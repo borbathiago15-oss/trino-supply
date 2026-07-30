@@ -110,6 +110,7 @@
 | ADR-009 | Banco de dados como projeção do domínio | 🟢 Accepted | `docs/17-adr/ADR-009-database-as-domain-projection.md` |
 | ADR-010 | Eventos de negócio como linguagem oficial | 🟢 Accepted | `docs/17-adr/ADR-010-business-domain-events.md` |
 | ADR-011 | Foundation antes das APIs | 🟢 Accepted | `docs/17-adr/ADR-011-foundation-before-apis.md` |
+| ADR-012 | Posicionamento da Materials Management Suite no roadmap de módulos | 🟢 Accepted | `docs/17-adr/ADR-012-materials-management-suite-roadmap.md` |
 
 ---
 
@@ -129,7 +130,6 @@
 | Aggregate enxuto do PR-001 (referências ao Foundation em vez de tabelas próprias de attachment/comment/approval) | PR-001-11, seção 14 | Em análise — exigirá ADR própria |
 | Business Event Catalog corporativo | PR-001-05, seção 13 | Aprovado para roadmap, sem data |
 | Mecanismo de pseudonimização LGPD compatível com cadeia de hash (cofre selado vs. HMAC com chave rotacionada) | FD-001-06, seção 6 | Em análise — exigirá ADR antes da v2 do Audit Service |
-| Posicionamento da suíte MMS frente à ordem de módulos do FD-001 (Item Catalog e Material Requisition são módulos novos; "Inventory (futuro)" passa a ser MMS-004; Purchasing da suíte mapeia para o domínio PR-001/RFQ/PO) | MMS-001, seções 7 e 8 | Aprovado funcionalmente no MMS-001 — exigirá ADR de roadmap de módulos antes da documentação MMS-002..005 |
 
 ---
 
@@ -154,3 +154,4 @@
 | 2026-07-30 | PR-001-15 — Wireframes do Purchase Requisition criado e aprovado (versão 1.0.0): 7 wireframes (lista, formulário, detalhe, fila de aprovações, detalhe de aprovação, notificações, configurações) com zonas, variantes responsivas, estados e matriz de rastreabilidade | PR-001-15 |
 | 2026-07-30 | PR-001-16 — Acceptance Criteria do Purchase Requisition criado e aprovado (versão 1.0.0): 68 critérios formais em Given/When/Then cobrindo UCs, regras transversais, workflow, eventos, notificações, API, UX e NFRs, com prioridades P0/P1/P2, matriz de rastreabilidade e alinhamento ao DoD | PR-001-16 |
 | 2026-07-30 | MMS-001 — Materials Management Suite criada e aprovada (versão 1.0.0): Documento Mestre Funcional da suíte de materiais/estoque com módulos MMS-002..005 (Item Catalog, Material Requisition, Inventory Management, Receiving), fluxo corporativo oficial, fronteira formal com PR-001 e roadmap; nova seção 5 no registry e decisão aberta de roadmap de módulos | MMS-001 |
+| 2026-07-30 | ADR-012 — Posicionamento da Materials Management Suite no roadmap aceita: MMS como domínio oficial, "Inventory (futuro)" = MMS-004, "Receiving" = MMS-005 (propriedade MMS), Item Catalog e Material Requisition adicionados ao roadmap, Purchasing mantido em Procurement, ordem oficial de módulos atualizada; decisão aberta do GOV-002 encerrada | ADR-012 |

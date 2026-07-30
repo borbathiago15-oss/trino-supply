@@ -72,7 +72,19 @@
 
 ---
 
-## 5. Design System (05-design-system)
+## 5. Materials Management — MMS-001 (Suíte de Materiais e Estoque)
+
+| ID | Documento | Versão | Status | Caminho |
+|----|-----------|--------|--------|---------|
+| MMS-001 | Materials Management Suite — Documento Mestre Funcional | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-001/README.md` |
+| MMS-002 | Item Catalog | — | ⚪ Planned | — |
+| MMS-003 | Material Requisition | — | ⚪ Planned | — |
+| MMS-004 | Inventory Management (Estoque) | — | ⚪ Planned | — |
+| MMS-005 | Receiving | — | ⚪ Planned | — |
+
+---
+
+## 6. Design System (05-design-system)
 
 | ID | Documento | Versão | Status | Caminho |
 |----|-----------|--------|--------|---------|
@@ -81,7 +93,7 @@
 
 ---
 
-## 6. Segurança (08-security)
+## 7. Segurança (08-security)
 
 | ID | Documento | Versão | Status | Caminho |
 |----|-----------|--------|--------|---------|
@@ -91,7 +103,7 @@
 
 ---
 
-## 7. ADRs (17-adr)
+## 8. ADRs (17-adr)
 
 | ID | Decisão | Status | Caminho |
 |----|---------|--------|---------|
@@ -101,7 +113,7 @@
 
 ---
 
-## 8. Arquivados (Superseded)
+## 9. Arquivados (Superseded)
 
 | ID | Documento | Motivo | Substituído por | Caminho |
 |----|-----------|--------|-----------------|---------|
@@ -110,17 +122,18 @@
 
 ---
 
-## 9. Decisões Abertas
+## 10. Decisões Abertas
 
 | Tema | Origem | Situação |
 |------|--------|----------|
 | Aggregate enxuto do PR-001 (referências ao Foundation em vez de tabelas próprias de attachment/comment/approval) | PR-001-11, seção 14 | Em análise — exigirá ADR própria |
 | Business Event Catalog corporativo | PR-001-05, seção 13 | Aprovado para roadmap, sem data |
 | Mecanismo de pseudonimização LGPD compatível com cadeia de hash (cofre selado vs. HMAC com chave rotacionada) | FD-001-06, seção 6 | Em análise — exigirá ADR antes da v2 do Audit Service |
+| Posicionamento da suíte MMS frente à ordem de módulos do FD-001 (Item Catalog e Material Requisition são módulos novos; "Inventory (futuro)" passa a ser MMS-004; Purchasing da suíte mapeia para o domínio PR-001/RFQ/PO) | MMS-001, seções 7 e 8 | Aprovado funcionalmente no MMS-001 — exigirá ADR de roadmap de módulos antes da documentação MMS-002..005 |
 
 ---
 
-## 10. Histórico de Governança
+## 11. Histórico de Governança
 
 | Data | Evento | Referência |
 |------|--------|------------|
@@ -140,3 +153,4 @@
 | 2026-07-30 | PR-001-14 — UX do Purchase Requisition criado e aprovado (versão 1.0.0): princípios, personas, arquitetura de informação, jornadas por papel, padrões de interação, acessibilidade WCAG 2.1 AA, responsividade, i18n e métricas | PR-001-14 |
 | 2026-07-30 | PR-001-15 — Wireframes do Purchase Requisition criado e aprovado (versão 1.0.0): 7 wireframes (lista, formulário, detalhe, fila de aprovações, detalhe de aprovação, notificações, configurações) com zonas, variantes responsivas, estados e matriz de rastreabilidade | PR-001-15 |
 | 2026-07-30 | PR-001-16 — Acceptance Criteria do Purchase Requisition criado e aprovado (versão 1.0.0): 68 critérios formais em Given/When/Then cobrindo UCs, regras transversais, workflow, eventos, notificações, API, UX e NFRs, com prioridades P0/P1/P2, matriz de rastreabilidade e alinhamento ao DoD | PR-001-16 |
+| 2026-07-30 | MMS-001 — Materials Management Suite criada e aprovada (versão 1.0.0): Documento Mestre Funcional da suíte de materiais/estoque com módulos MMS-002..005 (Item Catalog, Material Requisition, Inventory Management, Receiving), fluxo corporativo oficial, fronteira formal com PR-001 e roadmap; nova seção 5 no registry e decisão aberta de roadmap de módulos | MMS-001 |

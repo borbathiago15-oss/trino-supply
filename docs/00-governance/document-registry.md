@@ -66,7 +66,7 @@
 | FD-001-05 | Notification Center | 1.0.0 | 🟢 Approved | `docs/03-business/foundation/FD-001/05-notification-center.md` |
 | FD-001-06 | Audit Service | 1.0.0 | 🟢 Approved | `docs/03-business/foundation/FD-001/06-audit-service.md` |
 | FD-001-07 | Timeline Service | 1.0.0 | 🟢 Approved | `docs/03-business/foundation/FD-001/07-timeline-service.md` |
-| FD-001-08 | Collaboration | — | ⚪ Planned | — |
+| FD-001-08 | Collaboration | 1.0.0 | 🟢 Approved | `docs/03-business/foundation/FD-001/08-collaboration.md` |
 | FD-001-09 | Master Data | — | ⚪ Planned | — |
 | FD-001-10 | Configuration | — | ⚪ Planned | — |
 
@@ -133,3 +133,4 @@
 | 2026-07-30 | FD-001-05 — Notification Center criado e aprovado (versão 1.0.0): canais SYSTEM + EMAIL, templates versionados, filas por prioridade, retry/DLQ, preferências, digest, escalonamento e auditoria de entrega | FD-001-05 |
 | 2026-07-30 | FD-001-06 — Audit Service criado e aprovado (versão 1.0.0): trilha append-only particionada, cadeia de hash, retenção 5 anos, LGPD/LegalHold, exportação assinada e APIs administrativas | FD-001-06 |
 | 2026-07-30 | FD-001-07 — Timeline Service criado e aprovado (versão 1.0.0): projeção reconstruível de linha do tempo por entidade, MilestoneMapper configurável, visibilidade em 4 regras, rebuild por escopo e APIs funcionais | FD-001-07 |
+| 2026-07-30 | FD-001-08 — Collaboration criado e aprovado (versão 1.0.0): comentários com threading, menções com notificação, edição com histórico, moderação, sanitização XSS, rate limit e herança de permissão da entidade | FD-001-08 |

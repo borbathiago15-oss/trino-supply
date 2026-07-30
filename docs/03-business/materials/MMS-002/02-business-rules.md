@@ -1,9 +1,9 @@
 **Documento:** MMS-002-02 — Business Rules
 **Módulo:** MMS-002 — Item Catalog (Catálogo de Itens)
-**Versão:** 1.0.0
+**Versão:** 1.1.0
 **Status:** 🟢 Approved
 **Data:** 2026-07-30
-**Dependências:** MMS-002 (Visão do Módulo), MMS-002-01 (Business Context), MMS-001 (Documento Mestre Funcional — seções 6, 8.1, 14, 23), FD-001-09 (Master Data), FD-001-10 (Configuration)
+**Dependências:** MMS-002 (Visão do Módulo — v1.1.0), MMS-002-01 (Business Context), MMS-001 (Documento Mestre Funcional — seções 6, 8.1, 14, 23), FD-001-03 (Document Management), FD-001-09 (Master Data), FD-001-10 (Configuration)
 **Referências:** MMS-003, MMS-004, MMS-005, PR-001-02 (padrão de formato), FD-001-01, FD-001-02, FD-001-04, FD-001-06, FD-001-07, GOV-001
 
 ---
@@ -617,7 +617,91 @@ Regras de vínculo:
 
 ---
 
-# 12. Matriz de Rastreabilidade
+# 12. Regras de EPI e Fardamento
+
+Família introduzida na revisão 1.1.0 (MMS-002 README v1.1.0, escopo 8): atributos do cadastro que viabilizam o caso de uso de EPI (Equipamento de Proteção Individual) e Fardamento. O grupo EPI/Fardamento **não é um campo novo** — é representado pela categoria do item no Master Data (FD-001-09).
+
+## IC-BR-080 — CA Obrigatório para Itens do Grupo EPI
+
+| Campo | Valor |
+|-------|-------|
+| Código | IC-BR-080 |
+| Nome | CA Obrigatório para Itens do Grupo EPI |
+| Descrição | Todo item cuja categoria pertença ao grupo EPI deve informar o CA (Certificado de Aprovação). Fardamento não possui CA. |
+| Tipo | Parametrizável |
+| Validação | Quando a categoria do item constar na lista de categorias EPI configurada, o campo CA é obrigatório e não vazio; formato alfanumérico conforme máscara configurada. |
+| Mensagem de erro | "Informe o CA (Certificado de Aprovação) do EPI." |
+| Código do erro | IC-ERR-080 |
+| Evento | Item cadastrado (rascunho) / Item alterado |
+| Caso de uso | UC-IC-001/002 |
+| API | POST, PATCH /api/v1/items |
+| Caso de teste | TC-IC-080 |
+| Configuração | Lista de categorias que exigem CA (`materials.item.epi.categories`; padrão: vazia — nenhuma exigência até configurada); máscara do CA (`materials.item.epi.ca-mask`). |
+| Observações | Origem: MMS-002 README v1.1.0 (escopo 8). A vigência/validade temporal do CA é funcionalidade futura (roadmap). |
+
+---
+
+## IC-BR-081 — Grade de Tamanhos por Item
+
+| Campo | Valor |
+|-------|-------|
+| Código | IC-BR-081 |
+| Nome | Grade de Tamanhos por Item |
+| Descrição | O item pode referenciar uma grade de tamanhos (vocabulário do Master Data — ex.: P/M/G/GG, numérica). Item com grade exige seleção de tamanho na solicitação (MMS-003), e o tamanho acompanha reserva, separação e entrega (MMS-004). Tamanho é atributo de referência — nunca gera item separado no catálogo. |
+| Tipo | Obrigatória |
+| Validação | Quando informada, a grade deve existir e estar vigente no Master Data, referenciada por `typeCode+code` (FD-001-09, vigência na data de referência). |
+| Mensagem de erro | "Grade de tamanhos inválida ou inativa." |
+| Código do erro | IC-ERR-081 |
+| Evento | Item cadastrado (rascunho) / Item alterado |
+| Caso de uso | UC-IC-001/002 |
+| API | POST, PATCH /api/v1/items |
+| Caso de teste | TC-IC-081 |
+| Configuração | `typeCode` das grades de tamanho (`materials.item.size-grid.type-code`; padrão: `SIZE_GRID`). |
+| Observações | Origem: MMS-002 README v1.1.0 (escopo 8). O saldo por tamanho é responsabilidade do MMS-004 (documentado no pacote daquele módulo). |
+
+---
+
+## IC-BR-082 — Imagem do Produto
+
+| Campo | Valor |
+|-------|-------|
+| Código | IC-BR-082 |
+| Nome | Imagem do Produto |
+| Descrição | O item pode ter uma imagem (foto do produto), armazenada via Document Management (FD-001-03); por padrão é opcional, podendo ser exigida para categorias configuradas (ex.: EPI e Fardamento). |
+| Tipo | Parametrizável |
+| Validação | Arquivo conforme as restrições do FD-001-03 (tipo e tamanho permitidos); no máximo uma imagem principal por item; substituição gera nova versão auditada. |
+| Mensagem de erro | "Imagem inválida, ausente ou acima do tamanho permitido." |
+| Código do erro | IC-ERR-082 |
+| Evento | Item alterado |
+| Caso de uso | UC-IC-001/002 |
+| API | PUT /api/v1/items/{id}/image |
+| Caso de teste | TC-IC-082 |
+| Configuração | Categorias que exigem imagem (`materials.item.image.required-categories`; padrão: vazia — opcional). |
+| Observações | Origem: MMS-002 README v1.1.0 (escopo 8 — imagem antecipada do roadmap 2.0 para o MVP). |
+
+---
+
+## IC-BR-083 — Código Externo do ERP
+
+| Campo | Valor |
+|-------|-------|
+| Código | IC-BR-083 |
+| Nome | Código Externo do ERP |
+| Descrição | Quando houver integração com ERP, o item registra o código externo do ERP como atributo de integração, único por empresa quando informado. O código oficial do item segue IC-BR-001; quando parametrizado, o código oficial é o próprio código do ERP. |
+| Tipo | Parametrizável |
+| Validação | Unicidade por (empresa, código externo) quando preenchido; imutável após a ativação do item. |
+| Mensagem de erro | "Já existe um item com este código de ERP nesta empresa." |
+| Código do erro | IC-ERR-083 |
+| Evento | Item cadastrado (rascunho) / Item alterado |
+| Caso de uso | UC-IC-001/002 |
+| API | POST, PATCH /api/v1/items |
+| Caso de teste | TC-IC-083 |
+| Configuração | Obrigatoriedade do código ERP (`materials.item.erp-code.required`; padrão: false); uso do código ERP como código oficial (`materials.item.erp-code.as-official`; padrão: false). |
+| Observações | Origem: MMS-002 README v1.1.0 (escopo 1 — código baseado no ERP). A identidade interna do item é sempre gerada pelo sistema e nunca depende do ERP. |
+
+---
+
+# 13. Matriz de Rastreabilidade
 
 | Regra | Origem (documento) | UC | API (conceitual) | Evento | Teste |
 |-------|--------------------|-----|------------------|--------|-------|
@@ -649,28 +733,34 @@ Regras de vínculo:
 | IC-BR-062 | MMS-001 §23 | Todos | Todos | — | TC-IC-062 |
 | IC-BR-070 | MMS-002 README (NFR) | UC-IC-006 | GET /items | — | TC-IC-070 |
 | IC-BR-071 | MMS-002 README (NFR) | UC-IC-006 | GET /items | — | TC-IC-071 |
+| IC-BR-080 | MMS-002 README v1.1.0 (escopo 8) | UC-IC-001/002 | POST, PATCH /items | Item cadastrado/alterado | TC-IC-080 |
+| IC-BR-081 | MMS-002 README v1.1.0 (escopo 8) | UC-IC-001/002 | POST, PATCH /items | Item cadastrado/alterado | TC-IC-081 |
+| IC-BR-082 | MMS-002 README v1.1.0 (escopo 8) | UC-IC-001/002 | PUT .../image | Item alterado | TC-IC-082 |
+| IC-BR-083 | MMS-002 README v1.1.0 (escopo 1) | UC-IC-001/002 | POST, PATCH /items | Item cadastrado/alterado | TC-IC-083 |
 
-**Cobertura:** 28/28 regras com origem documentada e teste associado (100%).
+**Cobertura:** 32/32 regras com origem documentada e teste associado (100%).
 
 ---
 
-# 13. Dependências
+# 14. Dependências
 
 | Dependência | Uso |
 |-------------|-----|
 | MMS-002 (Visão) / MMS-002-01 (Business Context) | Origem de todas as regras |
 | MMS-001 (Documento Mestre) | Regras MMS-RG-08, MMS-RG-11 e princípios MMS-P-01..08 herdados |
 | FD-001-01 / FD-001-02 | Autorização, escopo e estrutura organizacional |
+| FD-001-03 | Imagem do produto (IC-BR-082) |
 | FD-001-04 | Workflow cadastral quando parametrizado (IC-BR-020) |
 | FD-001-06 / FD-001-07 | Auditoria e timeline (IC-BR-050/051) |
-| FD-001-09 | Unidades de medida e categorias (IC-BR-003/004) |
+| FD-001-09 | Unidades de medida, categorias (IC-BR-003/004), categorias EPI (IC-BR-080) e grades de tamanho (IC-BR-081) |
 | FD-001-10 | Todos os parâmetros `materials.item.*` |
 | MMS-002-07 / MMS-002-13 / MMS-002-17 | Especificação de UCs, API e testes (documentos seguintes do pacote) |
 
 ---
 
-# 14. Histórico de Versão
+# 15. Histórico de Versão
 
 | Versão | Data | Descrição |
 |--------|------|-----------|
 | 1.0.0 | 2026-07-30 | Criação das Business Rules do Item Catalog: 28 regras codificadas (IC-BR-001..071) nas famílias gerais, parâmetros de reposição, ciclo de vida, sinônimos/duplicidade, alteração, auditoria/timeline, segurança e performance, com validação, erros (IC-ERR), eventos, UCs/API/testes conceituais, configurações `materials.item.*` e matriz de rastreabilidade 100% — derivadas da visão do módulo e das regras da suíte (MMS-RG), no padrão PR-001-02 |
+| 1.1.0 | 2026-07-30 | Incorporação do caso EPI/Fardamento (MMS-002 README v1.1.0): nova família "Regras de EPI e Fardamento" com 4 regras (IC-BR-080 CA obrigatório para grupo EPI, IC-BR-081 grade de tamanhos, IC-BR-082 imagem do produto via FD-001-03, IC-BR-083 código externo do ERP); matriz de rastreabilidade ampliada para 32/32; seções 12–14 renumeradas para 13–15 |

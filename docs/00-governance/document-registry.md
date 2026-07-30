@@ -77,10 +77,10 @@
 | ID | Documento | Versão | Status | Caminho |
 |----|-----------|--------|--------|---------|
 | MMS-001 | Materials Management Suite — Documento Mestre Funcional | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-001/README.md` |
-| MMS-002 | Item Catalog | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/README.md` |
+| MMS-002 | Item Catalog | 1.1.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/README.md` |
 | MMS-002-01 | Item Catalog — Business Context | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/01-business-context.md` |
-| MMS-002-02 | Item Catalog — Business Rules | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/02-business-rules.md` |
-| MMS-003 | Material Requisition | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-003/README.md` |
+| MMS-002-02 | Item Catalog — Business Rules | 1.1.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/02-business-rules.md` |
+| MMS-003 | Material Requisition | 1.1.0 | 🟢 Approved | `docs/03-business/materials/MMS-003/README.md` |
 | MMS-004 | Inventory Management (Estoque) | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/README.md` |
 | MMS-005 | Receiving | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/README.md` |
 
@@ -164,3 +164,4 @@
 | 2026-07-30 | PR-001-17 — Test Scenarios do Purchase Requisition criado e aprovado (versão 1.0.0): catálogo completo de cenários (TC-001..006, 55 TC-UC, transversais, workflow, eventos, notificações, API, UX, wireframes, UI×API, segurança, performance, banco), estratégia de automação por camada, matriz de rastreabilidade 100% (regra × UC × API × AC × teste) e alinhamento ao DoD — **pacote PR-001 100% documentado (17/17), apto a implementação** | PR-001-17 |
 | 2026-07-30 | MMS-002-01 — Business Context do Item Catalog criado e aprovado (versão 1.0.0): contexto, problema, objetivos, stakeholders, personas, premissas, restrições, gatilhos, entradas/saídas, indicadores, KPIs, riscos, glossário, princípios e dependências — **início do pacote funcional detalhado do MMS-002 (padrão PR-001)** | MMS-002-01 |
 | 2026-07-30 | MMS-002-02 — Business Rules do Item Catalog criado e aprovado (versão 1.0.0): 28 regras codificadas (IC-BR-001..071) em 8 famílias, com validação, erros IC-ERR, eventos, UCs/API/testes conceituais, configurações `materials.item.*` e matriz de rastreabilidade 100% | MMS-002-02 |
+| 2026-07-30 | Revisão EPI/Fardamento aprovada (versões 1.1.0): **MMS-002** — atributos de EPI/Fardamento no Item Catalog (CA obrigatório para grupo EPI, grade de tamanhos, imagem via FD-001-03, código externo do ERP; imagem antecipada da v2.0 para o MVP); **MMS-002-02** — nova família de regras IC-BR-080..083, rastreabilidade 32/32; **MMS-003** — motivo estruturado (FD-001-09), anexos (FD-001-03), aprovação parcial por item (alterar quantidades/rejeitar itens), cadastro de locais de entrega, visão do almoxarifado com filtros, indicadores de consumo/custo; decisões registradas sem ADR (extensão funcional dentro das fronteiras existentes) | MMS-002, MMS-002-02, MMS-003 |

@@ -1,9 +1,9 @@
 **Documento:** MMS-002 — Item Catalog (Visão do Módulo)
 **Módulo:** MMS-002 — Item Catalog (Catálogo de Itens)
-**Versão:** 1.0.0
+**Versão:** 1.1.0
 **Status:** 🟢 Approved
 **Data:** 2026-07-30
-**Dependências:** MMS-001 (Documento Mestre Funcional — seções 7, 8.1, 14, 24), ADR-012, FD-001-09 (Master Data), FD-001-01, FD-001-02, FD-001-04, FD-001-06, FD-001-07, FD-001-10
+**Dependências:** MMS-001 (Documento Mestre Funcional — seções 7, 8.1, 14, 24), ADR-012, FD-001-03 (Document Management), FD-001-09 (Master Data), FD-001-01, FD-001-02, FD-001-04, FD-001-06, FD-001-07, FD-001-10
 **Referências:** PR-001 (consumidor de itens na rota de compra), GOV-001
 
 ---
@@ -21,12 +21,18 @@ O módulo existe para eliminar o cadastro duplicado e informal de materiais — 
 ## O que faz
 
 1. Cadastro de itens com identidade única por empresa: código, descrição, descrição detalhada, unidade de medida, categoria e características.
+   - **Código do item:** informado pelo mantenedor; quando houver integração com ERP, o código oficial é o código do ERP. O sistema mantém identidade interna própria e registra o código externo do ERP como atributo de integração (único por empresa quando informado).
 2. Classificação do item: **estocável**, **não estocável** (compra/consumo direto) ou **sob encomenda**.
 3. Parâmetros de reposição por item (e, opcionalmente, por depósito): estoque mínimo, estoque máximo, ponto de pedido e lead time de referência.
 4. Criticidade do item (parametrizável: baixa/média/alta) para workflow de aprovação e priorização.
 5. Ciclo de vida: Rascunho → Ativo → Inativo, com regras de uso por estado.
 6. Consulta pública do catálogo para todos os módulos e usuários autorizados, com busca por código, descrição e categoria.
 7. Equivalências e sinônimos de busca (nomes alternativos usados pela operação) para reduzir duplicidade.
+8. **Atributos de EPI e Fardamento** (extensão do cadastro para o caso de uso de segurança e uniformes):
+   - **Grupo do produto (EPI / Fardamento):** representado pela categoria do item no Master Data (FD-001-09) — nenhum campo novo de classificação é criado;
+   - **CA (Certificado de Aprovação):** obrigatório para itens cuja categoria pertença ao grupo EPI (lista de categorias parametrizável); fardamento não possui CA;
+   - **Grade de tamanhos:** o item pode referenciar uma grade de tamanhos (vocabulário FD-001-09 — ex.: P/M/G/GG, numérica); item com grade exige seleção de tamanho na solicitação (MMS-003) e o tamanho acompanha o item em estoque (MMS-004) e entrega;
+   - **Imagem do produto:** foto opcional do item, armazenada via Document Management (FD-001-03).
 
 ## O que NÃO faz
 
@@ -127,7 +133,8 @@ A ativação de item **não exige workflow** no MVP (responsabilidade do papel G
 
 # Entradas
 
-- Dados do item: código, descrição, descrição detalhada, unidade de medida (FD-001-09), categoria (FD-001-09), características, classificação, criticidade;
+- Dados do item: código, código externo do ERP (quando houver integração), descrição, descrição detalhada, unidade de medida (FD-001-09), categoria (FD-001-09), características, classificação, criticidade;
+- Atributos de EPI/Fardamento: CA — Certificado de Aprovação (obrigatório para categorias do grupo EPI), grade de tamanhos (FD-001-09), imagem do produto (FD-001-03);
 - Parâmetros de reposição: mínimo, máximo, ponto de pedido, lead time;
 - Sinônimos de busca;
 - Motivo de alterações sensíveis (inativação, mudança de unidade) — trilha de auditoria.
@@ -235,7 +242,7 @@ A ativação de item **não exige workflow** no MVP (responsabilidade do papel G
 
 ## Versão 1 (MVP)
 
-- CRUD de itens, ciclo de vida, classificação, criticidade, parâmetros de reposição, sinônimos, busca, alerta de duplicidade.
+- CRUD de itens, ciclo de vida, classificação, criticidade, parâmetros de reposição, sinônimos, busca, alerta de duplicidade, atributos de EPI/Fardamento (CA, grade de tamanhos, imagem do produto, código externo do ERP).
 
 ## Versão 1.1
 
@@ -243,7 +250,7 @@ A ativação de item **não exige workflow** no MVP (responsabilidade do papel G
 
 ## Versão 2.0
 
-- Lote/validade/série por item (com MMS-004 v2.0); imagens e fichas técnicas (FD-001-03); equivalentes/substitutos formais; descrições localizadas.
+- Lote/validade/série por item (com MMS-004 v2.0); fichas técnicas (FD-001-03); equivalentes/substitutos formais; descrições localizadas.
 
 ---
 
@@ -270,3 +277,4 @@ A ativação de item **não exige workflow** no MVP (responsabilidade do papel G
 | Versão | Data | Descrição |
 |--------|------|-----------|
 | 1.0.0 | 2026-07-30 | Criação da visão do módulo Item Catalog: objetivo, escopo, classificação, ciclo de vida, parâmetros de reposição, integrações, eventos, NFRs, KPIs, DoD e roadmap — conforme MMS-001 (seção 8.1) e ADR-012 |
+| 1.1.0 | 2026-07-30 | Incorporação do caso EPI/Fardamento: CA (Certificado de Aprovação) obrigatório para categorias do grupo EPI (lista parametrizável), grade de tamanhos via FD-001-09, imagem do produto via FD-001-03, código externo do ERP como atributo de integração (único por empresa quando informado); grupo EPI/Fardamento representado pela categoria (sem novo campo de classificação); roadmap ajustado (imagem antecipada da v2.0 para o MVP) |

@@ -1,9 +1,9 @@
 **Documento:** MMS-003 — Material Requisition (Visão do Módulo)
 **Módulo:** MMS-003 — Material Requisition (Solicitação de Material)
-**Versão:** 1.0.0
+**Versão:** 1.1.0
 **Status:** 🟢 Approved
 **Data:** 2026-07-30
-**Dependências:** MMS-001 (Documento Mestre Funcional — seções 6, 8.2, 9, 10, 12, 14, 15.1, 16, 20, 22, 23, 24, 25), ADR-012, FD-001-01, FD-001-02, FD-001-04, FD-001-05, FD-001-06, FD-001-07, FD-001-10
+**Dependências:** MMS-001 (Documento Mestre Funcional — seções 6, 8.2, 9, 10, 12, 14, 15.1, 16, 20, 22, 23, 24, 25), ADR-012, FD-001-01, FD-001-02, FD-001-03, FD-001-04, FD-001-05, FD-001-06, FD-001-07, FD-001-09, FD-001-10
 **Referências:** MMS-002 (Item Catalog), MMS-004 (Inventory Management), MMS-005 (Receiving), PR-001 (Purchase Requisition — rota de compra), GOV-001
 
 ---
@@ -21,7 +21,13 @@ O módulo existe para substituir o pedido informal (bilhete, e-mail, conversa no
 ## O que faz
 
 - **Criação de solicitação de material:** itens pesquisados no Item Catalog (somente itens ativos), quantidades, justificativa obrigatória, centro de custo, local de entrega e data necessária.
+- **Motivo estruturado da solicitação:** além da justificativa livre, o solicitante seleciona um motivo em vocabulário do Master Data (FD-001-09) — ex.: roteiro mensal, troca programada, troca de tamanho, danificado, perda, roubo — com obrigatoriedade e lista parametrizáveis por empresa.
+- **Seleção de tamanho:** quando o item possui grade de tamanhos (MMS-002), a escolha do tamanho é obrigatória por item da solicitação e acompanha o atendimento (reserva, separação, entrega).
+- **Anexos na solicitação:** o solicitante pode anexar evidências (ex.: foto do EPI/fardamento danificado) via Document Management (FD-001-03); motivos que exigem anexo são parametrizáveis.
 - **Workflow de aprovação** via FD-001-04, parametrizável por empresa, unidade, valor estimado e criticidade dos itens (MMS-P-04, MMS-P-06).
+- **Aprovação parcial por item:** o aprovador pode aprovar integralmente, **alterar quantidades**, **rejeitar itens específicos**, cancelar toda a solicitação e registrar observações (parecer). Itens rejeitados ou com quantidade reduzida são registrados com motivo do decisor; apenas os itens aprovados seguem para a validação de estoque e o roteamento.
+- **Cadastro de locais de entrega:** o módulo mantém, por empresa, o cadastro de locais de entrega (código gerado pelo sistema, descrição / cliente para entrega, vínculo com a unidade organizacional), administrado pelo Administrador ou Gerente de Suprimentos; a solicitação seleciona um local ativo.
+- **Visão do almoxarifado:** fila exclusiva do Warehouse Workspace com todas as solicitações aprovadas de todos os solicitantes, incluindo acesso a todas as informações e anexos, com filtros por solicitante, período (data de/até), status, centro de custo, empresa, tipo de produto (categoria — ex.: EPI ou Fardamento) e número da solicitação.
 - **Validação de estoque obrigatória após a aprovação** (regra 2 do fluxo corporativo, MMS-001 §9): consulta o MMS-004 item a item, considerando somente saldo disponível (MMS-RG-09).
 - **Roteamento por item (rota mista):** itens com saldo seguem para reserva/atendimento pelo MMS-004; itens sem saldo geram demanda de compra no PR-001 com referência à solicitação de origem (rastreabilidade bidirecional — regra 3 do fluxo).
 - **Acompanhamento consolidado:** o solicitante vê o andamento de todos os itens na mesma solicitação, estejam eles na rota de estoque ou na rota de compra (jornada 10.1, MMS-001).
@@ -79,7 +85,10 @@ Conforme o roadmap oficial (MMS-001 §24), o MVP do módulo entrega:
 4. Geração de demanda de compra no PR-001 com referência bidirecional;
 5. Acompanhamento consolidado das duas rotas na mesma solicitação;
 6. Entrega e confirmação de recebimento, concluindo a solicitação;
-7. Cancelamento com regras de estado.
+7. Cancelamento com regras de estado;
+8. Motivo estruturado (FD-001-09), seleção de tamanho para itens com grade e anexos (FD-001-03);
+9. Aprovação parcial por item (alterar quantidades, rejeitar itens específicos) com observações do decisor;
+10. Cadastro de locais de entrega por empresa e visão do almoxarifado com filtros operacionais.
 
 ---
 
@@ -149,8 +158,11 @@ Regras herdadas do fluxo corporativo que este módulo impõe:
 |---------|--------|------------|
 | Itens e quantidades | Item Catalog (MMS-002) | Somente itens ativos (MMS-RG-08) |
 | Justificativa | Solicitante | Obrigatória |
+| Motivo da solicitação | Master Data (FD-001-09) | Vocabulário parametrizável (roteiro mensal, troca programada, troca de tamanho, danificado, perda, roubo…) |
+| Tamanho | Grade do item (MMS-002, FD-001-09) | Obrigatório quando o item possui grade de tamanhos |
+| Anexos | Solicitante (FD-001-03) | Evidências (ex.: foto do EPI/fardamento danificado); exigência por motivo parametrizável |
 | Centro de custo | FD-001-02 (Organization) | Escopo organizacional obrigatório |
-| Local de entrega | Estrutura organizacional / parametrização | Unidade, almoxarifado ou endereço de entrega |
+| Local de entrega | Cadastro de locais de entrega (este módulo) | Código gerado pelo sistema; seleção entre locais ativos da empresa |
 | Data necessária | Solicitante | Usada em priorização e alertas de atraso |
 | Resultado da validação de estoque | MMS-004 | Por item: atende / não atende |
 | Status da compra | PR-001 | Alimenta a visão consolidada |
@@ -177,10 +189,12 @@ Regras herdadas do fluxo corporativo que este módulo impõe:
 |---------|---------------|
 | FD-001-01 Identity & Access | Autenticação, papéis, permissões, escopo organizacional (MMS-P-05) |
 | FD-001-02 Organization | Empresa, unidade, centro de custo do solicitante e da solicitação |
+| FD-001-03 Document Management | Anexos da solicitação (fotos de EPI/fardamento e demais evidências) |
 | FD-001-04 Workflow | Aprovação parametrizável por empresa/unidade/valor/criticidade (MMS-P-04) |
 | FD-001-05 Notifications | Todos os avisos ao solicitante/aprovador/almoxarifado — o módulo nunca notifica por conta própria |
 | FD-001-06 Audit | Auditoria de toda criação, alteração, decisão e cancelamento (MMS-P-02) |
 | FD-001-07 Timeline | Linha do tempo da solicitação, incluindo vínculos com PR-001 (MMS-P-03) |
+| FD-001-09 Master Data | Vocabulário de motivos da solicitação e grades de tamanho (referência por `typeCode+code`) |
 | FD-001-10 Configuration | Parâmetros `materials.requisition.*` (MMS-P-06, MMS-RG-11) |
 
 Parâmetros previstos (nomes conceituais, definição fina no documento de configuração do módulo):
@@ -188,6 +202,9 @@ Parâmetros previstos (nomes conceituais, definição fina no documento de confi
 | Parâmetro | Efeito |
 |-----------|--------|
 | `materials.requisition.approval.required` | Exigência de aprovação e critérios (valor, criticidade) |
+| `materials.requisition.approval.partial-allowed` | Permite aprovação parcial: alterar quantidades e rejeitar itens específicos |
+| `materials.requisition.reason.required` | Obrigatoriedade do motivo estruturado e vínculo com a justificativa |
+| `materials.requisition.attachments.required-reasons` | Motivos que exigem anexo (ex.: danificado, perda, roubo) |
 | `materials.requisition.purchase.dedicated` | Compra dedicada: entrada já reservada para a solicitação de origem |
 | `materials.requisition.cancel.allowed-states` | Estados em que o cancelamento é permitido |
 | `materials.requisition.due-date.alert-days` | Antecedência dos alertas de data necessária |
@@ -202,6 +219,7 @@ Conforme o catálogo corporativo (MMS-001 §16); a especificação técnica (env
 2. Estoque validado para a solicitação (repasse do resultado por item: atende / não atende);
 3. Demanda de compra gerada para o PR-001 (com referência à solicitação de origem);
 4. Item roteado (estoque × compra) — fato de roteamento por item.
+5. Aprovação parcial registrada (quantidades alteradas e/ou itens rejeitados, com motivo do decisor).
 
 # Eventos Consumidos (funcionais)
 
@@ -263,6 +281,11 @@ Conforme o catálogo corporativo (MMS-001 §16); a especificação técnica (env
 | Ruptura originada em solicitação | itens sem saldo com demanda aberta | Alimenta alerta prioritário (MMS-RG-12) |
 | Ciclo de aprovação | submissão → decisão | Eficiência do workflow |
 | Taxa de cancelamento/rejeição | solicitações canceladas+rejeitadas ÷ submetidas | Qualidade da demanda |
+| Total de solicitações e pendentes/aprovadas | contagem por status no período | Visão gerencial do volume de demanda |
+| Consumo por colaborador | itens entregues por solicitante no período | Base para políticas de EPI/fardamento |
+| Consumo por centro de custo | itens entregues por centro de custo no período | Imputação e controle gerencial |
+| Produtos mais solicitados | ranking de itens por quantidade solicitada/entregue | Saneamento de catálogo e reposição |
+| Custo mensal de EPI/fardamento | valor dos itens entregues no mês, por categoria (EPI/Fardamento) | Depende de valorização de estoque (fora do MVP — roadmap MMS-004); no MVP, acompanhado em quantidades |
 
 ---
 
@@ -319,7 +342,7 @@ Registradas para visibilidade — **fora do compromisso de qualquer versão**: c
 
 # Versionamento do Módulo
 
-- **Versão do documento:** 1.0.0 (visão do módulo — primeira emissão).
+- **Versão do documento:** 1.1.0 (visão do módulo — revisão EPI/Fardamento).
 - **Esquema:** SemVer; mudanças de escopo/regra exigem nova versão e entrada no histórico.
 - **Pacote funcional detalhado:** será versionado documento a documento, seguindo o padrão do PR-001 (01-business-context … 17-test-scenarios) quando iniciado.
 
@@ -330,3 +353,4 @@ Registradas para visibilidade — **fora do compromisso de qualquer versão**: c
 | Versão | Data | Descrição |
 |--------|------|-----------|
 | 1.0.0 | 2026-07-30 | Criação da visão do módulo Material Requisition: solicitação interna ao almoxarifado com workflow (FD-001-04), validação de estoque após aprovação (MMS-RG-09), rota mista por item, demanda de compra via PR-001 com rastreabilidade bidirecional, acompanhamento consolidado, entrega e confirmação; fronteiras com MMS-002/004/005 e PR-001; NFRs, KPIs, DoD e roadmap. Fontes: MMS-001 (§8.2, §9, §15.1, §16, §22, §23, §24) e princípio do PR-001-12 |
+| 1.1.0 | 2026-07-30 | Incorporação do caso EPI/Fardamento: motivo estruturado via FD-001-09 (roteiro mensal, troca programada, troca de tamanho, danificado, perda, roubo…), anexos via FD-001-03 (foto do EPI/fardamento), seleção de tamanho para itens com grade, aprovação parcial por item (alterar quantidades / rejeitar itens específicos com observações), cadastro de locais de entrega por empresa (código gerado pelo sistema), visão do almoxarifado com filtros operacionais (solicitante, período, status, centro de custo, empresa, tipo de produto, número), indicadores de consumo por colaborador/centro de custo, produtos mais solicitados e custo mensal de EPI/fardamento; novos parâmetros `materials.requisition.*` |

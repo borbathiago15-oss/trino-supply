@@ -116,6 +116,7 @@
 |------|--------|----------|
 | Aggregate enxuto do PR-001 (referências ao Foundation em vez de tabelas próprias de attachment/comment/approval) | PR-001-11, seção 14 | Em análise — exigirá ADR própria |
 | Business Event Catalog corporativo | PR-001-05, seção 13 | Aprovado para roadmap, sem data |
+| Mecanismo de pseudonimização LGPD compatível com cadeia de hash (cofre selado vs. HMAC com chave rotacionada) | FD-001-06, seção 6 | Em análise — exigirá ADR antes da v2 do Audit Service |
 
 ---
 

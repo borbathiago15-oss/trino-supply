@@ -86,6 +86,7 @@
 | MMS-002-06 | Item Catalog — BPMN | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/06-bpmn.md` |
 | MMS-002-07 | Item Catalog — Use Cases | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/07-use-cases.md` |
 | MMS-002-08 | Item Catalog — User Stories | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/08-user-stories.md` |
+| MMS-002-09 | Item Catalog — Permissions | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/09-permissions.md` |
 | MMS-003 | Material Requisition | 1.1.0 | 🟢 Approved | `docs/03-business/materials/MMS-003/README.md` |
 | MMS-004 | Inventory Management (Estoque) | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/README.md` |
 | MMS-005 | Receiving | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/README.md` |
@@ -177,3 +178,4 @@
 | 2026-07-30 | MMS-002-06 — BPMN do Item Catalog criado e aprovado (versão 1.0.0): ciclo de vida completo (cadastro → parametrização → ativação → manutenção → inativação → reativação/descarte), 2 gateways com regras RG-IC-GW, 4 fluxos alternativos (incl. impacto de Master Data), 6 Business Objects, 5 Data Stores, 9 Message Events, 7 exceções, SLA, escalonamentos, timeouts, compensações e sub-processo de validação de ativação — padrão PR-001-06 | MMS-002-06 |
 | 2026-07-30 | MMS-002-07 — Use Cases do Item Catalog criados e aprovados (versão 1.0.0): UC-IC-001..007 em especificação UML completa (fluxos principal/alternativos/exceção, pré/pós-condições, regras, eventos, mensagens, validações, APIs /api/v1/items, permissões IC-PERM, testes TC-IC) + matriz de rastreabilidade — padrão PR-001-07 | MMS-002-07 |
 | 2026-07-30 | MMS-002-08 — User Stories do Item Catalog criadas e aprovadas (versão 1.0.0): 15 stories US-IC-001..015 em 5 Features com persona, valor de negócio, critérios Gherkin, regras, eventos, UC e matriz de rastreabilidade — padrão PR-001-08 | MMS-002-08 |
+| 2026-07-30 | MMS-002-09 — Permissions do Item Catalog criado e aprovado (versão 1.0.0): modelo híbrido RBAC+ABAC+Escopo, 4 papéis, 10 permissões IC-PERM, restrições por estado, policies POL-IC-AUTH, JWT claims, scopes items.*, Permission Matrix, SoD, Inheritance, Delegation e Evaluation Flow — padrão PR-001-09 | MMS-002-09 |

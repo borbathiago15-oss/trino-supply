@@ -89,6 +89,7 @@
 | MMS-002-09 | Item Catalog — Permissions | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/09-permissions.md` |
 | MMS-002-10 | Item Catalog — Notifications | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/10-notifications.md` |
 | MMS-002-11 | Item Catalog — Database Model | 1.0.0 | 🟢 Approved | `docs/06-database/materials/MMS-002/11-database.md` |
+| MMS-002-12 | Item Catalog — Business Journey | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/12-business-journey.md` |
 | MMS-003 | Material Requisition | 1.1.0 | 🟢 Approved | `docs/03-business/materials/MMS-003/README.md` |
 | MMS-004 | Inventory Management (Estoque) | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/README.md` |
 | MMS-005 | Receiving | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/README.md` |
@@ -183,3 +184,4 @@
 | 2026-07-30 | MMS-002-09 — Permissions do Item Catalog criado e aprovado (versão 1.0.0): modelo híbrido RBAC+ABAC+Escopo, 4 papéis, 10 permissões IC-PERM, restrições por estado, policies POL-IC-AUTH, JWT claims, scopes items.*, Permission Matrix, SoD, Inheritance, Delegation e Evaluation Flow — padrão PR-001-09 | MMS-002-09 |
 | 2026-07-30 | MMS-002-10 — Notifications do Item Catalog criado e aprovado (versão 1.0.0): 6 eventos notificáveis (parcimônia), 6 templates IC-NOT, especificação operacional (queues, prioridades, retry, template version, localization, scheduling, escalonamento, preferências, NOT-IC-BR-001..011, auditoria de entrega) — padrão PR-001-10 | MMS-002-10 |
 | 2026-07-30 | MMS-002-11 — Database Model do Item Catalog criado e aprovado (versão 1.0.0): DDL PostgreSQL completo no schema `materials` (ADR-009), tabelas item/item_synonym/item_replenishment_parameters com aggregate enxuto, unicidade soft-delete-ciente (company_id,code) e erp_code, constraints, índices parciais company_id-first, triggers TRG-IC-001..003, 3 views + 1 MV, keyset pagination, planos de indexação/performance/migração/backup, versionamento de schema — padrão PR-001-11 | MMS-002-11 |
+| 2026-07-30 | MMS-002-12 — Business Journey do Item Catalog criado e aprovado (versão 1.0.0): jornada macro (necessidade→cadastro→enriquecimento→ativação→consumo→manutenção→inativação/descarte), jornadas do mantenedor, do solicitante (busca por sinônimo) e do auditor, pontos de dor, momentos de verdade e KPIs por etapa — padrão PR-001-12 | MMS-002-12 |

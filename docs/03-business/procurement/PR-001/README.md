@@ -188,33 +188,35 @@ PR-001-01 — Business Context
 
 PR-001-02 — Business Rules
 
-PR-001-03 — Event Storming
+PR-001-03 — State Machine
 
-PR-001-04 — State Machine
+PR-001-04 — Domain Model
 
-PR-001-05 — BPMN
+PR-001-05 — Event Storming
 
-PR-001-06 — Use Cases
+PR-001-06 — BPMN
 
-PR-001-07 — User Stories
+PR-001-07 — Use Cases
 
-PR-001-08 — Permissions
+PR-001-08 — User Stories
 
-PR-001-09 — Notifications
+PR-001-09 — Permissions
 
-PR-001-10 — Domain Model
+PR-001-10 — Notifications
 
 PR-001-11 — Database
 
-PR-001-12 — API
+PR-001-12 — Business Journey
 
-PR-001-13 — UX
+PR-001-13 — API (planejado)
 
-PR-001-14 — Wireframes
+PR-001-14 — UX (planejado)
 
-PR-001-15 — Acceptance Criteria
+PR-001-15 — Wireframes (planejado)
 
-PR-001-16 — Test Scenarios
+PR-001-16 — Acceptance Criteria (planejado)
+
+PR-001-17 — Test Scenarios (planejado)
 
 ---
 

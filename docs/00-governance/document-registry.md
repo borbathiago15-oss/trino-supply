@@ -47,7 +47,7 @@
 | PR-001-11 | Database Model | 1.1.0 | 🟢 Approved | `docs/06-database/procurement/PR-001/11-database.md` |
 | PR-001-12 | Business Journey | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/12-business-journey.md` |
 | PR-001-13 | API | 1.0.0 | 🟢 Approved | `docs/07-api/procurement/PR-001/README.md` |
-| PR-001-14 | UX | — | ⚪ Planned | — |
+| PR-001-14 | UX | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/14-ux.md` |
 | PR-001-15 | Wireframes | — | ⚪ Planned | — |
 | PR-001-16 | Acceptance Criteria | — | ⚪ Planned | — |
 | PR-001-17 | Test Scenarios | — | ⚪ Planned | — |
@@ -137,3 +137,4 @@
 | 2026-07-30 | FD-001-09 — Master Data criado e aprovado (versão 1.0.0): catálogos de referência com códigos imutáveis, vigência temporal, hierarquia sem ciclos, cache com invalidação por evento e fronteira formal com Organization | FD-001-09 |
 | 2026-07-30 | FD-001-10 — Configuration criado e aprovado (versão 1.0.0): definições tipadas, escopos com precedência, feature flags, SecretRef, dual control e ConfigSnapshot — **Foundation 100% documentado (10/10 domínios, ADR-011)** | FD-001-10 |
 | 2026-07-30 | PR-001-13 — API do Purchase Requisition criada e aprovada (versão 1.0.0): convenções (envelope, keyset, idempotência, autorização), 20 endpoints mapeados a UC/permissão/evento, catálogo PR-ERR, segurança e versionamento | PR-001-13 |
+| 2026-07-30 | PR-001-14 — UX do Purchase Requisition criado e aprovado (versão 1.0.0): princípios, personas, arquitetura de informação, jornadas por papel, padrões de interação, acessibilidade WCAG 2.1 AA, responsividade, i18n e métricas | PR-001-14 |

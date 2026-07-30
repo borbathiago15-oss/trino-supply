@@ -80,7 +80,7 @@
 | MMS-002 | Item Catalog | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/README.md` |
 | MMS-003 | Material Requisition | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-003/README.md` |
 | MMS-004 | Inventory Management (Estoque) | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/README.md` |
-| MMS-005 | Receiving | — | ⚪ Planned | — |
+| MMS-005 | Receiving | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/README.md` |
 
 ---
 
@@ -158,3 +158,4 @@
 | 2026-07-30 | MMS-002 — Item Catalog criado e aprovado (versão 1.0.0): visão do módulo de catálogo de itens com ciclo de vida (Rascunho/Ativo/Inativo), classificação (estocável/não estocável/sob encomenda), parâmetros de reposição, sinônimos, fronteira formal com Master Data e roadmap | MMS-002 |
 | 2026-07-30 | MMS-004 — Inventory Management criado e aprovado (versão 1.0.0): visão do módulo Estoque com saldos derivados de movimentação (MMS-P-08), seis documentos de movimentação, reservas com validade, endereçamento, bloqueios de integridade, alertas, inventário e roadmap | MMS-004 |
 | 2026-07-30 | MMS-003 — Material Requisition criado e aprovado (versão 1.0.0): visão do módulo de solicitação interna ao almoxarifado com workflow (FD-001-04), validação de estoque após aprovação (MMS-RG-09), rota mista por item, demanda de compra via PR-001 com rastreabilidade bidirecional, acompanhamento consolidado, entrega e confirmação | MMS-003 |
+| 2026-07-30 | MMS-005 — Receiving criado e aprovado (versão 1.0.0): visão do módulo de recebimento físico contra documento de origem (MMS-RG-06), conferência quantitativa, divergências com destino documentado (MMS-RG-07), entrada no estoque via MMS-004, retomada de atendimento pendente e compra dedicada — **suíte MMS 100% com visões aprovadas (MMS-001..005)** | MMS-005 |

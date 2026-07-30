@@ -33,18 +33,18 @@
 
 | ID | Documento | Versão | Status | Caminho |
 |----|-----------|--------|--------|---------|
-| PR-001 | Visão do Módulo | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/README.md` |
-| PR-001-01 | Business Context | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/01-business-context.md` |
-| PR-001-02 | Business Rules | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/02-business-rules.md` |
-| PR-001-03 | State Machine | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/03-state-machine.md` |
-| PR-001-04 | Domain Model | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/04-domain-model.md` |
-| PR-001-05 | Event Storming | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/05-event-storming.md` |
-| PR-001-06 | BPMN | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/06-bpmn.md` |
-| PR-001-07 | Use Cases | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/07-use-cases.md` |
+| PR-001 | Visão do Módulo | 1.1.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/README.md` |
+| PR-001-01 | Business Context | 1.1.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/01-business-context.md` |
+| PR-001-02 | Business Rules | 1.1.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/02-business-rules.md` |
+| PR-001-03 | State Machine | 1.1.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/03-state-machine.md` |
+| PR-001-04 | Domain Model | 1.1.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/04-domain-model.md` |
+| PR-001-05 | Event Storming | 1.1.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/05-event-storming.md` |
+| PR-001-06 | BPMN | 1.1.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/06-bpmn.md` |
+| PR-001-07 | Use Cases | 1.1.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/07-use-cases.md` |
 | PR-001-08 | User Stories | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/08-user-stories.md` |
-| PR-001-09 | Permissions & Authorization | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/09-permissions.md` |
-| PR-001-10 | Notifications | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/10-notifications.md` |
-| PR-001-11 | Database Model | 1.0.0 | 🟢 Approved | `docs/06-database/procurement/PR-001/11-database.md` |
+| PR-001-09 | Permissions & Authorization | 1.1.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/09-permissions.md` |
+| PR-001-10 | Notifications | 1.1.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/10-notifications.md` |
+| PR-001-11 | Database Model | 1.1.0 | 🟢 Approved | `docs/06-database/procurement/PR-001/11-database.md` |
 | PR-001-12 | Business Journey | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/12-business-journey.md` |
 | PR-001-13 | API | — | ⚪ Planned | `docs/07-api/procurement/PR-001/` |
 | PR-001-14 | UX | — | ⚪ Planned | — |
@@ -81,7 +81,17 @@
 
 ---
 
-## 6. ADRs (17-adr)
+## 6. Segurança (08-security)
+
+| ID | Documento | Versão | Status | Caminho |
+|----|-----------|--------|--------|---------|
+| SEC-001 | Arquitetura de Segurança | 1.0.0 | 🟢 Approved | `docs/08-security/01-security-architecture.md` |
+| SEC-002 | Threat Model (STRIDE) | 1.0.0 | 🟢 Approved | `docs/08-security/02-threat-model-stride.md` |
+| SEC-003 | Padrão de Desenvolvimento Seguro | 1.0.0 | 🟢 Approved | `docs/08-security/03-secure-development-standard.md` |
+
+---
+
+## 7. ADRs (17-adr)
 
 | ID | Decisão | Status | Caminho |
 |----|---------|--------|---------|
@@ -91,7 +101,7 @@
 
 ---
 
-## 7. Arquivados (Superseded)
+## 8. Arquivados (Superseded)
 
 | ID | Documento | Motivo | Substituído por | Caminho |
 |----|-----------|--------|-----------------|---------|
@@ -100,7 +110,7 @@
 
 ---
 
-## 8. Decisões Abertas
+## 9. Decisões Abertas
 
 | Tema | Origem | Situação |
 |------|--------|----------|
@@ -109,10 +119,12 @@
 
 ---
 
-## 9. Histórico de Governança
+## 10. Histórico de Governança
 
 | Data | Evento | Referência |
 |------|--------|------------|
 | 2026-07-30 | Saneamento do repositório: caminhos recursivos corrigidos, duplicata de `08-user-stories.md` removida, numeração do índice do módulo alinhada aos IDs reais, série TS-PRQ arquivada, Jornada promovida a PR-001-12 | AUD-001 |
 | 2026-07-30 | FD-001-02 — Organization criado e aprovado (versão 1.0.0) | FD-001-02 |
 | 2026-07-30 | FD-001-03 — Document Management criado e aprovado (versão 1.0.0) | FD-001-03 |
+| 2026-07-30 | Elevação Enterprise do módulo PR-001: PR-001 (README) e PR-001-01 a PR-001-11 revisados para a versão 1.1.0 (todo conteúdo original preservado; PR-001-08 User Stories mantido em 1.0.0 por não constar do escopo da revisão) | PR-001 |
+| 2026-07-30 | Pacote de segurança criado e aprovado: SEC-001 (Arquitetura de Segurança), SEC-002 (Threat Model STRIDE) e SEC-003 (Padrão de Desenvolvimento Seguro), versão 1.0.0; nova seção 08-security registrada | SEC-001, SEC-002, SEC-003 |

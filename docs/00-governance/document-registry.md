@@ -83,6 +83,7 @@
 | MMS-002-03 | Item Catalog — State Machine | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/03-state-machine.md` |
 | MMS-002-04 | Item Catalog — Domain Model | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/04-domain-model.md` |
 | MMS-002-05 | Item Catalog — Event Storming | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/05-event-storming.md` |
+| MMS-002-06 | Item Catalog — BPMN | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/06-bpmn.md` |
 | MMS-003 | Material Requisition | 1.1.0 | 🟢 Approved | `docs/03-business/materials/MMS-003/README.md` |
 | MMS-004 | Inventory Management (Estoque) | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/README.md` |
 | MMS-005 | Receiving | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/README.md` |
@@ -171,3 +172,4 @@
 | 2026-07-30 | MMS-002-03 — State Machine do Item Catalog criada e aprovada (versão 1.0.0): 4 estados (Rascunho, Ativo, Inativo, Descartado) com entry/exit actions, eventos aceitos/rejeitados, guard conditions (IC-BR-020..024/040–042/080–083), side effects, SLA, responsável e auditoria; matriz de transições e matriz de editabilidade por estado — padrão PR-001-03 | MMS-002-03 |
 | 2026-07-30 | MMS-002-04 — Domain Model do Item Catalog criado e aprovado (versão 1.0.0): Aggregate Root Item (Synonym, ReplenishmentParameters), Aggregate Diagram, UML, Value Objects completos, 11 invariantes INV-IC rastreadas às IC-BR, factory methods (incluindo CreateEPI), repositories, 10 specifications, 5 domain services, 5 policies e limites do Aggregate — padrão PR-001-04 | MMS-002-04 |
 | 2026-07-30 | MMS-002-05 — Event Storming do Item Catalog criado e aprovado (versão 1.0.0): 13 comandos CMD-IC, 8 eventos de domínio EVT-IC (alinhados à visão MMS-002 v1.1.0), 5 políticas, validações automáticas rastreadas às IC-BR, matriz evento × reação, eventos consumidos do FD-001-09 e especificação técnica completa por evento (exchange trino.materials, Outbox, at-least-once, DLQ, idempotência, ordenação por agregado) — padrão PR-001-05 | MMS-002-05 |
+| 2026-07-30 | MMS-002-06 — BPMN do Item Catalog criado e aprovado (versão 1.0.0): ciclo de vida completo (cadastro → parametrização → ativação → manutenção → inativação → reativação/descarte), 2 gateways com regras RG-IC-GW, 4 fluxos alternativos (incl. impacto de Master Data), 6 Business Objects, 5 Data Stores, 9 Message Events, 7 exceções, SLA, escalonamentos, timeouts, compensações e sub-processo de validação de ativação — padrão PR-001-06 | MMS-002-06 |

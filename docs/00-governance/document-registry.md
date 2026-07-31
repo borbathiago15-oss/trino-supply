@@ -105,6 +105,7 @@
 | MMS-004-06 | Inventory Management — BPMN | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/06-bpmn.md` |
 | MMS-004-07 | Inventory Management — Use Cases | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/07-use-cases.md` |
 | MMS-004-08 | Inventory Management — User Stories | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/08-user-stories.md` |
+| MMS-004-09 | Inventory Management — Permissions | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/09-permissions.md` |
 | MMS-005 | Receiving | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/README.md` |
 
 ---
@@ -211,3 +212,4 @@
 | 2026-07-30 | MMS-004-06 — BPMN do Inventory Management criado e aprovado (versão 1.0.0): 7 fluxos principais (entrada, saída/atendimento, reserva com timer de vencimento, transferência, ajuste com aprovação, inventário com ajuste de divergências, estorno), 5 gateways RG-IV-GW, 6 fluxos alternativos, 10 Business Objects, 6 Data Stores, 20 Message Events, 7 exceções, SLA, escalonamentos, timeouts, timers, compensações e 2 sub-processos — padrão MMS-002-06 | MMS-004-06 |
 | 2026-07-30 | MMS-004-07 — Use Cases do Inventory Management criados e aprovados (versão 1.0.0): UC-IV-001..011 (entrada, saída/atendimento, criar reserva, liberar/vencer, transferência, ajuste com aprovação, inventário, estorno, locais, alertas, posição/extrato) em especificação UML completa + matriz de rastreabilidade com 100% de cobertura de regras (40/40) e eventos (16/16) — padrão MMS-002-07 | MMS-004-07 |
 | 2026-07-30 | MMS-004-08 — User Stories do Inventory Management criadas e aprovadas (versão 1.0.0): 16 stories US-IV-001..016 em 5 Features (Movimentação, Reservas, Ajustes, Inventário, Consulta/Visão/Alertas) com persona, Gherkin, regras, eventos e matriz de rastreabilidade — padrão MMS-002-08 | MMS-004-08 |
+| 2026-07-30 | MMS-004-09 — Permissions do Inventory Management criado e aprovado (versão 1.0.0): modelo híbrido RBAC+ABAC+Escopo, 6 papéis (Requester com negação explícita da visão do almoxarifado), 11 permissões IV-PERM, restrições por estado das 4 entidades, policies POL-IV-AUTH, JWT claims, scopes inventory.*, Permission Matrix, SoD (SOD-IV-001/002 não desligáveis), Inheritance, Delegation e Evaluation Flow — padrão MMS-002-09 | MMS-004-09 |

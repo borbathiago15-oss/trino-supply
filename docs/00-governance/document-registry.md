@@ -92,6 +92,7 @@
 | MMS-002-12 | Item Catalog — Business Journey | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/12-business-journey.md` |
 | MMS-002-13 | Item Catalog — API | 1.0.0 | 🟢 Approved | `docs/07-api/materials/MMS-002/README.md` |
 | MMS-002-14 | Item Catalog — UX | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/14-ux.md` |
+| MMS-002-15 | Item Catalog — Wireframes | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/15-wireframes.md` |
 | MMS-003 | Material Requisition | 1.1.0 | 🟢 Approved | `docs/03-business/materials/MMS-003/README.md` |
 | MMS-004 | Inventory Management (Estoque) | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/README.md` |
 | MMS-005 | Receiving | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/README.md` |
@@ -189,3 +190,4 @@
 | 2026-07-30 | MMS-002-12 — Business Journey do Item Catalog criado e aprovado (versão 1.0.0): jornada macro (necessidade→cadastro→enriquecimento→ativação→consumo→manutenção→inativação/descarte), jornadas do mantenedor, do solicitante (busca por sinônimo) e do auditor, pontos de dor, momentos de verdade e KPIs por etapa — padrão PR-001-12 | MMS-002-12 |
 | 2026-07-30 | MMS-002-13 — API do Item Catalog criada e aprovada (versão 1.0.0): convenções (envelope, keyset, idempotência, autorização, rate limit), 20 endpoints `/api/v1/items` mapeados a UC/permissão/evento, modelos de recursos (Item, ItemSynonym, ItemListView, CompletenessCheckView), catálogo de erros IC-ERR → HTTP, segurança, versionamento, NFRs e roadmap — padrão PR-001-13 (docs/07-api) | MMS-002-13 |
 | 2026-07-30 | MMS-002-14 — UX do Item Catalog criado e aprovado (versão 1.0.0): princípios IC-UX-001..008, personas, arquitetura de informação (IC-SCR-01..05), jornadas por papel (mantenedor, solicitante via componente de busca, auditor, admin), padrões de interação, WCAG 2.1 AA, responsividade, i18n, DS-001, métricas e critérios de aceite — padrão PR-001-14 | MMS-002-14 |
+| 2026-07-30 | MMS-002-15 — Wireframes do Item Catalog criados e aprovados (versão 1.0.0): WF-IC-01..06 (lista, formulário com checklist de completude, detalhe com ciclo de vida, notificações, configurações, componente de busca por sinônimo) com zonas, variantes responsivas, estados, matriz de rastreabilidade e critérios CA-WF-IC — padrão PR-001-15 | MMS-002-15 |

@@ -102,6 +102,7 @@
 | MMS-004-03 | Inventory Management — State Machine | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/03-state-machine.md` |
 | MMS-004-04 | Inventory Management — Domain Model | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/04-domain-model.md` |
 | MMS-004-05 | Inventory Management — Event Storming | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/05-event-storming.md` |
+| MMS-004-06 | Inventory Management — BPMN | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/06-bpmn.md` |
 | MMS-005 | Receiving | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/README.md` |
 
 ---
@@ -205,3 +206,4 @@
 | 2026-07-30 | MMS-004-03 — State Machine do Inventory Management criada e aprovada (versão 1.0.0): 4 entidades com ciclo de vida (Documento de Movimentação, Reserva, Ajuste, Inventário — 4 estados cada) com entry/exit actions, guards, side effects, SLA, 4 matrizes de transição e eventos de domínio — padrão MMS-002-03 | MMS-004-03 |
 | 2026-07-30 | MMS-004-04 — Domain Model do Inventory Management criado e aprovado (versão 1.0.0): 5 Aggregate Roots (StockMovement, Reservation, Adjustment, InventoryCount, Location) + StockBalance como projeção não editável; 13 Value Objects; 16 invariantes INV-IV; factories; repositories sem escrita de saldo; 13 specifications; 9 domain services; 9 policies — padrão MMS-002-04 | MMS-004-04 |
 | 2026-07-30 | MMS-004-05 — Event Storming do Inventory Management criado e aprovado (versão 1.0.0): 20 comandos, 16 eventos EVT-IV, 10 políticas, validações, matriz evento×reação, 5 eventos consumidos e fichas técnicas ADR-010 (outbox, at-least-once, DLQ, ordenação por agregado/chave de saldo) — padrão MMS-002-05 | MMS-004-05 |
+| 2026-07-30 | MMS-004-06 — BPMN do Inventory Management criado e aprovado (versão 1.0.0): 7 fluxos principais (entrada, saída/atendimento, reserva com timer de vencimento, transferência, ajuste com aprovação, inventário com ajuste de divergências, estorno), 5 gateways RG-IV-GW, 6 fluxos alternativos, 10 Business Objects, 6 Data Stores, 20 Message Events, 7 exceções, SLA, escalonamentos, timeouts, timers, compensações e 2 sub-processos — padrão MMS-002-06 | MMS-004-06 |

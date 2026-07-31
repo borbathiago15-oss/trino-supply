@@ -91,6 +91,7 @@
 | MMS-002-11 | Item Catalog — Database Model | 1.0.0 | 🟢 Approved | `docs/06-database/materials/MMS-002/11-database.md` |
 | MMS-002-12 | Item Catalog — Business Journey | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/12-business-journey.md` |
 | MMS-002-13 | Item Catalog — API | 1.0.0 | 🟢 Approved | `docs/07-api/materials/MMS-002/README.md` |
+| MMS-002-14 | Item Catalog — UX | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-002/14-ux.md` |
 | MMS-003 | Material Requisition | 1.1.0 | 🟢 Approved | `docs/03-business/materials/MMS-003/README.md` |
 | MMS-004 | Inventory Management (Estoque) | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/README.md` |
 | MMS-005 | Receiving | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/README.md` |
@@ -187,3 +188,4 @@
 | 2026-07-30 | MMS-002-11 — Database Model do Item Catalog criado e aprovado (versão 1.0.0): DDL PostgreSQL completo no schema `materials` (ADR-009), tabelas item/item_synonym/item_replenishment_parameters com aggregate enxuto, unicidade soft-delete-ciente (company_id,code) e erp_code, constraints, índices parciais company_id-first, triggers TRG-IC-001..003, 3 views + 1 MV, keyset pagination, planos de indexação/performance/migração/backup, versionamento de schema — padrão PR-001-11 | MMS-002-11 |
 | 2026-07-30 | MMS-002-12 — Business Journey do Item Catalog criado e aprovado (versão 1.0.0): jornada macro (necessidade→cadastro→enriquecimento→ativação→consumo→manutenção→inativação/descarte), jornadas do mantenedor, do solicitante (busca por sinônimo) e do auditor, pontos de dor, momentos de verdade e KPIs por etapa — padrão PR-001-12 | MMS-002-12 |
 | 2026-07-30 | MMS-002-13 — API do Item Catalog criada e aprovada (versão 1.0.0): convenções (envelope, keyset, idempotência, autorização, rate limit), 20 endpoints `/api/v1/items` mapeados a UC/permissão/evento, modelos de recursos (Item, ItemSynonym, ItemListView, CompletenessCheckView), catálogo de erros IC-ERR → HTTP, segurança, versionamento, NFRs e roadmap — padrão PR-001-13 (docs/07-api) | MMS-002-13 |
+| 2026-07-30 | MMS-002-14 — UX do Item Catalog criado e aprovado (versão 1.0.0): princípios IC-UX-001..008, personas, arquitetura de informação (IC-SCR-01..05), jornadas por papel (mantenedor, solicitante via componente de busca, auditor, admin), padrões de interação, WCAG 2.1 AA, responsividade, i18n, DS-001, métricas e critérios de aceite — padrão PR-001-14 | MMS-002-14 |

@@ -101,6 +101,7 @@
 | MMS-004-02 | Inventory Management — Business Rules | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/02-business-rules.md` |
 | MMS-004-03 | Inventory Management — State Machine | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/03-state-machine.md` |
 | MMS-004-04 | Inventory Management — Domain Model | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/04-domain-model.md` |
+| MMS-004-05 | Inventory Management — Event Storming | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/05-event-storming.md` |
 | MMS-005 | Receiving | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/README.md` |
 
 ---
@@ -203,3 +204,4 @@
 | 2026-07-30 | MMS-004-02 — Business Rules do Inventory Management criadas e aprovadas (versão 1.0.0): 40 regras IV-BR em 13 famílias (integridade de saldo, entrada/saída, reserva, transferência, ajuste, locais, segregação, inventário, alertas, auditoria, segurança, performance, EPI/Fardamento) com IV-ERR, eventos, configurações `materials.inventory.*` e rastreabilidade 100% — padrão MMS-002-02 | MMS-004-02 |
 | 2026-07-30 | MMS-004-03 — State Machine do Inventory Management criada e aprovada (versão 1.0.0): 4 entidades com ciclo de vida (Documento de Movimentação, Reserva, Ajuste, Inventário — 4 estados cada) com entry/exit actions, guards, side effects, SLA, 4 matrizes de transição e eventos de domínio — padrão MMS-002-03 | MMS-004-03 |
 | 2026-07-30 | MMS-004-04 — Domain Model do Inventory Management criado e aprovado (versão 1.0.0): 5 Aggregate Roots (StockMovement, Reservation, Adjustment, InventoryCount, Location) + StockBalance como projeção não editável; 13 Value Objects; 16 invariantes INV-IV; factories; repositories sem escrita de saldo; 13 specifications; 9 domain services; 9 policies — padrão MMS-002-04 | MMS-004-04 |
+| 2026-07-30 | MMS-004-05 — Event Storming do Inventory Management criado e aprovado (versão 1.0.0): 20 comandos, 16 eventos EVT-IV, 10 políticas, validações, matriz evento×reação, 5 eventos consumidos e fichas técnicas ADR-010 (outbox, at-least-once, DLQ, ordenação por agregado/chave de saldo) — padrão MMS-002-05 | MMS-004-05 |

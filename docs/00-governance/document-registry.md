@@ -99,6 +99,7 @@
 | MMS-004 | Inventory Management (Estoque) | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/README.md` |
 | MMS-004-01 | Inventory Management — Business Context | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/01-business-context.md` |
 | MMS-004-02 | Inventory Management — Business Rules | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/02-business-rules.md` |
+| MMS-004-03 | Inventory Management — State Machine | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/03-state-machine.md` |
 | MMS-005 | Receiving | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/README.md` |
 
 ---
@@ -199,3 +200,4 @@
 | 2026-07-30 | MMS-002-17 — Test Scenarios do Item Catalog criados e aprovados (versão 1.0.0): 45 cenários TC-IC por caso de uso + transversais, ciclo de vida, eventos, notificações, API, UX, wireframes, UI×API, segurança, performance e banco; estratégia por camada; matriz de rastreabilidade 100% (27/27 regras, 72/72 ACs) — **fecha o pacote MMS-002 (17/17)** — padrão PR-001-17 | MMS-002-17 |
 | 2026-07-30 | MMS-004-01 — Business Context do Inventory Management criado e aprovado (versão 1.0.0): contexto, problema, objetivos, stakeholders, personas, premissas, restrições, gatilhos, entradas/saídas, KPIs (acuracidade ≥ 98%), riscos, glossário e dependências — padrão MMS-002-01 | MMS-004-01 |
 | 2026-07-30 | MMS-004-02 — Business Rules do Inventory Management criadas e aprovadas (versão 1.0.0): 40 regras IV-BR em 13 famílias (integridade de saldo, entrada/saída, reserva, transferência, ajuste, locais, segregação, inventário, alertas, auditoria, segurança, performance, EPI/Fardamento) com IV-ERR, eventos, configurações `materials.inventory.*` e rastreabilidade 100% — padrão MMS-002-02 | MMS-004-02 |
+| 2026-07-30 | MMS-004-03 — State Machine do Inventory Management criada e aprovada (versão 1.0.0): 4 entidades com ciclo de vida (Documento de Movimentação, Reserva, Ajuste, Inventário — 4 estados cada) com entry/exit actions, guards, side effects, SLA, 4 matrizes de transição e eventos de domínio — padrão MMS-002-03 | MMS-004-03 |

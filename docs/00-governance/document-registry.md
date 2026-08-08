@@ -26,6 +26,7 @@
 |----|-----------|--------|--------|---------|
 | TPES-002 | Prompt Master — Trino Supply Product Engineering | 1.0.0 | 🟢 Approved | `docs/00-governance/prompt-master-trino-supply-product-engineering.md` |
 | GOV-002 | Document Registry (este arquivo) | 1.0.0 | 🟢 Approved | `docs/00-governance/document-registry.md` |
+| GO-001 | Prontidão de Implementação & Kickoff de Build | 1.0.0 | 🟢 Approved | `docs/00-governance/GO-001-build-kickoff.md` |
 
 ---
 
@@ -235,6 +236,7 @@
 
 | Data | Evento | Referência |
 |------|--------|------------|
+| 2026-08-08 | **GO-001 — Prontidão de Implementação & Kickoff de Build criado e aprovado (v1.0.0):** certifica a completude da documentação do MVP (Foundation + PR-001 + suíte MMS 4×17 + arquitetura/segurança/testes/devops/release), define a estrutura do repositório de código por Bounded Context (Clean Arch), a ordem de build mapeada aos documentos (esteira → Foundation → MMS-002 → MMS-004 → MMS-003 → MMS-005 → PR-001 → frontend), a primeira sprint (fatia vertical do Foundation), o DoD por entrega e as guardas de robustez (ARC-006 §12) — **encerra a fase de design do MVP e abre a construção** | GO-001 |
 | 2026-08-08 | **PRC-005 — Supplier Management (Visão do Módulo) criado e aprovado (v1.0.0):** base cadastral da suíte de Compras — cadastro de fornecedor com identidade única, homologação com documentos/workflow (FD-001-04), avaliação de desempenho (score como projeção alimentada pelas divergências de recebimento do MMS-005), categorias (FD-001-09), ciclo de vida e consulta de homologados para RFQ; fronteiras com RFQ/Pedido/Contrato/Receiving; NFRs, KPIs, roadmap e DoD — conforme PRC-001, padrão MMS-002 | PRC-005 |
 | 2026-08-08 | **PRC-001 — Procurement Suite (Documento Mestre Funcional) criado e aprovado (v1.0.0):** enquadra a próxima onda de Compras — PR-001 (existente) + RFQ (PRC-002), Equalização (PRC-003), Purchase Order (PRC-004), Supplier Management (PRC-005), Contract Management (PRC-006); define o fluxo corporativo procure-to-pay, as fronteiras com Materials (demanda/recebimento) e Foundation, regras gerais PRC-RG, KPIs e roadmap (Supplier Management como base cadastral) — padrão MMS-001 | PRC-001 |
 | 2026-08-08 | **Camadas transversais concluídas (placeholders → Approved):** VIS-001 (Visão do Produto), PRD-001 (Engenharia de Produto), REL-001 (Gestão de Releases) e DOC-001 (Guias do Usuário) promovidos a 1.0.0. **Todas as pastas oficiais da taxonomia TPES-002 agora têm conteúdo aprovado**; documentação da plataforma essencialmente completa (Foundation, Procurement, suíte MMS 4×17, arquitetura ARC-001..007, segurança, testes QA-001, devops OPS-001, ADRs 009-016) | VIS-001, PRD-001, REL-001, DOC-001 |

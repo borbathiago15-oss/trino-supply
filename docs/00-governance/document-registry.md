@@ -100,6 +100,8 @@
 | MMS-003-03 | Material Requisition — State Machine | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-003/03-state-machine.md` |
 | MMS-003-04 | Material Requisition — Domain Model | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-003/04-domain-model.md` |
 | MMS-003-05 | Material Requisition — Event Storming | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-003/05-event-storming.md` |
+| MMS-003-07 | Material Requisition — Use Cases | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-003/07-use-cases.md` |
+| MMS-003-09 | Material Requisition — Permissions | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-003/09-permissions.md` |
 | MMS-003-11 | Material Requisition — Database Model | 1.0.0 | 🟢 Approved | `docs/06-database/materials/MMS-003/11-database.md` |
 | MMS-003-13 | Material Requisition — API | 1.0.0 | 🟢 Approved | `docs/07-api/materials/MMS-003/README.md` |
 | MMS-004 | Inventory Management (Estoque) | 1.1.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/README.md` |

@@ -126,6 +126,9 @@
 | MMS-004-11 | Inventory Management — Database Model | 1.0.0 | 🟢 Approved | `docs/06-database/materials/MMS-004/11-database.md` |
 | MMS-004-13 | Inventory Management — API | 1.0.0 | 🟢 Approved | `docs/07-api/materials/MMS-004/README.md` |
 | MMS-005 | Receiving | 1.1.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/README.md` |
+| MMS-005-01 | Receiving — Business Context | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/01-business-context.md` |
+| MMS-005-02 | Receiving — Business Rules | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/02-business-rules.md` |
+| MMS-005-03 | Receiving — State Machine | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/03-state-machine.md` |
 
 ---
 

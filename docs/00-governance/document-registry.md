@@ -33,6 +33,7 @@
 
 | ID | Documento | Versão | Status | Caminho |
 |----|-----------|--------|--------|---------|
+| PRC-001 | Procurement Suite — Documento Mestre Funcional | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PRC-001/README.md` |
 | PR-001 | Visão do Módulo | 1.1.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/README.md` |
 | PR-001-01 | Business Context | 1.1.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/01-business-context.md` |
 | PR-001-02 | Business Rules | 1.1.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/02-business-rules.md` |
@@ -233,6 +234,7 @@
 
 | Data | Evento | Referência |
 |------|--------|------------|
+| 2026-08-08 | **PRC-001 — Procurement Suite (Documento Mestre Funcional) criado e aprovado (v1.0.0):** enquadra a próxima onda de Compras — PR-001 (existente) + RFQ (PRC-002), Equalização (PRC-003), Purchase Order (PRC-004), Supplier Management (PRC-005), Contract Management (PRC-006); define o fluxo corporativo procure-to-pay, as fronteiras com Materials (demanda/recebimento) e Foundation, regras gerais PRC-RG, KPIs e roadmap (Supplier Management como base cadastral) — padrão MMS-001 | PRC-001 |
 | 2026-08-08 | **Camadas transversais concluídas (placeholders → Approved):** VIS-001 (Visão do Produto), PRD-001 (Engenharia de Produto), REL-001 (Gestão de Releases) e DOC-001 (Guias do Usuário) promovidos a 1.0.0. **Todas as pastas oficiais da taxonomia TPES-002 agora têm conteúdo aprovado**; documentação da plataforma essencialmente completa (Foundation, Procurement, suíte MMS 4×17, arquitetura ARC-001..007, segurança, testes QA-001, devops OPS-001, ADRs 009-016) | VIS-001, PRD-001, REL-001, DOC-001 |
 | 2026-08-08 | **ADR-016 — Cloudflare como camada de borda + R2 (Accepted):** decidido, por prioridade de **robustez** (banco pesado, multiusuário, aprovações concorrentes), manter o backend **.NET em containers** com **Cloudflare na borda** (CDN/WAF/DDoS/TLS = Camada 1 do SEC-001) e **R2** no lugar do MinIO (FD-001-03 abstrai o storage); PostgreSQL pesado em Postgres gerenciado atrás do Cloudflare (Hyperdrive opcional); **D1 não usado** e Workers não hospedam .NET. **ARC-006 → 1.1.0** com nova seção §12 (Concorrência, Contenção e Escala) consolidando as garantias de robustez; ARC-003 nomeia Cloudflare/R2. Reversível por ADR futura | ADR-016, ARC-006, ARC-003 |
 | 2026-08-08 | **Suíte MMS 100% documentada e camadas de suporte iniciadas:** pacotes MMS-003, MMS-004 e MMS-005 completados (17/17 cada) — a suíte de Materiais (MMS-002/003/004/005) fica integralmente documentada. **QA-001 (09-testing)** e **OPS-001 (10-devops)** promovidos de placeholder a Approved (v1.0.0): estratégia de testes corporativa (pirâmide, camadas, DoD, rastreabilidade 100%) e DevOps/CI-CD (pipeline com gates, migrations expand-and-contract, observabilidade, runbooks) — operacionalizam ARC-003/ARC-006/SEC-003/QA-001 | MMS-003, MMS-004, MMS-005, QA-001, OPS-001 |

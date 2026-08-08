@@ -2,10 +2,10 @@
 
 **Documento:** MMS-004-07 — Use Cases
 **Módulo:** MMS-004 — Inventory Management (Estoque / Almoxarifado)
-**Versão:** 1.0.0
+**Versão:** 1.1.0
 **Status:** 🟢 Approved
-**Data:** 2026-07-30
-**Dependências:** MMS-004 v1.0.0, MMS-004-02 (Business Rules), MMS-004-03 (State Machine), MMS-004-04 (Domain Model), MMS-004-05 (Event Storming), MMS-004-06 (BPMN), MMS-002, MMS-003, MMS-005, FD-001-04, FD-001-05, FD-001-09
+**Data:** 2026-08-08
+**Dependências:** MMS-004 v1.1.0, MMS-004-02 (Business Rules v1.1.0), MMS-004-03 (State Machine v1.1.0), MMS-004-04 (Domain Model v1.1.0), MMS-004-05 (Event Storming v1.1.0), MMS-004-06 (BPMN), ADR-013 (Conversão de UoM), ADR-014 (Motor de Regras de Reposição), MMS-002, MMS-003, MMS-005, FD-001-04, FD-001-05, FD-001-09
 **Referências:** MMS-002-07 (padrão de formato Enterprise), PR-001-07, MMS-004-09 Permissions (a produzir), MMS-004-13 API (a produzir), GOV-001
 
 > Especificação dos Casos de Uso do módulo Inventory Management.
@@ -1199,6 +1199,107 @@ E2. Perfil sem acesso a dados sensíveis (consumo por colaborador).
 
 ---
 
+# UC-IV-012 — Gerenciar Sugestões de Reposição
+
+## Objetivo
+
+Permitir que o responsável pelo ressuprimento **revise e decida** sobre as sugestões de reposição geradas automaticamente pela regra do item (ADR-014): confirmar (disparando a rota de compra ou transferência) ou descartar.
+
+## Atores
+
+- Almoxarife / Gerente de Suprimentos (primário)
+- Sistema (secundário — `ReplenishmentEvaluator` gera a sugestão; POL-IV-10)
+
+## Pré-condições
+
+- Regra de reposição habilitada (`materials.replenishment.enabled=true`).
+- Existe ao menos uma sugestão em estado **Sugerida** no escopo do usuário.
+- Usuário com permissão IV-PERM-011 (gestão de reposição).
+
+## Pós-condições
+
+- **Confirmar:** sugestão em **Confirmada**; EVT-IV-018 publicado; rota disparada — demanda gerada no PR-001 (rota `compra`) ou documento de transferência (rota `transferencia`), com referência à origem (item/depósito/sugestão).
+- **Descartar:** sugestão em **Descartada**; EVT-IV-019 publicado; nenhum efeito no saldo.
+
+## Gatilho
+
+O sistema gera a sugestão quando o disponível cruza o ponto de pedido (IV-BR-130); o responsável acessa a fila de sugestões.
+
+## Fluxo Principal (Confirmar)
+
+1. Usuário abre a fila de sugestões de reposição.
+2. Seleciona uma sugestão e revisa item, depósito, quantidade sugerida (pela política) e rota proposta.
+3. Confirma; o sistema valida a rota (IV-BR-131) e dispara a ação: demanda PR-001 ou documento de transferência.
+4. A sugestão passa a **Confirmada** e publica EVT-IV-018.
+
+## Fluxos Alternativos
+
+A1. Ajuste de quantidade/rota antes de confirmar.
+- A1.1. Quando permitido pelo perfil, o usuário ajusta a quantidade sugerida ou a rota; a decisão é auditada.
+
+A2. Execução automática (v2.0).
+- A2.1. Com `materials.replenishment.auto-execute=true`, a sugestão é confirmada automaticamente sem passar pela fila (registro auditado).
+
+## Fluxos de Exceção
+
+E1. Rota incompatível com a classificação do item.
+- E1.1. Recusa com `IV-ERR-131`.
+
+E2. Sugestão já decidida (Confirmada/Descartada).
+- E2.1. Recusa com `IV-ERR-130` (estado terminal).
+
+E3. Usuário sem permissão.
+- E3.1. Recusa com `IV-ERR-100`; auditoria de negação.
+
+## Regras
+
+- IV-BR-130 (avaliação → sugestão)
+- IV-BR-131 (sugestão revisável; rota compra→PR-001 / transferência→documento)
+- IV-BR-101 (rota conforme classificação — via MMS-002)
+
+## Eventos
+
+- ReplenishmentSuggestionGenerated (EVT-IV-017 — automático)
+- ReplenishmentSuggestionConfirmed (EVT-IV-018)
+- ReplenishmentSuggestionDiscarded (EVT-IV-019)
+
+## Mensagens
+
+| Código | Mensagem |
+| ------ | -------- |
+| MSG-IV-UC-012-A | "Sugestão confirmada. Demanda de compra gerada para o item {code}." |
+| MSG-IV-UC-012-B | "Sugestão confirmada. Transferência sugerida do depósito {from}." |
+| MSG-IV-UC-012-C | "Sugestão descartada." |
+
+## Validações
+
+- Rota dentro do conjunto {transferencia, compra, manual} e compatível com a classificação do item.
+- Quantidade sugerida > 0 (resolvida pela política — `multiplo_embalagem` usa o fator de UoM).
+
+## APIs
+
+| Método | Endpoint | Descrição |
+| ------ | -------- | --------- |
+| GET | `/api/v1/inventory/replenishment-suggestions` | Lista sugestões (fila), com filtros por item/depósito/status |
+| POST | `/api/v1/inventory/replenishment-suggestions/{id}/confirm` | Confirma a sugestão e dispara a rota; `200` |
+| POST | `/api/v1/inventory/replenishment-suggestions/{id}/discard` | Descarta a sugestão; `200` |
+
+## Permissões
+
+- IV-PERM-011 (Gerenciar reposição).
+
+## Testes Relacionados
+
+| Código | Cenário |
+| ------ | ------- |
+| TC-IV-012-1 | Disponível ≤ ponto de pedido → EVT-IV-017 (sugestão gerada) |
+| TC-IV-012-2 | Confirmar rota compra → demanda PR-001 + EVT-IV-018 |
+| TC-IV-012-3 | Confirmar rota transferência → documento de transferência |
+| TC-IV-012-4 | Descartar → EVT-IV-019, sem efeito no saldo |
+| TC-IV-012-5 | Rota incompatível → IV-ERR-131 |
+
+---
+
 # 8. Matriz de Rastreabilidade UC × Regras × Eventos × APIs × Permissões
 
 | UC | Regras IV-BR | Eventos | Endpoints | Permissões |
@@ -1214,8 +1315,9 @@ E2. Perfil sem acesso a dados sensíveis (consumo por colaborador).
 | UC-IV-009 Locais | 060..063, 095 | — (v1.1: LocationChanged) | POST/PATCH /locations; POST /locations/{id}/inactivate; GET /locations | IV-PERM-008 |
 | UC-IV-010 Alertas | 090..092, 095 | EVT-IV-015, 016 | GET /alerts; POST /alerts/{id}/acknowledge | IV-PERM-009/010 |
 | UC-IV-011 Posição/Extrato | 096, 097, 098 | — | GET /balances; GET /balances/{itemId}/statement; GET /movements; GET /movements/{id} | IV-PERM-009 |
+| UC-IV-012 Reposição (Sugestão) | 130, 131, 101 | EVT-IV-017, 018, 019 | GET /replenishment-suggestions; POST /replenishment-suggestions/{id}/confirm; /discard | IV-PERM-011 |
 
-**Cobertura:** 40/40 regras IV-BR mapeadas a pelo menos um UC; 16/16 eventos EVT-IV cobertos (EVT-IV-012..014 no UC-IV-007; EVT-IV-015/016 nos UC-IV-002/010).
+**Cobertura:** 42/42 regras IV-BR mapeadas a pelo menos um UC (inclui IV-BR-009 conversão de UoM na captura de movimentação, tratada nos UCs de entrada/saída/transferência); 19/19 eventos EVT-IV cobertos (EVT-IV-012..014 no UC-IV-007; EVT-IV-015/016 nos UC-IV-002/010; EVT-IV-017..019 no UC-IV-012).
 
 ---
 
@@ -1224,3 +1326,4 @@ E2. Perfil sem acesso a dados sensíveis (consumo por colaborador).
 | Versão | Data | Autor | Alteração |
 | ------ | ---- | ----- | --------- |
 | 1.0.0 | 2026-07-30 | Arquiteto Principal | Versão inicial aprovada: 11 casos de uso (UC-IV-001..011) em especificação UML completa — fluxo principal, fluxos alternativos, fluxos de exceção, pré/pós-condições, regras IV-BR, eventos EVT-IV, mensagens i18n, validações, APIs `/api/v1/inventory`, permissões IV-PERM e testes TC-IV; matriz de rastreabilidade consolidada com 100% de cobertura de regras e eventos. |
+| 1.1.0 | 2026-08-08 | Arquiteto Principal | Incorporação de ADR-013 e ADR-014: novo **UC-IV-012 — Gerenciar Sugestões de Reposição** (fila, confirmar→PR-001/transferência, descartar; eventos EVT-IV-017..019; endpoints `/replenishment-suggestions`); conversão de UoM na captura de movimentação referida nos UCs de entrada/saída (IV-BR-009); matriz de rastreabilidade ampliada (42 regras, 19 eventos). |

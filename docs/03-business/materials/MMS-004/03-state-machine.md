@@ -1,16 +1,16 @@
 **Documento:** MMS-004-03 — State Machine
 **Módulo:** MMS-004 — Inventory Management (Estoque)
-**Versão:** 1.0.0
+**Versão:** 1.1.0
 **Status:** 🟢 Approved
-**Data:** 2026-07-30
-**Dependências:** MMS-004 (Visão do Módulo), MMS-004-02 (Business Rules — IV-BR-001..042, IV-BR-070..073), MMS-001 (Documento Mestre Funcional — §15.2, MMS-RG-03/04/05), FD-001-04 (Workflow), FD-001-06 (Audit), FD-001-07 (Timeline), FD-001-10 (Configuration)
+**Data:** 2026-08-08
+**Dependências:** MMS-004 (Visão do Módulo v1.1.0), MMS-004-02 (Business Rules — IV-BR-001..042, IV-BR-070..073, IV-BR-130/131), MMS-001 (Documento Mestre Funcional — §15.2, MMS-RG-03/04/05), ADR-014 (Motor de Regras de Reposição), FD-001-04 (Workflow), FD-001-06 (Audit), FD-001-07 (Timeline), FD-001-10 (Configuration)
 **Referências:** MMS-002-03 (padrão de formato), MMS-003, MMS-005, PR-001, GOV-001
 
 ---
 
 # 1. Objetivo
 
-Definir todos os estados possíveis das **entidades com ciclo de vida** do módulo Inventory Management — Documento de Movimentação, Reserva, Ajuste e Inventário — suas transições, restrições e eventos associados, garantindo evolução controlada, previsível, auditável e compatível com as regras do módulo (MMS-004-02).
+Definir todos os estados possíveis das **entidades com ciclo de vida** do módulo Inventory Management — Documento de Movimentação, Reserva, Ajuste, Inventário e Sugestão de Reposição (ADR-014) — suas transições, restrições e eventos associados, garantindo evolução controlada, previsível, auditável e compatível com as regras do módulo (MMS-004-02).
 
 Nenhuma transição poderá ocorrer fora das regras definidas neste documento. Saldos **não possuem estado** — são projeções derivadas (IV-BR-001) e não aparecem nesta máquina.
 
@@ -66,6 +66,16 @@ Quando `materials.inventory.adjustment.approval-required=false`, o ajuste nasce 
 | ST-IV-031 | Em Contagem | Não |
 | ST-IV-032 | Fechado | Sim |
 | ST-IV-033 | Cancelado | Sim |
+
+## 3.5 Sugestão de Reposição (ADR-014)
+
+| Código | Estado | Final |
+|--------|--------|-------|
+| ST-IV-040 | Sugerida | Não |
+| ST-IV-041 | Confirmada | Sim |
+| ST-IV-042 | Descartada | Sim |
+
+A sugestão nasce em **Sugerida** por avaliação automática da regra do item (IV-BR-130, POL-IV-10). De **Sugerida** vai para **Confirmada** (CMD-IV-021 — dispara a rota: demanda PR-001 ou documento de transferência, IV-BR-131) ou **Descartada** (CMD-IV-022). Uma sugestão **não altera saldo** em nenhum estado. Quando `materials.replenishment.auto-execute=true` (v2.0), a transição Sugerida→Confirmada ocorre automaticamente, sem ação humana.
 
 ---
 
@@ -447,6 +457,15 @@ Aberto → (CancelInventory) → Cancelado
 | Fechado | qualquer | Não | — | — |
 | Cancelado | qualquer | Não | — | — |
 
+## 10.5 Sugestão de Reposição (ADR-014)
+
+| Origem | Destino | Permitido | Guard Condition | Evento |
+|--------|---------|-----------|-----------------|--------|
+| Sugerida | Confirmada | Sim | Rota válida para a classificação (IV-BR-101/131); auto-execução só com `auto-execute=true` (v2.0) | Sugestão de reposição confirmada |
+| Sugerida | Descartada | Sim | Decisão do responsável (motivo opcional) | Sugestão de reposição descartada |
+| Confirmada | qualquer | Não | — | — |
+| Descartada | qualquer | Não | — | — |
+
 ---
 
 # 11. Eventos de Domínio
@@ -471,6 +490,9 @@ Conforme o catálogo funcional da visão do módulo (MMS-004 README — Eventos 
 | Divergência aprovada | via Ajuste aprovado vinculado ao inventário |
 | Alerta de estoque mínimo | avaliação pós-confirmação (IV-BR-080) |
 | Alerta de ruptura | condição disponível zero com demanda aberta (IV-BR-081) |
+| Sugestão de reposição gerada | criação → Sugerida (avaliação IV-BR-130) |
+| Sugestão de reposição confirmada | Sugerida→Confirmada (IV-BR-131) |
+| Sugestão de reposição descartada | Sugerida→Descartada |
 
 ---
 
@@ -489,6 +511,7 @@ Não permitido:
 - Registrar contagem fora do escopo ou fora do estado Em Contagem (IV-BR-071);
 - Fechar inventário com escopo não tratado;
 - Cancelar inventário com contagens registradas;
+- Alterar sugestão de reposição já Confirmada ou Descartada; efeito de saldo por sugestão (a sugestão nunca movimenta saldo — IV-BR-130/131);
 - Alterar qualquer estado diretamente no banco (MMS-001 §15);
 - Efeito de saldo por contagem (contagem alimenta divergência, nunca saldo — IV-BR-071);
 - Qualquer transição sem auditoria (IV-BR-090).
@@ -623,3 +646,4 @@ TC-IV-121 (bloqueio de troca de tamanho no atendimento)
 | Versão | Data | Descrição |
 |--------|------|-----------|
 | 1.0.0 | 2026-07-30 | Criação da State Machine do Inventory Management: 4 entidades com ciclo de vida (Documento de Movimentação 4 estados, Reserva 4 estados, Ajuste 4 estados, Inventário 4 estados) com entry/exit actions, eventos aceitos/rejeitados, guard conditions, side effects, SLA, responsável e auditoria por estado; fluxos principais e alternativos; 4 matrizes de transição; eventos de domínio; restrições; rastreabilidade com regras IV-BR, UCs, APIs e testes conceituais — no padrão MMS-002-03, derivada da visão do módulo e das Business Rules (MMS-004-02) |
+| 1.1.0 | 2026-08-08 | Incorporação de ADR-014: nova entidade **Sugestão de Reposição** (5ª entidade) com 3 estados (ST-IV-040 Sugerida, ST-IV-041 Confirmada, ST-IV-042 Descartada), matriz de transição §10.5, eventos (gerada/confirmada/descartada) e restrições (a sugestão nunca movimenta saldo; auto-execução opt-in na v2.0) — IV-BR-130/131 |

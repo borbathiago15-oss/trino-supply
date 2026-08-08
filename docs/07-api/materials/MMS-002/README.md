@@ -4,10 +4,10 @@
 |---|---|
 | **Documento** | MMS-002-13 |
 | **Módulo** | Materials — Item Catalog (MMS-002) |
-| **Versão** | 1.0.0 |
+| **Versão** | 1.1.0 |
 | **Status** | 🟢 Approved |
-| **Data** | 2026-07-30 |
-| **Dependências** | MMS-002 (Visão) v1.1.0, MMS-002-02 (Business Rules), MMS-002-03 (State Machine), MMS-002-05 (Event Storming), MMS-002-07 (Use Cases), MMS-002-09 (Permissions), MMS-002-11 (Database), FD-001-01 (IAM), FD-001-03 (Documents/Storage), FD-001-05 (Notifications), FD-001-06 (Audit), FD-001-07 (Timeline), FD-001-09 (Master Data), FD-001-10 (Configuration), SEC-001/003, ADR-009, ADR-010 |
+| **Data** | 2026-08-08 |
+| **Dependências** | MMS-002 (Visão) v1.2.0, MMS-002-02 (Business Rules) v1.2.0, MMS-002-03 (State Machine), MMS-002-05 (Event Storming), MMS-002-07 (Use Cases) v1.1.0, MMS-002-09 (Permissions), MMS-002-11 (Database) v1.1.0, ADR-013 (Conversão de UoM), ADR-014 (Motor de Regras de Reposição), FD-001-01 (IAM), FD-001-03 (Documents/Storage), FD-001-05 (Notifications), FD-001-06 (Audit), FD-001-07 (Timeline), FD-001-09 (Master Data), FD-001-10 (Configuration), SEC-001/003, ADR-009, ADR-010 |
 | **Escopo** | API REST pública `v1` do módulo Item Catalog |
 
 ---
@@ -131,7 +131,11 @@ Resposta `429` com corpo de erro `IC-ERR-429` e `Retry-After`. Limites ajustáve
   "erpCode": "1002345",
   "description": "Luva de segurança vaqueta",
   "group": "EPI | FARDAMENTO",
-  "unitOfMeasure": "PAR",
+  "baseUnitOfMeasure": "UN",
+  "unitOfMeasure": "UN",
+  "alternativeUnits": [
+    { "uom": "CX", "conversionFactor": 12, "role": "PURCHASE | CONSUMPTION | null" }
+  ],
   "status": "DRAFT | ACTIVE | INACTIVE | DISCARDED",
   "ca": {
     "caNumber": "12345",
@@ -146,7 +150,10 @@ Resposta `429` com corpo de erro `IC-ERR-429` e `Retry-After`. Limites ajustáve
     "reorderPoint": 50,
     "minStock": 30,
     "maxStock": 200,
-    "safetyStock": 20
+    "safetyStock": 20,
+    "policy": "ATE_MAXIMO | MULTIPLO_EMBALAGEM | LOTE_FIXO | null",
+    "supplyRoute": "TRANSFERENCIA | COMPRA | MANUAL | null",
+    "fixedLotQuantity": "number | null"
   },
   "version": 4,
   "createdAt": "2026-07-30T14:00:00Z",
@@ -160,6 +167,8 @@ Resposta `429` com corpo de erro `IC-ERR-429` e `Retry-After`. Limites ajustáve
 - `ca` **obrigatório** para `group=EPI` (IC-BR-080/081); proibido para `FARDAMENTO`.
 - `sizeGrid` restrito aos valores do domínio FD-001-09 SIZE_GRID (IC-BR-082).
 - `image` via FD-001-03 (MinIO); conteúdo nunca em bytes no JSON — URL assinada ≤ 5 min (IC-BR-083, SEC-001).
+- `baseUnitOfMeasure` é a unidade em que o saldo é mantido (ADR-013, IC-BR-090); `unitOfMeasure` é mantido como alias da base por compatibilidade v1. `alternativeUnits` lista unidades com `conversionFactor > 0` na **mesma categoria** da base (IC-BR-091/092); toda quantidade trafega/persiste na base — a API nunca expõe saldo em unidade alternativa.
+- `replenishmentParameters.policy`/`supplyRoute` parametrizam a regra de reposição avaliada pelo MMS-004 (ADR-014, IC-BR-100/101); `fixedLotQuantity` é obrigatório quando `policy=LOTE_FIXO`.
 - `version` sustenta `If-Match` (controle otimista).
 - `status` segue a máquina de estados MMS-002-03 (`ST-IC-001..004`); `DISCARDED` é terminal.
 
@@ -251,21 +260,30 @@ Resposta `429` com corpo de erro `IC-ERR-429` e `Retry-After`. Limites ajustáve
 | 15 | `PUT` | `/api/v1/items/{id}/size-grid` | UC-IC-003 | IC-PERM-002 (`items.write`) | Define grade de tamanhos; corpo `{ sizes: [] }` ⊆ SIZE_GRID; `If-Match`; publica EVT-IC-002 |
 | 16 | `POST` | `/api/v1/items/{id}/image` | UC-IC-003 | IC-PERM-002 (`items.write`) | Upload multipart da imagem (FD-001-03); `201` + `attachmentId`; publica EVT-IC-008 |
 | 17 | `DELETE` | `/api/v1/items/{id}/image` | UC-IC-003 | IC-PERM-002 (`items.write`) | Remove imagem; `204`; auditado |
-| 18 | `PUT` | `/api/v1/items/{id}/replenishment-parameters` | UC-IC-003 | IC-PERM-002 (`items.write`) | Define parâmetros de reposição; valida coerência (IC-BR-060..063); `If-Match`; publica EVT-IC-002 |
+| 18 | `PUT` | `/api/v1/items/{id}/replenishment-parameters` | UC-IC-007 | IC-PERM-002 (`items.write`) | Define parâmetros de reposição, incluindo `policy`/`supplyRoute`/`fixedLotQuantity` (IC-BR-100/101); valida coerência (IC-BR-060..063); `If-Match`; publica EVT-IC-002 |
 
-### 4.4 Auditoria e timeline
+### 4.4 Unidades de medida e conversões (ADR-013)
 
 | # | Método | Endpoint | UC | Permissão | Descrição |
 |---|---|---|---|---|---|
-| 19 | `GET` | `/api/v1/items/{id}/history?cursor=` | UC-IC-007 | IC-PERM-010 (`items.audit`) | Histórico de auditoria funcional do item (FD-001-06) |
-| 20 | `GET` | `/api/v1/items/{id}/timeline?cursor=` | UC-IC-007 | IC-PERM-009 (`items.read`) | Atalho para FD-001-07 (`entityType=item`) |
+| 19 | `PUT` | `/api/v1/items/{id}/base-unit` | UC-IC-008 | IC-PERM-002 (`items.write`) | Define/altera a unidade de estoque (base); bloqueado após a 1ª movimentação (`422 IC-ERR-112`); `If-Match`; publica EVT-IC-002 |
+| 20 | `GET` | `/api/v1/items/{id}/uom-conversions` | UC-IC-008 | IC-PERM-009 (`items.read`) | Lista as unidades alternativas do item (uom, fator, papel) |
+| 21 | `POST` | `/api/v1/items/{id}/uom-conversions` | UC-IC-008 | IC-PERM-002 (`items.write`) | Inclui unidade alternativa `{ uom, conversionFactor, role? }`; valida categoria/fator/papel (IC-BR-091/092); `201`; publica EVT-IC-002 |
+| 22 | `DELETE` | `/api/v1/items/{id}/uom-conversions/{uom}` | UC-IC-008 | IC-PERM-002 (`items.write`) | Remove unidade alternativa (lógico); `204`; publica EVT-IC-002 |
 
-### 4.5 Mapeamento de eventos publicados
+### 4.5 Auditoria e timeline
+
+| # | Método | Endpoint | UC | Permissão | Descrição |
+|---|---|---|---|---|---|
+| 23 | `GET` | `/api/v1/items/{id}/history?cursor=` | UC-IC-007 | IC-PERM-010 (`items.audit`) | Histórico de auditoria funcional do item (FD-001-06) |
+| 24 | `GET` | `/api/v1/items/{id}/timeline?cursor=` | UC-IC-007 | IC-PERM-009 (`items.read`) | Atalho para FD-001-07 (`entityType=item`) |
+
+### 4.6 Mapeamento de eventos publicados
 
 | Endpoint | Eventos (MMS-002-05) | Efeitos colaterais |
 |---|---|---|
 | `POST /items` | EVT-IC-001 (ItemCreated) | Timeline `created`, auditoria |
-| `PATCH /items/{id}`, `PUT size-grid`, `PUT replenishment-parameters`, `POST/DELETE synonyms` | EVT-IC-002 (ItemUpdated) | Timeline, invalida cache de busca, auditoria |
+| `PATCH /items/{id}`, `PUT size-grid`, `PUT replenishment-parameters`, `POST/DELETE synonyms`, `PUT base-unit`, `POST/DELETE uom-conversions` | EVT-IC-002 (ItemUpdated) | Timeline, invalida cache de busca, auditoria |
 | `POST …/activate` | EVT-IC-003 (ItemActivated) — crítico | Libera consumo por MMS-003/MMS-004, notifica (IC-NOT-001), timeline |
 | `POST …/inactivate` | EVT-IC-004 (ItemInactivated) — crítico | Bloqueia novo consumo (IC-BR-050), notifica (IC-NOT-002), timeline |
 | `POST …/reactivate` | EVT-IC-005 (ItemReactivated) — crítico | Relibera consumo, notifica (IC-NOT-003), timeline |
@@ -301,6 +319,11 @@ Catálogo consolidado (detalhes e mensagens em MMS-002-02/MMS-002-07; `Accept-La
 | `IC-ERR-081` | 422 | CA vencido ou inválido (IC-BR-081) |
 | `IC-ERR-082` | 400 | Tamanho fora da grade padrão SIZE_GRID (IC-BR-082) |
 | `IC-ERR-083` | 400 | Imagem inválida (tipo/tamanho — política FD-001-03, IC-BR-083) |
+| `IC-ERR-110` | 400 | Unidade alternativa inválida: fator ≤ 0 ou papel duplicado (IC-BR-091) |
+| `IC-ERR-111` | 422 | Conversão inválida: unidade alternativa de categoria diferente da base (IC-BR-092) |
+| `IC-ERR-112` | 422 | Unidade de estoque (base) inválida ou imutável após a 1ª movimentação (IC-BR-090/093) |
+| `IC-ERR-120` | 400 | Política de reposição inválida/incompleta — `LOTE_FIXO` exige `fixedLotQuantity > 0` (IC-BR-100) |
+| `IC-ERR-121` | 400 | Rota de suprimento inválida para a classificação do item (IC-BR-101) |
 
 ---
 
@@ -339,7 +362,7 @@ Catálogo consolidado (detalhes e mensagens em MMS-002-02/MMS-002-07; `Accept-La
 
 ## 9. Critérios de Conclusão
 
-- [ ] Todos os 20 endpoints implementados conforme este catálogo, com testes de contrato (OpenAPI diff limpo).
+- [ ] Todos os 24 endpoints implementados conforme este catálogo, com testes de contrato (OpenAPI diff limpo).
 - [ ] Fluxo de autorização escopo(404)→RBAC→ABAC→delegação verificado em testes por endpoint.
 - [ ] Keyset pagination com cursor assinado em todas as coleções (`IC-ERR-400` testado).
 - [ ] Idempotency-Key funcional nos endpoints de escrita.
@@ -353,8 +376,8 @@ Catálogo consolidado (detalhes e mensagens em MMS-002-02/MMS-002-07; `Accept-La
 
 | Versão | Escopo |
 |---|---|
-| **v1.0 (MVP)** | Este catálogo (20 endpoints), erros, segurança, keyset, idempotência, OpenAPI 3.1. |
-| **v1.1** | Importação em lote do ERP (`POST /api/v1/items/import` com relatório por linha), exportação CSV (`GET /api/v1/items/export.csv`), endpoint de sugestão de duplicatas (`GET /api/v1/items/{id}/duplicates`). |
+| **v1.0 (MVP)** | Catálogo base (20 endpoints), erros, segurança, keyset, idempotência, OpenAPI 3.1. |
+| **v1.1** | **(ADR-013/014, entregue neste documento)** 4 endpoints de unidade base e conversões (`/base-unit`, `/uom-conversions`), parâmetros de reposição com `policy`/`supplyRoute`/`fixedLotQuantity`, erros IC-ERR-110/111/112/120/121. Também previstos: importação em lote do ERP (`POST /api/v1/items/import` com relatório por linha), exportação CSV (`GET /api/v1/items/export.csv`), sugestão de duplicatas (`GET /api/v1/items/{id}/duplicates`). |
 | **v2.0** | Webhooks assinados de ciclo de vida do item, bulk lifecycle (`POST /api/v1/items/bulk-activate` com relatório por item), busca full-text dedicada (`GET /api/v1/items/search` com ranking explícito e facetas). |
 
 ---
@@ -364,3 +387,4 @@ Catálogo consolidado (detalhes e mensagens em MMS-002-02/MMS-002-07; `Accept-La
 | Versão | Data | Descrição | Autor |
 |---|---|---|---|
 | 1.0.0 | 2026-07-30 | Versão inicial aprovada: convenções (envelope, keyset, idempotência, autorização, headers, HTTP, rate limit), modelos de recursos (Item, ItemSynonym, ItemListView, CompletenessCheckView), catálogo de 20 endpoints mapeados a UC/permissão/evento, catálogo de erros IC-ERR, segurança operacional, versionamento, NFRs, critérios de conclusão e roadmap. | Arquitetura Trino |
+| 1.1.0 | 2026-08-08 | Incorporação de ADR-013 e ADR-014: recurso `Item` ganha `baseUnitOfMeasure`, `alternativeUnits[]` e `replenishmentParameters.policy/supplyRoute/fixedLotQuantity`; 4 novos endpoints (nº 19–22: `PUT /base-unit`, `GET/POST/DELETE /uom-conversions`) mapeados a UC-IC-008; auditoria/timeline renumeradas para 23–24 (total 24); 5 novos erros IC-ERR-110/111/112/120/121 (faixa livre, sem colisão com os códigos de estado/motivo já usados); mapa de eventos e roadmap atualizados. | Arquitetura Trino |

@@ -715,7 +715,7 @@ Família introduzida na revisão 1.2.0 (ADR-013 — Conversão de Unidade de Med
 | Tipo | Obrigatória |
 | Validação | UoM base existente e vigente no FD-001-09 (IC-BR-003); exatamente uma por item; imutável após a primeira movimentação do item no MMS-004. |
 | Mensagem de erro | "Informe a unidade de estoque (base) do item." |
-| Código do erro | IC-ERR-090 |
+| Código do erro | IC-ERR-112 |
 | Evento | Item cadastrado (rascunho) / Item alterado |
 | Caso de uso | UC-IC-001, UC-IC-002 |
 | API | POST, PATCH /api/v1/items |
@@ -735,7 +735,7 @@ Família introduzida na revisão 1.2.0 (ADR-013 — Conversão de Unidade de Med
 | Tipo | Parametrizável (existência do recurso; obrigatoriedade da unidade de compra é configurável) |
 | Validação | Fator numérico > 0; unicidade da UoM alternativa por item; unicidade de papel por item (no máximo uma unidade de compra padrão); a UoM alternativa é vigente no FD-001-09. |
 | Mensagem de erro | "Unidade alternativa ou fator de conversão inválido." |
-| Código do erro | IC-ERR-091 |
+| Código do erro | IC-ERR-110 |
 | Evento | Item cadastrado (rascunho) / Item alterado |
 | Caso de uso | UC-IC-001, UC-IC-002 |
 | API | PUT /api/v1/items/{id}/uom-conversions |
@@ -755,7 +755,7 @@ Família introduzida na revisão 1.2.0 (ADR-013 — Conversão de Unidade de Med
 | Tipo | Obrigatória |
 | Validação | UoM base e UoM alternativa pertencem à mesma categoria no FD-001-09; caso contrário, a conversão é recusada. |
 | Mensagem de erro | "Conversão inválida: as unidades pertencem a categorias diferentes." |
-| Código do erro | IC-ERR-092 |
+| Código do erro | IC-ERR-111 |
 | Evento | Item cadastrado (rascunho) / Item alterado |
 | Caso de uso | UC-IC-001, UC-IC-002 |
 | API | PUT /api/v1/items/{id}/uom-conversions |
@@ -775,7 +775,7 @@ Família introduzida na revisão 1.2.0 (ADR-013 — Conversão de Unidade de Med
 | Tipo | Obrigatória (imutabilidade); Parametrizável (arredondamento) |
 | Validação | Movimentos do MMS-004 registram quantidade base + (quantidade informada, UoM informada, fator aplicado); arredondamento conforme regra configurada, sem comportamento implícito. |
 | Mensagem de erro | — (regra de integridade; sem entrada direta de usuário) |
-| Código do erro | IC-ERR-093 |
+| Código do erro | IC-ERR-112 |
 | Evento | Item alterado (fator) |
 | Caso de uso | UC-IC-002 |
 | API | PUT /api/v1/items/{id}/uom-conversions |
@@ -799,7 +799,7 @@ Família introduzida na revisão 1.2.0 (ADR-014 — Motor de Regras de Reposiç�
 | Tipo | Parametrizável |
 | Validação | Valor dentro do conjunto fechado {ate_maximo, multiplo_embalagem, lote_fixo}; `lote_fixo` exige quantidade > 0; `multiplo_embalagem` exige unidade de compra com fator (IC-BR-091). |
 | Mensagem de erro | "Política de reposição inválida ou incompleta." |
-| Código do erro | IC-ERR-100 |
+| Código do erro | IC-ERR-120 |
 | Evento | Parâmetros de reposição alterados |
 | Caso de uso | UC-IC-007 |
 | API | PUT /api/v1/items/{id}/replenishment |
@@ -819,7 +819,7 @@ Família introduzida na revisão 1.2.0 (ADR-014 — Motor de Regras de Reposiç�
 | Tipo | Parametrizável |
 | Validação | Valor dentro do conjunto fechado {transferencia, compra, manual}; item `sob encomenda`/`não estocável` assume `manual`/`compra` conforme classificação (IC-BR-005). |
 | Mensagem de erro | "Rota de suprimento inválida para a classificação do item." |
-| Código do erro | IC-ERR-101 |
+| Código do erro | IC-ERR-121 |
 | Evento | Parâmetros de reposição alterados |
 | Caso de uso | UC-IC-007 |
 | API | PUT /api/v1/items/{id}/replenishment |

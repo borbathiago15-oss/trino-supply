@@ -2,10 +2,10 @@
 
 **Documento:** MMS-002-07 — Use Cases
 **Módulo:** MMS-002 — Item Catalog (Catálogo de Itens)
-**Versão:** 1.0.0
+**Versão:** 1.1.0
 **Status:** 🟢 Approved
-**Data:** 2026-07-30
-**Dependências:** MMS-002 v1.1.0, MMS-002-02 v1.1.0 (Business Rules), MMS-002-03 (State Machine), MMS-002-05 (Event Storming), MMS-002-06 (BPMN), FD-001-03, FD-001-09
+**Data:** 2026-08-08
+**Dependências:** MMS-002 v1.2.0, MMS-002-02 v1.2.0 (Business Rules), MMS-002-03 (State Machine), MMS-002-05 (Event Storming), MMS-002-06 (BPMN), ADR-013 (Conversão de UoM), ADR-014 (Motor de Regras de Reposição), FD-001-03, FD-001-09
 **Referências:** PR-001-07 (padrão de formato Enterprise), MMS-002-09 Permissions (a produzir), MMS-002-13 API (a produzir), GOV-001
 
 > Especificação dos Casos de Uso do módulo Item Catalog.
@@ -727,8 +727,8 @@ O mantenedor seleciona "Parâmetros de reposição" na tela do item.
 
 ## Fluxo Principal
 
-1. Usuário informa ponto de reposição, estoque mínimo, estoque máximo e lead time.
-2. Sistema valida a coerência dos parâmetros (IC-BR-050..052).
+1. Usuário informa ponto de reposição, estoque mínimo, estoque máximo, lead time e, opcionalmente, a **política de quantidade sugerida** (repor até o máximo / múltiplo de embalagem / lote fixo) e a **rota de suprimento** (transferência / compra / manual) — ADR-014.
+2. Sistema valida a coerência dos parâmetros (IC-BR-050..052) e da regra de reposição (IC-BR-100/101 — `lote_fixo` exige quantidade > 0; `multiplo_embalagem` exige unidade de compra com fator).
 3. Sistema persiste, publica EVT-IC-006 e registra auditoria.
 
 ## Fluxos Alternativos
@@ -761,6 +761,8 @@ E5. Usuário sem permissão.
 - IC-BR-050 (coerência mínimo ≤ ponto ≤ máximo)
 - IC-BR-051 (faixas de valores)
 - IC-BR-052 (lead time)
+- IC-BR-100 (política de quantidade sugerida)
+- IC-BR-101 (rota de suprimento)
 - IC-BR-070 (auditoria)
 
 ## Eventos
@@ -801,6 +803,112 @@ E5. Usuário sem permissão.
 
 ---
 
+# UC-IC-008 — Gerenciar Unidades Alternativas e Conversões
+
+## Objetivo
+
+Manter a **unidade de estoque (base)** e as **unidades alternativas com fator de conversão** de um item (ex.: `1 CX = 12 UN`), viabilizando comprar em uma unidade e estocar/consumir em outra (ADR-013).
+
+## Atores
+
+- Gerente de Suprimentos / Administrador (primário)
+
+## Pré-condições
+
+- Item existente em estado **Rascunho**, **Ativo** ou **Inativo** (nunca em Descarte).
+- Usuário autenticado com permissão IC-PERM-002 (edição cadastral).
+
+## Pós-condições
+
+- Unidade alternativa incluída, alterada ou removida; ou unidade base definida.
+- Evento EVT-IC-002 `ItemUpdated` publicado com `changedFields` (uom).
+- Timeline e Auditoria com before/after.
+
+## Gatilho
+
+O mantenedor acessa "Unidades e conversões" na tela do item.
+
+## Fluxo Principal (Incluir unidade alternativa)
+
+1. Usuário informa a unidade alternativa (Master Data), o fator de conversão para a base e, opcionalmente, o papel (unidade de compra padrão / de consumo).
+2. Sistema valida: mesma categoria de UoM da base (IC-BR-092), fator > 0 e unicidade de UoM e de papel por item (IC-BR-091).
+3. Sistema persiste, publica EVT-IC-002 e registra auditoria.
+
+## Fluxos Alternativos
+
+A1. Definir/alterar a unidade base.
+- A1.1. Permitido enquanto o item **não tem movimentação** no MMS-004 (INV-IC-12); após a primeira movimentação, a base é imutável.
+
+A2. Remover unidade alternativa.
+- A2.1. Remoção lógica; movimentos históricos que usaram a unidade preservam o fator aplicado no momento (IC-BR-093).
+
+## Fluxos de Exceção
+
+E1. Fator inválido (≤ 0).
+- E1.1. Recusa com `IC-ERR-110`.
+
+E2. Unidade alternativa de categoria diferente da base.
+- E2.1. Recusa com `IC-ERR-111`.
+
+E3. Papel já atribuído a outra unidade do item.
+- E3.1. Recusa com `IC-ERR-110` (unicidade de papel).
+
+E4. Alteração da base após a primeira movimentação.
+- E4.1. Recusa com `IC-ERR-112` (base imutável — INV-IC-12).
+
+E5. Usuário sem permissão.
+- E5.1. Recusa com `IC-ERR-900`; auditoria de negação.
+
+## Regras
+
+- IC-BR-090 (unidade de estoque base)
+- IC-BR-091 (unidades alternativas com fator e papel)
+- IC-BR-092 (conversão na mesma categoria)
+- IC-BR-093 (fator imutável para movimentos; arredondamento parametrizável)
+
+## Eventos
+
+- ItemUpdated (EVT-IC-002)
+
+## Mensagens
+
+| Código | Mensagem |
+| ------ | -------- |
+| MSG-IC-UC-008-A | "Unidade {uom} adicionada com fator {factor} para o item {code}." |
+| MSG-IC-UC-008-B | "A unidade alternativa deve pertencer à mesma categoria da unidade base." |
+| MSG-IC-UC-008-C | "A unidade base não pode ser alterada após a primeira movimentação de estoque." |
+
+## Validações
+
+- Fator de conversão > 0 (`NUMERIC(18,6)`), arredondamento conforme `materials.item.uom.rounding`.
+- Categoria da unidade alternativa = categoria da base (Master Data, FD-001-09).
+- Unicidade de UoM e de papel por item.
+
+## APIs
+
+| Método | Endpoint | Descrição |
+| ------ | -------- | --------- |
+| PUT | `/api/v1/items/{id}/base-unit` | Define/altera a unidade de estoque (base); bloqueado após 1ª movimentação |
+| GET | `/api/v1/items/{id}/uom-conversions` | Lista as unidades alternativas do item |
+| POST | `/api/v1/items/{id}/uom-conversions` | Inclui unidade alternativa (uom, fator, papel); retorna `201` |
+| DELETE | `/api/v1/items/{id}/uom-conversions/{uomId}` | Remove unidade alternativa; retorna `204` |
+
+## Permissões
+
+- IC-PERM-002 (Editar item).
+
+## Testes Relacionados
+
+| Código | Cenário |
+| ------ | ------- |
+| TC-IC-008-1 | Inclusão válida (`1 CX = 12 UN`) → EVT-IC-002 + auditoria |
+| TC-IC-008-2 | Fator ≤ 0 → IC-ERR-110 |
+| TC-IC-008-3 | Unidade de categoria diferente → IC-ERR-111 |
+| TC-IC-008-4 | Papel duplicado (2 unidades de compra) → IC-ERR-110 |
+| TC-IC-008-5 | Alterar base após movimentação → IC-ERR-112 |
+
+---
+
 # 8. Matriz de Rastreabilidade UC × Regras × Eventos × APIs × Permissões
 
 | UC | Regras IC-BR | Eventos | Endpoints | Permissões |
@@ -811,7 +919,8 @@ E5. Usuário sem permissão.
 | UC-IC-004 Inativar/Reativar/Descartar | 021, 070, 080..083, State Machine | EVT-IC-003/004/005 | POST /items/{id}/inactivate; /reactivate; /discard | IC-PERM-004 (003 p/ reativar) |
 | UC-IC-005 Sinônimos | 040, 041, 070 | EVT-IC-007/008 | POST/DELETE /items/{id}/synonyms | IC-PERM-005 |
 | UC-IC-006 Consultar | 021, 071 | — | GET /items; GET /items/{id}; GET /items/{id}/timeline | IC-PERM-006 |
-| UC-IC-007 Parâmetros | 050, 051, 052, 070 | EVT-IC-006 | PUT /items/{id}/replenishment-parameters | IC-PERM-007 |
+| UC-IC-007 Parâmetros | 050, 051, 052, 100, 101, 070 | EVT-IC-006 | PUT /items/{id}/replenishment-parameters | IC-PERM-007 |
+| UC-IC-008 Unidades/Conversões | 090, 091, 092, 093 | EVT-IC-002 | PUT /items/{id}/base-unit; GET/POST/DELETE /items/{id}/uom-conversions | IC-PERM-002 |
 
 ---
 
@@ -820,3 +929,4 @@ E5. Usuário sem permissão.
 | Versão | Data | Autor | Alteração |
 | ------ | ---- | ----- | --------- |
 | 1.0.0 | 2026-07-30 | Arquiteto Principal | Versão inicial aprovada: 7 casos de uso (UC-IC-001..007) em especificação UML completa — fluxo principal, fluxos alternativos, fluxos de exceção, pré/pós-condições, regras IC-BR, eventos EVT-IC, mensagens i18n, validações, APIs `/api/v1/items`, permissões IC-PERM e testes TC-IC; matriz de rastreabilidade consolidada. |
+| 1.1.0 | 2026-08-08 | Arquiteto Principal | Incorporação de ADR-013 e ADR-014: novo **UC-IC-008 — Gerenciar Unidades Alternativas e Conversões** (unidade base + unidades alternativas com fator, endpoints `/base-unit` e `/uom-conversions`, regras IC-BR-090..093); **UC-IC-007** estendido com política de quantidade sugerida e rota de suprimento (IC-BR-100/101); matriz de rastreabilidade ampliada (UC-IC-008 + regras novas). |

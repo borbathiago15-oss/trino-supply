@@ -252,7 +252,7 @@ A ativação de item **não exige workflow** no MVP (responsabilidade do papel G
 
 ## Versão 1.2
 
-- **Conversão de Unidade de Medida** (ADR-013): unidade de estoque (base) + unidades alternativas com fator e papel; conversão nas fronteiras (Receiving/movimentação/compra). Revisão dos documentos detalhados do pacote (MMS-002-04 Domain Model, MMS-002-11 Database, MMS-002-07/13 UC/API) para refletir o Value Object de conversão e as colunas de fator/UoM base — pendente neste passe.
+- **Conversão de Unidade de Medida** (ADR-013): unidade de estoque (base) + unidades alternativas com fator e papel; conversão nas fronteiras (Receiving/movimentação/compra). **Concluída** em todo o pacote MMS-002: Business Rules (IC-BR-090..093/100..101), Domain Model (`AlternativeUnit`, VOs de conversão/reposição), Database (`item_alternative_unit`, colunas de política/rota), Use Cases (UC-IC-008) e API (endpoints `/base-unit` e `/uom-conversions`).
 
 ## Versão 2.0
 

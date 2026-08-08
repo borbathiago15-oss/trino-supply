@@ -1,9 +1,9 @@
 **Documento:** MMS-005 — Receiving (Visão do Módulo)
 **Módulo:** MMS-005 — Receiving (Recebimento)
-**Versão:** 1.0.0
+**Versão:** 1.1.0
 **Status:** 🟢 Approved
-**Data:** 2026-07-30
-**Dependências:** MMS-001 (Documento Mestre Funcional — seções 6, 8.4, 9, 14, 15.3, 16, 20, 22, 23, 24, 25), ADR-012, FD-001-01, FD-001-02, FD-001-04, FD-001-05, FD-001-06, FD-001-07, FD-001-10
+**Data:** 2026-08-08
+**Dependências:** MMS-001 (Documento Mestre Funcional — seções 6, 8.4, 9, 14, 15.3, 16, 20, 22, 23, 24, 25), ADR-012, ADR-013 (Conversão de UoM), FD-001-01, FD-001-02, FD-001-04, FD-001-05, FD-001-06, FD-001-07, FD-001-10
 **Referências:** MMS-002 (Item Catalog), MMS-003 (Material Requisition), MMS-004 (Inventory Management), PR-001 (Purchase Requisition — origem de compras), GOV-001
 
 ---
@@ -21,7 +21,7 @@ O módulo existe para garantir que **nada entra no estoque sem conferência e se
 ## O que faz
 
 - **Recebimento contra documento de origem:** Pedido de Compra (futuro, domínio Procurement), transferência entre depósitos ou devolução de solicitante — sempre com referência obrigatória (MMS-RG-06).
-- **Conferência quantitativa:** quantidade recebida × quantidade esperada, item a item.
+- **Conferência quantitativa:** quantidade recebida × quantidade esperada, item a item. A quantidade pode ser conferida na **unidade de compra** do item (ex.: caixas); ao gerar a entrada, o sistema **converte para a unidade base** pelo fator do item (ADR-013, MMS-002 IC-BR-091) e o documento de entrada registra o fator aplicado (MMS-004 IV-BR-009).
 - **Registro de divergências:** falta, excesso e avaria, cada uma com destino documentado (MMS-RG-07) — nenhuma diferença desaparece sem rastro.
 - **Entrada no estoque:** conferência concluída gera o documento de entrada no MMS-004 (integração interna Receiving ↔ Inventory, MMS-001 §22).
 - **Retomada de atendimento pendente:** quando a origem é compra destinada a uma solicitação de material, a entrada dispara o atendimento da MMS-003 (MMS-001 §8.4); em **compra dedicada** (parametrizada), o material entra no estoque já reservado para a solicitação de origem.
@@ -44,7 +44,7 @@ O módulo existe para garantir que **nada entra no estoque sem conferência e se
 | MMS-004 Inventory | Dispara | Conferência concluída gera documento de entrada; origem dedicada entra já reservada |
 | MMS-003 Material Requisition | Alimenta | Entrada de material comprado retoma o atendimento pendente da solicitação |
 | PR-001 / Procurement (futuro PO) | Consome | Pedido de compra como documento de origem, com quantidades esperadas e previsão |
-| MMS-002 Item Catalog | Consome | Itens válidos para conferência (somente ativos; unidade de medida oficial) |
+| MMS-002 Item Catalog | Consome | Itens válidos para conferência (somente ativos; unidade base e unidades de compra com fator de conversão — ADR-013) |
 | Foundation (FD-001-01..10) | Consome | Identidade, organização, workflow (aprovação de divergência quando parametrizada), notificações, auditoria, timeline, configuração |
 
 ---
@@ -154,7 +154,7 @@ Regras herdadas que este módulo impõe:
 |---------|--------|------------|
 | Documento de origem | PR-001/Procurement (pedido), MMS-004 (transferência), MMS-003 (devolução) | Obrigatório (MMS-RG-06) |
 | Quantidades esperadas | Documento de origem | Base da conferência |
-| Quantidades recebidas | Almoxarife | Conferência física |
+| Quantidades recebidas | Almoxarife | Conferência física; pode ser informada na unidade de compra, convertida para a base na entrada (ADR-013) |
 | Divergências e destinos | Almoxarife/Supervisor | Falta, excesso, avaria com destino documentado |
 | Tolerâncias | FD-001-10 (`materials.receiving.*`) | Limites de aceite parametrizáveis (MMS-RG-11) |
 | Vínculo com solicitação | MMS-003 / PR-001 | Identifica compra dedicada e atendimento pendente |
@@ -333,3 +333,4 @@ Registradas para visibilidade — **fora do compromisso de qualquer versão**: c
 | Versão | Data | Descrição |
 |--------|------|-----------|
 | 1.0.0 | 2026-07-30 | Criação da visão do módulo Receiving: recebimento físico contra documento de origem (MMS-RG-06), conferência quantitativa, divergências com destino documentado (MMS-RG-07), entrada no estoque via MMS-004, retomada de atendimento pendente da MMS-003 e compra dedicada parametrizável; sem inspeção de qualidade no MVP (v2.0); fronteiras com MMS-002/003/004 e PR-001; NFRs, KPIs, DoD e roadmap. Fontes: MMS-001 (§8.4, §9, §14, §15.3, §16, §22, §23, §24) |
+| 1.1.0 | 2026-08-08 | Propagação de ADR-013 (Conversão de UoM): a conferência pode ser feita na unidade de compra do item, com conversão para a unidade base ao gerar a entrada no estoque (fator aplicado registrado no documento — MMS-004 IV-BR-009); integração com MMS-002 e entradas atualizadas. Fronteira preservada: o saldo continua exclusivamente no MMS-004, na unidade base |

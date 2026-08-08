@@ -34,6 +34,7 @@
 | ID | Documento | Versão | Status | Caminho |
 |----|-----------|--------|--------|---------|
 | PRC-001 | Procurement Suite — Documento Mestre Funcional | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PRC-001/README.md` |
+| PRC-005 | Supplier Management (Visão do Módulo) | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PRC-005/README.md` |
 | PR-001 | Visão do Módulo | 1.1.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/README.md` |
 | PR-001-01 | Business Context | 1.1.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/01-business-context.md` |
 | PR-001-02 | Business Rules | 1.1.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/02-business-rules.md` |

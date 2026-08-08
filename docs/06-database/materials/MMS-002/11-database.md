@@ -2,10 +2,10 @@
 
 **Documento:** MMS-002-11 — Database Model
 **Módulo:** MMS-002 — Item Catalog (Catálogo de Itens)
-**Versão:** 1.0.0
+**Versão:** 1.1.0
 **Status:** 🟢 Approved
-**Data:** 2026-07-30
-**Dependências:** MMS-002 v1.1.0, MMS-002-02 v1.1.0, MMS-002-04 (Domain Model), MMS-002-05 (Event Storming), MMS-002-07 (Use Cases), ADR-009, ADR-010, FD-001-03, FD-001-09
+**Data:** 2026-08-08
+**Dependências:** MMS-002 v1.2.0, MMS-002-02 v1.2.0, MMS-002-04 (Domain Model v1.1.0), MMS-002-05 (Event Storming), MMS-002-07 (Use Cases), ADR-009, ADR-010, ADR-013 (Conversão de UoM), ADR-014 (Motor de Regras de Reposição), FD-001-03, FD-001-09
 **Referências:** PR-001-11 (padrão de formato Enterprise — `docs/06-database/procurement/PR-001/11-database.md`), GOV-001
 
 > Decisão arquitetural associada: ADR-009 — Banco de dados como projeção do domínio.
@@ -95,7 +95,7 @@ id
 | company_id         | UUID          |
 | code               | VARCHAR(50)   |
 | description        | VARCHAR(500)  |
-| unit_of_measure_id | UUID          |
+| unit_of_measure_id | UUID          | (unidade de estoque = base — ADR-013) |
 | group_id           | UUID          |
 | category_id        | UUID          |
 | erp_code           | VARCHAR(50)   |
@@ -124,18 +124,37 @@ id
 
 ---
 
+## item_alternative_unit (ADR-013)
+
+| Campo             | Tipo          |
+| ----------------- | ------------- |
+| id                | UUID          |
+| item_id           | UUID (FK)     |
+| uom_id            | UUID          | (Master Data — mesma categoria da base) |
+| conversion_factor | NUMERIC(18,6) | (1 uom = factor × base) |
+| role              | SMALLINT NULL | (1=compra padrão, 2=consumo) |
+| created_at        | TIMESTAMP     |
+| updated_at        | TIMESTAMP     |
+| deleted_at        | TIMESTAMP NULL |
+| version           | INTEGER       |
+
+---
+
 ## item_replenishment_parameters
 
-| Campo            | Tipo          |
-| ---------------- | ------------- |
-| item_id          | UUID (PK/FK)  |
-| reorder_point    | NUMERIC(18,4) |
-| min_stock        | NUMERIC(18,4) |
-| max_stock        | NUMERIC(18,4) |
-| lead_time_days   | INTEGER       |
-| created_at       | TIMESTAMP     |
-| updated_at       | TIMESTAMP     |
-| version          | INTEGER       |
+| Campo               | Tipo          |
+| ------------------- | ------------- |
+| item_id             | UUID (PK/FK)  |
+| reorder_point       | NUMERIC(18,4) |
+| min_stock           | NUMERIC(18,4) |
+| max_stock           | NUMERIC(18,4) |
+| lead_time_days      | INTEGER       |
+| replenishment_policy| SMALLINT NULL | (1=ate_maximo, 2=multiplo_embalagem, 3=lote_fixo — ADR-014) |
+| supply_route        | SMALLINT NULL | (1=transferencia, 2=compra, 3=manual — ADR-014) |
+| fixed_lot_quantity  | NUMERIC(18,4) NULL | (obrigatório quando policy=lote_fixo) |
+| created_at          | TIMESTAMP     |
+| updated_at          | TIMESTAMP     |
+| version             | INTEGER       |
 
 ---
 
@@ -162,7 +181,8 @@ Item Replenishment Parameters
 
 Referências lógicas (sem FK física):
 
-item.unit_of_measure_id → FD-001-09 Master Data (unidade de medida)
+item.unit_of_measure_id → FD-001-09 Master Data (unidade de estoque = base)
+item_alternative_unit.uom_id → FD-001-09 Master Data (unidade alternativa, mesma categoria da base)
 item.group_id / category_id → FD-001-09 Master Data (grupo/categoria)
 item.size_grid_id → FD-001-09 Master Data (grade SIZE_GRID)
 item.image_file_id → FD-001-03 Document Management (MinIO)
@@ -399,16 +419,19 @@ CREATE UNIQUE INDEX uq_item_synonym_term
     WHERE deleted_at IS NULL;
 
 CREATE TABLE materials.item_replenishment_parameters (
-    item_id        UUID          NOT NULL,
-    reorder_point  NUMERIC(18,4) NULL,
-    min_stock      NUMERIC(18,4) NULL,
-    max_stock      NUMERIC(18,4) NULL,
-    lead_time_days INTEGER       NULL,
-    created_at     TIMESTAMPTZ   NOT NULL DEFAULT now(),
-    updated_at     TIMESTAMPTZ   NOT NULL DEFAULT now(),
-    created_by     UUID          NOT NULL,
-    updated_by     UUID          NOT NULL,
-    version        INTEGER       NOT NULL DEFAULT 1,
+    item_id             UUID          NOT NULL,
+    reorder_point       NUMERIC(18,4) NULL,
+    min_stock           NUMERIC(18,4) NULL,
+    max_stock           NUMERIC(18,4) NULL,
+    lead_time_days      INTEGER       NULL,
+    replenishment_policy SMALLINT     NULL,          -- 1=ate_maximo, 2=multiplo_embalagem, 3=lote_fixo (ADR-014, IC-BR-100)
+    supply_route        SMALLINT      NULL,          -- 1=transferencia, 2=compra, 3=manual (ADR-014, IC-BR-101)
+    fixed_lot_quantity  NUMERIC(18,4) NULL,          -- exigido quando replenishment_policy = 3
+    created_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at          TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    created_by          UUID          NOT NULL,
+    updated_by          UUID          NOT NULL,
+    version             INTEGER       NOT NULL DEFAULT 1,
     CONSTRAINT pk_item_replenishment PRIMARY KEY (item_id),
     CONSTRAINT fk_item_replenishment_item
         FOREIGN KEY (item_id)
@@ -424,8 +447,50 @@ CREATE TABLE materials.item_replenishment_parameters (
         (reorder_point IS NULL OR max_stock IS NULL OR reorder_point <= max_stock)
     ), -- IC-BR-050
     CONSTRAINT ck_item_repl_lead_time CHECK (lead_time_days IS NULL OR lead_time_days >= 0), -- IC-BR-052
+    CONSTRAINT ck_item_repl_policy CHECK (replenishment_policy IS NULL OR replenishment_policy IN (1, 2, 3)), -- IC-BR-100
+    CONSTRAINT ck_item_repl_route  CHECK (supply_route IS NULL OR supply_route IN (1, 2, 3)),                -- IC-BR-101
+    CONSTRAINT ck_item_repl_fixed_lot CHECK (
+        replenishment_policy IS DISTINCT FROM 3 OR (fixed_lot_quantity IS NOT NULL AND fixed_lot_quantity > 0)
+    ), -- lote_fixo exige quantidade > 0 (IC-BR-100)
     CONSTRAINT ck_item_repl_version CHECK (version >= 1)
 );
+
+-- item_alternative_unit: unidades alternativas com fator de conversão (ADR-013)
+CREATE TABLE materials.item_alternative_unit (
+    id                UUID          NOT NULL DEFAULT gen_random_uuid(),
+    item_id           UUID          NOT NULL,
+    uom_id            UUID          NOT NULL,       -- Master Data (mesma categoria da base — validado no domínio, IC-BR-092)
+    conversion_factor NUMERIC(18,6) NOT NULL,       -- 1 <uom> = conversion_factor × unidade base
+    role              SMALLINT      NULL,           -- 1=compra padrão, 2=consumo
+    created_at        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ   NOT NULL DEFAULT now(),
+    deleted_at        TIMESTAMPTZ   NULL,
+    created_by        UUID          NOT NULL,
+    updated_by        UUID          NOT NULL,
+    deleted_by        UUID          NULL,
+    version           INTEGER       NOT NULL DEFAULT 1,
+    CONSTRAINT pk_item_alt_unit PRIMARY KEY (id),
+    CONSTRAINT fk_item_alt_unit_item
+        FOREIGN KEY (item_id)
+        REFERENCES materials.item (id),
+    CONSTRAINT ck_item_alt_unit_factor CHECK (conversion_factor > 0), -- IC-BR-091
+    CONSTRAINT ck_item_alt_unit_role CHECK (role IS NULL OR role IN (1, 2)),
+    CONSTRAINT ck_item_alt_unit_version CHECK (version >= 1),
+    CONSTRAINT ck_item_alt_unit_soft_delete CHECK (
+        (deleted_at IS NULL AND deleted_by IS NULL) OR
+        (deleted_at IS NOT NULL AND deleted_by IS NOT NULL)
+    )
+);
+
+-- UoM alternativa única por item (IC-BR-091)
+CREATE UNIQUE INDEX uq_item_alt_unit_uom
+    ON materials.item_alternative_unit (item_id, uom_id)
+    WHERE deleted_at IS NULL;
+
+-- Papel único por item: no máximo uma unidade de compra padrão / uma de consumo (IC-BR-091)
+CREATE UNIQUE INDEX uq_item_alt_unit_role
+    ON materials.item_alternative_unit (item_id, role)
+    WHERE deleted_at IS NULL AND role IS NOT NULL;
 ```
 
 ## 15.2 Índices (implementação física)
@@ -449,6 +514,9 @@ CREATE INDEX idx_item_epi_sem_ca ON materials.item (company_id, group_id)       
 -- item_synonym
 CREATE INDEX idx_item_synonym_item       ON materials.item_synonym (item_id)      WHERE deleted_at IS NULL;
 CREATE INDEX idx_item_synonym_normalized ON materials.item_synonym (normalized_term) WHERE deleted_at IS NULL;
+
+-- item_alternative_unit (ADR-013)
+CREATE INDEX idx_item_alt_unit_item ON materials.item_alternative_unit (item_id) WHERE deleted_at IS NULL;
 ```
 
 **Padrão:** todos os índices de consulta iniciam por `company_id` (isolamento multiempresa, Seção 9) e são parciais (`WHERE deleted_at IS NULL`) para não carregar lixo de soft delete.
@@ -459,8 +527,9 @@ CREATE INDEX idx_item_synonym_normalized ON materials.item_synonym (normalized_t
 | -- | ---------------- | ---- | ------------- |
 | fk_item_synonym_item | item_synonym → item | Física (dentro do módulo) | Integridade do aggregate |
 | fk_item_replenishment_item | item_replenishment_parameters → item | Física | Integridade do aggregate (1:1) |
+| fk_item_alt_unit_item | item_alternative_unit → item | Física (dentro do módulo) | Integridade do aggregate (ADR-013) |
 | company_id | → Foundation (FD-001-01/02) | **Lógica** (sem constraint física) | Baixo acoplamento entre bounded contexts; validação na camada de aplicação/domínio; ADR-009 |
-| unit_of_measure_id, group_id, category_id, size_grid_id | → Master Data (FD-001-09) | **Lógica** | Idem; validação nas IC-BR-003/004/005/082 |
+| unit_of_measure_id (base), item_alternative_unit.uom_id, group_id, category_id, size_grid_id | → Master Data (FD-001-09) | **Lógica** | Idem; validação nas IC-BR-003/004/005/082/092 (compatibilidade de categoria da conversão no domínio) |
 | image_file_id | → Document Management (FD-001-03) | **Lógica** | Idem; validação na IC-BR-083 |
 
 ## 15.4 Triggers
@@ -763,3 +832,4 @@ LIMIT :page_size;
 | Versão | Data | Autor | Alteração |
 | ------ | ---- | ----- | --------- |
 | 1.0.0 | 2026-07-30 | Arquiteto Principal | Versão inicial aprovada: modelo físico do Item Catalog no schema `materials` (aggregate enxuto — ADR-009): 3 tabelas (item, item_synonym, item_replenishment_parameters), DDL PostgreSQL completo com constraints e check constraints, unicidade soft-delete-ciente de código e código ERP, 10+ índices parciais company_id-first, FKs físicas internas + lógicas para Foundation, 3 triggers (updated_at, version, imutabilidade de descarte), 3 views (catálogo, operacional, EPI sem CA), 1 materialized view, sem procedures de negócio, estratégia de particionamento, keyset pagination oficial, plano de indexação, plano de performance, estratégia de migração, política de backup e versionamento de schema. |
+| 1.1.0 | 2026-08-08 | Arquiteto Principal | Incorporação de ADR-013 e ADR-014: nova tabela `item_alternative_unit` (uom_id, conversion_factor > 0, role) com unicidade de UoM e de papel por item (IC-BR-091), FK física ao item e categoria de conversão validada no domínio (IC-BR-092); `item_replenishment_parameters` ganha `replenishment_policy`, `supply_route` e `fixed_lot_quantity` com check constraints (IC-BR-100/101); `unit_of_measure_id` documentado como unidade de estoque (base). Migration expand-and-contract; quantidades permanecem persistidas na base — nenhuma coluna de saldo é criada (fronteira com MMS-004). |

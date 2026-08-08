@@ -1,9 +1,9 @@
 **Documento:** MMS-002-04 — Domain Model
 **Módulo:** MMS-002 — Item Catalog (Catálogo de Itens)
-**Versão:** 1.0.0
+**Versão:** 1.1.0
 **Status:** 🟢 Approved
-**Data:** 2026-07-30
-**Dependências:** MMS-002 (Visão do Módulo — v1.1.0), MMS-002-02 (Business Rules — v1.1.0), MMS-002-03 (State Machine), MMS-001 (Documento Mestre Funcional), FD-001-03, FD-001-09, FD-001-10
+**Data:** 2026-08-08
+**Dependências:** MMS-002 (Visão do Módulo — v1.2.0), MMS-002-02 (Business Rules — v1.2.0), MMS-002-03 (State Machine), MMS-001 (Documento Mestre Funcional), ADR-013 (Conversão de UoM), ADR-014 (Motor de Regras de Reposição), FD-001-03, FD-001-09, FD-001-10
 **Referências:** PR-001-04 (padrão de formato), MMS-003, MMS-004, MMS-005, PR-001 (consumidores), ADR-009 (domínio não conhece o banco), GOV-001
 
 ---
@@ -45,17 +45,22 @@ Responsabilidades:
 │                                                                   │
 │  Id · CompanyId · ItemCode · ErpCode · Description ·              │
 │  DetailedDescription · Characteristics · Classification ·         │
-│  Criticality · Status · UnitOfMeasureRef · CategoryRef ·          │
+│  Criticality · Status · BaseUnitOfMeasureRef · CategoryRef ·      │
 │  SizeGridRef · CA · ImageDocumentId · Version                     │
 │                                                                   │
 │  ├── 0..N  Synonym               (Entity)                         │
 │  │         Term · CreatedBy · CreatedAt                           │
 │  │                                                                │
+│  ├── 0..N  AlternativeUnit        (Entity)  [ADR-013]             │
+│  │         UomRef · ConversionFactor · Role                       │
+│  │                                                                │
 │  └── 0..1  ReplenishmentParameters  (Entity)                      │
-│            MinStock · MaxStock · OrderPoint · LeadTimeDays        │
+│            MinStock · MaxStock · OrderPoint · LeadTimeDays ·      │
+│            ReplenishmentPolicy · SupplyRoute      [ADR-014]       │
 │                                                                   │
 │  Value Objects: ItemCode · ErpCode · ItemDescription ·            │
-│  MasterDataReference · CertificateNumber · ReplenishmentLimits    │
+│  MasterDataReference · CertificateNumber · ReplenishmentLimits ·  │
+│  ConversionFactor · ReplenishmentPolicy · SupplyRoute             │
 │                                                                   │
 │  Referências externas (por Id / referência lógica, fora do        │
 │  Aggregate):                                                      │
@@ -73,9 +78,11 @@ Responsabilidades:
 Company (FD-001-02)        1 ────── N   Item
 
 Item                     1 ────── N   Synonym
+Item                     1 ────── N   AlternativeUnit  (ADR-013)
 Item                     1 ────── 0..1 ReplenishmentParameters
 
-Item                     N ────── 1   UnitOfMeasure (Master Data, ref lógica typeCode+code)
+Item                     N ────── 1   UnitOfMeasure (base) (Master Data, ref lógica typeCode+code)
+AlternativeUnit          N ────── 1   UnitOfMeasure (alt.)  (Master Data, mesma categoria da base)
 Item                     N ────── 1   Category      (Master Data, ref lógica typeCode+code)
 Item                     N ────── 0..1 SizeGrid     (Master Data, ref lógica typeCode+code)
 
@@ -87,6 +94,7 @@ Item                     1 ────── 0..1 WorkflowInstance (FD-001-04, 
 Cardinalidades de negócio:
 
 - `Synonym`: 0..N por item; o termo nunca é identidade (IC-BR-030);
+- `AlternativeUnit`: 0..N por item; UoM da mesma categoria da base, fator > 0, papel único por item (IC-BR-091/092);
 - `ReplenishmentParameters`: 0..1 por item no MVP; por depósito somente na versão 1.1 do roadmap;
 - `Category`: 1 obrigatória; categorias do grupo EPI disparam a exigência de CA (IC-BR-080);
 - `ImageDocument`: 0..1 imagem principal (IC-BR-082).
@@ -110,7 +118,8 @@ Principais atributos:
 - Classificação: estocável / não estocável / sob encomenda (IC-BR-005);
 - Criticidade: parametrizável (IC-BR-013);
 - Estado: Rascunho / Ativo / Inativo / Descartado (MMS-002-03);
-- Unidade de medida e categoria (referências ao Master Data);
+- Unidade de estoque (base) e categoria (referências ao Master Data — IC-BR-090);
+- Unidades alternativas com fator de conversão (0..N — IC-BR-091);
 - Grade de tamanhos (referência — IC-BR-081);
 - CA (IC-BR-080);
 - Imagem (referência FD-001-03 — IC-BR-082);
@@ -132,6 +141,20 @@ Regra: sinônimo é auxílio de busca, **nunca** identidade nem descrição ofic
 
 ---
 
+## AlternativeUnit (ADR-013)
+
+Representa uma unidade de medida alternativa do item com fator de conversão para a **unidade base**.
+
+Atributos:
+
+- UomRef (referência lógica ao Master Data — mesma categoria da base)
+- ConversionFactor (fator > 0 — ex.: `1 CX = 12 UN` ⇒ fator 12)
+- Role (papel opcional: unidade de compra padrão, unidade de consumo)
+
+Regras: a conversão só é válida na mesma categoria de UoM (IC-BR-092); fator > 0 e papel único por item (IC-BR-091). A quantidade convertida sempre resulta na **unidade base**; não há saldo em unidade alternativa (a conversão é aplicada nas fronteiras — Receiving, movimentação, compra).
+
+---
+
 ## ReplenishmentParameters
 
 Representa o conjunto de parâmetros de reposição do item.
@@ -142,8 +165,10 @@ Atributos:
 - Estoque máximo
 - Ponto de pedido
 - Lead time de referência (dias)
+- ReplenishmentPolicy (política de quantidade sugerida — IC-BR-100)
+- SupplyRoute (rota de suprimento — IC-BR-101)
 
-Invariante própria: mínimo ≤ ponto de pedido ≤ máximo (IC-BR-012); obrigatoriedade para estocáveis é parametrizável (IC-BR-011).
+Invariante própria: mínimo ≤ ponto de pedido ≤ máximo (IC-BR-012); obrigatoriedade para estocáveis é parametrizável (IC-BR-011). Os campos `ReplenishmentPolicy` e `SupplyRoute` são parâmetros da regra avaliada pelo MMS-004 (ADR-014); o catálogo não executa reposição.
 
 ---
 
@@ -205,6 +230,23 @@ Imutável. Invariantes: `min ≥ 0`; `min ≤ orderPoint ≤ max` (IC-BR-012); l
 - Baixa, Média, Alta (lista parametrizável — IC-BR-013)
 
 Imutável. Uso: workflow de aprovação cadastral e priorização de alertas.
+
+---
+
+## ConversionFactor (ADR-013)
+
+- Valor decimal estritamente positivo (`NUMERIC(18,6)`)
+
+Imutável como VO. Invariante: fator > 0 (IC-BR-091). Aplicado com precisão e arredondamento parametrizáveis (`materials.item.uom.precision` / `.rounding` — IC-BR-093); o fator aplicado a um movimento é registrado no próprio movimento (MMS-004), nunca reprocessado retroativamente.
+
+---
+
+## ReplenishmentPolicy / SupplyRoute (Value Objects de enumeração — ADR-014)
+
+- `ReplenishmentPolicy`: `ate_maximo` · `multiplo_embalagem` · `lote_fixo` (IC-BR-100)
+- `SupplyRoute`: `transferencia` · `compra` · `manual` (IC-BR-101)
+
+Imutáveis. Uso: parametrizam a quantidade sugerida e a rota da regra de reposição avaliada pelo MMS-004; `multiplo_embalagem` depende de uma unidade de compra com fator (AlternativeUnit).
 
 ---
 
@@ -288,6 +330,9 @@ Invariantes formalizadas:
 | INV-IC-09 | `version` incrementa a cada alteração persistida | IC-BR-042 |
 | INV-IC-10 | Somente Ativo é referenciável por outros módulos | IC-BR-021 (MMS-RG-08) |
 | INV-IC-11 | Nenhuma exclusão física; descarte somente de Rascunho sem referências | IC-BR-024 |
+| INV-IC-12 | Unidade de estoque (base) obrigatória e única; imutável após a 1ª movimentação | IC-BR-090 |
+| INV-IC-13 | Unidade alternativa: fator > 0, papel único por item, mesma categoria da base | IC-BR-091/092 |
+| INV-IC-14 | `ReplenishmentPolicy`/`SupplyRoute` dentro dos conjuntos fechados; `lote_fixo` exige quantidade > 0; `multiplo_embalagem` exige unidade de compra | IC-BR-100/101 |
 
 ---
 
@@ -301,7 +346,11 @@ Create()
 
 Update() — somente campos permitidos pelo estado (IC-BR-041)
 
-SetReplenishmentParameters()
+SetReplenishmentParameters() — inclui ReplenishmentPolicy e SupplyRoute (IC-BR-100/101)
+
+SetBaseUnitOfMeasure() — bloqueado após a 1ª movimentação (INV-IC-12)
+
+AddAlternativeUnit(uomRef, factor, role) / RemoveAlternativeUnit() — IC-BR-091/092
 
 AddSynonym() / RemoveSynonym()
 
@@ -383,6 +432,7 @@ Operações de domínio que não pertencem naturalmente a uma entidade:
 | `ItemUniquenessValidator` | Garante unicidade de código e código ERP por empresa (INV-IC-01/02) |
 | `SimilarDescriptionDetector` | Detecta descrições semelhantes e emite alerta não bloqueante (IC-BR-031) |
 | `MasterDataVigenceValidator` | Valida vigência de unidade, categoria e grade por data de referência (FD-001-09) |
+| `UomConversionService` | Converte quantidades entre unidade alternativa e base (mesma categoria, fator, arredondamento parametrizável — IC-BR-091/092/093); consumido por Receiving/movimentação/compra |
 | `ItemLifecycleService` | Orquestra Activate/Inactivate/Reactivate/Discard: guardas, workflow quando parametrizado (IC-BR-020), eventos, timeline |
 | `CatalogReadModelRefresher` | Mantém o cache de leitura do catálogo (IC-BR-071) a partir dos eventos do ciclo de vida |
 
@@ -426,6 +476,7 @@ Fazem parte do Aggregate:
 
 - Item (Aggregate Root)
 - Synonym
+- AlternativeUnit (ADR-013)
 - ReplenishmentParameters
 
 Não fazem parte (outros Bounded Contexts ou referências externas):
@@ -460,3 +511,4 @@ Não fazem parte (outros Bounded Contexts ou referências externas):
 | Versão | Data | Descrição |
 |--------|------|-----------|
 | 1.0.0 | 2026-07-30 | Criação do Domain Model do Item Catalog: Aggregate Root Item com entidades Synonym e ReplenishmentParameters; Aggregate Diagram e relacionamentos UML; Value Objects completos (ItemCode, ErpCode, ItemDescription, MasterDataReference, CertificateNumber, ReplenishmentLimits, Criticality); 11 invariantes formalizadas (INV-IC-01..11) rastreadas às IC-BR; factory methods (incluindo CreateEPI); repositories com company_id, optimistic concurrency e keyset; 10 specifications; 5 domain services; 5 policies; eventos produzidos e limites do Aggregate — no padrão PR-001-04, derivado da visão v1.1.0, das Business Rules v1.1.0 e da State Machine |
+| 1.1.0 | 2026-08-08 | Incorporação de ADR-013 e ADR-014: nova entidade `AlternativeUnit` (UomRef, ConversionFactor, Role) e unidade de estoque (base) explícita; novos Value Objects `ConversionFactor`, `ReplenishmentPolicy` e `SupplyRoute`; `ReplenishmentParameters` ganha `ReplenishmentPolicy`/`SupplyRoute`; 3 novas invariantes (INV-IC-12..14); métodos `SetBaseUnitOfMeasure`/`AddAlternativeUnit`/`RemoveAlternativeUnit` e novo domain service `UomConversionService`; AlternativeUnit incluída nos limites do Aggregate. Rastreado às IC-BR-090..093 e IC-BR-100..101 (MMS-002-02 v1.2.0) |

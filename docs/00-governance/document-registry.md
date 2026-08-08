@@ -156,7 +156,7 @@
 | ARC-003 | Solution & Deployment Architecture | 1.0.0 | 🟢 Approved | `docs/04-architecture/03-solution-deployment-architecture.md` |
 | ARC-004 | Application Architecture | 1.0.0 | 🟢 Approved | `docs/04-architecture/04-application-architecture.md` |
 | ARC-005 | Integration & Eventing Architecture | 1.0.0 | 🟢 Approved | `docs/04-architecture/05-integration-eventing.md` |
-| ARC-006 | Cross-Cutting Concerns & NFRs | 1.0.0 | 🟢 Approved | `docs/04-architecture/06-cross-cutting-nfr.md` |
+| ARC-006 | Cross-Cutting Concerns & NFRs | 1.1.0 | 🟢 Approved | `docs/04-architecture/06-cross-cutting-nfr.md` |
 | ARC-007 | Domain Benchmark: Odoo & ERPNext (anexo informativo) | 1.0.0 | 🟢 Approved (informativo) | `docs/04-architecture/07-domain-benchmark-erp.md` |
 
 ---
@@ -204,6 +204,7 @@
 | ADR-013 | Conversão de Unidade de Medida (compra × estoque) no Item Catalog | 🟢 Accepted | `docs/17-adr/ADR-013-unit-of-measure-conversion.md` |
 | ADR-014 | Motor de Regras de Reposição (configurável) | 🟢 Accepted | `docs/17-adr/ADR-014-replenishment-rules-engine.md` |
 | ADR-015 | Confirmação da stack (.NET/Next.js) e avaliação da alternativa Supabase | 🟢 Accepted | `docs/17-adr/ADR-015-stack-confirmation-supabase-evaluation.md` |
+| ADR-016 | Cloudflare como camada de borda; R2 como storage; backend .NET em containers | 🟢 Accepted | `docs/17-adr/ADR-016-cloudflare-edge-and-storage.md` |
 
 ---
 
@@ -232,6 +233,7 @@
 
 | Data | Evento | Referência |
 |------|--------|------------|
+| 2026-08-08 | **ADR-016 — Cloudflare como camada de borda + R2 (Accepted):** decidido, por prioridade de **robustez** (banco pesado, multiusuário, aprovações concorrentes), manter o backend **.NET em containers** com **Cloudflare na borda** (CDN/WAF/DDoS/TLS = Camada 1 do SEC-001) e **R2** no lugar do MinIO (FD-001-03 abstrai o storage); PostgreSQL pesado em Postgres gerenciado atrás do Cloudflare (Hyperdrive opcional); **D1 não usado** e Workers não hospedam .NET. **ARC-006 → 1.1.0** com nova seção §12 (Concorrência, Contenção e Escala) consolidando as garantias de robustez; ARC-003 nomeia Cloudflare/R2. Reversível por ADR futura | ADR-016, ARC-006, ARC-003 |
 | 2026-08-08 | **Suíte MMS 100% documentada e camadas de suporte iniciadas:** pacotes MMS-003, MMS-004 e MMS-005 completados (17/17 cada) — a suíte de Materiais (MMS-002/003/004/005) fica integralmente documentada. **QA-001 (09-testing)** e **OPS-001 (10-devops)** promovidos de placeholder a Approved (v1.0.0): estratégia de testes corporativa (pirâmide, camadas, DoD, rastreabilidade 100%) e DevOps/CI-CD (pipeline com gates, migrations expand-and-contract, observabilidade, runbooks) — operacionalizam ARC-003/ARC-006/SEC-003/QA-001 | MMS-003, MMS-004, MMS-005, QA-001, OPS-001 |
 | 2026-08-08 | **ADR-015 — Confirmação da stack e avaliação da alternativa Supabase (Accepted):** analisada a proposta do owner (Supabase + React + Expo, sem IA); decisão de **manter** a stack mandatória (.NET 9/Next.js, DDD/Clean, ARC-001..007) por integridade de domínio, coerência do SSOT, garantias de evento/transação e portabilidade; **adotadas** como técnicas de implementação as boas ideias (RLS no PostgreSQL como isolamento multi-tenant complementar; tempo real via SignalR/WebSockets; mapa funcional do owner mapeado aos Bounded Contexts); **mobile permanece pós-MVP** (web-first). Reavaliável por ADR futura. ARC-006 §10 atualizado | ADR-015 |
 | 2026-07-30 | Saneamento do repositório: caminhos recursivos corrigidos, duplicata de `08-user-stories.md` removida, numeração do índice do módulo alinhada aos IDs reais, série TS-PRQ arquivada, Jornada promovida a PR-001-12 | AUD-001 |

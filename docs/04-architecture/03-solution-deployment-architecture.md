@@ -95,7 +95,7 @@ Nenhum segredo em repositório, imagem ou variável de ambiente em claro em logs
 - **PostgreSQL** é a fonte de verdade transacional. Um **schema por Bounded Context** (ARC-002 §5). Isolamento multi-tenant por `company_id` em toda tabela e índice `company_id`-first (ADR-009, `*-11-database`).
 - **Migrations** versionadas e auditáveis são obrigatórias; schema evolui só por migration (ADR-009).
 - **Redis**: cache de leitura, cache de decisão de autorização (TTL ≤ 60 s), rate limiting, sessão/refresh hints. Nunca fonte de verdade.
-- **MinIO**: anexos/documentos via Foundation Document Management (FD-001-03); a aplicação guarda apenas referências/metadados no Postgres.
+- **MinIO / Cloudflare R2**: anexos/documentos via Foundation Document Management (FD-001-03); a aplicação guarda apenas referências/metadados no Postgres. Na hospedagem Cloudflare, o storage de objetos é o **R2** (S3-compatível), substituindo o MinIO sem impacto de domínio (ADR-016).
 - **RabbitMQ**: mensagens duráveis; o estado de negócio nunca depende de mensagem — o Outbox no Postgres é a origem (ARC-005).
 
 ### 5.1 Backup e retenção
@@ -112,7 +112,7 @@ Nenhum segredo em repositório, imagem ou variável de ambiente em claro em logs
 
 Alinhado ao Defense in Depth do SEC-001 (§3) e Zero Trust (§4):
 
-- **Borda**: TLS 1.3 obrigatório, WAF, rate limiting, proteção DDoS.
+- **Borda**: TLS 1.3 obrigatório, WAF, rate limiting, proteção DDoS — provida pelo **Cloudflare** (ADR-016) como Camada 1 do Defense in Depth (SEC-001 §3), na frente do backend .NET em containers.
 - **Interna**: rede segmentada; API↔dependências em rede privada; **nenhuma rede é "confiável"** por padrão.
 - **Serviço-a-serviço**: autenticação mesmo interna; mTLS interno como alvo (SEC-001 §4).
 - **Hardening**: contêineres com usuário não-root, imagens mínimas, superfície reduzida, sem portas de administração expostas.

@@ -1,11 +1,11 @@
 **Documento:** ARC-006 — Cross-Cutting Concerns & NFRs
-**Versão:** 1.0.0
+**Versão:** 1.1.0
 **Status:** Approved
 **Criticidade:** 🔴 Core
 **Escopo:** Plataforma Trino Supply (todos os módulos)
 
 > Referências normativas: ISO/IEC 25010, 12-Factor App, OWASP ASVS, NIST SP 800-207.
-> Documentos relacionados: ARC-001..005, SEC-001/002/003, FD-001-06/07/10, ADR-009/010/011/012.
+> Documentos relacionados: ARC-001..005, SEC-001/002/003, FD-001-06/07/10, ADR-009/010/011/012/015/016.
 
 # ARC-006 — Cross-Cutting Concerns & NFRs
 
@@ -136,6 +136,7 @@ Autoridade normativa: **SEC-001/002/003**. Contrato transversal resumido:
 | ADR-013 | Conversão de Unidade de Medida (compra × estoque) no Item Catalog | Accepted |
 | ADR-014 | Motor de Regras de Reposição (configurável) | Accepted |
 | ADR-015 | Confirmação da stack (.NET/Next.js) e avaliação da alternativa Supabase | Accepted |
+| ADR-016 | Cloudflare como camada de borda; R2 como storage; backend .NET em containers | Accepted |
 
 **Decisões que exigirão ADR futura** (registradas em GOV-002 §10 e sinalizadas nesta seção): extração de um Bounded Context para serviço independente (ARC-003 §7); bancos de leitura dedicados / CQRS com store separado (ARC-004 §5); cada integração externa via ACL (ARC-005 §10); mecanismo de pseudonimização LGPD (ARC-006 §8).
 
@@ -150,3 +151,48 @@ Autoridade normativa: **SEC-001/002/003**. Contrato transversal resumido:
 | Observabilidade/resiliência | 12-Factor, ARC-003/005 |
 | Configurabilidade | FD-001-10 |
 | Índice de ADRs | 17-adr, GOV-002 |
+
+---
+
+## 12. Concorrência, Contenção e Escala (robustez)
+
+> Consolida, em um único ponto, as garantias que sustentam **banco pesado, muitos usuários lançando dados em paralelo e aprovações concorrentes** (ADR-016). Onde os módulos definem as regras, esta seção mostra o sistema de garantias que elas formam.
+
+### 12.1 Escrita concorrente (dois usuários, mesmo registro)
+- **Optimistic concurrency** em toda escrita: `version` + `If-Match`; conflito → `409` sem sobrescrever (IC-BR-042, IV-BR-012, MR-BR-091, RC-BR-030).
+- Triggers de banco garantem incremento estrito de `version` (`TRG-*-002`), barrando retrocesso.
+
+### 12.2 Contenção sobre o mesmo saldo (o ponto mais crítico)
+- **Confirmação serializada por chave de saldo** (item×tamanho×local×segregação) — `IV-BR-012`, aplicada pelo `StockBalanceService` (MMS-004-04 §12; MMS-004-11 §10). Duas movimentações no mesmo saldo não se atropelam.
+- **Reserva impede prometer o mesmo saldo duas vezes**: validação usa apenas o disponível = total − reservado (`IV-BR-005/020`; INV-IV-05/06).
+- **Saldo é projeção, nunca editado direto** (ADR-009 / `IV-BR-001`); reconstruível a partir do razão de movimentos (rebuild — MMS-004-11 §11).
+- **Transferência atômica** (saída+entrada na mesma transação — `IV-BR-030`).
+
+### 12.3 Aprovações concorrentes
+- **Workflow Engine** (FD-001-04) coordena a decisão; **SoD** inviolável (solicitante ≠ aprovador — `MR-BR-032`; registrante ≠ aprovador de ajuste — `IV-BR-041`).
+- **Aprovação parcial por item** com trilha do decisor (`MR-BR-031`); toda decisão **auditada** (FD-001-06).
+
+### 12.4 Confiabilidade sob carga
+- **Transactional Outbox** (estado + evento na mesma transação) + RabbitMQ **at-least-once**, **DLQ** e **idempotência de consumidor** (ARC-005); **Idempotency-Key** nas escritas de efeito externo — sem efeito duplicado sob reenvio/pico.
+
+### 12.5 Banco pesado — escala e leitura
+- **Particionamento** com gatilhos definidos por tabela (ex.: `item` > 5M linhas/empresa; `stock_movement` por hash — MMS-002-11 §15.8; padrão replicável ao schema `materials`).
+- **Keyset pagination** em 100% das listagens (sem `OFFSET`); índices **`company_id`-first** e parciais (`WHERE deleted_at IS NULL`).
+- **Cache Redis** para leitura quente com invalidação por evento; **réplica de leitura** do PostgreSQL no roadmap de escala (ARC-003 §7).
+- **Hyperdrive** (Cloudflare) para pool/aceleração de conexões da borda ao Postgres (ADR-016).
+
+### 12.6 Isolamento multi-tenant sob carga
+- Filtro `company_id` obrigatório em toda consulta + **RLS (Row Level Security)** no PostgreSQL como defesa em profundidade (ADR-015 §3); recurso fora do escopo → **404** (anti-enumeração — SEC-001 §6).
+
+### 12.7 Borda (perímetro) — ADR-016
+- **Cloudflare** provê CDN, **WAF**, **DDoS** e **TLS 1.3** (Camada 1 do Defense in Depth — SEC-001 §3), absorvendo picos e ataques antes de chegarem à aplicação; **R2** como storage de objetos (FD-001-03).
+
+### 12.8 Metas de robustez (referência)
+| Aspecto | Meta |
+|---------|------|
+| Consulta/validação de saldo | p95 < 2 s (IV-BR-110) |
+| Conflito de escrita | Detectado (409), nunca sobrescrita silenciosa |
+| Duplicação de efeito | Zero (idempotência + serialização) |
+| Perda de evento de negócio | Zero (Outbox no Postgres) |
+| Isolamento entre empresas | Total (company_id + RLS) |
+| Recuperação | RPO ≤ 5 min, RTO ≤ 4 h (MMS-002-11 §15.13) |

@@ -117,6 +117,12 @@
 | MMS-004-07 | Inventory Management — Use Cases | 1.1.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/07-use-cases.md` |
 | MMS-004-08 | Inventory Management — User Stories | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/08-user-stories.md` |
 | MMS-004-09 | Inventory Management — Permissions | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/09-permissions.md` |
+| MMS-004-10 | Inventory Management — Notifications | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/10-notifications.md` |
+| MMS-004-12 | Inventory Management — Business Journey | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/12-business-journey.md` |
+| MMS-004-14 | Inventory Management — UX | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/14-ux.md` |
+| MMS-004-15 | Inventory Management — Wireframes | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/15-wireframes.md` |
+| MMS-004-16 | Inventory Management — Acceptance Criteria | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/16-acceptance-criteria.md` |
+| MMS-004-17 | Inventory Management — Test Scenarios | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/17-test-scenarios.md` |
 | MMS-004-11 | Inventory Management — Database Model | 1.0.0 | 🟢 Approved | `docs/06-database/materials/MMS-004/11-database.md` |
 | MMS-004-13 | Inventory Management — API | 1.0.0 | 🟢 Approved | `docs/07-api/materials/MMS-004/README.md` |
 | MMS-005 | Receiving | 1.1.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/README.md` |

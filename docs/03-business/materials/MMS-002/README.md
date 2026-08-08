@@ -1,9 +1,9 @@
 **Documento:** MMS-002 — Item Catalog (Visão do Módulo)
 **Módulo:** MMS-002 — Item Catalog (Catálogo de Itens)
-**Versão:** 1.1.0
+**Versão:** 1.2.0
 **Status:** 🟢 Approved
-**Data:** 2026-07-30
-**Dependências:** MMS-001 (Documento Mestre Funcional — seções 7, 8.1, 14, 24), ADR-012, FD-001-03 (Document Management), FD-001-09 (Master Data), FD-001-01, FD-001-02, FD-001-04, FD-001-06, FD-001-07, FD-001-10
+**Data:** 2026-08-08
+**Dependências:** MMS-001 (Documento Mestre Funcional — seções 7, 8.1, 14, 24), ADR-012, ADR-013 (Conversão de UoM), ADR-014 (Motor de Regras de Reposição), FD-001-03 (Document Management), FD-001-09 (Master Data), FD-001-01, FD-001-02, FD-001-04, FD-001-06, FD-001-07, FD-001-10
 **Referências:** PR-001 (consumidor de itens na rota de compra), GOV-001
 
 ---
@@ -23,7 +23,9 @@ O módulo existe para eliminar o cadastro duplicado e informal de materiais — 
 1. Cadastro de itens com identidade única por empresa: código, descrição, descrição detalhada, unidade de medida, categoria e características.
    - **Código do item:** informado pelo mantenedor; quando houver integração com ERP, o código oficial é o código do ERP. O sistema mantém identidade interna própria e registra o código externo do ERP como atributo de integração (único por empresa quando informado).
 2. Classificação do item: **estocável**, **não estocável** (compra/consumo direto) ou **sob encomenda**.
+   - **Unidade de Estoque (base) e unidades alternativas com conversão** (ADR-013): o item define a unidade em que o saldo é mantido (base) e, opcionalmente, unidades alternativas com fator de conversão (ex.: `1 CX = 12 UN`) e papel (unidade de compra, de consumo). Toda quantidade do domínio de materiais é persistida na base; a conversão ocorre nas fronteiras (recebimento, movimentação, compra).
 3. Parâmetros de reposição por item (e, opcionalmente, por depósito): estoque mínimo, estoque máximo, ponto de pedido e lead time de referência.
+   - **Parâmetros da regra de reposição** (ADR-014): política de quantidade sugerida (repor até o máximo / múltiplo de embalagem / lote fixo) e rota de suprimento (transferência / compra / manual). A avaliação da regra e a fila de sugestões pertencem ao MMS-004 (v1.1); o catálogo apenas parametriza.
 4. Criticidade do item (parametrizável: baixa/média/alta) para workflow de aprovação e priorização.
 5. Ciclo de vida: Rascunho → Ativo → Inativo, com regras de uso por estado.
 6. Consulta pública do catálogo para todos os módulos e usuários autorizados, com busca por código, descrição e categoria.
@@ -133,9 +135,9 @@ A ativação de item **não exige workflow** no MVP (responsabilidade do papel G
 
 # Entradas
 
-- Dados do item: código, código externo do ERP (quando houver integração), descrição, descrição detalhada, unidade de medida (FD-001-09), categoria (FD-001-09), características, classificação, criticidade;
+- Dados do item: código, código externo do ERP (quando houver integração), descrição, descrição detalhada, unidade de estoque (base) e unidades alternativas com fator de conversão (FD-001-09; ADR-013), categoria (FD-001-09), características, classificação, criticidade;
 - Atributos de EPI/Fardamento: CA — Certificado de Aprovação (obrigatório para categorias do grupo EPI), grade de tamanhos (FD-001-09), imagem do produto (FD-001-03);
-- Parâmetros de reposição: mínimo, máximo, ponto de pedido, lead time;
+- Parâmetros de reposição: mínimo, máximo, ponto de pedido, lead time; política de quantidade sugerida e rota de suprimento (ADR-014);
 - Sinônimos de busca;
 - Motivo de alterações sensíveis (inativação, mudança de unidade) — trilha de auditoria.
 
@@ -189,7 +191,7 @@ A ativação de item **não exige workflow** no MVP (responsabilidade do papel G
 # Restrições Arquiteturais
 
 1. O módulo não armazena saldo, fornecedor ou preço — referências cruzadas são por identidade, nunca por cópia de dados.
-2. Unidade de medida e categoria são referências lógicas ao Master Data (`typeCode+code`), seguindo MD-BR do FD-001-09.
+2. Unidade de medida e categoria são referências lógicas ao Master Data (`typeCode+code`), seguindo MD-BR do FD-001-09. A **conversão de UoM** é relação entre unidades da mesma categoria; toda quantidade do domínio é persistida na **unidade base** (ADR-013) — o catálogo não mantém saldo em nenhuma unidade.
 3. Nenhum comportamento variável em código: exigência de aprovação cadastral, campos obrigatórios adicionais e tolerâncias são parâmetros (FD-001-10).
 4. Inativação é sempre lógica; nenhum item é excluído fisicamente após a primeira referência por outro módulo.
 5. O módulo segue MMS-001 (nada aqui pode contradizê-lo) e os princípios MMS-P-01..08.
@@ -246,7 +248,11 @@ A ativação de item **não exige workflow** no MVP (responsabilidade do papel G
 
 ## Versão 1.1
 
-- Parâmetros de reposição por depósito; importação em lote com validação; curva ABC calculada sobre consumo (com MMS-004).
+- Parâmetros de reposição por depósito; importação em lote com validação; curva ABC calculada sobre consumo (com MMS-004); parâmetros da regra de reposição (política + rota) consumidos pela fila de sugestões do MMS-004 v1.1 (ADR-014).
+
+## Versão 1.2
+
+- **Conversão de Unidade de Medida** (ADR-013): unidade de estoque (base) + unidades alternativas com fator e papel; conversão nas fronteiras (Receiving/movimentação/compra). Revisão dos documentos detalhados do pacote (MMS-002-04 Domain Model, MMS-002-11 Database, MMS-002-07/13 UC/API) para refletir o Value Object de conversão e as colunas de fator/UoM base — pendente neste passe.
 
 ## Versão 2.0
 
@@ -278,3 +284,4 @@ A ativação de item **não exige workflow** no MVP (responsabilidade do papel G
 |--------|------|-----------|
 | 1.0.0 | 2026-07-30 | Criação da visão do módulo Item Catalog: objetivo, escopo, classificação, ciclo de vida, parâmetros de reposição, integrações, eventos, NFRs, KPIs, DoD e roadmap — conforme MMS-001 (seção 8.1) e ADR-012 |
 | 1.1.0 | 2026-07-30 | Incorporação do caso EPI/Fardamento: CA (Certificado de Aprovação) obrigatório para categorias do grupo EPI (lista parametrizável), grade de tamanhos via FD-001-09, imagem do produto via FD-001-03, código externo do ERP como atributo de integração (único por empresa quando informado); grupo EPI/Fardamento representado pela categoria (sem novo campo de classificação); roadmap ajustado (imagem antecipada da v2.0 para o MVP) |
+| 1.2.0 | 2026-08-08 | Incorporação de ADR-013 (Conversão de UoM) e ADR-014 (Motor de Regras de Reposição): unidade de estoque (base) + unidades alternativas com fator de conversão e papel, com quantidades persistidas na base; parâmetros da regra de reposição (política de quantidade sugerida e rota de suprimento) no catálogo, avaliados pelo MMS-004; escopo, entradas, restrições e roadmap atualizados. Regras codificadas em MMS-002-02 v1.2.0 (IC-BR-090..093 e IC-BR-100..101). Revisão dos documentos detalhados (Domain Model, Database, UC, API) fica como conclusão da v1.2 |

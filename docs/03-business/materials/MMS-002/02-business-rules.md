@@ -1,9 +1,9 @@
 **Documento:** MMS-002-02 — Business Rules
 **Módulo:** MMS-002 — Item Catalog (Catálogo de Itens)
-**Versão:** 1.1.0
+**Versão:** 1.2.0
 **Status:** 🟢 Approved
-**Data:** 2026-07-30
-**Dependências:** MMS-002 (Visão do Módulo — v1.1.0), MMS-002-01 (Business Context), MMS-001 (Documento Mestre Funcional — seções 6, 8.1, 14, 23), FD-001-03 (Document Management), FD-001-09 (Master Data), FD-001-10 (Configuration)
+**Data:** 2026-08-08
+**Dependências:** MMS-002 (Visão do Módulo — v1.2.0), MMS-002-01 (Business Context), MMS-001 (Documento Mestre Funcional — seções 6, 8.1, 14, 23), ADR-013 (Conversão de UoM), ADR-014 (Motor de Regras de Reposição), FD-001-03 (Document Management), FD-001-09 (Master Data), FD-001-10 (Configuration)
 **Referências:** MMS-003, MMS-004, MMS-005, PR-001-02 (padrão de formato), FD-001-01, FD-001-02, FD-001-04, FD-001-06, FD-001-07, GOV-001
 
 ---
@@ -701,7 +701,135 @@ Família introduzida na revisão 1.1.0 (MMS-002 README v1.1.0, escopo 8): atribu
 
 ---
 
-# 13. Matriz de Rastreabilidade
+# 13. Regras de Conversão de Unidade de Medida
+
+Família introduzida na revisão 1.2.0 (ADR-013 — Conversão de Unidade de Medida). Trata o caso operacional de **comprar em uma unidade e estocar/consumir em outra** (ex.: comprar em caixa, controlar em unidade). O princípio da fronteira com o Master Data permanece: a UoM continua sendo **vocabulário do FD-001-09**; esta família adiciona a **relação de conversão** entre unidades, não um vocabulário novo.
+
+## IC-BR-090 — Unidade de Estoque (base) Obrigatória
+
+| Campo | Valor |
+|-------|-------|
+| Código | IC-BR-090 |
+| Nome | Unidade de Estoque (base) Obrigatória |
+| Descrição | Todo item define uma **Unidade de Estoque (base)** — a UoM na qual o saldo é mantido (MMS-004) e na qual toda quantidade do domínio de materiais é persistida. Substitui, sem ambiguidade, a "unidade de medida" única do item. |
+| Tipo | Obrigatória |
+| Validação | UoM base existente e vigente no FD-001-09 (IC-BR-003); exatamente uma por item; imutável após a primeira movimentação do item no MMS-004. |
+| Mensagem de erro | "Informe a unidade de estoque (base) do item." |
+| Código do erro | IC-ERR-090 |
+| Evento | Item cadastrado (rascunho) / Item alterado |
+| Caso de uso | UC-IC-001, UC-IC-002 |
+| API | POST, PATCH /api/v1/items |
+| Caso de teste | TC-IC-090 |
+| Configuração | Não configurável (fronteira formal com FD-001-09). |
+| Observações | O saldo (MMS-004) existe exclusivamente na base; não há saldo em unidades alternativas (ADR-013, decisão 1). |
+
+---
+
+## IC-BR-091 — Unidades Alternativas com Fator de Conversão
+
+| Campo | Valor |
+|-------|-------|
+| Código | IC-BR-091 |
+| Nome | Unidades Alternativas com Fator de Conversão |
+| Descrição | O item pode registrar zero ou mais **unidades alternativas** com **fator de conversão** para a base (ex.: `1 CX = 12 UN`), cada uma com um **papel** opcional (ex.: unidade de compra padrão, unidade de consumo). |
+| Tipo | Parametrizável (existência do recurso; obrigatoriedade da unidade de compra é configurável) |
+| Validação | Fator numérico > 0; unicidade da UoM alternativa por item; unicidade de papel por item (no máximo uma unidade de compra padrão); a UoM alternativa é vigente no FD-001-09. |
+| Mensagem de erro | "Unidade alternativa ou fator de conversão inválido." |
+| Código do erro | IC-ERR-091 |
+| Evento | Item cadastrado (rascunho) / Item alterado |
+| Caso de uso | UC-IC-001, UC-IC-002 |
+| API | PUT /api/v1/items/{id}/uom-conversions |
+| Caso de teste | TC-IC-091 |
+| Configuração | Exigir unidade de compra para itens compráveis (`materials.item.uom.purchase-unit-required`; padrão: `false`). |
+| Observações | Papéis alimentam Receiving (MMS-005), movimentação (MMS-004) e a rota de compra (PR-001) — ADR-013, decisão 2/4. |
+
+---
+
+## IC-BR-092 — Conversão na Mesma Categoria de UoM
+
+| Campo | Valor |
+|-------|-------|
+| Código | IC-BR-092 |
+| Nome | Conversão na Mesma Categoria de UoM |
+| Descrição | A conversão só é válida entre unidades da **mesma categoria de UoM** do Master Data (ex.: contagem, massa, comprimento); não se converte entre categorias incompatíveis. |
+| Tipo | Obrigatória |
+| Validação | UoM base e UoM alternativa pertencem à mesma categoria no FD-001-09; caso contrário, a conversão é recusada. |
+| Mensagem de erro | "Conversão inválida: as unidades pertencem a categorias diferentes." |
+| Código do erro | IC-ERR-092 |
+| Evento | Item cadastrado (rascunho) / Item alterado |
+| Caso de uso | UC-IC-001, UC-IC-002 |
+| API | PUT /api/v1/items/{id}/uom-conversions |
+| Caso de teste | TC-IC-092 |
+| Configuração | Não configurável (fronteira formal com FD-001-09). |
+| Observações | A vigência da UoM é avaliada na data de referência, como em IC-BR-003 (ADR-013, decisão 3). |
+
+---
+
+## IC-BR-093 — Fator Imutável para Movimentos e Arredondamento Parametrizável
+
+| Campo | Valor |
+|-------|-------|
+| Código | IC-BR-093 |
+| Nome | Fator Imutável para Movimentos e Arredondamento Parametrizável |
+| Descrição | Alterar o fator de conversão de um item **não reprocessa** saldos nem documentos históricos; cada movimento guarda o fator aplicado no momento. A precisão e a regra de arredondamento da conversão são parametrizáveis e determinísticas. |
+| Tipo | Obrigatória (imutabilidade); Parametrizável (arredondamento) |
+| Validação | Movimentos do MMS-004 registram quantidade base + (quantidade informada, UoM informada, fator aplicado); arredondamento conforme regra configurada, sem comportamento implícito. |
+| Mensagem de erro | — (regra de integridade; sem entrada direta de usuário) |
+| Código do erro | IC-ERR-093 |
+| Evento | Item alterado (fator) |
+| Caso de uso | UC-IC-002 |
+| API | PUT /api/v1/items/{id}/uom-conversions |
+| Caso de teste | TC-IC-093 |
+| Configuração | Precisão e arredondamento (`materials.item.uom.rounding`; `materials.item.uom.precision`). |
+| Observações | Mesma disciplina de vigência do FD-001-09 e de imutabilidade de movimento do MMS-004 (ADR-013, decisões 5/6). |
+
+---
+
+# 14. Regras de Reposição — Parâmetros da Regra
+
+Família introduzida na revisão 1.2.0 (ADR-014 — Motor de Regras de Reposição, Accepted). O Item Catalog guarda os **parâmetros da regra** por item (e, opcionalmente, por depósito); a **avaliação** da regra e a fila de sugestões pertencem ao MMS-004 (v1.1) e a execução automática à v2.0. O catálogo nunca compra nem cria saldo (fronteira MMS-001 §3).
+
+## IC-BR-100 — Política de Quantidade Sugerida de Reposição
+
+| Campo | Valor |
+|-------|-------|
+| Código | IC-BR-100 |
+| Nome | Política de Quantidade Sugerida de Reposição |
+| Descrição | O item define a política que determina **quanto** repor quando o gatilho de reposição (ponto de pedido/mínimo) é atingido: **repor até o máximo**, **múltiplo de embalagem** (fator de UoM, IC-BR-091) ou **lote econômico fixo**. |
+| Tipo | Parametrizável |
+| Validação | Valor dentro do conjunto fechado {ate_maximo, multiplo_embalagem, lote_fixo}; `lote_fixo` exige quantidade > 0; `multiplo_embalagem` exige unidade de compra com fator (IC-BR-091). |
+| Mensagem de erro | "Política de reposição inválida ou incompleta." |
+| Código do erro | IC-ERR-100 |
+| Evento | Parâmetros de reposição alterados |
+| Caso de uso | UC-IC-007 |
+| API | PUT /api/v1/items/{id}/replenishment |
+| Caso de teste | TC-IC-100 |
+| Configuração | Política padrão da empresa (`materials.replenishment.default-policy`; padrão: `ate_maximo`). |
+| Observações | A quantidade é calculada pelo MMS-004 sobre o saldo disponível; o catálogo apenas parametriza (ADR-014, decisão 1; Resolução do aceite). |
+
+---
+
+## IC-BR-101 — Rota de Suprimento por Item
+
+| Campo | Valor |
+|-------|-------|
+| Código | IC-BR-101 |
+| Nome | Rota de Suprimento por Item |
+| Descrição | O item define a **rota de reposição** preferencial: **transferência** de outro depósito, **compra** (demanda para PR-001) ou **manual** (sem sugestão automática). A regra nunca executa compra/movimentação por conta própria — apenas orienta a sugestão do MMS-004. |
+| Tipo | Parametrizável |
+| Validação | Valor dentro do conjunto fechado {transferencia, compra, manual}; item `sob encomenda`/`não estocável` assume `manual`/`compra` conforme classificação (IC-BR-005). |
+| Mensagem de erro | "Rota de suprimento inválida para a classificação do item." |
+| Código do erro | IC-ERR-101 |
+| Evento | Parâmetros de reposição alterados |
+| Caso de uso | UC-IC-007 |
+| API | PUT /api/v1/items/{id}/replenishment |
+| Caso de teste | TC-IC-101 |
+| Configuração | Rota padrão (`materials.replenishment.default-route`; padrão: `compra`). |
+| Observações | Reposição por compra passa sempre por PR-001; por transferência gera documento no MMS-004 (MMS-P-07). Rastreabilidade bidirecional preservada (ADR-014, decisões 3/5). |
+
+---
+
+# 15. Matriz de Rastreabilidade
 
 | Regra | Origem (documento) | UC | API (conceitual) | Evento | Teste |
 |-------|--------------------|-----|------------------|--------|-------|
@@ -737,16 +865,25 @@ Família introduzida na revisão 1.1.0 (MMS-002 README v1.1.0, escopo 8): atribu
 | IC-BR-081 | MMS-002 README v1.1.0 (escopo 8) | UC-IC-001/002 | POST, PATCH /items | Item cadastrado/alterado | TC-IC-081 |
 | IC-BR-082 | MMS-002 README v1.1.0 (escopo 8) | UC-IC-001/002 | PUT .../image | Item alterado | TC-IC-082 |
 | IC-BR-083 | MMS-002 README v1.1.0 (escopo 1) | UC-IC-001/002 | POST, PATCH /items | Item cadastrado/alterado | TC-IC-083 |
+| IC-BR-090 | ADR-013 (decisão 1) | UC-IC-001/002 | POST, PATCH /items | Item cadastrado/alterado | TC-IC-090 |
+| IC-BR-091 | ADR-013 (decisão 2) | UC-IC-001/002 | PUT .../uom-conversions | Item cadastrado/alterado | TC-IC-091 |
+| IC-BR-092 | ADR-013 (decisão 3) | UC-IC-001/002 | PUT .../uom-conversions | Item cadastrado/alterado | TC-IC-092 |
+| IC-BR-093 | ADR-013 (decisões 5/6) | UC-IC-002 | PUT .../uom-conversions | Item alterado (fator) | TC-IC-093 |
+| IC-BR-100 | ADR-014 (decisão 1) | UC-IC-007 | PUT .../replenishment | Parâmetros alterados | TC-IC-100 |
+| IC-BR-101 | ADR-014 (decisões 3/5) | UC-IC-007 | PUT .../replenishment | Parâmetros alterados | TC-IC-101 |
 
-**Cobertura:** 32/32 regras com origem documentada e teste associado (100%).
+**Cobertura:** 38/38 regras com origem documentada e teste associado (100%).
 
 ---
 
-# 14. Dependências
+# 16. Dependências
 
 | Dependência | Uso |
 |-------------|-----|
 | MMS-002 (Visão) / MMS-002-01 (Business Context) | Origem de todas as regras |
+| ADR-013 — Conversão de UoM | Origem da família IC-BR-090..093 |
+| ADR-014 — Motor de Regras de Reposição | Origem da família IC-BR-100..101 (parâmetros); avaliação no MMS-004 |
+| MMS-004 — Inventory Management | Saldo na UoM base; avaliação da regra de reposição e fila de sugestões |
 | MMS-001 (Documento Mestre) | Regras MMS-RG-08, MMS-RG-11 e princípios MMS-P-01..08 herdados |
 | FD-001-01 / FD-001-02 | Autorização, escopo e estrutura organizacional |
 | FD-001-03 | Imagem do produto (IC-BR-082) |
@@ -758,9 +895,10 @@ Família introduzida na revisão 1.1.0 (MMS-002 README v1.1.0, escopo 8): atribu
 
 ---
 
-# 15. Histórico de Versão
+# 17. Histórico de Versão
 
 | Versão | Data | Descrição |
 |--------|------|-----------|
 | 1.0.0 | 2026-07-30 | Criação das Business Rules do Item Catalog: 28 regras codificadas (IC-BR-001..071) nas famílias gerais, parâmetros de reposição, ciclo de vida, sinônimos/duplicidade, alteração, auditoria/timeline, segurança e performance, com validação, erros (IC-ERR), eventos, UCs/API/testes conceituais, configurações `materials.item.*` e matriz de rastreabilidade 100% — derivadas da visão do módulo e das regras da suíte (MMS-RG), no padrão PR-001-02 |
 | 1.1.0 | 2026-07-30 | Incorporação do caso EPI/Fardamento (MMS-002 README v1.1.0): nova família "Regras de EPI e Fardamento" com 4 regras (IC-BR-080 CA obrigatório para grupo EPI, IC-BR-081 grade de tamanhos, IC-BR-082 imagem do produto via FD-001-03, IC-BR-083 código externo do ERP); matriz de rastreabilidade ampliada para 32/32; seções 12–14 renumeradas para 13–15 |
+| 1.2.0 | 2026-08-08 | Incorporação de ADR-013 e ADR-014: nova família "Regras de Conversão de Unidade de Medida" (IC-BR-090 unidade de estoque base, IC-BR-091 unidades alternativas com fator, IC-BR-092 conversão na mesma categoria, IC-BR-093 fator imutável para movimentos + arredondamento parametrizável) e nova família "Regras de Reposição — Parâmetros da Regra" (IC-BR-100 política de quantidade sugerida, IC-BR-101 rota de suprimento); matriz ampliada para 38/38; seções Matriz/Dependências/Histórico renumeradas para 15/16/17. Avaliação da regra de reposição e fila de sugestões pertencem ao MMS-004 (v1.1) |

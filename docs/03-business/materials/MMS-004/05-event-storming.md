@@ -2,10 +2,10 @@
 
 **Documento:** MMS-004-05 — Event Storming
 **Módulo:** MMS-004 — Inventory Management (Estoque)
-**Versão:** 1.0.0
+**Versão:** 1.1.0
 **Status:** 🟢 Approved
-**Data:** 2026-07-30
-**Dependências:** MMS-004 (visão do módulo), MMS-004-02 (Business Rules), MMS-004-03 (State Machine), MMS-004-04 (Domain Model), ADR-010 (mensageria e eventos), FD-001-05 (Notifications), FD-001-06 (Audit), FD-001-07 (Timeline)
+**Data:** 2026-08-08
+**Dependências:** MMS-004 (visão do módulo v1.1.0), MMS-004-02 (Business Rules v1.1.0), MMS-004-03 (State Machine), MMS-004-04 (Domain Model v1.1.0), ADR-010 (mensageria e eventos), ADR-013 (Conversão de UoM), ADR-014 (Motor de Regras de Reposição), FD-001-05 (Notifications), FD-001-06 (Audit), FD-001-07 (Timeline)
 **Referências:** MMS-002-05 (padrão de formato Enterprise), MMS-002 (Item Catalog), MMS-003 (Material Requisition), MMS-005 (Receiving), PR-001 (Compras), GOV-001
 
 ---
@@ -87,14 +87,19 @@ Estados (MMS-004-03): Documento `ST-IV-001..004` · Reserva `ST-IV-010..013` · 
 | CMD-IV-018 | CancelInventory | Supervisor | Cancela inventário sem contagens | (somente timeline) |
 | CMD-IV-019 | ManageLocation | Supervisor / Administrador | Cria/edita/inativa locais — IV-BR-050..052 | (administrativo; timeline/auditoria) |
 | CMD-IV-020 | AddComment | Papéis autorizados | Comentário operacional na timeline | (somente timeline) |
+| CMD-IV-021 | ConfirmReplenishmentSuggestion | Almoxarife / Gerente | Confirma sugestão de reposição, disparando a rota (compra→PR-001 / transferência) — IV-BR-131 | EVT-IV-018 |
+| CMD-IV-022 | DiscardReplenishmentSuggestion | Almoxarife / Gerente | Descarta a sugestão sem efeito | EVT-IV-019 |
 
-**Nota:** `EvaluateStockAlerts` não é comando de ator — é reação automática do `StockAlertEvaluator` às confirmações (POL-IV-03/04), podendo publicar EVT-IV-015/016.
+**Notas:**
+- `EvaluateStockAlerts` não é comando de ator — é reação automática do `StockAlertEvaluator` às confirmações (POL-IV-03/04), podendo publicar EVT-IV-015/016.
+- `GenerateReplenishmentSuggestion` também não é comando de ator: é reação automática do `ReplenishmentEvaluator` (POL-IV-10) à confirmação que reduz o disponível abaixo do ponto de pedido, publicando EVT-IV-017 (ADR-014, IV-BR-130). A execução automática da rota (sem CMD-IV-021) é opt-in na v2.0 (`materials.replenishment.auto-execute`).
+- **Conversão de UoM (ADR-013):** os comandos de entrada/saída/transferência podem capturar a quantidade em unidade alternativa; o `UomConversionApplier` converte para a base antes da confirmação (IV-BR-009) — não há comando nem evento próprios de conversão.
 
 ---
 
 ## 5. Eventos de Domínio
 
-Os 16 eventos abaixo correspondem aos eventos funcionais previstos na visão do módulo (MMS-004 README — Eventos Publicados), detalhados pela State Machine (MMS-004-03 §11). Nenhum evento adicional foi criado.
+Os eventos abaixo correspondem aos eventos funcionais previstos na visão do módulo (MMS-004 README — Eventos Publicados), detalhados pela State Machine (MMS-004-03 §11). A revisão 1.1.0 acrescenta 3 eventos de reposição (EVT-IV-017..019) derivados do ADR-014, totalizando 19 eventos.
 
 | Código | Evento | Nome funcional | Disparado por | Momento |
 |---|---|---|---|---|
@@ -114,6 +119,9 @@ Os 16 eventos abaixo correspondem aos eventos funcionais previstos na visão do 
 | EVT-IV-014 | InventoryCountClosed | Inventário fechado | CMD-IV-017 | Fechamento persistido com sumário |
 | EVT-IV-015 | StockMinimumAlerted | Alerta de estoque mínimo | StockAlertEvaluator (POL-IV-03/04) | Disponível cruzou o mínimo (IV-BR-080) |
 | EVT-IV-016 | StockoutAlerted | Alerta de ruptura | StockAlertEvaluator (POL-IV-03) | Disponível zero com demanda aberta (IV-BR-081) |
+| EVT-IV-017 | ReplenishmentSuggestionGenerated | Sugestão de reposição gerada | ReplenishmentEvaluator (POL-IV-10) | Disponível ≤ ponto de pedido, regra habilitada (IV-BR-130) |
+| EVT-IV-018 | ReplenishmentSuggestionConfirmed | Sugestão de reposição confirmada | CMD-IV-021 | Rota disparada: demanda PR-001 ou transferência (IV-BR-131) |
+| EVT-IV-019 | ReplenishmentSuggestionDiscarded | Sugestão de reposição descartada | CMD-IV-022 | Descarte persistido, sem efeito no saldo |
 
 **Regras gerais dos eventos:**
 
@@ -278,6 +286,9 @@ Síntese de quem reage a cada evento. ✅ = reação obrigatória; ◐ = condici
 | EVT-IV-014 InventoryCountClosed | ✅ | ✅ | — | — | ◐ (Analytics — acuracidade) |
 | EVT-IV-015 StockMinimumAlerted | ✅ | ✅ | ✅ (ressuprimento) | — | ◐ (PR-001) |
 | EVT-IV-016 StockoutAlerted | ✅ | ✅ | ✅ (prioridade alta) | — | ◐ (PR-001) |
+| EVT-IV-017 ReplenishmentSuggestionGenerated | ✅ | ✅ | ✅ (responsável) | — | — |
+| EVT-IV-018 ReplenishmentSuggestionConfirmed | ✅ | ✅ | — | — | ✅ (PR-001, se rota compra) |
+| EVT-IV-019 ReplenishmentSuggestionDiscarded | ✅ | ✅ | — | — | — |
 
 ---
 
@@ -623,7 +634,12 @@ Aplicam-se a **todos** os eventos do Inventory Management:
 | CMD-IV-018 CancelInventory | — (somente timeline) | MMS-004-03 |
 | CMD-IV-019 ManageLocation | — (administrativo; timeline/auditoria) | Seção 7 (IV-BR-050..052) |
 | CMD-IV-020 AddComment | — (somente timeline) | — |
+| CMD-IV-021 ConfirmReplenishmentSuggestion | EVT-IV-018 ReplenishmentSuggestionConfirmed | IV-BR-131 (rota compra→PR-001 / transferência) |
+| CMD-IV-022 DiscardReplenishmentSuggestion | EVT-IV-019 ReplenishmentSuggestionDiscarded | — |
 | (automático) StockAlertEvaluator | EVT-IV-015 / EVT-IV-016 | IV-BR-080/081 (POL-IV-03/04) |
+| (automático) ReplenishmentEvaluator | EVT-IV-017 ReplenishmentSuggestionGenerated | IV-BR-130 (POL-IV-10) |
+
+> **Fichas técnicas (14.2):** EVT-IV-017..019 seguem os mesmos padrões transversais do §14.1 (exchange `trino.materials`, Outbox, at-least-once, retry 5×, DLQ, idempotência por `eventId`), com routing keys `evt.inventory.replenishment-suggested|confirmed|discarded` e ordenação por `aggregateId` da sugestão. EVT-IV-018 com rota `compra` tem como consumidor o PR-001 (geração de demanda com referência à origem).
 
 ---
 
@@ -632,3 +648,4 @@ Aplicam-se a **todos** os eventos do Inventory Management:
 | Versão | Data | Autor | Descrição |
 |---|---|---|---|
 | 1.0.0 | 2026-07-30 | Arquiteto Principal | Versão inicial aprovada: Event Storming completo do Inventory Management com 20 comandos, 16 eventos de domínio, 10 políticas, validações automáticas, matriz evento × reação, 5 eventos consumidos (MMS-002/003/005/Procurement) com regras de idempotência por origem, e especificação técnica por evento conforme ADR-010 (exchange `trino.materials`, Outbox, at-least-once, retry 5×, DLQ, ordenação por agregado e por chave de saldo). |
+| 1.1.0 | 2026-08-08 | Arquiteto Principal | Incorporação de ADR-013 e ADR-014: 2 novos comandos (CMD-IV-021 ConfirmReplenishmentSuggestion, CMD-IV-022 DiscardReplenishmentSuggestion) + geração automática via ReplenishmentEvaluator (POL-IV-10); 3 novos eventos (EVT-IV-017..019) — total 19; nota de conversão de UoM na captura de movimentação (UomConversionApplier, sem evento próprio); matriz evento×reação e rastreabilidade comando→evento atualizadas. |

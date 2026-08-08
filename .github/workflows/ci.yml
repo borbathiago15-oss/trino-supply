@@ -1,0 +1,39 @@
+# Pipeline CI do Trino Supply (OPS-001 §1). Gates: build → testes → análise.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (.NET 9)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+      - name: Restore
+        run: dotnet restore TrinoSupply.slnx
+      - name: Build
+        run: dotnet build TrinoSupply.slnx --configuration Release --no-restore
+      - name: Test
+        run: dotnet test TrinoSupply.slnx --configuration Release --no-build
+      # TODO(OPS-001): SAST + secret scanning + verificação de imagem (gates de segurança — SEC-003).
+
+  frontend:
+    name: Frontend (Next.js)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci || npm install
+      - run: npm run lint --if-present
+      - run: npm run build --if-present

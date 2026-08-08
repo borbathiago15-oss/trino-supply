@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Camada de Domínio do Foundation (FD-001). Sem dependência de infraestrutura/framework (ARC-004 §2). -->
+  <ItemGroup>
+    <ProjectReference Include="../../BuildingBlocks/TrinoSupply.BuildingBlocks.csproj" />
+  </ItemGroup>
+</Project>

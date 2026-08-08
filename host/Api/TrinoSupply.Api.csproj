@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- Composição do Modular Monolith (ARC-001 §2, ARC-004 §9): DI, pipeline, endpoints. -->
+  <ItemGroup>
+    <ProjectReference Include="../../src/Foundation/Infrastructure/TrinoSupply.Foundation.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/BuildingBlocks/TrinoSupply.BuildingBlocks.csproj" />
+  </ItemGroup>
+</Project>

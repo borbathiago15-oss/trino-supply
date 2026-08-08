@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BuildingBlocks/TrinoSupply.BuildingBlocks.csproj" />
+    <Project Path="src/Foundation/Domain/TrinoSupply.Foundation.Domain.csproj" />
+    <Project Path="src/Foundation/Application/TrinoSupply.Foundation.Application.csproj" />
+    <Project Path="src/Foundation/Infrastructure/TrinoSupply.Foundation.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/host/">
+    <Project Path="host/Api/TrinoSupply.Api.csproj" />
+    <Project Path="host/Worker/TrinoSupply.Worker.csproj" />
+  </Folder>
+</Solution>

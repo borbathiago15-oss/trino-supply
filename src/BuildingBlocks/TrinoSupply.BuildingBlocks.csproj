@@ -1,0 +1,3 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Kernel técnico compartilhado (ARC-004 §9). NÃO contém domínio de negócio. -->
+</Project>

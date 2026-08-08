@@ -41,3 +41,7 @@ docs/
 2. Em conflito, a documentação `Approved` no registry vence.
 3. Nenhuma funcionalidade sem os artefatos obrigatórios (ver TPES-002).
 4. Mudanças de arquitetura exigem ADR.
+
+## Código
+
+A implementação segue o **GO-001 — Build Kickoff** (`docs/00-governance/GO-001-build-kickoff.md`). O esqueleto inicial está em `src/` (Bounded Contexts), `host/` (Api/Worker), `web/` (Next.js) e `deploy/` (docker-compose). Como buildar: ver [`BUILD.md`](BUILD.md).

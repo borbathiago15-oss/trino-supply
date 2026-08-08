@@ -1,0 +1,56 @@
+# Infra local do Trino Supply (ARC-003 §2). Dev: paridade com produção via configuração (12-Factor).
+# Storage: MinIO local emula o Cloudflare R2 (S3-compatível) — ADR-016.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: trino
+      POSTGRES_USER: trino
+      POSTGRES_PASSWORD: trino
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trino"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: trino
+      RABBITMQ_DEFAULT_PASS: trino
+    ports: ["5672:5672", "15672:15672"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # MinIO = R2-compatível (S3) para dev; em produção usa-se Cloudflare R2 (ADR-016, FD-001-03).
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: trino
+      MINIO_ROOT_PASSWORD: trino12345
+    ports: ["9000:9000", "9001:9001"]
+    volumes: ["miniodata:/data"]
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+  miniodata:

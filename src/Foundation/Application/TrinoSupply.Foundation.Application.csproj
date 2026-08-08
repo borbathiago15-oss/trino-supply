@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Camada de Aplicação do Foundation: casos de uso, portas, Outbox (ARC-004 §2/§4). -->
+  <ItemGroup>
+    <ProjectReference Include="../Domain/TrinoSupply.Foundation.Domain.csproj" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,27 @@
+# .NET
+bin/
+obj/
+*.user
+artifacts/
+.vs/
+*.suo
+
+# Node / Next.js
+node_modules/
+web/.next/
+web/out/
+web/.turbo/
+npm-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+appsettings.*.local.json
+
+# OS / IDE
+.DS_Store
+.idea/
+*.swp

@@ -167,8 +167,8 @@
 |----|-----------|--------|--------|---------|
 | VIS-000 | Vision (índice/placeholder) | 0.1.0 | 🟡 Draft | `docs/01-vision/README.md` |
 | PRD-000 | Product (índice/placeholder) | 0.1.0 | 🟡 Draft | `docs/02-product/README.md` |
-| QA-000 | Testing (índice/placeholder) | 0.1.0 | 🟡 Draft | `docs/09-testing/README.md` |
-| OPS-000 | DevOps (índice/placeholder) | 0.1.0 | 🟡 Draft | `docs/10-devops/README.md` |
+| QA-001 | Estratégia de Testes Corporativa | 1.0.0 | 🟢 Approved | `docs/09-testing/README.md` |
+| OPS-001 | DevOps & CI/CD | 1.0.0 | 🟢 Approved | `docs/10-devops/README.md` |
 | REL-000 | Release (índice/placeholder) | 0.1.0 | 🟡 Draft | `docs/11-release/README.md` |
 | DOC-000 | User Guides (índice/placeholder) | 0.1.0 | 🟡 Draft | `docs/12-user-guides/README.md` |
 
@@ -232,6 +232,7 @@
 
 | Data | Evento | Referência |
 |------|--------|------------|
+| 2026-08-08 | **Suíte MMS 100% documentada e camadas de suporte iniciadas:** pacotes MMS-003, MMS-004 e MMS-005 completados (17/17 cada) — a suíte de Materiais (MMS-002/003/004/005) fica integralmente documentada. **QA-001 (09-testing)** e **OPS-001 (10-devops)** promovidos de placeholder a Approved (v1.0.0): estratégia de testes corporativa (pirâmide, camadas, DoD, rastreabilidade 100%) e DevOps/CI-CD (pipeline com gates, migrations expand-and-contract, observabilidade, runbooks) — operacionalizam ARC-003/ARC-006/SEC-003/QA-001 | MMS-003, MMS-004, MMS-005, QA-001, OPS-001 |
 | 2026-08-08 | **ADR-015 — Confirmação da stack e avaliação da alternativa Supabase (Accepted):** analisada a proposta do owner (Supabase + React + Expo, sem IA); decisão de **manter** a stack mandatória (.NET 9/Next.js, DDD/Clean, ARC-001..007) por integridade de domínio, coerência do SSOT, garantias de evento/transação e portabilidade; **adotadas** como técnicas de implementação as boas ideias (RLS no PostgreSQL como isolamento multi-tenant complementar; tempo real via SignalR/WebSockets; mapa funcional do owner mapeado aos Bounded Contexts); **mobile permanece pós-MVP** (web-first). Reavaliável por ADR futura. ARC-006 §10 atualizado | ADR-015 |
 | 2026-07-30 | Saneamento do repositório: caminhos recursivos corrigidos, duplicata de `08-user-stories.md` removida, numeração do índice do módulo alinhada aos IDs reais, série TS-PRQ arquivada, Jornada promovida a PR-001-12 | AUD-001 |
 | 2026-07-30 | FD-001-02 — Organization criado e aprovado (versão 1.0.0) | FD-001-02 |

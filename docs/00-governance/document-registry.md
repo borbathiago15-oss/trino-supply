@@ -130,6 +130,10 @@
 | MMS-005-02 | Receiving — Business Rules | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/02-business-rules.md` |
 | MMS-005-03 | Receiving — State Machine | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/03-state-machine.md` |
 | MMS-005-04 | Receiving — Domain Model | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/04-domain-model.md` |
+| MMS-005-05 | Receiving — Event Storming | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/05-event-storming.md` |
+| MMS-005-06 | Receiving — BPMN | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/06-bpmn.md` |
+| MMS-005-07 | Receiving — Use Cases | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/07-use-cases.md` |
+| MMS-005-09 | Receiving — Permissions | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/09-permissions.md` |
 | MMS-005-11 | Receiving — Database Model | 1.0.0 | 🟢 Approved | `docs/06-database/materials/MMS-005/11-database.md` |
 | MMS-005-13 | Receiving — API | 1.0.0 | 🟢 Approved | `docs/07-api/materials/MMS-005/README.md` |
 

@@ -189,6 +189,7 @@
 | ADR-012 | Posicionamento da Materials Management Suite no roadmap de módulos | 🟢 Accepted | `docs/17-adr/ADR-012-materials-management-suite-roadmap.md` |
 | ADR-013 | Conversão de Unidade de Medida (compra × estoque) no Item Catalog | 🟢 Accepted | `docs/17-adr/ADR-013-unit-of-measure-conversion.md` |
 | ADR-014 | Motor de Regras de Reposição (configurável) | 🟢 Accepted | `docs/17-adr/ADR-014-replenishment-rules-engine.md` |
+| ADR-015 | Confirmação da stack (.NET/Next.js) e avaliação da alternativa Supabase | 🟢 Accepted | `docs/17-adr/ADR-015-stack-confirmation-supabase-evaluation.md` |
 
 ---
 
@@ -217,6 +218,7 @@
 
 | Data | Evento | Referência |
 |------|--------|------------|
+| 2026-08-08 | **ADR-015 — Confirmação da stack e avaliação da alternativa Supabase (Accepted):** analisada a proposta do owner (Supabase + React + Expo, sem IA); decisão de **manter** a stack mandatória (.NET 9/Next.js, DDD/Clean, ARC-001..007) por integridade de domínio, coerência do SSOT, garantias de evento/transação e portabilidade; **adotadas** como técnicas de implementação as boas ideias (RLS no PostgreSQL como isolamento multi-tenant complementar; tempo real via SignalR/WebSockets; mapa funcional do owner mapeado aos Bounded Contexts); **mobile permanece pós-MVP** (web-first). Reavaliável por ADR futura. ARC-006 §10 atualizado | ADR-015 |
 | 2026-07-30 | Saneamento do repositório: caminhos recursivos corrigidos, duplicata de `08-user-stories.md` removida, numeração do índice do módulo alinhada aos IDs reais, série TS-PRQ arquivada, Jornada promovida a PR-001-12 | AUD-001 |
 | 2026-07-30 | FD-001-02 — Organization criado e aprovado (versão 1.0.0) | FD-001-02 |
 | 2026-07-30 | FD-001-03 — Document Management criado e aprovado (versão 1.0.0) | FD-001-03 |

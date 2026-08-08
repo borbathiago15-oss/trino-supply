@@ -1,11 +1,11 @@
 # ADR-014 — Motor de Regras de Reposição (configurável)
 
-**Status:** 🟡 Proposed
-**Data:** 2026-08-08
+**Status:** 🟢 Accepted
+**Data:** 2026-08-08 (proposta) · 2026-08-08 (aceita pelo owner)
 **Criticidade:** 🟠 Alta
 **Origem:** ARC-007 (Domain Benchmark Odoo & ERPNext), candidato de refinamento P1 (#20)
 
-> **Status Proposed:** esta ADR registra a direção de projeto recomendada pelo benchmark, mas **depende de aceite do owner** por expandir o comportamento de reposição do MVP em direção à automação prevista para a v2.0. Enquanto não aceita, o comportamento vigente é o dos documentos MMS aprovados (alerta de reposição → demanda manual para PR-001).
+> **Aceita pelo owner em 2026-08-08.** As duas pendências de aceite foram resolvidas (ver "Resolução do aceite"): o motor de **sugestão revisável** entra na **v1.1 do MMS-004** e a **execução automática** permanece **v2.0** (opt-in); o catálogo inicial de políticas de quantidade tem três opções. O MVP não é alterado — até a v1.1, o comportamento vigente continua sendo o dos documentos MMS aprovados (alerta de reposição → demanda manual para PR-001).
 
 ---
 
@@ -17,7 +17,7 @@ O benchmark ARC-007 (§3, #20; §4 P1) observou que Odoo e ERPNext tratam isso c
 
 Sem uma decisão registrada, o Trino tende a codificar essa política de forma dispersa (parte no alerta, parte na operação), contrariando o princípio de **parametrização acima de customização** (MMS-P-06 / FD-001-10) e dificultando a automação da v2.0.
 
-## Decisão (proposta)
+## Decisão
 
 1. **Introduzir o conceito de Regra de Reposição** como entidade configurável (FD-001-10), avaliada pelo Inventory (MMS-004) sobre a posição de saldo disponível:
    - **Gatilho:** saldo disponível ≤ ponto de pedido (ou mínimo), por item × depósito.
@@ -32,7 +32,7 @@ Sem uma decisão registrada, o Trino tende a codificar essa política de forma d
 
 5. **Rastreabilidade bidirecional preservada:** demanda de compra gerada por regra referencia a origem (item/depósito/regra), como já ocorre na rota MMS-003 → PR-001.
 
-## Consequências (se aceita)
+## Consequências
 
 * **Documentos impactados:** MMS-004 (avaliação da regra, fila de sugestões, eventos de reposição sugerida/confirmada); MMS-002 (parâmetros da regra por item, além dos já existentes); PR-001 (origem "reposição automática" além de "solicitação de material"); FD-001-10 (namespace `materials.replenishment.*`).
 * Prepara formalmente a automação da v2.0 do MMS-004 sem reescrever o modelo — a diferença entre v1 e v2 vira **parâmetro** (sugestão revisável × execução automática).
@@ -44,10 +44,19 @@ Sem uma decisão registrada, o Trino tende a codificar essa política de forma d
 * **Manter apenas o alerta atual (sem motor de regras):** mais simples, mas deixa a política de reposição implícita e não parametrizável, contrariando MMS-P-06 e dificultando a v2.0.
 * **Automação total imediata (gerar PR-001 automaticamente no MVP):** rejeitada para o primeiro estágio — risco de compras indevidas sem revisão; melhor evoluir de sugestão revisável para automática por parâmetro.
 
-## Pendências para aceite
+## Resolução do aceite
 
-* Confirmar com o owner se o **motor de sugestão revisável** entra já no MVP do MMS-004 ou permanece integralmente na v1.1/v2.0.
-* Definir o catálogo inicial de políticas de quantidade (até o máximo / múltiplo de embalagem / lote fixo).
+As pendências que condicionavam o aceite foram decididas pelo owner em 2026-08-08:
+
+1. **Estágio de entrega.** O **motor de sugestão revisável** (fila de sugestões de reposição, com confirmação humana) entra na **v1.1 do MMS-004** — evolução natural dos alertas do MVP, sem alterar o escopo do MVP. A **execução automática** (gerar PR-001 / transferência sem intervenção) permanece na **v2.0**, ativável por parâmetro (opt-in). Assim, a diferença entre v1.1 e v2.0 é apenas configuração (sugestão revisável × execução automática), como previsto na Decisão §2.
+2. **Catálogo inicial de políticas de quantidade sugerida:**
+   - **(a) Repor até o máximo** — quantidade = máximo − saldo disponível;
+   - **(b) Múltiplo de embalagem** — arredonda a sugestão para cima até o múltiplo do fator de UoM (ADR-013), respeitando (a) como teto/piso conforme parâmetro;
+   - **(c) Lote econômico fixo** — quantidade fixa por item/depósito (parâmetro).
+
+   Políticas adicionais (ex.: lote econômico calculado, cobertura em dias) ficam como evolução futura e não exigem nova ADR se permanecerem dentro deste modelo de regra.
+
+Estas resoluções são refletidas no roadmap do MMS-004 (v1.1/v2.0) na revisão de módulo correspondente.
 
 ## Referências
 

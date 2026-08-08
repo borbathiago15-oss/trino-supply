@@ -134,7 +134,7 @@ Autoridade normativa: **SEC-001/002/003**. Contrato transversal resumido:
 | ADR-011 | Foundation antes das APIs | Accepted |
 | ADR-012 | Posicionamento da Materials Management Suite no roadmap | Accepted |
 | ADR-013 | Conversão de Unidade de Medida (compra × estoque) no Item Catalog | Accepted |
-| ADR-014 | Motor de Regras de Reposição (configurável) | Proposed (aguarda aceite do owner) |
+| ADR-014 | Motor de Regras de Reposição (configurável) | Accepted |
 
 **Decisões que exigirão ADR futura** (registradas em GOV-002 §10 e sinalizadas nesta seção): extração de um Bounded Context para serviço independente (ARC-003 §7); bancos de leitura dedicados / CQRS com store separado (ARC-004 §5); cada integração externa via ACL (ARC-005 §10); mecanismo de pseudonimização LGPD (ARC-006 §8).
 

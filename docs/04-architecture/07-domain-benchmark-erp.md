@@ -68,7 +68,7 @@ Legenda de status: **✅ MVP** (já no escopo v1) · **🗓️ Roadmap** (previs
 | 17 | **Landed costs** (frete/seguro no custo) | — | 🔴 Lacuna (relevante quando #16 entrar) |
 | 18 | Requisição de compra / RFQ / Pedido | PR-001 + roadmap RFQ/PO (MMS-001 §8.5) | ✅ MVP (PR-001); RFQ/PO 🗓️ Roadmap |
 | 19 | Rastreabilidade demanda↔suprimento (procurement group) | MMS-003 ↔ PR-001 (rastreab. bidirecional) | ✅ MVP |
-| 20 | **Motor de rotas/regras de suprimento (push/pull configurável)** | Ponto de pedido → PR-001 → **ADR-014 (Proposed)** | 🟠 Proposto (aguarda aceite do owner) |
+| 20 | **Motor de rotas/regras de suprimento (push/pull configurável)** | Ponto de pedido → PR-001 → **ADR-014 (Accepted)** | ✅ Decidido (sugestão v1.1, automático v2.0) |
 | 21 | Cadastro de fornecedor + pricelist + scorecard | Procurement / Supplier Mgmt | 🗓️ Roadmap (domínio BC-SUP) |
 | 22 | Acordos-quadro / blanket orders | Contract Management | 🗓️ Roadmap (domínio BC-CTR) |
 | 23 | Operação por código de barras / RFID | MMS-004 (scanner-friendly previsto) | 🗓️ Roadmap / futuro |
@@ -86,7 +86,7 @@ Recomendações para avaliar — **nenhuma exige mudar a arquitetura**; são ref
 | Prio | Candidato | Por quê | Onde entraria |
 |------|-----------|---------|----------------|
 | P1 | **Conversão de UoM** (compra × estoque) (#9) — **→ ADR-013 (Accepted)** | Comprar em caixa e controlar em unidade é regra comum; sem conversão, gera erro de saldo e de compra. Baixo custo se tratado no Item Catalog. | **Decidido em ADR-013**; revisão **MMS-002** (alvo 1.2.0) + MMS-004/005/PR-001 pendente |
-| P1 | **Motor de regras de reposição** (#20) — **→ ADR-014 (Proposed)** | Trino já tem ponto de pedido → PR-001; formalizar como *regra configurável* (quando repor, de onde: estoque/transferência/compra) dá clareza e prepara automação da v2.0. | **ADR-014 registrada como Proposed**, aguardando aceite do owner |
+| P1 | **Motor de regras de reposição** (#20) — **→ ADR-014 (Accepted)** | Trino já tem ponto de pedido → PR-001; formalizar como *regra configurável* (quando repor, de onde: estoque/transferência/compra) dá clareza e prepara automação da v2.0. | **ADR-014 aceita**; sugestão revisável na v1.1 e execução automática na v2.0 do MMS-004 |
 | P2 | **Estratégia de retirada FEFO/FIFO + putaway** (#11) | Necessário quando lote/validade (#10) entrar na v2.0; decidir cedo evita retrabalho de endereçamento. | Roadmap **MMS-004 v2.0** (pareado com lote/validade) |
 | P2 | **Landed costs** (#17) | Única lacuna limpa; só faz sentido junto da valoração fiscal (#16), hoje fora do MVP. Registrar para não ser esquecido. | Roadmap fiscal (**decisão aberta** + ADR quando valoração retornar) |
 | P3 | **Supplier scorecard / homologação estruturada** (#21) | Odoo/ERPNext mostram valor de avaliação de fornecedor; alinhar o roadmap do BC-SUP a esse padrão. | Roadmap **Supplier Management** |

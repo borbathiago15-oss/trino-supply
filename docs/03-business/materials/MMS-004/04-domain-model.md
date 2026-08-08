@@ -1,9 +1,9 @@
 **Documento:** MMS-004-04 — Domain Model
 **Módulo:** MMS-004 — Inventory Management (Estoque)
-**Versão:** 1.0.0
+**Versão:** 1.1.0
 **Status:** 🟢 Approved
-**Data:** 2026-07-30
-**Dependências:** MMS-004 (Visão do Módulo), MMS-004-02 (Business Rules), MMS-004-03 (State Machine), MMS-001 (Documento Mestre Funcional), MMS-002 (Item Catalog), FD-001-10
+**Data:** 2026-08-08
+**Dependências:** MMS-004 (Visão do Módulo v1.1.0), MMS-004-02 (Business Rules v1.1.0), MMS-004-03 (State Machine), MMS-001 (Documento Mestre Funcional), MMS-002 (Item Catalog v1.2.0), ADR-013 (Conversão de UoM), ADR-014 (Motor de Regras de Reposição), FD-001-10
 **Referências:** MMS-002-04 (padrão de formato), MMS-003, MMS-005, PR-001, ADR-009 (domínio não conhece o banco), GOV-001
 
 ---
@@ -20,7 +20,7 @@ O modelo de domínio é independente de banco de dados, APIs e interface de usu�
 
 # 2. Aggregate Roots do Módulo
 
-O módulo possui **cinco Aggregate Roots**, um por documento/estrutura com ciclo de vida próprio (MMS-004-03):
+O módulo possui **seis Aggregate Roots**, um por documento/estrutura com ciclo de vida próprio (MMS-004-03):
 
 | Aggregate Root | Responsabilidade central |
 |----------------|--------------------------|
@@ -29,6 +29,7 @@ O módulo possui **cinco Aggregate Roots**, um por documento/estrutura com ciclo
 | **Adjustment** | Correção de divergência com justificativa e aprovação |
 | **InventoryCount** | Inventário físico: escopo, contagens, divergências e fechamento |
 | **Location** | Estrutura almoxarifado → depósito → endereço |
+| **ReplenishmentSuggestion** | Sugestão revisável de reposição derivada da regra do item (ADR-014, IV-BR-130/131) |
 
 Nenhuma entidade interna poderá ser alterada diretamente sem passar pelo seu Aggregate Root. Nenhum Aggregate altera saldo diretamente: o efeito sobre o saldo é produzido **somente** pela confirmação de documentos, aplicada pelo Domain Service `StockBalanceService`.
 
@@ -184,7 +185,8 @@ Atributos:
 - Id
 - ItemRef (referência ao MMS-002 — somente item Ativo em novas operações, IV-BR-007)
 - SizeCode (obrigatório quando o item tem grade — IV-BR-120)
-- Quantity (> 0, na unidade do item — IV-BR-009)
+- Quantity (> 0, na **unidade base** do item — IV-BR-009)
+- CapturedQuantity / CapturedUom / AppliedFactor (quando a linha é capturada em unidade alternativa — ex.: recebimento em caixas; a conversão para a base fica registrada com o fator aplicado no momento — ADR-013, IV-BR-009/093)
 - FromLocationRef / ToLocationRef (conforme o tipo: saída exige From; entrada exige To; transferência exige ambos — IV-BR-008/030)
 - SegregationKey (cliente/contrato, quando habilitada — IV-BR-060)
 
@@ -265,13 +267,31 @@ Principais atributos:
 
 ---
 
+## ReplenishmentSuggestion (Aggregate Root) — ADR-014
+
+Representa uma sugestão **revisável** de reposição, gerada pela avaliação da regra do item (IV-BR-130) sobre o saldo disponível. Não altera saldo e não compra por conta própria — orienta uma ação humana (ou automática, opt-in na v2.0).
+
+Principais atributos:
+
+- Id; CompanyId; ItemRef; LocationRef (depósito);
+- TriggeredAvailableQty; ReorderPoint (snapshot do gatilho);
+- Policy (`ate_maximo` / `multiplo_embalagem` / `lote_fixo` — IC-BR-100) e SuggestedQuantity (na unidade base, já resolvida pela política);
+- Route (`transferencia` / `compra` / `manual` — IC-BR-101);
+- Status: Sugerida / Confirmada / Descartada (ver §7);
+- OutcomeReference (referência ao PR-001 gerado ou ao documento de transferência, quando confirmada);
+- CreatedAt; DecidedBy?; DecidedAt?; Version.
+
+Regras: a quantidade sugerida respeita a política do item (multiplo_embalagem usa o fator de UoM); a confirmação por rota `compra` gera demanda ao PR-001, por `transferencia` gera documento de movimentação (IV-BR-131); execução automática apenas com `materials.replenishment.auto-execute=true`.
+
+---
+
 # 6. Value Objects
 
 ## Quantity
 
 - Valor (NUMERIC(18,4))
 
-Imutável. Invariante: `> 0` em movimentações; `≥ 0` em contagens; sempre na unidade do item, sem conversão (IV-BR-009).
+Imutável. Invariante: `> 0` em movimentações; `≥ 0` em contagens; **sempre na unidade base do item** (IV-BR-009). Quando a linha é capturada em unidade alternativa, a conversão para a base é aplicada com o fator do item (ADR-013) e registrada em `CapturedQuantity`/`CapturedUom`/`AppliedFactor`; o saldo é sempre afetado na base.
 
 ---
 
@@ -388,6 +408,9 @@ Aberto · Em Contagem · Fechado · Cancelado
 ## LocationType
 Warehouse · Deposit · Address
 
+## ReplenishmentSuggestion Status (ADR-014)
+Sugerida · Confirmada · Descartada
+
 ---
 
 # 8. Invariantes
@@ -427,6 +450,8 @@ Invariantes formalizadas:
 | INV-IV-14 | Transições somente pelas matrizes da State Machine | MMS-004-03 §10 |
 | INV-IV-15 | `version` incrementa a cada alteração persistida; confirmação sequencial por chave de saldo | IV-BR-012 |
 | INV-IV-16 | Toda confirmação grava BalanceSnapshot anterior/posterior na auditoria | IV-BR-090 |
+| INV-IV-17 | Linha capturada em unidade alternativa persiste `Quantity` na base + `AppliedFactor` do momento | IV-BR-009 (ADR-013) |
+| INV-IV-18 | Sugestão de reposição nunca altera saldo nem compra; confirmação por rota gera PR-001/transferência | IV-BR-130/131 (ADR-014) |
 
 ---
 
@@ -480,6 +505,14 @@ Cancel(reason) — somente Aberto sem contagens
 
 Create() / Update() / Inactivate() — inativação exige saldo zero (IV-BR-052)
 
+## ReplenishmentSuggestion (ADR-014)
+
+Generate(itemRef, locationRef, availableQty) — cria a sugestão a partir da regra do item (IV-BR-130)
+
+Confirm(decidedBy, route) — gera PR-001 (compra) ou documento de transferência (IV-BR-131)
+
+Discard(decidedBy, reason?) — descarta a sugestão sem efeito
+
 ---
 
 ## Factory Methods
@@ -496,6 +529,7 @@ Criação sempre via fábricas do Aggregate — construtores nunca expostos:
 | `Adjustment.Register` | (companyId, reasonType, justification, lines, inventoryRef?) | Justificativa obrigatória (IV-BR-040); status inicial conforme parâmetro (IV-BR-041) |
 | `InventoryCount.Open` | (companyId, scope, responsibleId, deadline) | Escopo válido e sem sobreposição (IV-BR-070) |
 | `Location.Create` | (companyId, type, code, parentId?) | Hierarquia íntegra (IV-BR-050) |
+| `ReplenishmentSuggestion.Generate` | (companyId, itemRef, locationRef, availableQty, reorderPoint, policy, route) | Quantidade sugerida pela política (IV-BR-130); sem duplicidade de sugestão aberta por item×depósito |
 
 ---
 
@@ -563,6 +597,8 @@ Operações de domínio que não pertencem naturalmente a uma entidade:
 | `StockAlertEvaluator` | Avalia mínimo e ruptura após confirmações e emite alertas via FD-001-05 (IV-BR-080/081/083) |
 | `LocationHierarchyValidator` | Integridade da estrutura e granularidade (IV-BR-050/051) |
 | `InventoryReadModelRefresher` | Mantém o cache de leitura de saldos/posição (IV-BR-110) a partir dos eventos |
+| `UomConversionApplier` | Converte a quantidade capturada em unidade alternativa para a base pelo fator do item e registra `AppliedFactor` na linha (ADR-013, IV-BR-009/093) |
+| `ReplenishmentEvaluator` | Avalia a regra do item após confirmação que reduz o disponível (ou por agenda) e gera `ReplenishmentSuggestion` (IV-BR-130); nunca escreve saldo |
 
 ---
 
@@ -581,6 +617,8 @@ Políticas de negócio reativas a eventos:
 | POL-IV-07 | Recebimento conferido (evento consumido — MMS-005) | Gerar documento de entrada vinculado (IV-BR-010) |
 | POL-IV-08 | Solicitação cancelada (evento consumido — MMS-003) | Liberar reservas ativas vinculadas (IV-BR-022) |
 | POL-IV-09 | Qualquer evento que altere projeção de saldo | Invalidar cache de leitura (IV-BR-110) |
+| POL-IV-10 | Confirmação que reduz o disponível abaixo do ponto de pedido (regra habilitada) | Avaliar a regra de reposição e gerar `ReplenishmentSuggestion` (IV-BR-130) |
+| POL-IV-11 | Sugestão confirmada por rota `compra` / `transferencia` | Gerar demanda PR-001 ou documento de transferência com rastreabilidade (IV-BR-131) |
 
 ---
 
@@ -591,6 +629,7 @@ Reserva criada · Reserva atendida · Reserva liberada · Reserva vencida
 Ajuste registrado · Ajuste aprovado · Ajuste rejeitado
 Inventário iniciado · Contagem registrada · Divergência aprovada
 Alerta de estoque mínimo · Alerta de ruptura
+Sugestão de reposição gerada · Sugestão de reposição confirmada · Sugestão de reposição descartada (ADR-014)
 
 (Especificação técnica no MMS-004-05, conforme ADR-010.)
 
@@ -605,6 +644,7 @@ Fazem parte do módulo:
 - Adjustment + AdjustmentLine
 - InventoryCount + CountEntry
 - Location
+- ReplenishmentSuggestion (ADR-014)
 - StockBalance (projeção de leitura, sem Aggregate próprio)
 
 Não fazem parte (outros Bounded Contexts ou referências externas):
@@ -639,3 +679,4 @@ Não fazem parte (outros Bounded Contexts ou referências externas):
 | Versão | Data | Descrição |
 |--------|------|-----------|
 | 1.0.0 | 2026-07-30 | Criação do Domain Model do Inventory Management: 5 Aggregate Roots (StockMovement, Reservation, Adjustment, InventoryCount, Location) + StockBalance como projeção não editável; Aggregate Diagram e relacionamentos UML; Value Objects completos (Quantity, QuantityDelta, MovementType, DocumentOrigin, LocationRef, SizeCode, SegregationKey, ReservationValidity, BalanceSnapshot, Justification, AdjustmentReasonType, CountScope, ToleranceLimits); 16 invariantes formalizadas (INV-IV-01..16) rastreadas às IV-BR; factory methods; repositories (sem escrita de saldo; company_id, optimistic concurrency, keyset); 13 specifications; 9 domain services (StockBalanceService como único ponto de efeito sobre saldo); 9 policies; eventos produzidos e limites dos Aggregates — no padrão MMS-002-04, derivado da visão do módulo, das Business Rules e da State Machine |
+| 1.1.0 | 2026-08-08 | Incorporação de ADR-013 e ADR-014: `MovementLine` ganha `CapturedQuantity`/`CapturedUom`/`AppliedFactor` (captura em unidade alternativa convertida para a base; `Quantity` passa a ser explicitamente na base — IV-BR-009); novo Aggregate Root **ReplenishmentSuggestion** (Sugerida/Confirmada/Descartada) com factory `Generate` e comportamentos `Confirm`/`Discard`; domain services `UomConversionApplier` e `ReplenishmentEvaluator`; políticas POL-IV-10/11; eventos de sugestão de reposição; invariantes INV-IV-17/18; agora 6 Aggregate Roots. Rastreado a IV-BR-009/130/131 (MMS-004-02 v1.1.0) |

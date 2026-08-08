@@ -100,7 +100,7 @@
 | MMS-004-01 | Inventory Management — Business Context | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/01-business-context.md` |
 | MMS-004-02 | Inventory Management — Business Rules | 1.1.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/02-business-rules.md` |
 | MMS-004-03 | Inventory Management — State Machine | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/03-state-machine.md` |
-| MMS-004-04 | Inventory Management — Domain Model | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/04-domain-model.md` |
+| MMS-004-04 | Inventory Management — Domain Model | 1.1.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/04-domain-model.md` |
 | MMS-004-05 | Inventory Management — Event Storming | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/05-event-storming.md` |
 | MMS-004-06 | Inventory Management — BPMN | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/06-bpmn.md` |
 | MMS-004-07 | Inventory Management — Use Cases | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/07-use-cases.md` |

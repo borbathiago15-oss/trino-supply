@@ -134,6 +134,13 @@
 | MMS-005-06 | Receiving — BPMN | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/06-bpmn.md` |
 | MMS-005-07 | Receiving — Use Cases | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/07-use-cases.md` |
 | MMS-005-09 | Receiving — Permissions | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/09-permissions.md` |
+| MMS-005-08 | Receiving — User Stories | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/08-user-stories.md` |
+| MMS-005-10 | Receiving — Notifications | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/10-notifications.md` |
+| MMS-005-12 | Receiving — Business Journey | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/12-business-journey.md` |
+| MMS-005-14 | Receiving — UX | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/14-ux.md` |
+| MMS-005-15 | Receiving — Wireframes | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/15-wireframes.md` |
+| MMS-005-16 | Receiving — Acceptance Criteria | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/16-acceptance-criteria.md` |
+| MMS-005-17 | Receiving — Test Scenarios | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/17-test-scenarios.md` |
 | MMS-005-11 | Receiving — Database Model | 1.0.0 | 🟢 Approved | `docs/06-database/materials/MMS-005/11-database.md` |
 | MMS-005-13 | Receiving — API | 1.0.0 | 🟢 Approved | `docs/07-api/materials/MMS-005/README.md` |
 

@@ -19,9 +19,18 @@ Toda implementação segue rigorosamente `docs/`. O índice oficial é
 ```text
 docs/
 ├── 00-governance        # Registro mestre, Prompt Master (TPES-002)
-├── 03-business          # Negócio: foundation (FD-001) e procurement (PR-001)
+├── 01-vision            # Visão do produto (placeholder)
+├── 02-product           # Engenharia de produto (placeholder)
+├── 03-business          # Negócio: foundation (FD-001), procurement (PR-001), materials (MMS-*)
+├── 04-architecture      # Arquitetura do sistema (ARC-001..006)
 ├── 05-design-system     # Marca e logo oficial (DS-001)
 ├── 06-database          # Modelos físicos por módulo
+├── 07-api               # Contratos de API por módulo
+├── 08-security          # Arquitetura de segurança (SEC-001..003)
+├── 09-testing           # Estratégia de testes (placeholder)
+├── 10-devops            # DevOps & CI/CD (placeholder)
+├── 11-release           # Gestão de releases (placeholder)
+├── 12-user-guides       # Guias do usuário (placeholder)
 ├── 17-adr               # Architecture Decision Records
 └── 90-archive           # Documentos substituídos (somente histórico)
 ```

@@ -110,6 +110,33 @@
 
 ---
 
+## 5.1 Arquitetura (04-architecture)
+
+| ID | Documento | Versão | Status | Caminho |
+|----|-----------|--------|--------|---------|
+| ARC-000 | Architecture Overview (Índice da seção) | 1.0.0 | 🟢 Approved | `docs/04-architecture/README.md` |
+| ARC-001 | System Architecture Overview | 1.0.0 | 🟢 Approved | `docs/04-architecture/01-system-architecture-overview.md` |
+| ARC-002 | Bounded Contexts & Context Map | 1.0.0 | 🟢 Approved | `docs/04-architecture/02-bounded-contexts-context-map.md` |
+| ARC-003 | Solution & Deployment Architecture | 1.0.0 | 🟢 Approved | `docs/04-architecture/03-solution-deployment-architecture.md` |
+| ARC-004 | Application Architecture | 1.0.0 | 🟢 Approved | `docs/04-architecture/04-application-architecture.md` |
+| ARC-005 | Integration & Eventing Architecture | 1.0.0 | 🟢 Approved | `docs/04-architecture/05-integration-eventing.md` |
+| ARC-006 | Cross-Cutting Concerns & NFRs | 1.0.0 | 🟢 Approved | `docs/04-architecture/06-cross-cutting-nfr.md` |
+
+---
+
+## 5.2 Placeholders estruturais (pastas oficiais TPES-002 ainda sem conteúdo aprovado)
+
+| ID | Documento | Versão | Status | Caminho |
+|----|-----------|--------|--------|---------|
+| VIS-000 | Vision (índice/placeholder) | 0.1.0 | 🟡 Draft | `docs/01-vision/README.md` |
+| PRD-000 | Product (índice/placeholder) | 0.1.0 | 🟡 Draft | `docs/02-product/README.md` |
+| QA-000 | Testing (índice/placeholder) | 0.1.0 | 🟡 Draft | `docs/09-testing/README.md` |
+| OPS-000 | DevOps (índice/placeholder) | 0.1.0 | 🟡 Draft | `docs/10-devops/README.md` |
+| REL-000 | Release (índice/placeholder) | 0.1.0 | 🟡 Draft | `docs/11-release/README.md` |
+| DOC-000 | User Guides (índice/placeholder) | 0.1.0 | 🟡 Draft | `docs/12-user-guides/README.md` |
+
+---
+
 ## 6. Design System (05-design-system)
 
 | ID | Documento | Versão | Status | Caminho |
@@ -213,3 +240,5 @@
 | 2026-07-30 | MMS-004-07 — Use Cases do Inventory Management criados e aprovados (versão 1.0.0): UC-IV-001..011 (entrada, saída/atendimento, criar reserva, liberar/vencer, transferência, ajuste com aprovação, inventário, estorno, locais, alertas, posição/extrato) em especificação UML completa + matriz de rastreabilidade com 100% de cobertura de regras (40/40) e eventos (16/16) — padrão MMS-002-07 | MMS-004-07 |
 | 2026-07-30 | MMS-004-08 — User Stories do Inventory Management criadas e aprovadas (versão 1.0.0): 16 stories US-IV-001..016 em 5 Features (Movimentação, Reservas, Ajustes, Inventário, Consulta/Visão/Alertas) com persona, Gherkin, regras, eventos e matriz de rastreabilidade — padrão MMS-002-08 | MMS-004-08 |
 | 2026-07-30 | MMS-004-09 — Permissions do Inventory Management criado e aprovado (versão 1.0.0): modelo híbrido RBAC+ABAC+Escopo, 6 papéis (Requester com negação explícita da visão do almoxarifado), 11 permissões IV-PERM, restrições por estado das 4 entidades, policies POL-IV-AUTH, JWT claims, scopes inventory.*, Permission Matrix, SoD (SOD-IV-001/002 não desligáveis), Inheritance, Delegation e Evaluation Flow — padrão MMS-002-09 | MMS-004-09 |
+| 2026-08-08 | Seção de Arquitetura criada e aprovada (04-architecture, versão 1.0.0): **ARC-000** (índice), **ARC-001** System Architecture Overview (C4 L1–L2, monólito modular orientado a domínio, fluxo de requisição de referência, atributos de qualidade), **ARC-002** Bounded Contexts & Context Map (9 contextos oficiais alinhados ao TPES-002, Context Map DDD, mapa contexto→schema→exchange, regras de fronteira), **ARC-003** Solution & Deployment Architecture (topologia de contêineres, ambientes, dados/backup, rede/hardening Zero Trust, escala e extração de contexto, contrato CI/CD), **ARC-004** Application Architecture (Clean Architecture + DDD tático, fluxos Command/Query, Outbox, contrato com Foundation, estrutura de solução .NET por contexto), **ARC-005** Integration & Eventing (estilos síncrono/assíncrono, Transactional Outbox, topologia RabbitMQ, at-least-once/idempotência/ordenação, envelope de evento como Published Language, ACL para externos), **ARC-006** Cross-Cutting & NFRs (multi-tenancy, segurança, auditoria, observabilidade, resiliência, performance, configurabilidade, LGPD, matriz de rastreabilidade e índice de ADRs) — formaliza a camada de arquitetura da metodologia TPE antes do avanço de Database/API para os demais módulos; consolida ADR-009/010/011/012 | ARC-001..006 |
+| 2026-08-08 | Placeholders estruturais criados (Draft) para completar a taxonomia oficial de `docs/` do TPES-002: **01-vision** (VIS-000), **02-product** (PRD-000), **09-testing** (QA-000), **10-devops** (OPS-000), **11-release** (REL-000), **12-user-guides** (DOC-000) — pastas registradas com índice/escopo previsto e regra de promoção via registry | GOV-002 |

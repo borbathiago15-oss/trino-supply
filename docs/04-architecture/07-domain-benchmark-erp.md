@@ -57,7 +57,7 @@ Legenda de status: **✅ MVP** (já no escopo v1) · **🗓️ Roadmap** (previs
 | 6 | Curva ABC | MMS-002/004 | 🗓️ Roadmap 1.1 |
 | 7 | Ponto de pedido / mín-máx (reordering rules) | MMS-002 (parâmetros de reposição) | ✅ MVP (cálculo de alerta); reposição automática 🗓️ v2.0 |
 | 8 | Unidade de medida (catálogo de UoM) | MMS-002 via Master Data FD-001-09 | ✅ MVP |
-| 9 | **Conversão de UoM** (comprar em CX, estocar em UN) | MMS-002 (UoM única por item) | 🟠 Verificar |
+| 9 | **Conversão de UoM** (comprar em CX, estocar em UN) | MMS-002 (UoM única por item) → **ADR-013 (Accepted)** | ✅ Decidido (revisão de módulo pendente) |
 | 10 | Lote / Validade / Número de série | MMS-002/004 | 🗓️ Roadmap 2.0 |
 | 11 | Estratégia de retirada (FEFO/FIFO) e putaway | MMS-004 (endereçamento) | 🟠 Verificar (pareado com #10) |
 | 12 | Inspeção de qualidade / quarentena no recebimento | MMS-005 | 🗓️ Roadmap 2.0 |
@@ -68,7 +68,7 @@ Legenda de status: **✅ MVP** (já no escopo v1) · **🗓️ Roadmap** (previs
 | 17 | **Landed costs** (frete/seguro no custo) | — | 🔴 Lacuna (relevante quando #16 entrar) |
 | 18 | Requisição de compra / RFQ / Pedido | PR-001 + roadmap RFQ/PO (MMS-001 §8.5) | ✅ MVP (PR-001); RFQ/PO 🗓️ Roadmap |
 | 19 | Rastreabilidade demanda↔suprimento (procurement group) | MMS-003 ↔ PR-001 (rastreab. bidirecional) | ✅ MVP |
-| 20 | **Motor de rotas/regras de suprimento (push/pull configurável)** | Ponto de pedido → PR-001 | 🟠 Parcial (formalizar como regra) |
+| 20 | **Motor de rotas/regras de suprimento (push/pull configurável)** | Ponto de pedido → PR-001 → **ADR-014 (Proposed)** | 🟠 Proposto (aguarda aceite do owner) |
 | 21 | Cadastro de fornecedor + pricelist + scorecard | Procurement / Supplier Mgmt | 🗓️ Roadmap (domínio BC-SUP) |
 | 22 | Acordos-quadro / blanket orders | Contract Management | 🗓️ Roadmap (domínio BC-CTR) |
 | 23 | Operação por código de barras / RFID | MMS-004 (scanner-friendly previsto) | 🗓️ Roadmap / futuro |
@@ -85,8 +85,8 @@ Recomendações para avaliar — **nenhuma exige mudar a arquitetura**; são ref
 
 | Prio | Candidato | Por quê | Onde entraria |
 |------|-----------|---------|----------------|
-| P1 | **Conversão de UoM** (compra × estoque) (#9) | Comprar em caixa e controlar em unidade é regra comum; sem conversão, gera erro de saldo e de compra. Baixo custo se tratado no Item Catalog. | Revisão **MMS-002** (fator de conversão por item, ancorado em FD-001-09) |
-| P1 | **Motor de regras de reposição** (#20) | Trino já tem ponto de pedido → PR-001; formalizar como *regra configurável* (quando repor, de onde: estoque/transferência/compra) dá clareza e prepara automação da v2.0. | Refinamento **MMS-002/004** + possível **ADR** (regra de suprimento) |
+| P1 | **Conversão de UoM** (compra × estoque) (#9) — **→ ADR-013 (Accepted)** | Comprar em caixa e controlar em unidade é regra comum; sem conversão, gera erro de saldo e de compra. Baixo custo se tratado no Item Catalog. | **Decidido em ADR-013**; revisão **MMS-002** (alvo 1.2.0) + MMS-004/005/PR-001 pendente |
+| P1 | **Motor de regras de reposição** (#20) — **→ ADR-014 (Proposed)** | Trino já tem ponto de pedido → PR-001; formalizar como *regra configurável* (quando repor, de onde: estoque/transferência/compra) dá clareza e prepara automação da v2.0. | **ADR-014 registrada como Proposed**, aguardando aceite do owner |
 | P2 | **Estratégia de retirada FEFO/FIFO + putaway** (#11) | Necessário quando lote/validade (#10) entrar na v2.0; decidir cedo evita retrabalho de endereçamento. | Roadmap **MMS-004 v2.0** (pareado com lote/validade) |
 | P2 | **Landed costs** (#17) | Única lacuna limpa; só faz sentido junto da valoração fiscal (#16), hoje fora do MVP. Registrar para não ser esquecido. | Roadmap fiscal (**decisão aberta** + ADR quando valoração retornar) |
 | P3 | **Supplier scorecard / homologação estruturada** (#21) | Odoo/ERPNext mostram valor de avaliação de fornecedor; alinhar o roadmap do BC-SUP a esse padrão. | Roadmap **Supplier Management** |

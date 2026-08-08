@@ -1,9 +1,9 @@
 **Documento:** MMS-004 — Inventory Management (Visão do Módulo)
 **Módulo:** MMS-004 — Inventory Management (Estoque)
-**Versão:** 1.0.0
+**Versão:** 1.1.0
 **Status:** 🟢 Approved
-**Data:** 2026-07-30
-**Dependências:** MMS-001 (Documento Mestre Funcional — seções 6, 8.3, 9, 14, 15.2, 20), MMS-002 (Item Catalog), ADR-012, FD-001-01, FD-001-02, FD-001-04, FD-001-05, FD-001-06, FD-001-07, FD-001-10
+**Data:** 2026-08-08
+**Dependências:** MMS-001 (Documento Mestre Funcional — seções 6, 8.3, 9, 14, 15.2, 20), MMS-002 (Item Catalog v1.2.0), ADR-012, ADR-013 (Conversão de UoM), ADR-014 (Motor de Regras de Reposição), FD-001-01, FD-001-02, FD-001-04, FD-001-05, FD-001-06, FD-001-07, FD-001-10
 **Referências:** MMS-003 (Material Requisition — consumidor de reservas), MMS-005 (Receiving — origem de entradas), PR-001 (rota de compra), GOV-001
 
 ---
@@ -38,7 +38,7 @@ O módulo existe para que a plataforma possa confiar no próprio estoque: reserv
 
 - **Não solicita material** — é o MMS-003; o estoque é consultado e reservado por ele.
 - **Não recebe fisicamente** — conferência é do MMS-005; o estoque registra a entrada decorrente.
-- **Não cadastra itens** — identidade e parâmetros vêm do MMS-002 (o estoque consome mín/máx/ponto de pedido, não os edita).
+- **Não cadastra itens** — identidade e parâmetros vêm do MMS-002 (o estoque consome mín/máx/ponto de pedido, unidade base, unidades de conversão e a regra de reposição; não os edita).
 - **Não compra** — alertas de reposição viram demanda no domínio PR-001.
 - **Não faz valorização fiscal/contábil** — o MVP registra custo médio apenas como referência gerencial (MMS-001, seção 8.3).
 
@@ -250,11 +250,11 @@ Confirmação ──► saldo atualizado (total e/ou reservado)
 
 ## Versão 1.1
 
-- Transferência com recebimento em trânsito; inventário cíclico automático por curva ABC; compra dedicada com reserva automática na entrada; relatórios completos (posição, movimentações, curva ABC, acuracidade).
+- Transferência com recebimento em trânsito; inventário cíclico automático por curva ABC; compra dedicada com reserva automática na entrada; relatórios completos (posição, movimentações, curva ABC, acuracidade); **fila de sugestões de reposição** (avaliação da regra do item — ADR-014, IV-BR-130/131), com execução automática opt-in reservada à v2.0.
 
 ## Versão 2.0
 
-- Controle por lote/validade e número de série; quarentena (com MMS-005 v2.0); sugestão de rebalanceamento entre depósitos; reposição automática por ponto de pedido (gera PR-001).
+- Controle por lote/validade e número de série; quarentena (com MMS-005 v2.0); sugestão de rebalanceamento entre depósitos; **reposição automática** por ponto de pedido (execução da regra ADR-014 sem intervenção — `materials.replenishment.auto-execute=true`, gera PR-001/transferência).
 
 ---
 
@@ -281,3 +281,4 @@ Confirmação ──► saldo atualizado (total e/ou reservado)
 | Versão | Data | Descrição |
 |--------|------|-----------|
 | 1.0.0 | 2026-07-30 | Criação da visão do módulo Inventory Management: saldos derivados de movimentação, seis documentos de movimentação, reservas com validade, endereçamento, bloqueios de integridade, alertas, inventário, eventos, NFRs, KPIs, DoD e roadmap — conforme MMS-001 (seção 8.3) e ADR-012 |
+| 1.1.0 | 2026-08-08 | Propagação de ADR-013 e ADR-014: saldo mantido na unidade base com conversão de UoM na captura de movimentação (IV-BR-009 revisada); consumo da unidade base, das unidades de conversão e da regra de reposição do MMS-002 v1.2.0; nova fila de sugestões de reposição na v1.1 (IV-BR-130/131) e reposição automática opt-in reafirmada na v2.0. Regras em MMS-004-02 v1.1.0 |

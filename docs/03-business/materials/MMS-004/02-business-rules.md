@@ -1,9 +1,9 @@
 **Documento:** MMS-004-02 — Business Rules
 **Módulo:** MMS-004 — Inventory Management (Estoque)
-**Versão:** 1.0.0
+**Versão:** 1.1.0
 **Status:** 🟢 Approved
-**Data:** 2026-07-30
-**Dependências:** MMS-004 (Visão do Módulo), MMS-004-01 (Business Context), MMS-001 (Documento Mestre Funcional — seções 6, 8.3, 9, 14, 15.2, 18, 20, 23), MMS-002 (Item Catalog), FD-001-10 (Configuration)
+**Data:** 2026-08-08
+**Dependências:** MMS-004 (Visão do Módulo), MMS-004-01 (Business Context), MMS-001 (Documento Mestre Funcional — seções 6, 8.3, 9, 14, 15.2, 18, 20, 23), MMS-002 (Item Catalog v1.2.0), ADR-013 (Conversão de UoM), ADR-014 (Motor de Regras de Reposição), FD-001-10 (Configuration)
 **Referências:** MMS-003, MMS-005, PR-001, MMS-002-02 (padrão de formato), FD-001-01, FD-001-02, FD-001-04, FD-001-05, FD-001-06, FD-001-07, GOV-001
 
 ---
@@ -208,18 +208,18 @@ Regras de vínculo:
 | Campo | Valor |
 |-------|-------|
 | Código | IV-BR-009 |
-| Nome | Quantidade Positiva na Unidade do Item |
-| Descrição | Toda quantidade movimentada é positiva e expressa na unidade de medida do item no catálogo (MMS-002); não há conversão de unidades no MVP. |
+| Nome | Quantidade Positiva; Persistência na Unidade Base (Conversão de UoM) |
+| Descrição | Toda quantidade movimentada é positiva. O saldo é sempre mantido na **unidade de estoque (base)** do item (MMS-002, IC-BR-090). A movimentação pode **capturar** a quantidade em unidade alternativa (ex.: unidade de compra no recebimento); nesse caso o sistema **converte para a base** pelo fator do item (IC-BR-091) e registra no documento a quantidade informada, a unidade informada e o **fator aplicado** (ADR-013, IC-BR-093). |
 | Tipo | Obrigatória |
-| Validação | Quantidade > 0; unidade herdada do item, sem conversão. |
-| Mensagem de erro | "Quantidade inválida para a unidade do item." |
+| Validação | Quantidade > 0; quando informada em unidade alternativa, a unidade pertence ao item e a conversão resulta em quantidade base conforme a regra de arredondamento parametrizada (IC-BR-093); o saldo afetado é sempre o da base. |
+| Mensagem de erro | "Quantidade ou unidade inválida para o item." |
 | Código do erro | IV-ERR-009 |
 | Evento | — |
 | Caso de uso | Todos os de movimentação |
 | API | Todos os endpoints de escrita |
 | Caso de teste | TC-IV-009 |
-| Configuração | Não configurável. |
-| Observações | Conversão de unidades é funcionalidade futura (roadmap). |
+| Configuração | Não configurável (a conversão usa os parâmetros do item — `materials.item.uom.*`). |
+| Observações | Substitui a restrição anterior de "sem conversão no MVP": a conversão de UoM passa a existir por ADR-013; o saldo permanece único, na base (MMS-P-08). |
 
 ---
 
@@ -889,7 +889,51 @@ Família introduzida na concepção do módulo (MMS-002-02, IC-BR-081: "o tamanh
 
 ---
 
-# 17. Matriz de Rastreabilidade
+# 17. Regras de Reposição (Sugestão)
+
+Família introduzida na revisão 1.1.0 (ADR-014 — Motor de Regras de Reposição, aceita). O MMS-004 **avalia** a regra parametrizada no Item Catalog (MMS-002, IC-BR-100/101) sobre o saldo disponível e produz **sugestões revisáveis**. A execução automática (gerar PR-001/transferência sem intervenção) é opt-in na v2.0. A avaliação **nunca escreve saldo** e **nunca compra** por conta própria (fronteiras MMS-P-07/08, MMS-001 §3).
+
+## IV-BR-130 — Avaliação da Regra de Reposição
+
+| Campo | Valor |
+|-------|-------|
+| Código | IV-BR-130 |
+| Nome | Avaliação da Regra de Reposição |
+| Descrição | Após confirmação de movimentação que reduz o disponível (e por avaliação periódica), o sistema verifica se `disponível ≤ ponto de pedido` do item × depósito; em caso positivo, calcula a **quantidade sugerida** conforme a política do item (`ate_maximo` / `multiplo_embalagem` / `lote_fixo` — IC-BR-100) e registra uma sugestão de reposição. |
+| Tipo | Parametrizável |
+| Validação | Gatilho por ponto de pedido (MMS-002); quantidade pela política; `multiplo_embalagem` usa o fator de UoM (IC-BR-091); sem duplicidade de sugestão aberta para a mesma condição (item × depósito). |
+| Mensagem de erro | — (gera sugestão, não erro) |
+| Código do erro | — |
+| Evento | Sugestão de reposição gerada |
+| Caso de uso | UC-IV-012 |
+| API | GET /api/v1/inventory/replenishment-suggestions |
+| Caso de teste | TC-IV-130 |
+| Configuração | `materials.replenishment.enabled` (padrão: `false` no MVP; `true` a partir da v1.1); `materials.replenishment.evaluation` (`on-movement` / `scheduled`). |
+| Observações | A avaliação nunca escreve saldo — apenas registra sugestão (MMS-P-08). |
+
+---
+
+## IV-BR-131 — Sugestão Revisável e Fronteiras de Rota
+
+| Campo | Valor |
+|-------|-------|
+| Código | IV-BR-131 |
+| Nome | Sugestão Revisável e Fronteiras de Rota |
+| Descrição | A sugestão é **revisável** (fila) e confirmada por um responsável; a execução automática é opt-in (v2.0). A reposição por **compra** gera demanda para PR-001 (a MMS não compra — MMS-001 §3); por **transferência** gera documento de movimentação (MMS-P-07); rota **manual** apenas registra a sugestão. Nenhuma sugestão cria saldo por conta própria. |
+| Tipo | Obrigatória |
+| Validação | Rota conforme IC-BR-101; `compra` → PR-001 com referência à origem (item/depósito/sugestão); `transferencia` → documento IV; execução automática somente quando `materials.replenishment.auto-execute=true` (v2.0). |
+| Mensagem de erro | "Rota de reposição incompatível com a classificação do item." |
+| Código do erro | IV-ERR-131 |
+| Evento | Sugestão de reposição confirmada / Demanda de compra gerada / Transferência sugerida |
+| Caso de uso | UC-IV-012 |
+| API | POST /api/v1/inventory/replenishment-suggestions/{id}/confirm |
+| Caso de teste | TC-IV-131 |
+| Configuração | `materials.replenishment.auto-execute` (padrão: `false`). |
+| Observações | Rastreabilidade bidirecional preservada (ADR-014, decisão 5); alinhado ao roadmap v2.0 do módulo (reposição automática). |
+
+---
+
+# 18. Matriz de Rastreabilidade
 
 | Regra | Origem (documento) | UC | API (conceitual) | Evento | Teste |
 |-------|--------------------|-----|------------------|--------|-------|
@@ -901,7 +945,7 @@ Família introduzida na concepção do módulo (MMS-002-02, IC-BR-081: "o tamanh
 | IV-BR-006 | MMS-001 §6.2 | Todos | Todos | — | TC-IV-006 |
 | IV-BR-007 | MMS-RG-08 / MMS-004 README (eventos consumidos) | UC-IV-003/005/006 | POST /movements, /reservations | — | TC-IV-007 |
 | IV-BR-008 | MMS-004 README (escopo 3) | Todos movimentação | Escrita | — | TC-IV-008 |
-| IV-BR-009 | MMS-002 (unidade do item) | Todos movimentação | Escrita | — | TC-IV-009 |
+| IV-BR-009 | MMS-002 (unidade base) / ADR-013 | Todos movimentação | Escrita | — | TC-IV-009 |
 | IV-BR-010 | MMS-004 README (escopo 2) | UC-IV-001 | POST /movements | Entrada registrada | TC-IV-010 |
 | IV-BR-011 | MMS-004 README (escopo 2) | UC-IV-002 | POST /movements | Saída registrada | TC-IV-011 |
 | IV-BR-012 | MMS-004 README (NFR) | Todos movimentação | Escrita | — | TC-IV-012 |
@@ -934,18 +978,22 @@ Família introduzida na concepção do módulo (MMS-002-02, IC-BR-081: "o tamanh
 | IV-BR-111 | Padrão suíte (keyset) | UC-IV-011 | GET /movements | — | TC-IV-111 |
 | IV-BR-120 | MMS-002-02 IC-BR-081 (fronteira) | Todos movimentação | Escrita (sizeCode) | — | TC-IV-120 |
 | IV-BR-121 | MMS-002-02 IC-BR-081 (fronteira) | UC-IV-002/003 | POST /reservations, /movements | — | TC-IV-121 |
+| IV-BR-130 | ADR-014 (decisões 1/2) | UC-IV-012 | GET /replenishment-suggestions | Sugestão de reposição gerada | TC-IV-130 |
+| IV-BR-131 | ADR-014 (decisões 3/5) | UC-IV-012 | POST .../confirm | Sugestão confirmada / Demanda de compra gerada | TC-IV-131 |
 
-**Cobertura:** 40/40 regras com origem documentada e teste associado (100%).
+**Cobertura:** 42/42 regras com origem documentada e teste associado (100%).
 
 ---
 
-# 18. Dependências
+# 19. Dependências
 
 | Dependência | Uso |
 |-------------|-----|
 | MMS-004 (Visão) / MMS-004-01 (Business Context) | Origem de todas as regras |
 | MMS-001 (Documento Mestre) | Regras MMS-RG-03/04/05/08/09/10/12 e princípios MMS-P-01..08 herdados |
-| MMS-002 (Item Catalog) | Estado do item (IV-BR-007), unidade (IV-BR-009), parâmetros de reposição (IV-BR-080), grade de tamanhos (IV-BR-120/121) |
+| MMS-002 (Item Catalog v1.2.0) | Estado do item (IV-BR-007), unidade base e conversão (IV-BR-009), parâmetros de reposição e regra (IV-BR-080/130/131), grade de tamanhos (IV-BR-120/121) |
+| ADR-013 — Conversão de UoM | Origem da revisão de IV-BR-009 (saldo na base, conversão nas fronteiras) |
+| ADR-014 — Motor de Regras de Reposição | Origem da família IV-BR-130..131 (avaliação e sugestão) |
 | FD-001-01 / FD-001-02 | Autorização, segregação de funções, escopo e estrutura organizacional |
 | FD-001-04 | Workflow de aprovação de ajustes (IV-BR-041) |
 | FD-001-05 | Despacho exclusivo de alertas (IV-BR-080..083) |
@@ -955,8 +1003,9 @@ Família introduzida na concepção do módulo (MMS-002-02, IC-BR-081: "o tamanh
 
 ---
 
-# 19. Histórico de Versão
+# 20. Histórico de Versão
 
 | Versão | Data | Descrição |
 |--------|------|-----------|
 | 1.0.0 | 2026-07-30 | Criação das Business Rules do Inventory Management: 40 regras codificadas (IV-BR-001..121) nas famílias integridade de saldo, entrada/saída, reserva, transferência, ajuste, estrutura de locais, segregação, inventário, alertas, auditoria/timeline, segurança, performance e EPI/Fardamento, com validação, erros (IV-ERR), eventos, UCs/API/testes conceituais, configurações `materials.inventory.*` e matriz de rastreabilidade 100% — derivadas da visão do módulo e das regras da suíte (MMS-RG), no padrão MMS-002-02 |
+| 1.1.0 | 2026-08-08 | Incorporação de ADR-013 e ADR-014: **IV-BR-009** revisada — saldo mantido na unidade base e conversão de UoM nas fronteiras (fator aplicado registrado no documento), substituindo a restrição anterior de "sem conversão no MVP"; nova família **Regras de Reposição (Sugestão)** com IV-BR-130 (avaliação da regra → sugestão) e IV-BR-131 (sugestão revisável e fronteiras de rota: compra via PR-001, transferência gera documento, execução automática opt-in v2.0); matriz 40→42/42; seções Matriz/Dependências/Histórico renumeradas para 18/19/20 |

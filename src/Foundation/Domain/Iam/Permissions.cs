@@ -12,11 +12,12 @@ public static class PermissionCatalog
     public const string UsersManage = "users.manage";     // criar, ativar/desativar, atribuir papéis
     public const string RolesRead = "roles.read";
     public const string RolesManage = "roles.manage";     // criar papéis, conceder/revogar permissões
+    public const string AuditRead = "audit.read";          // ler a trilha de auditoria
 
     /// <summary>Todas as permissões conhecidas — usado para validar concessões (não conceder desconhecida).</summary>
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
-        UsersRead, UsersManage, RolesRead, RolesManage
+        UsersRead, UsersManage, RolesRead, RolesManage, AuditRead
     };
 
     public static bool IsKnown(string permission) => All.Contains(permission);

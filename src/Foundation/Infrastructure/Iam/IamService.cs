@@ -2,7 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using TrinoSupply.BuildingBlocks;
 using TrinoSupply.BuildingBlocks.Abstractions;
 using TrinoSupply.BuildingBlocks.Multitenancy;
+using TrinoSupply.Foundation.Application.Audit;
 using TrinoSupply.Foundation.Application.Iam;
+using TrinoSupply.Foundation.Domain.Audit;
 using TrinoSupply.Foundation.Domain.Iam;
 using TrinoSupply.Foundation.Domain.Organization;
 using TrinoSupply.Foundation.Infrastructure.Persistence;
@@ -10,7 +12,8 @@ using TrinoSupply.Foundation.Infrastructure.Persistence;
 namespace TrinoSupply.Foundation.Infrastructure.Iam;
 
 /// <summary>Implementação dos casos de uso de IAM (FD-001-01) sobre o <see cref="FoundationDbContext"/>.</summary>
-public sealed class IamService(FoundationDbContext db, ITenantContext tenant, IUsageMetrics metrics) : IIamService
+public sealed class IamService(
+    FoundationDbContext db, ITenantContext tenant, IUsageMetrics metrics, IAuditLog audit, IClock clock) : IIamService
 {
     public async Task<Result<Guid>> RegisterCompanyWithAdminAsync(
         string legalName, string taxId, string adminSubject, string adminEmail, string adminName,
@@ -46,6 +49,13 @@ public sealed class IamService(FoundationDbContext db, ITenantContext tenant, IU
         db.Companies.Add(company);
         db.Roles.Add(adminRole);
         db.Users.Add(admin);
+
+        // Auditoria do provisionamento (ator = system; não há usuário autenticado no bootstrap).
+        db.AuditEntries.Add(AuditEntry.Create(company.Id, clock.UtcNow, "system",
+            "company.provisioned", "Company", company.Id.Value.ToString()));
+        db.AuditEntries.Add(AuditEntry.Create(company.Id, clock.UtcNow, "system",
+            "user.registered", "User", admin.Id.Value.ToString()));
+
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
@@ -64,6 +74,7 @@ public sealed class IamService(FoundationDbContext db, ITenantContext tenant, IU
         if (result.IsFailure) return Result.Failure<Guid>(result.Error);
 
         db.Users.Add(result.Value);
+        audit.Record("user.registered", "User", result.Value.Id.Value.ToString(), new { email });
         await db.SaveChangesAsync(ct);
 
         metrics.Record("user.registered", tenant.CompanyId.Value.ToString());
@@ -88,6 +99,7 @@ public sealed class IamService(FoundationDbContext db, ITenantContext tenant, IU
         if (result.IsFailure) return Result.Failure<Guid>(result.Error);
 
         db.Roles.Add(result.Value);
+        audit.Record("role.created", "Role", result.Value.Id.Value.ToString(), new { name });
         await db.SaveChangesAsync(ct);
         metrics.Record("role.created", tenant.CompanyId.Value.ToString());
         return Result.Success(result.Value.Id.Value);
@@ -108,6 +120,7 @@ public sealed class IamService(FoundationDbContext db, ITenantContext tenant, IU
         var granted = role.Grant(permission);
         if (granted.IsFailure) return granted;
 
+        audit.Record("role.permission_granted", "Role", roleId.ToString(), new { permission });
         await db.SaveChangesAsync(ct);
         metrics.Record("role.permission_granted", role.CompanyId.Value.ToString());
         return Result.Success();
@@ -120,6 +133,7 @@ public sealed class IamService(FoundationDbContext db, ITenantContext tenant, IU
             return Result.Failure(new Error("iam.role.not_found", "Papel não encontrado."));
 
         role.Revoke(permission);
+        audit.Record("role.permission_revoked", "Role", roleId.ToString(), new { permission });
         await db.SaveChangesAsync(ct);
         metrics.Record("role.permission_revoked", role.CompanyId.Value.ToString());
         return Result.Success();
@@ -137,6 +151,7 @@ public sealed class IamService(FoundationDbContext db, ITenantContext tenant, IU
             return Result.Failure(new Error("iam.user.not_found", "Usuário não encontrado."));
 
         user.AssignRole(RoleId.From(roleId));
+        audit.Record("user.role_assigned", "User", userId.ToString(), new { roleId });
         await db.SaveChangesAsync(ct);
         metrics.Record("user.role_assigned", user.CompanyId.Value.ToString());
         return Result.Success();
@@ -149,8 +164,21 @@ public sealed class IamService(FoundationDbContext db, ITenantContext tenant, IU
             return Result.Failure(new Error("iam.user.not_found", "Usuário não encontrado."));
 
         user.RemoveRole(RoleId.From(roleId));
+        audit.Record("user.role_removed", "User", userId.ToString(), new { roleId });
         await db.SaveChangesAsync(ct);
         metrics.Record("user.role_removed", user.CompanyId.Value.ToString());
         return Result.Success();
+    }
+
+    public async Task<IReadOnlyList<AuditView>> ListAuditAsync(int limit, CancellationToken ct = default)
+    {
+        // Tenant-scoped por RLS; mais recentes primeiro. Append-only: só leitura.
+        var take = limit is <= 0 or > 500 ? 100 : limit;
+        var entries = await db.AuditEntries.AsNoTracking()
+            .OrderByDescending(a => a.OccurredAt)
+            .Take(take)
+            .ToListAsync(ct);
+        return entries.Select(a => new AuditView(
+            a.Id, a.OccurredAt, a.ActorSubject, a.Action, a.TargetType, a.TargetId, a.Metadata)).ToList();
     }
 }

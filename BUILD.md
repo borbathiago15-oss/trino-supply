@@ -64,9 +64,14 @@ dotnet ef database update \
   eventos de domínio, Outbox, CompanyId/ITenantContext, IClock).
 - ✅ `Foundation`: agregado `Company` (tenant) + `FoundationDbContext` (EF Core) que grava
   eventos de domínio no **Outbox** na mesma transação (ARC-005 §3).
-- ✅ **Migrations EF Core (SSOT do schema):** `InitialFoundation` cria `company`/`outbox`/`role`/
-  `app_user` + índices + função `current_company()` + policies **RLS** (via `migrationBuilder.Sql`).
-  Aplicada e validada com `dotnet ef database update` (SEC-004). SQL em `deploy/db/` é referência.
+- ✅ **Migrations EF Core (SSOT do schema):** `InitialFoundation` + `AuditTrail` criam
+  `company`/`outbox`/`role`/`app_user`/`audit_entry` + índices + função `current_company()` +
+  policies **RLS** (via `migrationBuilder.Sql`). Aplicadas e validadas com `dotnet ef database update`
+  (SEC-004). SQL em `deploy/db/` é referência.
+- ✅ **Auditoria imutável (SEC-001/SEC-002):** `IAuditLog` grava "quem fez o quê" na MESMA transação
+  da ação (atomicidade); trilha **append-only** reforçada por **trigger** (bloqueia UPDATE/DELETE,
+  inclusive superuser) + grants sem update/delete + RLS por tenant. Endpoint `GET /api/v1/audit`
+  (`audit.read`). Comprovado: 6 ações registradas, adulteração negada nos dois níveis.
 - ✅ **Enforcement do RLS (SEC-004):** `TenantConnectionInterceptor` define `app.current_company`
   por conexão, **fail-closed** (sem tenant → nega tudo). A `outbox`/`company` não usam RLS (infra/
   catálogo — isolamento por role).

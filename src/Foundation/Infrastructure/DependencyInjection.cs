@@ -4,7 +4,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TrinoSupply.BuildingBlocks.Abstractions;
 using TrinoSupply.BuildingBlocks.Multitenancy;
+using TrinoSupply.Foundation.Application.Audit;
 using TrinoSupply.Foundation.Application.Iam;
+using TrinoSupply.Foundation.Infrastructure.Audit;
 using TrinoSupply.Foundation.Infrastructure.Iam;
 using TrinoSupply.Foundation.Infrastructure.Multitenancy;
 using TrinoSupply.Foundation.Infrastructure.Observability;
@@ -38,6 +40,7 @@ public static class DependencyInjection
 
         // IAM (FD-001-01) + métricas de uso (case de sucesso).
         services.AddSingleton<IUsageMetrics, LoggingUsageMetrics>();
+        services.AddScoped<IAuditLog, DbAuditLog>();
         services.AddScoped<IIamService, IamService>();
         services.AddScoped<IPermissionChecker, PermissionChecker>();
 

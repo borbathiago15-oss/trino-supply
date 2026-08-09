@@ -1,4 +1,5 @@
 using TrinoSupply.BuildingBlocks;
+using TrinoSupply.Foundation.Application.Audit;
 
 namespace TrinoSupply.Foundation.Application.Iam;
 
@@ -39,4 +40,7 @@ public interface IIamService
     /// <summary>Atribui um papel do tenant a um usuário do tenant.</summary>
     Task<Result> AssignRoleToUserAsync(Guid userId, Guid roleId, CancellationToken ct = default);
     Task<Result> RemoveRoleFromUserAsync(Guid userId, Guid roleId, CancellationToken ct = default);
+
+    /// <summary>Lê a trilha de auditoria do tenant corrente (mais recentes primeiro).</summary>
+    Task<IReadOnlyList<AuditView>> ListAuditAsync(int limit, CancellationToken ct = default);
 }

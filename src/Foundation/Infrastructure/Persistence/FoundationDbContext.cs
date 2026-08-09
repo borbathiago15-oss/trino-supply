@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TrinoSupply.BuildingBlocks.Domain;
 using TrinoSupply.BuildingBlocks.Multitenancy;
 using TrinoSupply.BuildingBlocks.Outbox;
+using TrinoSupply.Foundation.Domain.Audit;
 using TrinoSupply.Foundation.Domain.Iam;
 using TrinoSupply.Foundation.Domain.Organization;
 
@@ -20,6 +21,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
+    public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -69,6 +71,21 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             e.HasIndex(x => new { x.CompanyId, x.Email }).IsUnique();
             e.Ignore(x => x.RoleIds);
             e.Ignore(x => x.DomainEvents);
+        });
+
+        b.Entity<AuditEntry>(e =>
+        {
+            e.ToTable("audit_entry");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.OccurredAt).HasColumnName("occurred_at");
+            e.Property(x => x.ActorSubject).HasColumnName("actor_subject").HasMaxLength(200).IsRequired();
+            e.Property(x => x.Action).HasColumnName("action").HasMaxLength(100).IsRequired();
+            e.Property(x => x.TargetType).HasColumnName("target_type").HasMaxLength(100);
+            e.Property(x => x.TargetId).HasColumnName("target_id").HasMaxLength(100);
+            e.Property(x => x.Metadata).HasColumnName("metadata").HasColumnType("jsonb");
+            e.HasIndex(x => new { x.CompanyId, x.OccurredAt });
         });
 
         b.Entity<OutboxMessage>(e =>

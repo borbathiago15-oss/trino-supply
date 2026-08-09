@@ -95,6 +95,14 @@ public static class IamEndpoints
             return Map(await iam.RemoveRoleFromUserAsync(userId, roleId, ct));
         }).RequireAuthorization();
 
+        // ---- Auditoria (append-only, somente leitura) ----
+
+        v1.MapGet("/audit", async (int? limit, IPermissionChecker perm, IIamService iam, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.AuditRead, ct)) return Results.Forbid();
+            return Results.Ok(await iam.ListAuditAsync(limit ?? 100, ct));
+        }).RequireAuthorization();
+
         return app;
     }
 

@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
   <!-- Consumidores de eventos (RabbitMQ) — processamento assíncrono (ARC-003 §2, ARC-005). -->
   <ItemGroup>
+    <!-- BackgroundService / Host.CreateApplicationBuilder — o SDK Worker não os traz sozinho. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="../../src/Foundation/Infrastructure/TrinoSupply.Foundation.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

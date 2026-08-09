@@ -22,13 +22,14 @@ public static class PermissionCatalog
     public const string PurchasesRead = "purchases.read";
     public const string PurchasesRequest = "purchases.request";
     public const string PurchasesApprove = "purchases.approve";
+    public const string PurchasesOrder = "purchases.order";   // emitir pedido + cadastrar fornecedor
 
     /// <summary>Todas as permissões conhecidas — usado para validar concessões (não conceder desconhecida).</summary>
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
         UsersRead, UsersManage, RolesRead, RolesManage, AuditRead,
         MaterialsRead, MaterialsManage,
-        PurchasesRead, PurchasesRequest, PurchasesApprove
+        PurchasesRead, PurchasesRequest, PurchasesApprove, PurchasesOrder
     };
 
     public static bool IsKnown(string permission) => All.Contains(permission);

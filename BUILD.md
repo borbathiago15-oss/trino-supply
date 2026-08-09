@@ -111,6 +111,11 @@ dotnet ef database update \
   permissão). Requisitar e aprovar são permissões distintas. Decisão com **concorrência otimista**
   (2 approves simultâneos → uma só decisão vinga). **Ponte reposição→requisição** (from-suggestions)
   fecha o ciclo estoque baixo → compra. RLS por tenant nas duas tabelas.
+- ✅ **Procurement — Fase 3, fatia 2 (validada): fornecedor + pedido de compra.** Cadastro de
+  fornecedor e **emissão de pedido a partir de requisição APROVADA** (copia as linhas, um pedido por
+  requisição via índice único). Guardas: pedido antes de aprovar → 400; segundo pedido da mesma
+  requisição → 409. **Fase 3 (Procurement) conclui o procure-to-pay:** estoque baixo → sugestão →
+  requisição → aprovação (SoD) → pedido ao fornecedor. RLS por tenant nas tabelas novas.
 - ✅ `docker-compose` (Postgres/Redis/RabbitMQ/MinIO) e pipeline CI.
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e

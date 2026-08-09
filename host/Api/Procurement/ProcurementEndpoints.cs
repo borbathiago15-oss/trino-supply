@@ -7,6 +7,8 @@ namespace TrinoSupply.Api.Procurement;
 
 public sealed record CreateRequisitionRequest(IReadOnlyList<RequisitionLineInput> Lines);
 public sealed record RejectRequest(string? Note);
+public sealed record CreateSupplierRequest(string Code, string Name, string TaxId);
+public sealed record IssueOrderRequest(string SupplierCode);
 
 /// <summary>Endpoints de Compras (PR-001). Requisitar e aprovar são permissões distintas (SoD).</summary>
 public static class ProcurementEndpoints
@@ -71,6 +73,50 @@ public static class ProcurementEndpoints
         {
             if (!await perm.HasAsync(PermissionCatalog.PurchasesApprove, ct)) return Results.Forbid();
             return MapDecision(await svc.RejectAsync(id, req.Note, ct));
+        }).RequireAuthorization();
+
+        // ---- Fornecedores ----
+        p.MapGet("/suppliers", async (IPermissionChecker perm, ISupplierService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
+            return Results.Ok(await svc.ListAsync(ct));
+        }).RequireAuthorization();
+
+        p.MapPost("/suppliers", async (CreateSupplierRequest req, IPermissionChecker perm, ISupplierService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesOrder, ct)) return Results.Forbid();
+            var r = await svc.CreateAsync(req.Code, req.Name, req.TaxId, ct);
+            return r.IsSuccess
+                ? Results.Created($"/api/v1/purchases/suppliers/{r.Value}", new { supplierId = r.Value })
+                : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization();
+
+        // ---- Pedidos de compra (emitidos de requisição aprovada) ----
+        p.MapGet("/orders", async (IPermissionChecker perm, IPurchaseOrderService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
+            return Results.Ok(await svc.ListAsync(ct));
+        }).RequireAuthorization();
+
+        p.MapGet("/orders/{id:guid}", async (Guid id, IPermissionChecker perm, IPurchaseOrderService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
+            var r = await svc.GetAsync(id, ct);
+            return r.IsSuccess ? Results.Ok(r.Value) : Results.NotFound(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization();
+
+        p.MapPost("/requisitions/{id:guid}/order", async (Guid id, IssueOrderRequest req,
+            IPermissionChecker perm, IPurchaseOrderService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesOrder, ct)) return Results.Forbid();
+            var r = await svc.IssueFromRequisitionAsync(id, req.SupplierCode, ct);
+            if (r.IsSuccess) return Results.Created($"/api/v1/purchases/orders/{r.Value}", new { orderId = r.Value });
+            return r.Error.Code switch
+            {
+                "purchases.not_found" or "purchases.supplier.not_found" => Results.NotFound(new { code = r.Error.Code, message = r.Error.Message }),
+                "purchases.order.already_exists" => Results.Conflict(new { code = r.Error.Code, message = r.Error.Message }),
+                _ => Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message })
+            };
         }).RequireAuthorization();
 
         return app;

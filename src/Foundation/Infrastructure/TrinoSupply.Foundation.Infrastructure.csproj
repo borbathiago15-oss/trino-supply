@@ -1,8 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- Camada de Infraestrutura do Foundation: EF Core, RabbitMQ, Redis, storage (ARC-004 §2).
-       Pacotes (Npgsql.EntityFrameworkCore.PostgreSQL, StackExchange.Redis, RabbitMQ.Client)
-       serão adicionados na implementação de cada porta. -->
+  <!-- Camada de Infraestrutura do Foundation: EF Core (PostgreSQL), cache, mensageria (ARC-004 §2). -->
   <ItemGroup>
     <ProjectReference Include="../Application/TrinoSupply.Foundation.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.0" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.0" />
   </ItemGroup>
 </Project>

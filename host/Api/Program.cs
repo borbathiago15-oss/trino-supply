@@ -3,7 +3,7 @@ using TrinoSupply.Foundation.Infrastructure;
 var builder = WebApplication.CreateBuilder(args);
 
 // --- Serviços ---------------------------------------------------------------
-builder.Services.AddFoundationInfrastructure();
+builder.Services.AddFoundationInfrastructure(builder.Configuration);
 builder.Services.AddHealthChecks();
 // TODO(GO-001 · sprint 1): AuthN JWT (FD-001-01), AuthZ (escopo→RBAC→ABAC), multi-tenant + RLS,
 // Outbox/RabbitMQ, OpenAPI, versionamento /api/v1 (ARC-004 §4, SEC-001).

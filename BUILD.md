@@ -61,6 +61,11 @@ psql "postgresql://trino:trino@localhost:5432/trino" -f deploy/db/001_foundation
 - ✅ `host/Api`: health check + **AuthN JWT fail-closed** (validação estrita; recusa iniciar em
   produção sem AuthN) + `HttpTenantContext` (tenant do token) + endpoint protegido `/api/v1/whoami`.
 - ✅ `host/Worker` com `OutboxRelayWorker` (placeholder do publisher).
+- ✅ **IAM (FD-001-01) — Fase 1, fatia 1 (validada em Postgres real):** agregados `User` e `Role`,
+  catálogo de permissões, autorização **deny-by-default** (`IPermissionChecker`), provisionamento de
+  empresa com admin, endpoints protegidos (`/api/v1/companies`, `/api/v1/users`) e **métricas de uso**
+  (`IUsageMetrics`) para o case de sucesso. RLS aplicado a `role`/`app_user` (`deploy/db/002_iam.sql`);
+  isolamento entre tenants provado sem filtro na aplicação (só RLS).
 - ✅ `docker-compose` (Postgres/Redis/RabbitMQ/MinIO) e pipeline CI.
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e

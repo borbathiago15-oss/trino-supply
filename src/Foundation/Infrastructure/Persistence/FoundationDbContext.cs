@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TrinoSupply.BuildingBlocks.Domain;
 using TrinoSupply.BuildingBlocks.Multitenancy;
 using TrinoSupply.BuildingBlocks.Outbox;
+using TrinoSupply.Foundation.Domain.Iam;
 using TrinoSupply.Foundation.Domain.Organization;
 
 namespace TrinoSupply.Foundation.Infrastructure.Persistence;
@@ -17,6 +18,8 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
 {
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
+    public DbSet<User> Users => Set<User>();
+    public DbSet<Role> Roles => Set<Role>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -34,6 +37,37 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             e.Property(x => x.Status).HasColumnName("status").HasConversion<short>();
             e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
             e.HasIndex(x => x.TaxId).IsUnique();
+            e.Ignore(x => x.DomainEvents);
+        });
+
+        b.Entity<Role>(e =>
+        {
+            e.ToTable("role");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").HasConversion(id => id.Value, v => RoleId.From(v));
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.Name).HasColumnName("name").HasMaxLength(100).IsRequired();
+            e.PrimitiveCollection(x => x.Permissions).HasColumnName("permissions");
+            e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
+            e.HasIndex(x => new { x.CompanyId, x.Name }).IsUnique();
+            e.Ignore(x => x.DomainEvents);
+        });
+
+        b.Entity<User>(e =>
+        {
+            e.ToTable("app_user"); // "user" é palavra reservada no PostgreSQL
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").HasConversion(id => id.Value, v => UserId.From(v));
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.Subject).HasColumnName("subject").HasMaxLength(200).IsRequired();
+            e.Property(x => x.Email).HasColumnName("email").HasMaxLength(200).IsRequired();
+            e.Property(x => x.DisplayName).HasColumnName("display_name").HasMaxLength(200).IsRequired();
+            e.Property(x => x.Status).HasColumnName("status").HasConversion<short>();
+            e.PrimitiveCollection<List<Guid>>("_roleIds").HasColumnName("role_ids");
+            e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
+            e.HasIndex(x => new { x.CompanyId, x.Subject }).IsUnique();
+            e.HasIndex(x => new { x.CompanyId, x.Email }).IsUnique();
+            e.Ignore(x => x.RoleIds);
             e.Ignore(x => x.DomainEvents);
         });
 
@@ -126,6 +160,12 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
         if (tenant.HasTenant)
         {
             return tenant.CompanyId.Value;
+        }
+
+        // Bootstrap (sem tenant na requisição): resolve pelo próprio agregado.
+        if (entry.Entity is IBelongsToTenant owned)
+        {
+            return owned.CompanyId.Value;
         }
 
         if (entry.Entity is Company company)

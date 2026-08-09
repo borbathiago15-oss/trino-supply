@@ -1,0 +1,81 @@
+using Microsoft.EntityFrameworkCore;
+using TrinoSupply.BuildingBlocks;
+using TrinoSupply.BuildingBlocks.Abstractions;
+using TrinoSupply.BuildingBlocks.Multitenancy;
+using TrinoSupply.Foundation.Application.Iam;
+using TrinoSupply.Foundation.Domain.Iam;
+using TrinoSupply.Foundation.Domain.Organization;
+using TrinoSupply.Foundation.Infrastructure.Persistence;
+
+namespace TrinoSupply.Foundation.Infrastructure.Iam;
+
+/// <summary>Implementação dos casos de uso de IAM (FD-001-01) sobre o <see cref="FoundationDbContext"/>.</summary>
+public sealed class IamService(FoundationDbContext db, ITenantContext tenant, IUsageMetrics metrics) : IIamService
+{
+    public async Task<Result<Guid>> RegisterCompanyWithAdminAsync(
+        string legalName, string taxId, string adminSubject, string adminEmail, string adminName,
+        CancellationToken ct = default)
+    {
+        Company company;
+        try
+        {
+            company = Company.Register(legalName, taxId);
+        }
+        catch (ArgumentException ex)
+        {
+            return Result.Failure<Guid>(new Error("iam.company.invalid", ex.Message));
+        }
+
+        var roleResult = Role.Create(company.Id, "Administrador");
+        if (roleResult.IsFailure) return Result.Failure<Guid>(roleResult.Error);
+        var adminRole = roleResult.Value;
+        foreach (var p in PermissionCatalog.All) adminRole.Grant(p);
+
+        var userResult = User.Register(company.Id, adminSubject, adminEmail, adminName);
+        if (userResult.IsFailure) return Result.Failure<Guid>(userResult.Error);
+        var admin = userResult.Value;
+        admin.AssignRole(adminRole.Id);
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+
+        // Bootstrap: define o tenant desta transação para que o RLS (WITH CHECK) das tabelas
+        // role/app_user aceite as inserções da nova empresa. is_local=true → escopo da transação.
+        await db.Database.ExecuteSqlRawAsync(
+            "SELECT set_config('app.current_company', {0}, true)", company.Id.Value.ToString());
+
+        db.Companies.Add(company);
+        db.Roles.Add(adminRole);
+        db.Users.Add(admin);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
+        metrics.Record("company.provisioned", company.Id.Value.ToString());
+        metrics.Record("user.registered", company.Id.Value.ToString());
+        return Result.Success(company.Id.Value);
+    }
+
+    public async Task<Result<Guid>> RegisterUserAsync(
+        string subject, string email, string displayName, CancellationToken ct = default)
+    {
+        if (!tenant.HasTenant)
+            return Result.Failure<Guid>(new Error("iam.no_tenant", "Requisição sem tenant."));
+
+        var result = User.Register(tenant.CompanyId, subject, email, displayName);
+        if (result.IsFailure) return Result.Failure<Guid>(result.Error);
+
+        db.Users.Add(result.Value);
+        await db.SaveChangesAsync(ct);
+
+        metrics.Record("user.registered", tenant.CompanyId.Value.ToString());
+        return Result.Success(result.Value.Id.Value);
+    }
+
+    public async Task<IReadOnlyList<UserView>> ListUsersAsync(CancellationToken ct = default)
+    {
+        // Tenant-scoped por RLS + (defesa em profundidade) sem exposição cross-tenant.
+        var users = await db.Users.AsNoTracking().OrderBy(u => u.Email).ToListAsync(ct);
+        return users.Select(u => new UserView(
+            u.Id.Value, u.Email, u.DisplayName, u.Status.ToString(),
+            u.RoleIds.Select(r => r.Value).ToList())).ToList();
+    }
+}

@@ -4,7 +4,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TrinoSupply.BuildingBlocks.Abstractions;
 using TrinoSupply.BuildingBlocks.Multitenancy;
+using TrinoSupply.Foundation.Application.Iam;
+using TrinoSupply.Foundation.Infrastructure.Iam;
 using TrinoSupply.Foundation.Infrastructure.Multitenancy;
+using TrinoSupply.Foundation.Infrastructure.Observability;
 using TrinoSupply.Foundation.Infrastructure.Persistence;
 
 namespace TrinoSupply.Foundation.Infrastructure;
@@ -32,6 +35,11 @@ public static class DependencyInjection
             options
                 .UseNpgsql(connectionString, npg => npg.MigrationsHistoryTable("__ef_migrations", "foundation"))
                 .AddInterceptors(sp.GetRequiredService<TenantConnectionInterceptor>()));
+
+        // IAM (FD-001-01) + métricas de uso (case de sucesso).
+        services.AddSingleton<IUsageMetrics, LoggingUsageMetrics>();
+        services.AddScoped<IIamService, IamService>();
+        services.AddScoped<IPermissionChecker, PermissionChecker>();
 
         // TODO(GO-001 · sprint 1): Redis, publisher Outbox→RabbitMQ, Audit.
         return services;

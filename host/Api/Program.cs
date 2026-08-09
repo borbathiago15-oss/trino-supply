@@ -1,8 +1,10 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using TrinoSupply.Api.Iam;
 using TrinoSupply.Api.Multitenancy;
 using TrinoSupply.BuildingBlocks.Multitenancy;
+using TrinoSupply.BuildingBlocks.Security;
 using TrinoSupply.Foundation.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,6 +16,7 @@ builder.Services.AddHealthChecks();
 // Multi-tenant: o tenant vem do JWT (FD-001-01). Sobrepõe o NullTenantContext do host de infra.
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
+builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
 
 // AuthN (JWT Bearer) — SEC-001/003. FAIL-CLOSED: só aceitamos tokens efetivamente validados
 // (assinatura + emissor + audiência + expiração). Sem um provedor de identidade (Authority) OU
@@ -82,6 +85,9 @@ v1.MapGet("/whoami", (ITenantContext tenant) =>
             ? Results.Ok(new { companyId = tenant.CompanyId.Value })
             : Results.Unauthorized())
     .RequireAuthorization();
+
+// IAM (FD-001-01): provisionamento de empresa + gestão de usuários (deny-by-default).
+app.MapIamEndpoints();
 
 app.Run();
 

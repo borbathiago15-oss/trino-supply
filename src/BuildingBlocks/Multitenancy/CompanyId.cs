@@ -24,3 +24,12 @@ public interface ITenantContext
     CompanyId CompanyId { get; }
     bool HasTenant { get; }
 }
+
+/// <summary>
+/// Agregado que pertence a um tenant. Permite ao Outbox resolver o <c>company_id</c> do evento
+/// a partir do próprio agregado no bootstrap (quando ainda não há tenant na requisição) — SEC-004 §7.
+/// </summary>
+public interface IBelongsToTenant
+{
+    CompanyId CompanyId { get; }
+}

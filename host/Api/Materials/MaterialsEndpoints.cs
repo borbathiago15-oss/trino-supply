@@ -8,6 +8,7 @@ namespace TrinoSupply.Api.Materials;
 public sealed record CreateUnitRequest(string Code, string Name, string Dimension, decimal FactorToBase);
 public sealed record CreateItemRequest(string Code, string Name, string BaseUnitCode);
 public sealed record PostMovementRequest(StockDirection Direction, decimal Quantity, string? Reason);
+public sealed record SetPolicyRequest(decimal MinLevel, decimal MaxLevel);
 
 /// <summary>Endpoints de Materiais (MMS-002). Protegidos por permissão (deny-by-default).</summary>
 public static class MaterialsEndpoints
@@ -85,6 +86,35 @@ public static class MaterialsEndpoints
         {
             if (!await perm.HasAsync(PermissionCatalog.MaterialsRead, ct)) return Results.Forbid();
             return Results.Ok(await stock.ListMovementsAsync(code, ct));
+        }).RequireAuthorization();
+
+        // ---- Reposição (ADR-014) ----
+        m.MapPut("/items/{code}/replenishment", async (string code, SetPolicyRequest req,
+            IPermissionChecker perm, IReplenishmentService repl, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsManage, ct)) return Results.Forbid();
+            var r = await repl.SetPolicyAsync(code, req.MinLevel, req.MaxLevel, ct);
+            if (r.IsSuccess) return Results.NoContent();
+            return r.Error.Code.EndsWith("not_found")
+                ? Results.NotFound(new { code = r.Error.Code, message = r.Error.Message })
+                : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization();
+
+        m.MapGet("/items/{code}/replenishment", async (string code,
+            IPermissionChecker perm, IReplenishmentService repl, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsRead, ct)) return Results.Forbid();
+            var r = await repl.GetPolicyAsync(code, ct);
+            return r.IsSuccess
+                ? Results.Ok(r.Value)
+                : Results.NotFound(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization();
+
+        m.MapGet("/replenishment/suggestions", async (
+            IPermissionChecker perm, IReplenishmentService repl, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsRead, ct)) return Results.Forbid();
+            return Results.Ok(await repl.GetSuggestionsAsync(ct));
         }).RequireAuthorization();
 
         return app;

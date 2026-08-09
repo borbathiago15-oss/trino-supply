@@ -14,6 +14,7 @@ public sealed class MaterialsDbContext(DbContextOptions<MaterialsDbContext> opti
     public DbSet<UnitOfMeasure> Units => Set<UnitOfMeasure>();
     public DbSet<StockBalance> StockBalances => Set<StockBalance>();
     public DbSet<StockMovement> StockMovements => Set<StockMovement>();
+    public DbSet<ReplenishmentPolicy> ReplenishmentPolicies => Set<ReplenishmentPolicy>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -73,6 +74,20 @@ public sealed class MaterialsDbContext(DbContextOptions<MaterialsDbContext> opti
             e.Property(x => x.OccurredAt).HasColumnName("occurred_at");
             e.Property(x => x.Reason).HasColumnName("reason").HasMaxLength(300);
             e.HasIndex(x => new { x.CompanyId, x.ItemId, x.OccurredAt });
+        });
+
+        b.Entity<ReplenishmentPolicy>(e =>
+        {
+            e.ToTable("replenishment_policy");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("item_id").HasConversion(id => id.Value, v => ItemId.From(v));
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.MinLevel).HasColumnName("min_level").HasColumnType("numeric(18,6)");
+            e.Property(x => x.MaxLevel).HasColumnName("max_level").HasColumnType("numeric(18,6)");
+            e.Property(x => x.Active).HasColumnName("active");
+            e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
+            e.HasIndex(x => x.CompanyId);
+            e.Ignore(x => x.DomainEvents);
         });
     }
 }

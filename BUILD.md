@@ -101,6 +101,10 @@ dotnet ef database update \
   saída além do saldo → 400. **Serialização por chave de saldo** (`SELECT … FOR UPDATE` + version
   otimista) — comprovado com **50 lançamentos simultâneos** (líquido +30): saldo final exato, zero
   atualização perdida. Endpoints `/materials/items/{code}/{movements,balance}`.
+- ✅ **Materials — Fase 2, fatia 3 (validada): motor de reposição (ADR-014).** Política mín/máx por
+  item; sugestões `necessidade = máx − saldo` apenas para itens no ponto de reposição, ordenadas por
+  prioridade e reagindo ao saldo. Endpoints `/materials/items/{code}/replenishment` e
+  `/materials/replenishment/suggestions`. **Fase 2 (Materials) concluída.**
 - ✅ `docker-compose` (Postgres/Redis/RabbitMQ/MinIO) e pipeline CI.
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e

@@ -23,6 +23,7 @@ public static class DependencyInjection
 
         services.AddScoped<IMaterialsService, MaterialsService>();
         services.AddScoped<IStockService, StockService>();
+        services.AddScoped<IReplenishmentService, ReplenishmentService>();
         return services;
     }
 }

@@ -116,6 +116,11 @@ dotnet ef database update \
   requisição via índice único). Guardas: pedido antes de aprovar → 400; segundo pedido da mesma
   requisição → 409. **Fase 3 (Procurement) conclui o procure-to-pay:** estoque baixo → sugestão →
   requisição → aprovação (SoD) → pedido ao fornecedor. RLS por tenant nas tabelas novas.
+- ✅ **Frontend web (Fase 5, fatia 1 — validado em navegador real):** app **Next.js 15 / React 19 /
+  TypeScript** (`web/`) com Tailwind, TanStack Query, Zustand e Zod. Login (IdP local), shell
+  autenticado e telas **Painel / Materiais / Reposição / Compras** consumindo a API via proxy
+  same-origin (`/api` → backend). `npm run build` OK; **smoke E2E (Playwright) 6/6** — login pela UI →
+  painel com dados reais → sugestão de reposição.
 - ✅ `docker-compose` (Postgres/Redis/RabbitMQ/MinIO) e pipeline CI.
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e

@@ -1,0 +1,8 @@
+# dependências e build do frontend
+node_modules/
+.next/
+out/
+next-env.d.ts
+
+# logs / temporários
+*.log

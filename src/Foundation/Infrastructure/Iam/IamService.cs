@@ -78,4 +78,79 @@ public sealed class IamService(FoundationDbContext db, ITenantContext tenant, IU
             u.Id.Value, u.Email, u.DisplayName, u.Status.ToString(),
             u.RoleIds.Select(r => r.Value).ToList())).ToList();
     }
+
+    public async Task<Result<Guid>> CreateRoleAsync(string name, CancellationToken ct = default)
+    {
+        if (!tenant.HasTenant)
+            return Result.Failure<Guid>(new Error("iam.no_tenant", "Requisição sem tenant."));
+
+        var result = Role.Create(tenant.CompanyId, name);
+        if (result.IsFailure) return Result.Failure<Guid>(result.Error);
+
+        db.Roles.Add(result.Value);
+        await db.SaveChangesAsync(ct);
+        metrics.Record("role.created", tenant.CompanyId.Value.ToString());
+        return Result.Success(result.Value.Id.Value);
+    }
+
+    public async Task<IReadOnlyList<RoleView>> ListRolesAsync(CancellationToken ct = default)
+    {
+        var roles = await db.Roles.AsNoTracking().OrderBy(r => r.Name).ToListAsync(ct);
+        return roles.Select(r => new RoleView(r.Id.Value, r.Name, r.Permissions.ToList())).ToList();
+    }
+
+    public async Task<Result> GrantPermissionAsync(Guid roleId, string permission, CancellationToken ct = default)
+    {
+        var role = await db.Roles.FindAsync([RoleId.From(roleId)], ct);
+        if (role is null)
+            return Result.Failure(new Error("iam.role.not_found", "Papel não encontrado."));
+
+        var granted = role.Grant(permission);
+        if (granted.IsFailure) return granted;
+
+        await db.SaveChangesAsync(ct);
+        metrics.Record("role.permission_granted", role.CompanyId.Value.ToString());
+        return Result.Success();
+    }
+
+    public async Task<Result> RevokePermissionAsync(Guid roleId, string permission, CancellationToken ct = default)
+    {
+        var role = await db.Roles.FindAsync([RoleId.From(roleId)], ct);
+        if (role is null)
+            return Result.Failure(new Error("iam.role.not_found", "Papel não encontrado."));
+
+        role.Revoke(permission);
+        await db.SaveChangesAsync(ct);
+        metrics.Record("role.permission_revoked", role.CompanyId.Value.ToString());
+        return Result.Success();
+    }
+
+    public async Task<Result> AssignRoleToUserAsync(Guid userId, Guid roleId, CancellationToken ct = default)
+    {
+        // O papel precisa existir no tenant (RLS garante o escopo); evita atribuir papel inexistente.
+        var role = await db.Roles.AsNoTracking().FirstOrDefaultAsync(r => r.Id == RoleId.From(roleId), ct);
+        if (role is null)
+            return Result.Failure(new Error("iam.role.not_found", "Papel não encontrado."));
+
+        var user = await db.Users.FindAsync([UserId.From(userId)], ct);
+        if (user is null)
+            return Result.Failure(new Error("iam.user.not_found", "Usuário não encontrado."));
+
+        user.AssignRole(RoleId.From(roleId));
+        await db.SaveChangesAsync(ct);
+        metrics.Record("user.role_assigned", user.CompanyId.Value.ToString());
+        return Result.Success();
+    }
+
+    public async Task<Result> RemoveRoleFromUserAsync(Guid userId, Guid roleId, CancellationToken ct = default)
+    {
+        var user = await db.Users.FindAsync([UserId.From(userId)], ct);
+        if (user is null)
+            return Result.Failure(new Error("iam.user.not_found", "Usuário não encontrado."));
+
+        user.RemoveRole(RoleId.From(roleId));
+        await db.SaveChangesAsync(ct);
+        metrics.Record("user.role_removed", user.CompanyId.Value.ToString());
+        return Result.Success();
+    }
 }

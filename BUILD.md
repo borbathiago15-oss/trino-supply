@@ -40,21 +40,33 @@ dotnet run --project host/Worker     # OutboxRelayWorker (heartbeat)
 cd web && npm install && npm run dev
 ```
 
-## Migração de banco (dev)
+## Migração de banco (dev) — EF Core é o SSOT do schema
 ```bash
 docker compose -f deploy/docker-compose.yml up -d postgres
-psql "postgresql://trino:trino@localhost:5432/trino" -f deploy/db/001_foundation_init.sql
+
+# Aplica as migrations (rode com role privilegiada; NÃO com a role da aplicação).
+dotnet tool install --global dotnet-ef --version 9.0.0   # uma vez
+export ConnectionStrings__Postgres="Host=localhost;Port=5432;Database=trino;Username=trino;Password=trino"
+dotnet ef database update \
+  --project src/Foundation/Infrastructure --startup-project src/Foundation/Infrastructure
+
+# Nova migration após mudar o modelo:
+# dotnet ef migrations add <Nome> --project src/Foundation/Infrastructure \
+#   --startup-project src/Foundation/Infrastructure --output-dir Persistence/Migrations
 ```
-> As migrations definitivas serão via EF Core (OPS-001 §3); o SQL em `deploy/db/` é a
-> referência inicial e o local das policies RLS (que o EF não gera automaticamente).
+> A migration `InitialFoundation` cria `company`/`outbox`/`role`/`app_user`, os índices e — via
+> `migrationBuilder.Sql` — a função `current_company()` e as **policies RLS** (SEC-004), que o EF
+> não gera do modelo. Os arquivos em `deploy/db/` (`001`/`002`) são **referência** (caminho sem EF)
+> e `rls.sql` documenta o hardening da role de aplicação (que roda fora das migrations).
 
 ## Estado atual (esqueleto)
 - ✅ Estrutura da solution por contexto; `BuildingBlocks` (Result, Entity/AggregateRoot,
   eventos de domínio, Outbox, CompanyId/ITenantContext, IClock).
 - ✅ `Foundation`: agregado `Company` (tenant) + `FoundationDbContext` (EF Core) que grava
   eventos de domínio no **Outbox** na mesma transação (ARC-005 §3).
-- ✅ Migração SQL inicial (`deploy/db/001_foundation_init.sql`): `company`, `outbox` e função
-  `current_company()`. Policies **RLS** das tabelas de negócio em `deploy/db/rls.sql` (SEC-004).
+- ✅ **Migrations EF Core (SSOT do schema):** `InitialFoundation` cria `company`/`outbox`/`role`/
+  `app_user` + índices + função `current_company()` + policies **RLS** (via `migrationBuilder.Sql`).
+  Aplicada e validada com `dotnet ef database update` (SEC-004). SQL em `deploy/db/` é referência.
 - ✅ **Enforcement do RLS (SEC-004):** `TenantConnectionInterceptor` define `app.current_company`
   por conexão, **fail-closed** (sem tenant → nega tudo). A `outbox`/`company` não usam RLS (infra/
   catálogo — isolamento por role).

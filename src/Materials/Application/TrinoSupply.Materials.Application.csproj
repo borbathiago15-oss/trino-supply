@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Camada de Aplicação de Materiais: casos de uso e portas (ARC-004 §2). -->
+  <ItemGroup>
+    <ProjectReference Include="../Domain/TrinoSupply.Materials.Domain.csproj" />
+  </ItemGroup>
+</Project>

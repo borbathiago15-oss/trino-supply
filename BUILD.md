@@ -90,6 +90,12 @@ dotnet ef database update \
   revogação **mudam o acesso dinamicamente** (comprovado). **Métricas de uso** (`IUsageMetrics`)
   por tenant para o case de sucesso. RLS em `role`/`app_user` (`deploy/db/002_iam.sql`); isolamento
   entre tenants provado **sem filtro na aplicação** (só RLS).
+- ✅ **Materials (MMS-002) — Fase 2, fatia 1 (validada):** bounded context próprio (schema
+  `materials`, projetos `src/Materials/{Domain,Application,Infrastructure}`). Catálogo de **itens** +
+  **unidades de medida com conversão** (ADR-013, com checagem de dimensão), endpoints protegidos
+  (`materials.read`/`materials.manage`), RLS por tenant reusando o interceptor do Foundation.
+  Comprovado: conversão 2 kg→2000 g / 1500 g→1.5 kg; cross-dimensão → 400; isolamento por RLS;
+  deny-by-default cobrindo o módulo novo.
 - ✅ `docker-compose` (Postgres/Redis/RabbitMQ/MinIO) e pipeline CI.
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e

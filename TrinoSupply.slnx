@@ -9,4 +9,10 @@
     <Project Path="host/Api/TrinoSupply.Api.csproj" />
     <Project Path="host/Worker/TrinoSupply.Worker.csproj" />
   </Folder>
+  <Folder Name="/src/Materials/" />
+  <Folder Name="/src/Materials/Domain/">
+    <Project Path="src/Materials/Application/TrinoSupply.Materials.Application.csproj" />
+    <Project Path="src/Materials/Domain/TrinoSupply.Materials.Domain.csproj" />
+    <Project Path="src/Materials/Infrastructure/TrinoSupply.Materials.Infrastructure.csproj" />
+  </Folder>
 </Solution>

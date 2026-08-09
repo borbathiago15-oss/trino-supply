@@ -14,10 +14,15 @@ public static class PermissionCatalog
     public const string RolesManage = "roles.manage";     // criar papéis, conceder/revogar permissões
     public const string AuditRead = "audit.read";          // ler a trilha de auditoria
 
+    // Materiais (MMS-002). TODO: evoluir para catálogo por módulo (cada BC contribui suas permissões).
+    public const string MaterialsRead = "materials.read";
+    public const string MaterialsManage = "materials.manage";
+
     /// <summary>Todas as permissões conhecidas — usado para validar concessões (não conceder desconhecida).</summary>
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
-        UsersRead, UsersManage, RolesRead, RolesManage, AuditRead
+        UsersRead, UsersManage, RolesRead, RolesManage, AuditRead,
+        MaterialsRead, MaterialsManage
     };
 
     public static bool IsKnown(string permission) => All.Contains(permission);

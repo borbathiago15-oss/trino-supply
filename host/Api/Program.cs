@@ -5,13 +5,16 @@ using TrinoSupply.Api.Iam;
 using TrinoSupply.Api.Multitenancy;
 using TrinoSupply.BuildingBlocks.Multitenancy;
 using TrinoSupply.BuildingBlocks.Security;
+using TrinoSupply.Api.Materials;
 using TrinoSupply.Foundation.Application.Auth;
 using TrinoSupply.Foundation.Infrastructure;
+using TrinoSupply.Materials.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // --- Serviços ---------------------------------------------------------------
 builder.Services.AddFoundationInfrastructure(builder.Configuration);
+builder.Services.AddMaterialsInfrastructure(builder.Configuration);
 builder.Services.AddHealthChecks();
 
 // Multi-tenant: o tenant vem do JWT (FD-001-01). Sobrepõe o NullTenantContext do host de infra.
@@ -93,6 +96,9 @@ app.MapAuthEndpoints();
 
 // IAM (FD-001-01): provisionamento de empresa + gestão de usuários (deny-by-default).
 app.MapIamEndpoints();
+
+// Materiais (MMS-002): catálogo de itens e unidades + conversão.
+app.MapMaterialsEndpoints();
 
 app.Run();
 

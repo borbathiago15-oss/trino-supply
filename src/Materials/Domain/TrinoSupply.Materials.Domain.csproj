@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Camada de Domínio de Materiais (MMS-002). Sem dependência de infraestrutura (ARC-004 §2). -->
+  <ItemGroup>
+    <ProjectReference Include="../../BuildingBlocks/TrinoSupply.BuildingBlocks.csproj" />
+  </ItemGroup>
+</Project>

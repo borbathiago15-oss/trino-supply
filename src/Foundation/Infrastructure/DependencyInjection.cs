@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using TrinoSupply.BuildingBlocks.Abstractions;
 using TrinoSupply.BuildingBlocks.Multitenancy;
 using TrinoSupply.Foundation.Infrastructure.Multitenancy;
@@ -16,14 +17,23 @@ public static class DependencyInjection
     {
         services.AddSingleton<IClock, SystemClock>();
 
-        // Placeholder até a AuthN/JWT resolver o tenant (FD-001-01) — sprint 1.
-        services.AddScoped<ITenantContext, NullTenantContext>();
+        // Placeholder até a AuthN/JWT resolver o tenant (FD-001-01). O host (Api) sobrepõe por
+        // HttpTenantContext; se nada sobrepuser, NullTenantContext → RLS fail-closed (SEC-004).
+        services.TryAddScoped<ITenantContext, NullTenantContext>();
+
+        // Enforcement do RLS: seta app.current_company por conexão (SEC-004). Scoped porque depende
+        // do ITenantContext da requisição.
+        services.AddScoped<TenantConnectionInterceptor>();
 
         var connectionString = configuration.GetConnectionString("Postgres");
-        services.AddDbContext<FoundationDbContext>(options =>
-            options.UseNpgsql(connectionString, npg => npg.MigrationsHistoryTable("__ef_migrations", "foundation")));
 
-        // TODO(GO-001 · sprint 1): ITenantContext (do JWT), Redis, publisher Outbox→RabbitMQ, Audit.
+        // Overload (sp, options): permite anexar o interceptor SCOPED resolvido do escopo da requisição.
+        services.AddDbContext<FoundationDbContext>((sp, options) =>
+            options
+                .UseNpgsql(connectionString, npg => npg.MigrationsHistoryTable("__ef_migrations", "foundation"))
+                .AddInterceptors(sp.GetRequiredService<TenantConnectionInterceptor>()));
+
+        // TODO(GO-001 · sprint 1): Redis, publisher Outbox→RabbitMQ, Audit.
         return services;
     }
 }

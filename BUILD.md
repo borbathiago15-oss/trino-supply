@@ -53,14 +53,18 @@ psql "postgresql://trino:trino@localhost:5432/trino" -f deploy/db/001_foundation
   eventos de domínio, Outbox, CompanyId/ITenantContext, IClock).
 - ✅ `Foundation`: agregado `Company` (tenant) + `FoundationDbContext` (EF Core) que grava
   eventos de domínio no **Outbox** na mesma transação (ARC-005 §3).
-- ✅ Migração SQL inicial (`deploy/db/001_foundation_init.sql`): `company`, `outbox` e **RLS**.
-- ✅ `host/Api`: health check + **AuthN JWT** + `HttpTenantContext` (tenant do token) +
-  endpoint protegido `/api/v1/whoami`.
+- ✅ Migração SQL inicial (`deploy/db/001_foundation_init.sql`): `company`, `outbox` e função
+  `current_company()`. Policies **RLS** das tabelas de negócio em `deploy/db/rls.sql` (SEC-004).
+- ✅ **Enforcement do RLS (SEC-004):** `TenantConnectionInterceptor` define `app.current_company`
+  por conexão, **fail-closed** (sem tenant → nega tudo). A `outbox`/`company` não usam RLS (infra/
+  catálogo — isolamento por role).
+- ✅ `host/Api`: health check + **AuthN JWT fail-closed** (validação estrita; recusa iniciar em
+  produção sem AuthN) + `HttpTenantContext` (tenant do token) + endpoint protegido `/api/v1/whoami`.
 - ✅ `host/Worker` com `OutboxRelayWorker` (placeholder do publisher).
 - ✅ `docker-compose` (Postgres/Redis/RabbitMQ/MinIO) e pipeline CI.
-- ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; interceptor que aplica
-  `SET LOCAL app.current_company` (RLS ativa por requisição); publisher Outbox→RabbitMQ real;
-  IAM (usuários/papéis) e Auditoria; testes de integração (Testcontainers — QA-001).
+- ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
+  negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e
+  Auditoria; testes de integração de isolamento (Testcontainers — QA-001 / SEC-004 §8).
 
 > Nota: este esqueleto foi escrito seguindo as convenções do .NET 9, porém **não foi compilado
 > no ambiente de geração** (sem SDK .NET). Rode `dotnet build` localmente para validar.

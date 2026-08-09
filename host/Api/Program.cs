@@ -1,4 +1,6 @@
+using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
 using TrinoSupply.Api.Multitenancy;
 using TrinoSupply.BuildingBlocks.Multitenancy;
 using TrinoSupply.Foundation.Infrastructure;
@@ -13,14 +15,46 @@ builder.Services.AddHealthChecks();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
 
-// AuthN (JWT Bearer) — SEC-001/003. Parâmetros de validação via config "Jwt".
-// TODO(GO-001 · sprint 1): Authority/Audience/chaves reais (rotação 90 dias — SEC-001 §5).
+// AuthN (JWT Bearer) — SEC-001/003. FAIL-CLOSED: só aceitamos tokens efetivamente validados
+// (assinatura + emissor + audiência + expiração). Sem um provedor de identidade (Authority) OU
+// uma chave simétrica de desenvolvimento configurada, NENHUM token é aceito — nunca validação frouxa.
+var jwtAuthority = builder.Configuration["Jwt:Authority"];
+var jwtAudience = builder.Configuration["Jwt:Audience"];
+var jwtDevKey = builder.Configuration["Jwt:DevSigningKey"];
+
+if (string.IsNullOrWhiteSpace(jwtAuthority) && string.IsNullOrWhiteSpace(jwtDevKey))
+{
+    // Sem confiança configurada: em produção é erro fatal (não subir "aberto" por engano).
+    if (!builder.Environment.IsDevelopment())
+    {
+        throw new InvalidOperationException(
+            "AuthN não configurada: defina Jwt:Authority (produção) — SEC-001/SEC-004. " +
+            "Recusando iniciar para não expor a API sem validação de token.");
+    }
+    // Em dev, seguimos, mas sem chaves de assinatura todo token protegido resulta em 401 (fail-closed).
+}
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.Authority = builder.Configuration["Jwt:Authority"];
-        options.Audience = builder.Configuration["Jwt:Audience"];
+        options.Authority = string.IsNullOrWhiteSpace(jwtAuthority) ? null : jwtAuthority;
+        options.Audience = jwtAudience;
         options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            ValidateLifetime = true,
+            ValidateAudience = !string.IsNullOrWhiteSpace(jwtAudience),
+            ValidAudience = jwtAudience,
+            ValidateIssuer = !string.IsNullOrWhiteSpace(jwtAuthority),
+            ValidIssuer = jwtAuthority,
+            ClockSkew = TimeSpan.FromSeconds(30),
+            // Chave simétrica só para DEV/testes; em produção as chaves vêm do Authority (OIDC/JWKS).
+            IssuerSigningKey = string.IsNullOrWhiteSpace(jwtDevKey)
+                ? null
+                : new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtDevKey))
+        };
     });
 builder.Services.AddAuthorization();
 

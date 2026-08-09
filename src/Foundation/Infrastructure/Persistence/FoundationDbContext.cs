@@ -62,30 +62,79 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
         return await base.SaveChangesAsync(ct);
     }
 
-    /// <summary>Coleta eventos de domínio das raízes rastreadas e os grava no Outbox (ARC-005 §3).</summary>
+    /// <summary>
+    /// Coleta eventos de domínio de TODAS as raízes rastreadas (via <see cref="IHasDomainEvents"/>,
+    /// independente do tipo do Id) e os grava no Outbox na mesma transação (ARC-005 §3).
+    /// </summary>
     private void WriteOutboxFromDomainEvents()
     {
-        var roots = ChangeTracker.Entries<AggregateRoot<CompanyId>>()
-            .Select(x => x.Entity)
-            .Where(x => x.DomainEvents.Count > 0)
+        var roots = ChangeTracker.Entries<IHasDomainEvents>()
+            .Where(x => x.Entity.DomainEvents.Count > 0)
             .ToList();
 
-        foreach (var root in roots)
+        foreach (var entry in roots)
         {
+            var root = entry.Entity;
+            var companyId = ResolveCompanyId(entry);
+            var aggregateId = ExtractAggregateId(entry);
+
             foreach (var ev in root.DomainEvents)
             {
                 Outbox.Add(new OutboxMessage
                 {
                     Id = ev.EventId == Guid.Empty ? Guid.NewGuid() : ev.EventId,
-                    CompanyId = tenant.HasTenant ? tenant.CompanyId.Value : root.Id.Value,
+                    CompanyId = companyId,
                     Type = ev.GetType().Name,
                     Payload = JsonSerializer.Serialize(ev, ev.GetType()),
                     AggregateType = root.GetType().Name,
-                    AggregateId = root.Id.Value,
+                    AggregateId = aggregateId,
                     OccurredAt = ev.OccurredAt
                 });
             }
             root.ClearDomainEvents();
         }
+    }
+
+    /// <summary>
+    /// Id do agregado como <see cref="Guid"/>. Desembrulha IDs fortemente tipados do padrão
+    /// <c>record struct X(Guid Value)</c> (ex.: <see cref="CompanyId"/>); aceita PK Guid direto.
+    /// </summary>
+    private static Guid ExtractAggregateId(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry)
+    {
+        if (entry.Metadata.FindPrimaryKey() is not { } pk)
+        {
+            return Guid.Empty;
+        }
+
+        var value = entry.Property(pk.Properties[0].Name).CurrentValue;
+        return value switch
+        {
+            Guid g => g,
+            null => Guid.Empty,
+            _ => value.GetType().GetProperty("Value")?.GetValue(value) is Guid inner ? inner : Guid.Empty
+        };
+    }
+
+    /// <summary>
+    /// Tenant do evento (SEC-004, fail-closed). Preferimos o tenant da requisição; no bootstrap
+    /// de empresa (evento <c>CompanyRegistered</c>, sem tenant ainda) usamos o próprio Id da
+    /// <see cref="Company"/>. Sem nenhum dos dois, é erro de programação — nunca gravamos tenant
+    /// arbitrário (evitaria vazamento cross-tenant no Outbox).
+    /// </summary>
+    private Guid ResolveCompanyId(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry)
+    {
+        if (tenant.HasTenant)
+        {
+            return tenant.CompanyId.Value;
+        }
+
+        if (entry.Entity is Company company)
+        {
+            return company.Id.Value;
+        }
+
+        throw new InvalidOperationException(
+            $"Não foi possível determinar o tenant do evento de {entry.Entity.GetType().Name} " +
+            "(sem ITenantContext e agregado não é a raiz de tenant). Ver SEC-004.");
     }
 }

@@ -4,8 +4,9 @@ namespace TrinoSupply.Api.Multitenancy;
 
 /// <summary>
 /// Resolve o tenant a partir do claim <c>company_id</c> do JWT (FD-001-01).
-/// Toda operação filtra por este <see cref="CompanyId"/>; a RLS usa o mesmo valor
-/// (SET LOCAL app.current_company — deploy/db/rls.sql). Recurso fora do escopo → 404.
+/// Toda operação filtra por este <see cref="CompanyId"/>; a RLS usa o mesmo valor, aplicado por
+/// conexão pelo <c>TenantConnectionInterceptor</c> (set_config app.current_company — SEC-004,
+/// deploy/db/rls.sql). Recurso fora do escopo → 404.
 /// </summary>
 public sealed class HttpTenantContext(IHttpContextAccessor accessor) : ITenantContext
 {

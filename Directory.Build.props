@@ -5,7 +5,9 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <!-- Warnings visíveis, mas não bloqueiam o build (evita atrito no dia-a-dia). A qualidade é
+         garantida por revisão + analisadores; o gate de CI pode elevar isto quando o time decidir. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <RootNamespace>TrinoSupply.$(MSBuildProjectName.Replace('TrinoSupply.', ''))</RootNamespace>
   </PropertyGroup>

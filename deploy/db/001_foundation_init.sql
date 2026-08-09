@@ -41,20 +41,18 @@ CREATE INDEX IF NOT EXISTS idx_outbox_pending
     WHERE published_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_outbox_company ON foundation.outbox (company_id);
 
--- current_company(): tenant corrente da sessão (do JWT via SET LOCAL app.current_company).
+-- current_company(): tenant corrente da sessão. Definido por conexão via
+-- set_config('app.current_company', <uuid>, false) — TenantConnectionInterceptor (SEC-004).
 CREATE OR REPLACE FUNCTION foundation.current_company() RETURNS uuid
 LANGUAGE sql STABLE AS $$
     SELECT NULLIF(current_setting('app.current_company', true), '')::uuid
 $$;
 
--- RLS na outbox: cada tenant só enxerga/insere suas mensagens (defesa em profundidade).
-ALTER TABLE foundation.outbox ENABLE ROW LEVEL SECURITY;
-ALTER TABLE foundation.outbox FORCE  ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS tenant_isolation ON foundation.outbox;
-CREATE POLICY tenant_isolation ON foundation.outbox
-    USING      (company_id = foundation.current_company())
-    WITH CHECK (company_id = foundation.current_company());
-
--- Nota: a tabela foundation.company é o próprio catálogo de tenants (não recebe RLS por company_id).
--- O acesso a company é restrito por autorização de plataforma (Admin) — SEC-001.
+-- IMPORTANTE (SEC-004): a `outbox` NÃO recebe RLS.
+--  * É tabela de infraestrutura, não exposta por API;
+--  * é consumida por um publisher de sistema que legitimamente lê TODOS os tenants;
+--  * habilitar RLS aqui quebraria o publisher e o provisionamento de empresa (evento
+--    CompanyRegistered ocorre fora de escopo de tenant). O isolamento da outbox é por
+--    privilégio de banco (o publisher usa role dedicada), não por RLS.
+-- A `foundation.company` também não recebe RLS (é o catálogo de tenants; acesso restrito a
+-- Admin de plataforma — SEC-001). O RLS incide sobre as TABELAS DE NEGÓCIO (ver deploy/db/rls.sql).

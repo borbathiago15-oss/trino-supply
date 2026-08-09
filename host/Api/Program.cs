@@ -6,15 +6,18 @@ using TrinoSupply.Api.Multitenancy;
 using TrinoSupply.BuildingBlocks.Multitenancy;
 using TrinoSupply.BuildingBlocks.Security;
 using TrinoSupply.Api.Materials;
+using TrinoSupply.Api.Procurement;
 using TrinoSupply.Foundation.Application.Auth;
 using TrinoSupply.Foundation.Infrastructure;
 using TrinoSupply.Materials.Infrastructure;
+using TrinoSupply.Procurement.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // --- Serviços ---------------------------------------------------------------
 builder.Services.AddFoundationInfrastructure(builder.Configuration);
 builder.Services.AddMaterialsInfrastructure(builder.Configuration);
+builder.Services.AddProcurementInfrastructure(builder.Configuration);
 builder.Services.AddHealthChecks();
 
 // Multi-tenant: o tenant vem do JWT (FD-001-01). Sobrepõe o NullTenantContext do host de infra.
@@ -99,6 +102,9 @@ app.MapIamEndpoints();
 
 // Materiais (MMS-002): catálogo de itens e unidades + conversão.
 app.MapMaterialsEndpoints();
+
+// Compras (PR-001): requisição + aprovação com SoD; ponte da reposição.
+app.MapProcurementEndpoints();
 
 app.Run();
 

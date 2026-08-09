@@ -18,11 +18,17 @@ public static class PermissionCatalog
     public const string MaterialsRead = "materials.read";
     public const string MaterialsManage = "materials.manage";
 
+    // Compras (PR-001). Segregação: requisitar e aprovar são permissões distintas (SoD).
+    public const string PurchasesRead = "purchases.read";
+    public const string PurchasesRequest = "purchases.request";
+    public const string PurchasesApprove = "purchases.approve";
+
     /// <summary>Todas as permissões conhecidas — usado para validar concessões (não conceder desconhecida).</summary>
     public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
     {
         UsersRead, UsersManage, RolesRead, RolesManage, AuditRead,
-        MaterialsRead, MaterialsManage
+        MaterialsRead, MaterialsManage,
+        PurchasesRead, PurchasesRequest, PurchasesApprove
     };
 
     public static bool IsKnown(string permission) => All.Contains(permission);

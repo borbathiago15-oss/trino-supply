@@ -15,4 +15,10 @@
     <Project Path="src/Materials/Domain/TrinoSupply.Materials.Domain.csproj" />
     <Project Path="src/Materials/Infrastructure/TrinoSupply.Materials.Infrastructure.csproj" />
   </Folder>
+  <Folder Name="/src/Procurement/" />
+  <Folder Name="/src/Procurement/Domain/">
+    <Project Path="src/Procurement/Application/TrinoSupply.Procurement.Application.csproj" />
+    <Project Path="src/Procurement/Domain/TrinoSupply.Procurement.Domain.csproj" />
+    <Project Path="src/Procurement/Infrastructure/TrinoSupply.Procurement.Infrastructure.csproj" />
+  </Folder>
 </Solution>

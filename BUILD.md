@@ -105,6 +105,12 @@ dotnet ef database update \
   item; sugestões `necessidade = máx − saldo` apenas para itens no ponto de reposição, ordenadas por
   prioridade e reagindo ao saldo. Endpoints `/materials/items/{code}/replenishment` e
   `/materials/replenishment/suggestions`. **Fase 2 (Materials) concluída.**
+- ✅ **Procurement (PR-001) — Fase 3, fatia 1 (validada):** bounded context próprio (schema
+  `procurement`). Requisição de compra com linhas, fluxo Draft→Submitted→Approved/Rejected e
+  **Segregation of Duties** (o requisitante não aprova a própria requisição — 403 mesmo com a
+  permissão). Requisitar e aprovar são permissões distintas. Decisão com **concorrência otimista**
+  (2 approves simultâneos → uma só decisão vinga). **Ponte reposição→requisição** (from-suggestions)
+  fecha o ciclo estoque baixo → compra. RLS por tenant nas duas tabelas.
 - ✅ `docker-compose` (Postgres/Redis/RabbitMQ/MinIO) e pipeline CI.
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e

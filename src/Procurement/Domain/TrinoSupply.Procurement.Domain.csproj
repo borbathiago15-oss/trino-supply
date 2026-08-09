@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Domínio de Compras (PR-001). Sem dependência de infraestrutura (ARC-004 §2). -->
+  <ItemGroup>
+    <ProjectReference Include="../../BuildingBlocks/TrinoSupply.BuildingBlocks.csproj" />
+  </ItemGroup>
+</Project>

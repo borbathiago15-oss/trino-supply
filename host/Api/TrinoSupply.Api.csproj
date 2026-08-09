@@ -3,6 +3,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Foundation/Infrastructure/TrinoSupply.Foundation.Infrastructure.csproj" />
     <ProjectReference Include="../../src/Materials/Infrastructure/TrinoSupply.Materials.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/Procurement/Infrastructure/TrinoSupply.Procurement.Infrastructure.csproj" />
     <ProjectReference Include="../../src/BuildingBlocks/TrinoSupply.BuildingBlocks.csproj" />
   </ItemGroup>
 

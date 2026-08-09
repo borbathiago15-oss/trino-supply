@@ -46,6 +46,8 @@ public sealed class MaterialsService(MaterialsDbContext db, ITenantContext tenan
         if (result.IsFailure) return Result.Failure<Guid>(result.Error);
 
         db.Items.Add(result.Value);
+        // Saldo criado zerado junto com o item → movimentos são sempre UPDATE (sem corrida de INSERT).
+        db.StockBalances.Add(StockBalance.Create(tenant.CompanyId, result.Value.Id));
         await db.SaveChangesAsync(ct);
         metrics.Record("materials.item.created", tenant.CompanyId.Value.ToString());
         return Result.Success(result.Value.Id.Value);

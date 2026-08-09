@@ -96,6 +96,11 @@ dotnet ef database update \
   (`materials.read`/`materials.manage`), RLS por tenant reusando o interceptor do Foundation.
   Comprovado: conversão 2 kg→2000 g / 1500 g→1.5 kg; cross-dimensão → 400; isolamento por RLS;
   deny-by-default cobrindo o módulo novo.
+- ✅ **Materials — Fase 2, fatia 2 (validada): estoque com saldo, ledger e concorrência.**
+  Saldo como **projeção** atualizada por um **ledger append-only** de movimentos (entrada/saída);
+  saída além do saldo → 400. **Serialização por chave de saldo** (`SELECT … FOR UPDATE` + version
+  otimista) — comprovado com **50 lançamentos simultâneos** (líquido +30): saldo final exato, zero
+  atualização perdida. Endpoints `/materials/items/{code}/{movements,balance}`.
 - ✅ `docker-compose` (Postgres/Redis/RabbitMQ/MinIO) e pipeline CI.
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e

@@ -1,11 +1,13 @@
 using TrinoSupply.Foundation.Application.Iam;
 using TrinoSupply.Foundation.Domain.Iam;
 using TrinoSupply.Materials.Application;
+using TrinoSupply.Materials.Domain;
 
 namespace TrinoSupply.Api.Materials;
 
 public sealed record CreateUnitRequest(string Code, string Name, string Dimension, decimal FactorToBase);
 public sealed record CreateItemRequest(string Code, string Name, string BaseUnitCode);
+public sealed record PostMovementRequest(StockDirection Direction, decimal Quantity, string? Reason);
 
 /// <summary>Endpoints de Materiais (MMS-002). Protegidos por permissão (deny-by-default).</summary>
 public static class MaterialsEndpoints
@@ -55,6 +57,34 @@ public static class MaterialsEndpoints
             return r.IsSuccess
                 ? Results.Ok(new { quantity, from, to, result = r.Value })
                 : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization();
+
+        // ---- Estoque: movimentos (ledger) + saldo (projeção) ----
+        m.MapPost("/items/{code}/movements", async (string code, PostMovementRequest req,
+            IPermissionChecker perm, IStockService stock, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsManage, ct)) return Results.Forbid();
+            var r = await stock.PostMovementAsync(code, req.Direction, req.Quantity, req.Reason, ct);
+            return r.IsSuccess
+                ? Results.Ok(new { itemCode = code, balance = r.Value })
+                : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization();
+
+        m.MapGet("/items/{code}/balance", async (string code,
+            IPermissionChecker perm, IStockService stock, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsRead, ct)) return Results.Forbid();
+            var r = await stock.GetBalanceAsync(code, ct);
+            return r.IsSuccess
+                ? Results.Ok(r.Value)
+                : Results.NotFound(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization();
+
+        m.MapGet("/items/{code}/movements", async (string code,
+            IPermissionChecker perm, IStockService stock, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsRead, ct)) return Results.Forbid();
+            return Results.Ok(await stock.ListMovementsAsync(code, ct));
         }).RequireAuthorization();
 
         return app;

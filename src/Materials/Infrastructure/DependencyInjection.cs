@@ -22,6 +22,7 @@ public static class DependencyInjection
                 .AddInterceptors(sp.GetRequiredService<TenantConnectionInterceptor>()));
 
         services.AddScoped<IMaterialsService, MaterialsService>();
+        services.AddScoped<IStockService, StockService>();
         return services;
     }
 }

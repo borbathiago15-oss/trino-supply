@@ -12,6 +12,8 @@ public sealed class MaterialsDbContext(DbContextOptions<MaterialsDbContext> opti
 {
     public DbSet<Item> Items => Set<Item>();
     public DbSet<UnitOfMeasure> Units => Set<UnitOfMeasure>();
+    public DbSet<StockBalance> StockBalances => Set<StockBalance>();
+    public DbSet<StockMovement> StockMovements => Set<StockMovement>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -45,6 +47,32 @@ public sealed class MaterialsDbContext(DbContextOptions<MaterialsDbContext> opti
             e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
             e.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
             e.Ignore(x => x.DomainEvents);
+        });
+
+        b.Entity<StockBalance>(e =>
+        {
+            e.ToTable("stock_balance");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("item_id").HasConversion(id => id.Value, v => ItemId.From(v));
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.Quantity).HasColumnName("quantity").HasColumnType("numeric(18,6)");
+            e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
+            e.HasIndex(x => x.CompanyId);
+            e.Ignore(x => x.DomainEvents);
+        });
+
+        b.Entity<StockMovement>(e =>
+        {
+            e.ToTable("stock_movement");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.ItemId).HasColumnName("item_id").HasConversion(id => id.Value, v => ItemId.From(v));
+            e.Property(x => x.Direction).HasColumnName("direction").HasConversion<short>();
+            e.Property(x => x.Quantity).HasColumnName("quantity").HasColumnType("numeric(18,6)");
+            e.Property(x => x.OccurredAt).HasColumnName("occurred_at");
+            e.Property(x => x.Reason).HasColumnName("reason").HasMaxLength(300);
+            e.HasIndex(x => new { x.CompanyId, x.ItemId, x.OccurredAt });
         });
     }
 }

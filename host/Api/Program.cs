@@ -1,10 +1,11 @@
-using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using TrinoSupply.Api.Auth;
 using TrinoSupply.Api.Iam;
 using TrinoSupply.Api.Multitenancy;
 using TrinoSupply.BuildingBlocks.Multitenancy;
 using TrinoSupply.BuildingBlocks.Security;
+using TrinoSupply.Foundation.Application.Auth;
 using TrinoSupply.Foundation.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,45 +19,46 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
 builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
 
-// AuthN (JWT Bearer) — SEC-001/003. FAIL-CLOSED: só aceitamos tokens efetivamente validados
-// (assinatura + emissor + audiência + expiração). Sem um provedor de identidade (Authority) OU
-// uma chave simétrica de desenvolvimento configurada, NENHUM token é aceito — nunca validação frouxa.
+// AuthN (JWT Bearer) — SEC-001/003. IdP LOCAL: o próprio Trino emite e valida tokens usando um
+// key-ring (rotação de chaves — SEC-001). FAIL-CLOSED: só aceitamos tokens efetivamente validados
+// (assinatura por kid + emissor + audiência + expiração). Sem chaves nem Authority → nada é aceito.
+var keyRing = JwtKeyRing.FromConfig(builder.Configuration);
 var jwtAuthority = builder.Configuration["Jwt:Authority"];
-var jwtAudience = builder.Configuration["Jwt:Audience"];
-var jwtDevKey = builder.Configuration["Jwt:DevSigningKey"];
 
-if (string.IsNullOrWhiteSpace(jwtAuthority) && string.IsNullOrWhiteSpace(jwtDevKey))
+if (!keyRing.HasKeys && string.IsNullOrWhiteSpace(jwtAuthority))
 {
     // Sem confiança configurada: em produção é erro fatal (não subir "aberto" por engano).
     if (!builder.Environment.IsDevelopment())
     {
         throw new InvalidOperationException(
-            "AuthN não configurada: defina Jwt:Authority (produção) — SEC-001/SEC-004. " +
+            "AuthN não configurada: defina Jwt:Keys (IdP local) ou Jwt:Authority (OIDC) — SEC-001/SEC-004. " +
             "Recusando iniciar para não expor a API sem validação de token.");
     }
-    // Em dev, seguimos, mas sem chaves de assinatura todo token protegido resulta em 401 (fail-closed).
+    // Em dev, seguimos; sem chaves todo token protegido resulta em 401 (fail-closed).
 }
+
+builder.Services.AddSingleton(keyRing);
+builder.Services.AddSingleton<ITokenIssuer, JwtTokenIssuer>();
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.Authority = string.IsNullOrWhiteSpace(jwtAuthority) ? null : jwtAuthority;
-        options.Audience = jwtAudience;
+        options.Audience = keyRing.Audience;
         options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+        options.MapInboundClaims = false; // preserva o claim 'sub' com o nome original
 
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
             ValidateLifetime = true,
-            ValidateAudience = !string.IsNullOrWhiteSpace(jwtAudience),
-            ValidAudience = jwtAudience,
-            ValidateIssuer = !string.IsNullOrWhiteSpace(jwtAuthority),
-            ValidIssuer = jwtAuthority,
+            ValidateAudience = !string.IsNullOrWhiteSpace(keyRing.Audience),
+            ValidAudience = keyRing.Audience,
+            ValidateIssuer = keyRing.HasKeys || !string.IsNullOrWhiteSpace(jwtAuthority),
+            ValidIssuer = keyRing.HasKeys ? keyRing.Issuer : jwtAuthority,
             ClockSkew = TimeSpan.FromSeconds(30),
-            // Chave simétrica só para DEV/testes; em produção as chaves vêm do Authority (OIDC/JWKS).
-            IssuerSigningKey = string.IsNullOrWhiteSpace(jwtDevKey)
-                ? null
-                : new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtDevKey))
+            // Todas as chaves do ring validam (janela de rotação); a assinatura escolhe por kid.
+            IssuerSigningKeys = keyRing.HasKeys ? keyRing.ValidationKeys : null
         };
     });
 builder.Services.AddAuthorization();
@@ -85,6 +87,9 @@ v1.MapGet("/whoami", (ITenantContext tenant) =>
             ? Results.Ok(new { companyId = tenant.CompanyId.Value })
             : Results.Unauthorized())
     .RequireAuthorization();
+
+// AuthN (IdP local): login, refresh, logout.
+app.MapAuthEndpoints();
 
 // IAM (FD-001-01): provisionamento de empresa + gestão de usuários (deny-by-default).
 app.MapIamEndpoints();

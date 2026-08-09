@@ -4,10 +4,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TrinoSupply.BuildingBlocks.Abstractions;
 using TrinoSupply.BuildingBlocks.Multitenancy;
+using TrinoSupply.BuildingBlocks.Security;
 using TrinoSupply.Foundation.Application.Audit;
+using TrinoSupply.Foundation.Application.Auth;
 using TrinoSupply.Foundation.Application.Iam;
 using TrinoSupply.Foundation.Infrastructure.Audit;
+using TrinoSupply.Foundation.Infrastructure.Auth;
 using TrinoSupply.Foundation.Infrastructure.Iam;
+using TrinoSupply.Foundation.Infrastructure.Security;
 using TrinoSupply.Foundation.Infrastructure.Multitenancy;
 using TrinoSupply.Foundation.Infrastructure.Observability;
 using TrinoSupply.Foundation.Infrastructure.Persistence;
@@ -43,6 +47,10 @@ public static class DependencyInjection
         services.AddScoped<IAuditLog, DbAuditLog>();
         services.AddScoped<IIamService, IamService>();
         services.AddScoped<IPermissionChecker, PermissionChecker>();
+
+        // AuthN (IdP local): hashing de senha + login/refresh. ITokenIssuer é provido pelo host.
+        services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
+        services.AddScoped<IAuthService, AuthService>();
 
         // TODO(GO-001 · sprint 1): Redis, publisher Outbox→RabbitMQ, Audit.
         return services;

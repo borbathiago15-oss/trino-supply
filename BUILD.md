@@ -77,6 +77,11 @@ dotnet ef database update \
   catálogo — isolamento por role).
 - ✅ `host/Api`: health check + **AuthN JWT fail-closed** (validação estrita; recusa iniciar em
   produção sem AuthN) + `HttpTenantContext` (tenant do token) + endpoint protegido `/api/v1/whoami`.
+- ✅ **IdP local (SEC-001) — Fase 1, fatia 5 (validada):** o próprio Trino **emite** tokens. Login
+  por e-mail/senha (hash **PBKDF2-HMAC-SHA256**), access token curto (15 min) + **refresh token com
+  rotação** (guarda só o hash; reuso do antigo é negado), logout revoga. **Key-ring** com rotação de
+  chave de assinatura (ativa assina, todas validam por `kid`) — token de chave antiga ainda valida na
+  janela; chave fora do ring → 401. Endpoints `/api/v1/auth/{login,refresh,logout}`.
 - ✅ `host/Worker` com `OutboxRelayWorker` (placeholder do publisher).
 - ✅ **IAM (FD-001-01) — Fase 1 (validada em Postgres real):** agregados `User` e `Role`,
   catálogo de permissões, autorização **deny-by-default** (`IPermissionChecker`), provisionamento de

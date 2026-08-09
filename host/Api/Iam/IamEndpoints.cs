@@ -4,9 +4,9 @@ using TrinoSupply.Foundation.Domain.Iam;
 namespace TrinoSupply.Api.Iam;
 
 public sealed record RegisterCompanyRequest(
-    string LegalName, string TaxId, string AdminSubject, string AdminEmail, string AdminName);
+    string LegalName, string TaxId, string AdminSubject, string AdminEmail, string AdminName, string AdminPassword);
 
-public sealed record RegisterUserRequest(string Subject, string Email, string DisplayName);
+public sealed record RegisterUserRequest(string Subject, string Email, string DisplayName, string? Password);
 public sealed record CreateRoleRequest(string Name);
 public sealed record PermissionRequest(string Permission);
 public sealed record AssignRoleRequest(Guid RoleId);
@@ -23,7 +23,7 @@ public static class IamEndpoints
         v1.MapPost("/companies", async (RegisterCompanyRequest req, IIamService iam, CancellationToken ct) =>
         {
             var result = await iam.RegisterCompanyWithAdminAsync(
-                req.LegalName, req.TaxId, req.AdminSubject, req.AdminEmail, req.AdminName, ct);
+                req.LegalName, req.TaxId, req.AdminSubject, req.AdminEmail, req.AdminName, req.AdminPassword, ct);
             return result.IsSuccess
                 ? Results.Created($"/api/v1/companies/{result.Value}", new { companyId = result.Value })
                 : Results.BadRequest(new { code = result.Error.Code, message = result.Error.Message });
@@ -42,7 +42,7 @@ public static class IamEndpoints
         {
             if (!await perm.HasAsync(PermissionCatalog.UsersManage, ct))
                 return Results.Forbid();
-            var result = await iam.RegisterUserAsync(req.Subject, req.Email, req.DisplayName, ct);
+            var result = await iam.RegisterUserAsync(req.Subject, req.Email, req.DisplayName, req.Password, ct);
             return result.IsSuccess
                 ? Results.Created($"/api/v1/users/{result.Value}", new { userId = result.Value })
                 : Results.BadRequest(new { code = result.Error.Code, message = result.Error.Message });

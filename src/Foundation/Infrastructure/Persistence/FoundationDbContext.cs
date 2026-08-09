@@ -21,6 +21,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
 
     protected override void OnModelCreating(ModelBuilder b)
@@ -65,12 +66,27 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             e.Property(x => x.Email).HasColumnName("email").HasMaxLength(200).IsRequired();
             e.Property(x => x.DisplayName).HasColumnName("display_name").HasMaxLength(200).IsRequired();
             e.Property(x => x.Status).HasColumnName("status").HasConversion<short>();
+            e.Property(x => x.PasswordHash).HasColumnName("password_hash").HasMaxLength(300);
             e.PrimitiveCollection<List<Guid>>("_roleIds").HasColumnName("role_ids");
             e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
             e.HasIndex(x => new { x.CompanyId, x.Subject }).IsUnique();
             e.HasIndex(x => new { x.CompanyId, x.Email }).IsUnique();
             e.Ignore(x => x.RoleIds);
             e.Ignore(x => x.DomainEvents);
+        });
+
+        b.Entity<RefreshToken>(e =>
+        {
+            e.ToTable("refresh_token");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.TokenHash).HasColumnName("token_hash").HasMaxLength(100).IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.ExpiresAt).HasColumnName("expires_at");
+            e.Property(x => x.RevokedAt).HasColumnName("revoked_at");
+            e.HasIndex(x => x.TokenHash).IsUnique();
         });
 
         b.Entity<AuditEntry>(e =>

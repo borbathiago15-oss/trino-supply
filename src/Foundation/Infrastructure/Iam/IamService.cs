@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TrinoSupply.BuildingBlocks;
 using TrinoSupply.BuildingBlocks.Abstractions;
 using TrinoSupply.BuildingBlocks.Multitenancy;
+using TrinoSupply.BuildingBlocks.Security;
 using TrinoSupply.Foundation.Application.Audit;
 using TrinoSupply.Foundation.Application.Iam;
 using TrinoSupply.Foundation.Domain.Audit;
@@ -13,12 +14,16 @@ namespace TrinoSupply.Foundation.Infrastructure.Iam;
 
 /// <summary>Implementação dos casos de uso de IAM (FD-001-01) sobre o <see cref="FoundationDbContext"/>.</summary>
 public sealed class IamService(
-    FoundationDbContext db, ITenantContext tenant, IUsageMetrics metrics, IAuditLog audit, IClock clock) : IIamService
+    FoundationDbContext db, ITenantContext tenant, IUsageMetrics metrics, IAuditLog audit, IClock clock,
+    IPasswordHasher passwordHasher) : IIamService
 {
     public async Task<Result<Guid>> RegisterCompanyWithAdminAsync(
         string legalName, string taxId, string adminSubject, string adminEmail, string adminName,
-        CancellationToken ct = default)
+        string adminPassword, CancellationToken ct = default)
     {
+        if (string.IsNullOrWhiteSpace(adminPassword) || adminPassword.Length < 8)
+            return Result.Failure<Guid>(new Error("iam.password.weak", "Senha do admin deve ter ao menos 8 caracteres."));
+
         Company company;
         try
         {
@@ -38,6 +43,7 @@ public sealed class IamService(
         if (userResult.IsFailure) return Result.Failure<Guid>(userResult.Error);
         var admin = userResult.Value;
         admin.AssignRole(adminRole.Id);
+        admin.SetPasswordHash(passwordHasher.Hash(adminPassword));
 
         await using var tx = await db.Database.BeginTransactionAsync(ct);
 
@@ -65,13 +71,20 @@ public sealed class IamService(
     }
 
     public async Task<Result<Guid>> RegisterUserAsync(
-        string subject, string email, string displayName, CancellationToken ct = default)
+        string subject, string email, string displayName, string? password, CancellationToken ct = default)
     {
         if (!tenant.HasTenant)
             return Result.Failure<Guid>(new Error("iam.no_tenant", "Requisição sem tenant."));
 
         var result = User.Register(tenant.CompanyId, subject, email, displayName);
         if (result.IsFailure) return Result.Failure<Guid>(result.Error);
+
+        if (!string.IsNullOrEmpty(password))
+        {
+            if (password.Length < 8)
+                return Result.Failure<Guid>(new Error("iam.password.weak", "Senha deve ter ao menos 8 caracteres."));
+            result.Value.SetPasswordHash(passwordHasher.Hash(password));
+        }
 
         db.Users.Add(result.Value);
         audit.Record("user.registered", "User", result.Value.Id.Value.ToString(), new { email });

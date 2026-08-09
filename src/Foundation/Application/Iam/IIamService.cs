@@ -22,10 +22,11 @@ public interface IIamService
     /// </summary>
     Task<Result<Guid>> RegisterCompanyWithAdminAsync(
         string legalName, string taxId, string adminSubject, string adminEmail, string adminName,
-        CancellationToken ct = default);
+        string adminPassword, CancellationToken ct = default);
 
-    /// <summary>Cria um usuário (sem papéis) no tenant corrente.</summary>
-    Task<Result<Guid>> RegisterUserAsync(string subject, string email, string displayName, CancellationToken ct = default);
+    /// <summary>Cria um usuário (sem papéis) no tenant corrente. Senha opcional (IdP local).</summary>
+    Task<Result<Guid>> RegisterUserAsync(
+        string subject, string email, string displayName, string? password, CancellationToken ct = default);
 
     /// <summary>Lista usuários do tenant corrente.</summary>
     Task<IReadOnlyList<UserView>> ListUsersAsync(CancellationToken ct = default);

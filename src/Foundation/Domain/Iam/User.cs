@@ -38,6 +38,9 @@ public sealed class User : AggregateRoot<UserId>, IBelongsToTenant
     public string Email { get; private set; } = string.Empty;
     public string DisplayName { get; private set; } = string.Empty;
     public UserStatus Status { get; private set; }
+
+    /// <summary>Hash da senha (IdP local). Nulo para usuários de identidade externa — SEC-003.</summary>
+    public string? PasswordHash { get; private set; }
     public IReadOnlyCollection<RoleId> RoleIds => _roleIds.Select(RoleId.From).ToArray();
 
     public static Result<User> Register(CompanyId companyId, string subject, string email, string displayName)
@@ -66,6 +69,13 @@ public sealed class User : AggregateRoot<UserId>, IBelongsToTenant
         _roleIds.Remove(roleId.Value);
         Version++;
         return Result.Success();
+    }
+
+    /// <summary>Define/atualiza o hash de senha (o hashing é responsabilidade da infra — IPasswordHasher).</summary>
+    public void SetPasswordHash(string passwordHash)
+    {
+        PasswordHash = passwordHash;
+        Version++;
     }
 
     public void Deactivate()

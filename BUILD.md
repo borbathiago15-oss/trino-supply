@@ -121,6 +121,10 @@ dotnet ef database update \
   autenticado e telas **Painel / Materiais / Reposição / Compras** consumindo a API via proxy
   same-origin (`/api` → backend). `npm run build` OK; **smoke E2E (Playwright) 6/6** — login pela UI →
   painel com dados reais → sugestão de reposição.
+- ✅ **Testes automatizados (Fase 6, fatia 1 — QA-001):** projeto xUnit `tests/TrinoSupply.Domain.Tests`
+  com **29 testes de unidade** das invariantes de domínio (SoD aprovação/rejeição, guard de saldo
+  negativo, conversão de UoM e checagem de dimensão, cálculo de reposição, máquina de estados da
+  requisição, hash de senha PBKDF2). Rodam no CI (`dotnet test TrinoSupply.slnx`). `dotnet test` → 29/29.
 - ✅ `docker-compose` (Postgres/Redis/RabbitMQ/MinIO) e pipeline CI.
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e

@@ -128,6 +128,9 @@ public sealed class PurchaseOrder : AggregateRoot<PurchaseOrderId>, IBelongsToTe
     public string IssuedBySubject { get; private set; } = string.Empty;
     public DateTimeOffset IssuedAt { get; private set; }
     public PurchaseOrderStatus Status { get; private set; }
+    public string? CancelledBySubject { get; private set; }
+    public DateTimeOffset? CancelledAt { get; private set; }
+    public string? CancelReason { get; private set; }
     public IReadOnlyList<OrderLine> Lines => _lines;
 
     /// <summary>Valor dos produtos (soma dos valores de serviço das linhas).</summary>
@@ -165,5 +168,27 @@ public sealed class PurchaseOrder : AggregateRoot<PurchaseOrderId>, IBelongsToTe
                 companyId, order.Id, l.ItemCode, l.Description, l.Quantity, l.Unit, l.UnitPrice,
                 l.IrrfPercent, l.IssPercent, l.DeliveryDate));
         return Result.Success(order);
+    }
+
+    /// <summary>
+    /// Cancela a OC (só uma OC <b>emitida</b> pode ser cancelada). Registra motivo/quem/quando para a
+    /// trilha. Após cancelar, a requisição volta a poder gerar uma nova OC (índice único parcial só
+    /// conta pedidos emitidos).
+    /// </summary>
+    public Result Cancel(string cancelledBySubject, string reason, DateTimeOffset now)
+    {
+        if (Status != PurchaseOrderStatus.Issued)
+            return Result.Failure(new Error("purchases.order.not_issued", "Só uma OC emitida pode ser cancelada."));
+        if (string.IsNullOrWhiteSpace(cancelledBySubject))
+            return Result.Failure(new Error("purchases.order.canceller_required", "Responsável pelo cancelamento é obrigatório."));
+        if (string.IsNullOrWhiteSpace(reason))
+            return Result.Failure(new Error("purchases.order.cancel_reason_required", "Informe o motivo do cancelamento."));
+
+        Status = PurchaseOrderStatus.Cancelled;
+        CancelledBySubject = cancelledBySubject;
+        CancelledAt = now;
+        CancelReason = reason.Trim();
+        Version++;
+        return Result.Success();
     }
 }

@@ -161,6 +161,44 @@ public class PurchaseOrderTests
         Assert.True(result.IsFailure);
         Assert.Equal("purchases.order.number_required", result.Error.Code);
     }
+
+    private static PurchaseOrder Emitida() => PurchaseOrder.Issue(
+        Company, 1, RequisitionId.New(), PayingCompanyId.New(), SupplierId.New(),
+        "A Vista", "Depósito Bancário", ZeroTotals, "comprador", DateTimeOffset.UtcNow,
+        [Line("A", 1m, 10m)]).Value;
+
+    [Fact]
+    public void Cancel_marca_como_cancelada_e_registra_motivo()
+    {
+        var order = Emitida();
+        var now = DateTimeOffset.UtcNow;
+        var result = order.Cancel("gestor", "Fornecedor não atende mais", now);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(PurchaseOrderStatus.Cancelled, order.Status);
+        Assert.Equal("gestor", order.CancelledBySubject);
+        Assert.Equal("Fornecedor não atende mais", order.CancelReason);
+        Assert.Equal(now, order.CancelledAt);
+    }
+
+    [Fact]
+    public void Cancel_exige_motivo()
+    {
+        var result = Emitida().Cancel("gestor", "  ", DateTimeOffset.UtcNow);
+        Assert.True(result.IsFailure);
+        Assert.Equal("purchases.order.cancel_reason_required", result.Error.Code);
+    }
+
+    [Fact]
+    public void Cancel_de_OC_ja_cancelada_falha()
+    {
+        var order = Emitida();
+        order.Cancel("gestor", "motivo", DateTimeOffset.UtcNow);
+        var second = order.Cancel("gestor", "de novo", DateTimeOffset.UtcNow);
+
+        Assert.True(second.IsFailure);
+        Assert.Equal("purchases.order.not_issued", second.Error.Code);
+    }
 }
 
 public class PayingCompanyTests

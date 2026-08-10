@@ -92,6 +92,31 @@ public sealed class PurchaseOrderService(
         return Result.Failure<Guid>(new Error("purchases.order.number_conflict", "Não foi possível reservar o número da OC. Tente novamente."));
     }
 
+    public async Task<Result> CancelAsync(Guid id, string reason, CancellationToken ct = default)
+    {
+        if (!tenant.HasTenant || string.IsNullOrWhiteSpace(currentUser.Subject))
+            return Result.Failure(new Error("purchases.no_context", "Requisição sem tenant/usuário."));
+
+        var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == PurchaseOrderId.From(id), ct);
+        if (order is null)
+            return Result.Failure(new Error("purchases.order.not_found", "Pedido não encontrado."));
+
+        var result = order.Cancel(currentUser.Subject!, reason, clock.UtcNow);
+        if (result.IsFailure) return result;
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return Result.Failure(new Error("purchases.conflict", "A OC foi alterada concorrentemente. Recarregue."));
+        }
+
+        metrics.Record("purchases.order.cancelled", tenant.CompanyId.Value.ToString());
+        return Result.Success();
+    }
+
     public async Task<Result<PurchaseOrderView>> GetAsync(Guid id, CancellationToken ct = default)
     {
         var order = await db.Orders.AsNoTracking().Include(o => o.Lines)
@@ -121,6 +146,7 @@ public sealed class PurchaseOrderService(
         o.SupplierId.Value, supplier?.Code ?? string.Empty, supplier?.Name ?? string.Empty,
         o.Status.ToString(), o.IssuedBySubject, o.IssuedAt, o.PaymentTerms, o.PaymentMethod,
         o.ProductsValue, o.IpiValue, o.IcmsValue, o.DiscountValue, o.OtherExpenses, o.FreightTerms, o.NetValue,
+        o.CancelledBySubject, o.CancelledAt, o.CancelReason,
         o.Lines.Select(l => new OrderLineView(
             l.ItemCode, l.Description, l.Quantity, l.Unit, l.UnitPrice, l.IrrfPercent, l.IssPercent,
             l.ServiceValue, l.IrrfValue, l.IssValue, l.DeliveryDate)).ToList());

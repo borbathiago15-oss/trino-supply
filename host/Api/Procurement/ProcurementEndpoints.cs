@@ -8,6 +8,7 @@ namespace TrinoSupply.Api.Procurement;
 public sealed record CreateRequisitionRequest(IReadOnlyList<RequisitionLineInput> Lines);
 public sealed record AddLinesRequest(IReadOnlyList<RequisitionLineInput> Lines);
 public sealed record RejectRequest(string? Note);
+public sealed record CancelOrderRequest(string Reason);
 
 /// <summary>Endpoints de Compras (PR-001). Requisitar e aprovar são permissões distintas (SoD).</summary>
 public static class ProcurementEndpoints
@@ -197,6 +198,21 @@ public static class ProcurementEndpoints
             if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
             var r = await svc.GetAsync(id, ct);
             return r.IsSuccess ? Results.Ok(r.Value) : Results.NotFound(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization();
+
+        // Cancelamento de OC (com motivo). Libera a requisição para nova emissão.
+        p.MapPost("/orders/{id:guid}/cancel", async (Guid id, CancelOrderRequest req,
+            IPermissionChecker perm, IPurchaseOrderService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesOrder, ct)) return Results.Forbid();
+            var r = await svc.CancelAsync(id, req.Reason, ct);
+            if (r.IsSuccess) return Results.NoContent();
+            return r.Error.Code switch
+            {
+                "purchases.order.not_found" => Results.NotFound(new { code = r.Error.Code, message = r.Error.Message }),
+                "purchases.conflict" => Results.Conflict(new { code = r.Error.Code, message = r.Error.Message }),
+                _ => Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message })
+            };
         }).RequireAuthorization();
 
         // Download da OC em PDF (modelo do grupo Trino), preenchida com pagadora + fornecedor + preços.

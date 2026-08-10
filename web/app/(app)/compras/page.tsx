@@ -32,6 +32,17 @@ export default function ComprasPage() {
     catch (e) { onErr(e); }
   };
 
+  const cancelar = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      api(`/purchases/orders/${id}/cancel`, { method: "POST", body: JSON.stringify({ reason }) }),
+    onSuccess: () => ok("OC cancelada."), onError: onErr,
+  });
+
+  const onCancelar = (o: OrderView) => {
+    const reason = typeof window !== "undefined" ? window.prompt(`Motivo do cancelamento da OC nº ${o.number}:`) : null;
+    if (reason && reason.trim()) cancelar.mutate({ id: o.id, reason: reason.trim() });
+  };
+
   return (
     <>
       <h1 className="text-xl font-semibold text-slate-800">Compras</h1>
@@ -86,7 +97,14 @@ export default function ComprasPage() {
                 <td className="px-3 py-2 text-slate-600">{o.supplierCode} — {o.supplierName}</td>
                 <td className="px-3 py-2 text-right tabular-nums">R$ {money(o.netValue)}</td>
                 <td className="px-3 py-2"><StatusPill status={o.status} /></td>
-                <td className="px-3 py-2"><Button variant="ghost" onClick={() => baixarOc(o)}>Baixar OC (PDF)</Button></td>
+                <td className="px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" onClick={() => baixarOc(o)}>Baixar OC (PDF)</Button>
+                    {o.status === "Issued" && has(Perm.PurchasesOrder) && (
+                      <Button variant="danger" onClick={() => onCancelar(o)}>Cancelar</Button>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
           </Table>

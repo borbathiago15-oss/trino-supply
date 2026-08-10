@@ -180,6 +180,23 @@ public sealed class OcFlowIntegrationTests(PilotFixture fixture)
         var pdfBytes = await pdfRes.Content.ReadAsByteArrayAsync();
         Assert.True(pdfBytes.Length > 1000);
         Assert.Equal("%PDF-", System.Text.Encoding.ASCII.GetString(pdfBytes, 0, 5));
+
+        // Cancela a OC (com motivo) → 204; a requisição volta a poder gerar OC.
+        Assert.Equal(204, await PostStatusAsync(c, $"/api/v1/purchases/orders/{order.OrderId}/cancel",
+            new { reason = "Fornecedor não atende mais" }, admin));
+
+        // Reemite a OC a partir da MESMA requisição aprovada (índice único parcial permite).
+        var (reissueStatus, order2) = await PostAsync<OrderResp>(c, $"/api/v1/purchases/requisitions/{reqId}/order", new
+        {
+            payingCompanyCode = "EP1", supplierCode = "3963",
+            lines = new[] { new { itemCode = "VIDRO-TEMP", unitPrice = 130.00m }, new { itemCode = "ESPELHO", unitPrice = 90.00m } },
+        }, admin);
+        Assert.Equal(201, reissueStatus);
+        Assert.NotEqual(order.OrderId, order2!.OrderId);
+
+        // A OC cancelada não pode ser cancelada de novo → 400.
+        Assert.Equal(400, await PostStatusAsync(c, $"/api/v1/purchases/orders/{order.OrderId}/cancel",
+            new { reason = "de novo" }, admin));
     }
 
     private record RoleResp(Guid RoleId);

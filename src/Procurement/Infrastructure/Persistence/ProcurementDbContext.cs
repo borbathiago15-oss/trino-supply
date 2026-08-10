@@ -116,8 +116,12 @@ public sealed class ProcurementDbContext(DbContextOptions<ProcurementDbContext> 
             e.Property(x => x.IssuedBySubject).HasColumnName("issued_by_subject").HasMaxLength(200).IsRequired();
             e.Property(x => x.IssuedAt).HasColumnName("issued_at");
             e.Property(x => x.Status).HasColumnName("status").HasConversion<short>();
+            e.Property(x => x.CancelledBySubject).HasColumnName("cancelled_by_subject").HasMaxLength(200);
+            e.Property(x => x.CancelledAt).HasColumnName("cancelled_at");
+            e.Property(x => x.CancelReason).HasColumnName("cancel_reason").HasMaxLength(500);
             e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
-            e.HasIndex(x => new { x.CompanyId, x.RequisitionId }).IsUnique(); // um pedido por requisição
+            // Um pedido EMITIDO por requisição (parcial): cancelar libera a requisição para nova OC.
+            e.HasIndex(x => new { x.CompanyId, x.RequisitionId }).IsUnique().HasFilter("status = 1");
             e.HasIndex(x => new { x.CompanyId, x.Number }).IsUnique();        // nº da OC único por tenant
             e.Ignore(x => x.ProductsValue);
             e.Ignore(x => x.NetValue);

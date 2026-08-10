@@ -151,6 +151,14 @@ dotnet ef database update \
   admin cadastra pagadora + fornecedor pela tela → baixa o modelo Excel → cria requisição com item manual
   → envia → **aprovador distinto aprova (SoD)** → admin emite a OC selecionando pagadora + fornecedor +
   preço → **baixa o PDF da OC** (assinatura `%PDF-`).
+- ✅ **OC — Fase 8, fatia 5: cancelamento de OC + reemissão (validado em Postgres real e navegador).**
+  `POST /orders/{id}/cancel` cancela uma OC **emitida** (exige **motivo**; grava quem/quando para a
+  trilha) — só quem tem `purchases.order`. O índice único `(company, requisition_id)` virou **parcial
+  (`WHERE status = 1`)**, então **cancelar libera a requisição para uma nova OC**. Guardas: cancelar OC
+  não-emitida → 400; cancelar sem motivo → 400. UI: botão **Cancelar** (com motivo) nas OCs emitidas e
+  status **Cancelled**. **Validado:** 37 testes de unidade (guardas de cancelamento) + integração
+  (emite → **baixa PDF** → cancela → **reemite da mesma requisição** → 2ª OC ≠ 1ª → recancelar bloqueado);
+  `dotnet test` → **37 unidade + 16 no projeto de integração**; `next build`/`tsc` limpos.
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

@@ -12,7 +12,8 @@ public sealed record PurchaseOrderView(
     Guid SupplierId, string SupplierCode, string SupplierName, string Status, string IssuedBy,
     DateTimeOffset IssuedAt, string PaymentTerms, string PaymentMethod, decimal ProductsValue,
     decimal IpiValue, decimal IcmsValue, decimal DiscountValue, decimal OtherExpenses, string FreightTerms,
-    decimal NetValue, IReadOnlyList<OrderLineView> Lines);
+    decimal NetValue, string? CancelledBy, DateTimeOffset? CancelledAt, string? CancelReason,
+    IReadOnlyList<OrderLineView> Lines);
 
 /// <summary>Preço do vencedor (concorrência/BID) para uma linha da requisição, casada por código do item.</summary>
 public sealed record IssueOrderLineInput(
@@ -32,6 +33,9 @@ public interface IPurchaseOrderService
 {
     /// <summary>Emite a OC selecionando empresa pagadora + fornecedor vencedor + preços (um pedido por requisição).</summary>
     Task<Result<Guid>> IssueFromRequisitionAsync(Guid requisitionId, IssueOrderInput input, CancellationToken ct = default);
+
+    /// <summary>Cancela uma OC emitida (com motivo). Libera a requisição para uma nova emissão.</summary>
+    Task<Result> CancelAsync(Guid id, string reason, CancellationToken ct = default);
 
     Task<Result<PurchaseOrderView>> GetAsync(Guid id, CancellationToken ct = default);
     Task<IReadOnlyList<PurchaseOrderView>> ListAsync(CancellationToken ct = default);

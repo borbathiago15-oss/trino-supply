@@ -66,7 +66,9 @@ const STATUS_STYLES: Record<string, string> = {
   Approved: "bg-emerald-100 text-emerald-700",
   Rejected: "bg-rose-100 text-rose-700",
   Issued: "bg-emerald-100 text-emerald-700",
+  Cancelled: "bg-rose-100 text-rose-700",
   Active: "bg-emerald-100 text-emerald-700",
+  Inactive: "bg-slate-100 text-slate-600",
 };
 
 export function StatusPill({ status }: { status: string }) {

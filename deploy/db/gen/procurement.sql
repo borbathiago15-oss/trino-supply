@@ -461,5 +461,48 @@ BEGIN
     VALUES ('20260810022704_OcPayingCompanyAndPricing', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810121405_OcCancellation') THEN
+    DROP INDEX procurement."IX_purchase_order_company_id_requisition_id";
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810121405_OcCancellation') THEN
+    ALTER TABLE procurement.purchase_order ADD cancel_reason character varying(500);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810121405_OcCancellation') THEN
+    ALTER TABLE procurement.purchase_order ADD cancelled_at timestamp with time zone;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810121405_OcCancellation') THEN
+    ALTER TABLE procurement.purchase_order ADD cancelled_by_subject character varying(200);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810121405_OcCancellation') THEN
+    CREATE UNIQUE INDEX "IX_purchase_order_company_id_requisition_id" ON procurement.purchase_order (company_id, requisition_id) WHERE status = 1;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810121405_OcCancellation') THEN
+    INSERT INTO procurement.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260810121405_OcCancellation', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

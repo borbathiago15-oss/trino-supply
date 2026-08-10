@@ -126,6 +126,12 @@ dotnet ef database update \
   negativo, conversão de UoM e checagem de dimensão, cálculo de reposição, máquina de estados da
   requisição, hash de senha PBKDF2). Rodam no CI (`dotnet test TrinoSupply.slnx`). `dotnet test` → 29/29.
 - ✅ `docker-compose` (Postgres/Redis/RabbitMQ/MinIO) e pipeline CI.
+- ✅ **Piloto containerizado (Fase 7, fatia 1):** `deploy/docker-compose.pilot.yml` sobe banco +
+  API + frontend com um comando. **`bootstrap`** aplica migrations (scripts idempotentes do EF em
+  `deploy/db/gen/`) e provisiona a role `trino_app` (não-superuser, sem BYPASSRLS). Dockerfiles
+  multi-stage (API .NET, web Next.js). **Validado:** bootstrap cria 19 tabelas + 14 policies RLS +
+  role endurecida (idempotente); API em config de produção conecta como `trino_app` e serve
+  (provisão + login 200). Ver `deploy/README.md`.
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e
   Auditoria; testes de integração de isolamento (Testcontainers — QA-001 / SEC-004 §8).

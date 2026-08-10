@@ -1,0 +1,15 @@
+# Imagem da API (Modular Monolith .NET 9). Multi-stage: build no SDK, runtime enxuto no aspnet.
+# Contexto de build = raiz do repositório (precisa dos projetos referenciados).
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /src
+COPY . .
+RUN dotnet publish host/Api -c Release -o /app /p:UseAppHost=false
+
+FROM mcr.microsoft.com/dotnet/aspnet:9.0
+WORKDIR /app
+COPY --from=build /app .
+ENV ASPNETCORE_URLS=http://+:8080
+EXPOSE 8080
+# Roda como usuário não-root (boa prática de container; SEC-003).
+USER app
+ENTRYPOINT ["dotnet", "TrinoSupply.Api.dll"]

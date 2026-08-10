@@ -19,6 +19,20 @@ services:
     ports:
       - "5432:5432"
 
+  # Broker de eventos (ARC-005): o Worker publica os eventos do Outbox aqui.
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    environment:
+      RABBITMQ_DEFAULT_USER: trino
+      RABBITMQ_DEFAULT_PASS: trino
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports:
+      - "15672:15672"  # console de gestão
+
   # Aplica migrations (scripts idempotentes do EF) + provisiona a role da aplicação. Roda e sai.
   bootstrap:
     image: postgres:16
@@ -61,9 +75,14 @@ services:
     depends_on:
       bootstrap:
         condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
     environment:
       DOTNET_ENVIRONMENT: Production
       ConnectionStrings__Postgres: "Host=db;Port=5432;Database=trino;Username=trino_app;Password=apppw"
+      RabbitMq__Host: "rabbitmq"
+      RabbitMq__User: "trino"
+      RabbitMq__Password: "trino"
 
   web:
     build:

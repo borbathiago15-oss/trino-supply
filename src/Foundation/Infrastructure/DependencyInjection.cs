@@ -54,8 +54,24 @@ public static class DependencyInjection
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
         services.AddScoped<IAuthService, AuthService>();
 
-        // Eventos assíncronos: relay do Outbox (ARC-005). Publisher inicial = log; troca por RabbitMQ.
-        services.AddSingleton<IEventPublisher, LoggingEventPublisher>();
+        // Eventos assíncronos: relay do Outbox (ARC-005). Publisher = RabbitMQ se configurado; senão log.
+        var rabbitHost = configuration["RabbitMq:Host"];
+        if (!string.IsNullOrWhiteSpace(rabbitHost))
+        {
+            services.AddSingleton(new RabbitMqOptions
+            {
+                Host = rabbitHost,
+                Port = int.TryParse(configuration["RabbitMq:Port"], out var p) ? p : 5672,
+                User = configuration["RabbitMq:User"] ?? "trino",
+                Password = configuration["RabbitMq:Password"] ?? "trino",
+                Exchange = configuration["RabbitMq:Exchange"] ?? "trino.events",
+            });
+            services.AddSingleton<IEventPublisher, RabbitMqEventPublisher>();
+        }
+        else
+        {
+            services.AddSingleton<IEventPublisher, LoggingEventPublisher>();
+        }
         services.AddScoped<OutboxRelay>();
 
         // TODO(GO-001 · sprint 1): Redis, publisher Outbox→RabbitMQ, Audit.

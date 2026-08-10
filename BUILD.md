@@ -100,6 +100,11 @@ dotnet ef database update \
   (`materials.read`/`materials.manage`), RLS por tenant reusando o interceptor do Foundation.
   Comprovado: conversão 2 kg→2000 g / 1500 g→1.5 kg; cross-dimensão → 400; isolamento por RLS;
   deny-by-default cobrindo o módulo novo.
+- ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
+  mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
+  (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +
+  Worker apontando pra ele. **Validado por integração (Testcontainers Postgres + RabbitMQ):**
+  provisionar → Outbox → relay publica → fila recebe o `CompanyRegistered`. `dotnet test` → 7/7 integração.
 - ✅ **Materials — Fase 2, fatia 2 (validada): estoque com saldo, ledger e concorrência.**
   Saldo como **projeção** atualizada por um **ledger append-only** de movimentos (entrada/saída);
   saída além do saldo → 400. **Serialização por chave de saldo** (`SELECT … FOR UPDATE` + version

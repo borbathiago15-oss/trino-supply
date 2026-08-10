@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useRef, useState } from "react";
+import { Fragment, FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   api, ApiError, download, upload, OrderView, PayingCompanyView, RequisitionView, SupplierFullView,
@@ -15,6 +15,7 @@ export default function ComprasPage() {
   const qc = useQueryClient();
   const toast = useToast();
   const has = useHas();
+  const [openOc, setOpenOc] = useState<string | null>(null);
 
   const reqs = useQuery({ queryKey: ["requisitions"], queryFn: () => api<RequisitionView[]>("/purchases/requisitions") });
   const orders = useQuery({ queryKey: ["orders"], queryFn: () => api<OrderView[]>("/purchases/orders") });
@@ -91,21 +92,31 @@ export default function ComprasPage() {
         {orders.data && orders.data.length > 0 ? (
           <Table head={["OC nº", "Empresa pagadora", "Fornecedor", "Valor líquido", "Situação", "OC"]}>
             {orders.data.map((o) => (
-              <tr key={o.id}>
-                <td className="px-3 py-2 font-mono text-xs">{o.number}</td>
-                <td className="px-3 py-2">{o.payingCompanyName}</td>
-                <td className="px-3 py-2 text-slate-600">{o.supplierCode} — {o.supplierName}</td>
-                <td className="px-3 py-2 text-right tabular-nums">R$ {money(o.netValue)}</td>
-                <td className="px-3 py-2"><StatusPill status={o.status} /></td>
-                <td className="px-3 py-2">
-                  <div className="flex items-center gap-2">
-                    <Button variant="ghost" onClick={() => baixarOc(o)}>Baixar OC (PDF)</Button>
-                    {o.status === "Issued" && has(Perm.PurchasesOrder) && (
-                      <Button variant="danger" onClick={() => onCancelar(o)}>Cancelar</Button>
-                    )}
-                  </div>
-                </td>
-              </tr>
+              <Fragment key={o.id}>
+                <tr>
+                  <td className="px-3 py-2 font-mono text-xs">{o.number}</td>
+                  <td className="px-3 py-2">{o.payingCompanyName}</td>
+                  <td className="px-3 py-2 text-slate-600">{o.supplierCode} — {o.supplierName}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">R$ {money(o.netValue)}</td>
+                  <td className="px-3 py-2"><StatusPill status={o.status} /></td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <Button variant="ghost" onClick={() => setOpenOc(openOc === o.id ? null : o.id)}>
+                        {openOc === o.id ? "Ocultar" : "Detalhes"}
+                      </Button>
+                      <Button variant="ghost" onClick={() => baixarOc(o)}>Baixar OC (PDF)</Button>
+                      {o.status === "Issued" && has(Perm.PurchasesOrder) && (
+                        <Button variant="danger" onClick={() => onCancelar(o)}>Cancelar</Button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+                {openOc === o.id && (
+                  <tr>
+                    <td colSpan={6} className="bg-slate-50 px-3 py-4"><OcDetalhe o={o} /></td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </Table>
         ) : (
@@ -113,6 +124,64 @@ export default function ComprasPage() {
         )}
       </Card>
     </>
+  );
+}
+
+/** Detalhe da OC na própria tela: cabeçalho, itens com impostos, totais e — se cancelada — o motivo. */
+function OcDetalhe({ o }: { o: OrderView }) {
+  const dt = (s?: string | null) => (s ? new Date(s).toLocaleDateString("pt-BR") : "—");
+  return (
+    <div className="space-y-3 text-sm">
+      <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+        <div><span className="text-slate-400">Empresa pagadora:</span> {o.payingCompanyName}</div>
+        <div><span className="text-slate-400">Fornecedor:</span> {o.supplierCode} — {o.supplierName}</div>
+        <div><span className="text-slate-400">Emissão:</span> {dt(o.issuedAt)} · por {o.issuedBy}</div>
+        <div><span className="text-slate-400">Cond./Forma pgto:</span> {o.paymentTerms || "—"} · {o.paymentMethod || "—"}</div>
+      </div>
+
+      {o.status === "Cancelled" && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-2 text-rose-700">
+          <strong>Cancelada</strong> em {dt(o.cancelledAt)} por {o.cancelledBy || "—"} — motivo: {o.cancelReason || "—"}
+        </div>
+      )}
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-xs">
+          <thead>
+            <tr className="text-slate-400">
+              <th className="px-2 py-1">Item</th><th className="px-2 py-1">Descrição</th>
+              <th className="px-2 py-1 text-right">Qtd</th><th className="px-2 py-1">Un.</th>
+              <th className="px-2 py-1 text-right">Vlr.Unit.</th><th className="px-2 py-1 text-right">Vlr.Serviço</th>
+              <th className="px-2 py-1 text-right">%IRRF</th><th className="px-2 py-1 text-right">%ISS</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {o.lines.map((l, i) => (
+              <tr key={i}>
+                <td className="px-2 py-1 font-mono">{l.itemCode}</td>
+                <td className="px-2 py-1">{l.description || "—"}</td>
+                <td className="px-2 py-1 text-right tabular-nums">{Number(l.quantity)}</td>
+                <td className="px-2 py-1">{l.unit}</td>
+                <td className="px-2 py-1 text-right tabular-nums">{money(l.unitPrice)}</td>
+                <td className="px-2 py-1 text-right tabular-nums">{money(l.serviceValue)}</td>
+                <td className="px-2 py-1 text-right tabular-nums">{Number(l.irrfPercent)}</td>
+                <td className="px-2 py-1 text-right tabular-nums">{Number(l.issPercent)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="ml-auto grid max-w-xs gap-0.5">
+        {([["Produtos", o.productsValue], ["IPI", o.ipiValue], ["ICMS", o.icmsValue], ["Descontos", o.discountValue], ["Outras despesas", o.otherExpenses]] as [string, number][]).map(([k, v]) => (
+          <div key={k} className="flex justify-between"><span className="text-slate-400">{k}</span><span className="tabular-nums">R$ {money(v)}</span></div>
+        ))}
+        <div className="mt-1 flex justify-between border-t border-slate-200 pt-1 font-semibold">
+          <span>Valor líquido</span><span className="tabular-nums">R$ {money(o.netValue)}</span>
+        </div>
+        <div className="text-xs text-slate-400">Frete: {o.freightTerms || "—"}</div>
+      </div>
+    </div>
   );
 }
 

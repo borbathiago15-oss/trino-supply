@@ -143,6 +143,9 @@ export interface OrderView {
   otherExpenses: number;
   freightTerms: string;
   netValue: number;
+  cancelledBy?: string | null;
+  cancelledAt?: string | null;
+  cancelReason?: string | null;
   lines: OrderLineView[];
 }
 

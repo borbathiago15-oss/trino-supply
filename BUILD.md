@@ -165,6 +165,12 @@ dotnet ef database update \
   (nº, pagadora, fornecedor, valor líquido, situação + baixar PDF). Tudo a partir dos endpoints já
   testados. **E2E (Playwright, stack real) 11/11:** após emitir a OC pela tela, o Painel reflete
   "OCs emitidas ≥ 1", o **valor emitido (R$ 1.200,00)** e lista a última OC. `next build`/`tsc` limpos.
+- ✅ **Detalhe da OC na tela — Fase 5, fatia 5 (validado em navegador).** Botão **Detalhes** expande a
+  linha da OC e mostra, sem baixar o PDF: cabeçalho (pagadora, fornecedor, emissão, Cond./Forma pgto),
+  **tabela de itens com impostos** (Vlr.Unit/Vlr.Serviço/%IRRF/%ISS), **totais** (produtos/IPI/ICMS/
+  descontos/outras despesas/frete/líquido) e, se cancelada, **quem/quando/motivo**. Tudo a partir do
+  que o endpoint já devolve. **E2E (Playwright, stack real) 12/12** — expande a OC e confere itens/totais
+  na tela; `next build`/`tsc` limpos.
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

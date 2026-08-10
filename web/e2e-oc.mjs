@@ -108,6 +108,13 @@ try {
   await page.getByRole("button", { name: "Baixar OC (PDF)" }).first().waitFor({ timeout: 8000 });
   check("OC emitida pela UI e listada", true);
 
+  // Detalhes da OC na própria tela (itens + totais)
+  await page.getByRole("button", { name: "Detalhes" }).first().click();
+  await page.getByText("Valor líquido", { exact: false }).first().waitFor({ timeout: 6000 });
+  const temItem = await page.getByText("VIDRO-TEMP", { exact: false }).count();
+  check("detalhe da OC na tela mostra itens e totais", temItem >= 1, `ocorrências=${temItem}`);
+  await page.getByRole("button", { name: "Ocultar" }).first().click();
+
   // Baixar o PDF da OC
   const dlPdf = page.waitForEvent("download", { timeout: 10000 });
   await page.getByRole("button", { name: "Baixar OC (PDF)" }).first().click();

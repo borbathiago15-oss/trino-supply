@@ -1,5 +1,8 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using TrinoSupply.BuildingBlocks.Abstractions;
 using TrinoSupply.Api.Auth;
 using TrinoSupply.Api.Iam;
 using TrinoSupply.Api.Multitenancy;
@@ -33,6 +36,17 @@ builder.Services.AddMaterialsInfrastructure(builder.Configuration);
 builder.Services.AddProcurementInfrastructure(builder.Configuration);
 builder.Services.AddHealthChecks()
     .AddCheck<TrinoSupply.Api.Health.DatabaseHealthCheck>("postgres", tags: ["ready"]);
+
+// Métricas (OPS-001 §observabilidade): OpenTelemetry expõe /metrics (Prometheus) com métricas de
+// request (ASP.NET Core) + as ações de negócio (IUsageMetrics → contador trino.business.actions).
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(r => r.AddService("trino-supply-api"))
+    .WithMetrics(m => m
+        .AddAspNetCoreInstrumentation()
+        .AddMeter(TrinoSupply.Api.Observability.OpenTelemetryUsageMetrics.MeterName)
+        .AddPrometheusExporter());
+// Sobrepõe o LoggingUsageMetrics do Foundation por métricas exportáveis (mesma interface, sem tocar call-sites).
+builder.Services.AddSingleton<IUsageMetrics, TrinoSupply.Api.Observability.OpenTelemetryUsageMetrics>();
 
 // Multi-tenant: o tenant vem do JWT (FD-001-01). Sobrepõe o NullTenantContext do host de infra.
 builder.Services.AddHttpContextAccessor();
@@ -109,6 +123,9 @@ app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks
 {
     ResponseWriter = TrinoSupply.Api.Health.HealthJson.WriteAsync,
 });
+
+// Métricas Prometheus em /metrics (scraping). Aberto — restrinja por rede/borda em produção (ADR-016).
+app.MapPrometheusScrapingEndpoint();
 
 var v1 = app.MapGroup("/api/v1");
 

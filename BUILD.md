@@ -214,6 +214,14 @@ dotnet ef database update \
   o `global.json` (SDK fixado). **Validado:** rodei o **comando exato do CID** em Release — `restore` →
   `build` → **37 unidade** → **22 integração** (53s, `integration.trx` gerado) — tudo verde. Fecha a
   lacuna de "a validação desta sessão vira suíte permanente no CI" (Fase 6/7).
+- ✅ **Métricas Prometheus (OpenTelemetry) — Fase 7, fatia 5 (validado em execução real).** A API expõe
+  **`/metrics`** (formato Prometheus) via OpenTelemetry: **métricas de request** do ASP.NET Core
+  (`http_server_request_duration_seconds`) + as **ações de negócio** — o `IUsageMetrics` do Foundation
+  foi sobreposto por uma implementação que incrementa o contador **`trino_business_actions_total`** com a
+  dimensão `action` (ex.: `company.provisioned`, `purchases.order.issued`), **sem tocar nos call-sites**
+  e sem o tenant como rótulo (evita explosão de cardinalidade). **Validado:** ao provisionar uma empresa,
+  `/metrics` mostrou `trino_business_actions_total{action="company.provisioned"} 1` e o histograma de
+  request; 1 teste de integração fixa o contrato. `dotnet test` → 37 unidade + 23 integração.
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

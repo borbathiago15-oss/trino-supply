@@ -25,3 +25,6 @@ appsettings.*.local.json
 .DS_Store
 .idea/
 *.swp
+
+# Resultados de teste (trx) gerados localmente/CI
+**/TestResults/

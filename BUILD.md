@@ -207,6 +207,13 @@ dotnet ef database update \
   para reprodutibilidade. **Validado:** header ecoado quando enviado e gerado quando ausente; ao provisionar
   uma empresa, 4 linhas de log JSON saíram com `{"CorrelationId":"corr-XYZ-999"}` no `Scopes`. 2 testes de
   integração fixam o comportamento. `dotnet test` → 37 unidade + 22 integração.
+- ✅ **CI roda os testes de integração — Fase 7, fatia 4 (comando do CI validado localmente).** O
+  pipeline (`.github/workflows/ci.yml`) passou a executar, em passos separados: **testes de unidade**
+  (rápido, sem Docker) e **testes de integração com Testcontainers** (Postgres + RabbitMQ reais; o runner
+  ubuntu já tem Docker), com **resultados em `.trx`** publicados como artefato. O `setup-dotnet` agora usa
+  o `global.json` (SDK fixado). **Validado:** rodei o **comando exato do CID** em Release — `restore` →
+  `build` → **37 unidade** → **22 integração** (53s, `integration.trx` gerado) — tudo verde. Fecha a
+  lacuna de "a validação desta sessão vira suíte permanente no CI" (Fase 6/7).
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

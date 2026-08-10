@@ -116,6 +116,18 @@ try {
   const sig = readFileSync(pdfPath).subarray(0, 5).toString("ascii");
   check("PDF da OC baixado pela UI (assinatura %PDF-)", sig === "%PDF-", `sig=${sig} size=${statSync(pdfPath).size}`);
 
+  // ===== Painel reflete a OC emitida (indicadores reais) =====
+  await page.getByRole("link", { name: "Painel" }).first().click();
+  await page.waitForURL("**/dashboard");
+  await page.waitForLoadState("networkidle");
+  await page.getByText("OCs emitidas").first().waitFor({ timeout: 8000 });
+  const emitidasTxt = await page.locator("text=OCs emitidas").first().locator("xpath=following-sibling::p").textContent();
+  check("Painel mostra OCs emitidas ≥ 1", Number(emitidasTxt?.trim()) >= 1, `valor=${emitidasTxt?.trim()}`);
+  const valorTxt = await page.locator("text=Valor emitido em OCs").first().locator("xpath=following-sibling::p").textContent();
+  check("Painel mostra valor emitido em OCs", /R\$\s*[\d.]/.test(valorTxt ?? ""), `valor=${valorTxt?.trim()}`);
+  const ultimaOc = await page.getByRole("cell", { name: "Rede & Vidros Decoracoes", exact: false }).count();
+  check("Painel lista a última OC emitida", ultimaOc >= 1, `count=${ultimaOc}`);
+
   await page.screenshot({ path: "/tmp/trino-oc.png", fullPage: true });
 } catch (e) {
   check("execução sem exceção", false, String(e).slice(0, 300));

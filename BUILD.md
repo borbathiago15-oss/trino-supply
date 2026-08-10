@@ -159,6 +159,12 @@ dotnet ef database update \
   status **Cancelled**. **Validado:** 37 testes de unidade (guardas de cancelamento) + integração
   (emite → **baixa PDF** → cancela → **reemite da mesma requisição** → 2ª OC ≠ 1ª → recancelar bloqueado);
   `dotnet test` → **37 unidade + 16 no projeto de integração**; `next build`/`tsc` limpos.
+- ✅ **Painel com indicadores reais — Fase 5, fatia 4 (validado em navegador).** O Painel deixou de ser
+  estático: mostra **KPIs do ciclo** (itens, sugestões de reposição, requisições aguardando aprovação,
+  **OCs emitidas**, **valor emitido em OCs**, OCs canceladas) e um painel **Últimas Ordens de Compra**
+  (nº, pagadora, fornecedor, valor líquido, situação + baixar PDF). Tudo a partir dos endpoints já
+  testados. **E2E (Playwright, stack real) 11/11:** após emitir a OC pela tela, o Painel reflete
+  "OCs emitidas ≥ 1", o **valor emitido (R$ 1.200,00)** e lista a última OC. `next build`/`tsc` limpos.
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

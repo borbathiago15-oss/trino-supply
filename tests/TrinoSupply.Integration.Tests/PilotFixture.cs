@@ -27,6 +27,9 @@ public sealed class PilotFixture : IAsyncLifetime
     /// <summary>Connection string de superuser (para testes que inspecionam infra, ex.: o relay do Outbox).</summary>
     public string AdminConnectionString { get; private set; } = default!;
 
+    /// <summary>Connection string da role da aplicação (trino_app, sem BYPASSRLS) — exercita RLS + set_config.</summary>
+    public string AppConnectionString { get; private set; } = default!;
+
     public async Task InitializeAsync()
     {
         await _db.StartAsync();
@@ -51,6 +54,7 @@ public sealed class PilotFixture : IAsyncLifetime
             Username = "trino_app",
             Password = "apppw",
         }.ConnectionString;
+        AppConnectionString = appConn;
 
         _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {

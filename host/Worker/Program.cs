@@ -1,5 +1,6 @@
 using TrinoSupply.Foundation.Infrastructure;
 using TrinoSupply.Foundation.Infrastructure.Outbox;
+using TrinoSupply.Procurement.Infrastructure.Projections;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -7,8 +8,26 @@ var builder = Host.CreateApplicationBuilder(args);
 builder.Services.AddFoundationInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<OutboxRelayWorker>();
 
+// Consumidor de eventos → projeção de histórico por fornecedor (ARC-005). Só com broker configurado;
+// o RabbitMqOptions é registrado pelo AddFoundationInfrastructure quando RabbitMq:Host está definido.
+if (!string.IsNullOrWhiteSpace(builder.Configuration["RabbitMq:Host"]))
+{
+    var pg = builder.Configuration.GetConnectionString("Postgres")!;
+    builder.Services.AddSingleton(sp => new SupplierStatsProjector(
+        pg, sp.GetRequiredService<ILogger<SupplierStatsProjector>>()));
+    builder.Services.AddSingleton<SupplierStatsConsumer>();
+    builder.Services.AddHostedService<SupplierStatsConsumerWorker>();
+}
+
 var host = builder.Build();
 host.Run();
+
+/// <summary>Hospeda o <see cref="SupplierStatsConsumer"/>: assina o broker no start, encerra no stop.</summary>
+internal sealed class SupplierStatsConsumerWorker(SupplierStatsConsumer consumer) : IHostedService
+{
+    public Task StartAsync(CancellationToken ct) => consumer.StartAsync(ct);
+    public Task StopAsync(CancellationToken ct) => consumer.StopAsync();
+}
 
 /// <summary>
 /// Publisher do Transactional Outbox (ARC-005 §3): a cada ciclo, drena as mensagens pendentes e as

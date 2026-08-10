@@ -171,6 +171,21 @@ dotnet ef database update \
   descontos/outras despesas/frete/líquido) e, se cancelada, **quem/quando/motivo**. Tudo a partir do
   que o endpoint já devolve. **E2E (Playwright, stack real) 12/12** — expande a OC e confere itens/totais
   na tela; `next build`/`tsc` limpos.
+- ✅ **Consumidor de eventos + projeção (Fase 4, fatia 3 — validado com Postgres + RabbitMQ reais).**
+  Fecha o ciclo assíncrono do roadmap ("consumidores e projeções"):
+  - **Eventos de domínio** `OrderIssued`/`OrderCancelled` na `PurchaseOrder`; o **ProcurementDbContext**
+    passou a **coletar eventos para o `foundation.outbox`** na mesma transação (mesma tabela do
+    Foundation, mapeada com `ExcludeFromMigrations` para não duplicar).
+  - **Projeção** `procurement.supplier_stats` (histórico por fornecedor: nº de OCs, valor total, última
+    OC) — **RLS por tenant** — mais `processed_event` (dedupe idempotente, infra sem RLS).
+  - **Consumidor** `SupplierStatsConsumer` (fila durável dedicada ligada a `OrderIssued`/`OrderCancelled`,
+    ack manual) hospedado no **Worker**; escreve a projeção via `SupplierStatsProjector` **idempotente**
+    (dedupe por EventId) e **escopado ao tenant** (`set_config('app.current_company', …, true)` → RLS
+    vale para a role `trino_app`). Endpoint `GET /purchases/suppliers/stats` + card **Histórico por
+    fornecedor** na tela de Cadastros.
+  - **Validado (Testcontainers Postgres + RabbitMQ):** emitir OC → `OrderIssued` no Outbox → relay publica
+    → consumidor projeta (`orders_count=1`, `total=100`); **cancelar** reverte para 0; **idempotência**
+    (mesmo EventId aplicado 2× não duplica). `dotnet test` → **37 unidade + 18 integração**; web `tsc`/`build` OK.
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

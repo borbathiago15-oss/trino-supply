@@ -97,7 +97,7 @@ public sealed class PurchaseOrderService(
         if (!tenant.HasTenant || string.IsNullOrWhiteSpace(currentUser.Subject))
             return Result.Failure(new Error("purchases.no_context", "Requisição sem tenant/usuário."));
 
-        var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == PurchaseOrderId.From(id), ct);
+        var order = await db.Orders.Include(o => o.Lines).FirstOrDefaultAsync(o => o.Id == PurchaseOrderId.From(id), ct);
         if (order is null)
             return Result.Failure(new Error("purchases.order.not_found", "Pedido não encontrado."));
 

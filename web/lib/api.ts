@@ -149,6 +149,14 @@ export interface OrderView {
   lines: OrderLineView[];
 }
 
+export interface SupplierStatsView {
+  supplierId: string;
+  code: string;
+  name: string;
+  ordersCount: number;
+  totalValue: number;
+  lastOrderAt?: string | null;
+}
 export interface PayingCompanyView {
   id: string;
   code: string;

@@ -135,6 +135,13 @@ public static class ProcurementEndpoints
             return Results.Ok(await svc.ListAsync(ct));
         }).RequireAuthorization();
 
+        // Projeção de histórico por fornecedor (read model assíncrono, alimentado por eventos).
+        p.MapGet("/suppliers/stats", async (IPermissionChecker perm, ISupplierService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
+            return Results.Ok(await svc.ListStatsAsync(ct));
+        }).RequireAuthorization();
+
         p.MapGet("/suppliers/{id:guid}", async (Guid id, IPermissionChecker perm, ISupplierService svc, CancellationToken ct) =>
         {
             if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();

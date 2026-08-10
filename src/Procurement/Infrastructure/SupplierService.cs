@@ -74,6 +74,24 @@ public sealed class SupplierService(ProcurementDbContext db, ITenantContext tena
         return suppliers.Select(ToView).ToList();
     }
 
+    public async Task<IReadOnlyList<SupplierStatsView>> ListStatsAsync(CancellationToken ct = default)
+    {
+        // RLS já restringe ambos ao tenant corrente; junta a projeção ao cadastro pelo id do fornecedor.
+        var stats = await db.SupplierStats.AsNoTracking().ToListAsync(ct);
+        if (stats.Count == 0) return Array.Empty<SupplierStatsView>();
+
+        var suppliers = (await db.Suppliers.AsNoTracking().ToListAsync(ct)).ToDictionary(s => s.Id.Value);
+        return stats
+            .Select(st =>
+            {
+                suppliers.TryGetValue(st.SupplierId, out var sup);
+                return new SupplierStatsView(st.SupplierId, sup?.Code ?? "—", sup?.Name ?? "—",
+                    st.OrdersCount, st.TotalValue, st.LastOrderAt);
+            })
+            .OrderByDescending(s => s.TotalValue)
+            .ToList();
+    }
+
     private static SupplierView ToView(Supplier s) => new(
         s.Id.Value, s.Code, s.Name, s.TaxId, s.StateRegistration, s.Address, s.District, s.City, s.State,
         s.ZipCode, s.Phone, s.Email, s.PaymentTerms, s.PaymentMethod, s.Status.ToString());

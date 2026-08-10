@@ -19,6 +19,16 @@ public enum PurchaseOrderStatus
     Cancelled = 2
 }
 
+/// <summary>Evento: uma OC foi emitida para um fornecedor (alimenta a projeção de histórico do fornecedor).</summary>
+public sealed record OrderIssued(
+    Guid EventId, DateTimeOffset OccurredAt, Guid CompanyId, Guid OrderId, long Number,
+    Guid SupplierId, decimal NetValue) : IDomainEvent;
+
+/// <summary>Evento: uma OC emitida foi cancelada (reverte a projeção do fornecedor).</summary>
+public sealed record OrderCancelled(
+    Guid EventId, DateTimeOffset OccurredAt, Guid CompanyId, Guid OrderId,
+    Guid SupplierId, decimal NetValue) : IDomainEvent;
+
 /// <summary>
 /// Linha do pedido (snapshot da linha da requisição + preço do vencedor da concorrência/BID).
 /// Guarda o valor unitário e os percentuais fiscais (IRRF/ISS) para compor a OC. Escopada ao tenant (RLS).
@@ -167,6 +177,9 @@ public sealed class PurchaseOrder : AggregateRoot<PurchaseOrderId>, IBelongsToTe
             order._lines.Add(OrderLine.Create(
                 companyId, order.Id, l.ItemCode, l.Description, l.Quantity, l.Unit, l.UnitPrice,
                 l.IrrfPercent, l.IssPercent, l.DeliveryDate));
+
+        order.Raise(new OrderIssued(
+            Guid.NewGuid(), issuedAt, companyId.Value, order.Id.Value, number, supplierId.Value, order.NetValue));
         return Result.Success(order);
     }
 
@@ -189,6 +202,7 @@ public sealed class PurchaseOrder : AggregateRoot<PurchaseOrderId>, IBelongsToTe
         CancelledAt = now;
         CancelReason = reason.Trim();
         Version++;
+        Raise(new OrderCancelled(Guid.NewGuid(), now, CompanyId.Value, Id.Value, SupplierId.Value, NetValue));
         return Result.Success();
     }
 }

@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError, PayingCompanyView, SupplierFullView } from "@/lib/api";
+import { api, ApiError, PayingCompanyView, SupplierFullView, SupplierStatsView } from "@/lib/api";
 import { Button, Card, Empty, Input, StatusPill, Table } from "@/components/ui";
 import { useToast } from "@/lib/toast";
 import { Perm, useHas } from "@/lib/me";
@@ -35,6 +35,8 @@ export default function CadastrosPage() {
 
   // ---- Fornecedores (com dados fiscais) ----
   const suppliers = useQuery({ queryKey: ["suppliers"], queryFn: () => api<SupplierFullView[]>("/purchases/suppliers") });
+  const stats = useQuery({ queryKey: ["supplier-stats"], queryFn: () => api<SupplierStatsView[]>("/purchases/suppliers/stats") });
+  const money = (v: number) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const [sup, setSup] = useState(emptySupplier);
   const createSupplier = useMutation({
     mutationFn: () => api("/purchases/suppliers", { method: "POST", body: JSON.stringify(sup) }),
@@ -118,6 +120,26 @@ export default function CadastrosPage() {
           </Table>
         ) : (
           <Empty>Nenhum fornecedor cadastrado.</Empty>
+        )}
+      </Card>
+
+      <Card title="Histórico por fornecedor">
+        <p className="mb-3 text-xs text-slate-500">
+          Projeção atualizada de forma assíncrona a partir das OCs emitidas (pode levar alguns segundos após emitir).
+        </p>
+        {stats.data && stats.data.length > 0 ? (
+          <Table head={["Fornecedor", "OCs", "Valor total", "Última OC"]}>
+            {stats.data.map((s) => (
+              <tr key={s.supplierId}>
+                <td className="px-3 py-2">{s.code} — {s.name}</td>
+                <td className="px-3 py-2 tabular-nums">{s.ordersCount}</td>
+                <td className="px-3 py-2 text-right tabular-nums">R$ {money(s.totalValue)}</td>
+                <td className="px-3 py-2 text-slate-500">{s.lastOrderAt ? new Date(s.lastOrderAt).toLocaleDateString("pt-BR") : "—"}</td>
+              </tr>
+            ))}
+          </Table>
+        ) : (
+          <Empty>Sem histórico ainda — emita uma OC para começar a compor as estatísticas.</Empty>
         )}
       </Card>
     </>

@@ -1,5 +1,8 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using TrinoSupply.BuildingBlocks.Domain;
 using TrinoSupply.BuildingBlocks.Multitenancy;
+using TrinoSupply.BuildingBlocks.Outbox;
 using TrinoSupply.Procurement.Domain;
 
 namespace TrinoSupply.Procurement.Infrastructure.Persistence;
@@ -11,6 +14,9 @@ public sealed class ProcurementDbContext(DbContextOptions<ProcurementDbContext> 
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<PayingCompany> PayingCompanies => Set<PayingCompany>();
     public DbSet<PurchaseOrder> Orders => Set<PurchaseOrder>();
+    public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
+    public DbSet<SupplierStats> SupplierStats => Set<SupplierStats>();
+    public DbSet<ProcessedEvent> ProcessedEvents => Set<ProcessedEvent>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -149,5 +155,81 @@ public sealed class ProcurementDbContext(DbContextOptions<ProcurementDbContext> 
             e.Ignore(x => x.IssValue);
             e.HasIndex(x => x.OrderId);
         });
+
+        // Projeção de histórico por fornecedor (read model), atualizada pelo consumidor de eventos.
+        b.Entity<SupplierStats>(e =>
+        {
+            e.ToTable("supplier_stats");
+            e.HasKey(x => new { x.CompanyId, x.SupplierId });
+            e.Property(x => x.CompanyId).HasColumnName("company_id");
+            e.Property(x => x.SupplierId).HasColumnName("supplier_id");
+            e.Property(x => x.OrdersCount).HasColumnName("orders_count");
+            e.Property(x => x.TotalValue).HasColumnName("total_value").HasColumnType("numeric(18,2)");
+            e.Property(x => x.LastOrderAt).HasColumnName("last_order_at");
+        });
+
+        // Idempotência do consumidor (infra, sem RLS): um evento aplicado no máximo uma vez.
+        b.Entity<ProcessedEvent>(e =>
+        {
+            e.ToTable("processed_event");
+            e.HasKey(x => x.EventId);
+            e.Property(x => x.EventId).HasColumnName("event_id");
+            e.Property(x => x.ProcessedAt).HasColumnName("processed_at");
+        });
+
+        // Outbox transacional (ARC-005): eventos do Procurement gravam na MESMA tabela do Foundation
+        // (foundation.outbox). O relay do Worker relê e publica; sem duplicar infra.
+        b.Entity<OutboxMessage>(e =>
+        {
+            // Tabela pertence ao Foundation (foundation.outbox) — não é gerenciada pelas migrations do
+            // Procurement; aqui só a mapeamos para gravar/ler. ExcludeFromMigrations evita duplicá-la.
+            e.ToTable("outbox", "foundation", t => t.ExcludeFromMigrations());
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CompanyId).HasColumnName("company_id");
+            e.Property(x => x.Type).HasColumnName("type").HasMaxLength(200).IsRequired();
+            e.Property(x => x.Payload).HasColumnName("payload").HasColumnType("jsonb").IsRequired();
+            e.Property(x => x.AggregateType).HasColumnName("aggregate_type").HasMaxLength(100);
+            e.Property(x => x.AggregateId).HasColumnName("aggregate_id");
+            e.Property(x => x.CorrelationId).HasColumnName("correlation_id");
+            e.Property(x => x.OccurredAt).HasColumnName("occurred_at");
+            e.Property(x => x.PublishedAt).HasColumnName("published_at");
+            e.Property(x => x.RetryCount).HasColumnName("retry_count");
+            e.Property(x => x.LastError).HasColumnName("last_error");
+        });
+    }
+
+    public override async Task<int> SaveChangesAsync(CancellationToken ct = default)
+    {
+        WriteOutboxFromDomainEvents();
+        return await base.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Coleta eventos de domínio das raízes rastreadas e os grava no Outbox (mesma transação).</summary>
+    private void WriteOutboxFromDomainEvents()
+    {
+        var roots = ChangeTracker.Entries<IHasDomainEvents>()
+            .Where(x => x.Entity.DomainEvents.Count > 0)
+            .ToList();
+
+        foreach (var entry in roots)
+        {
+            var root = entry.Entity;
+            var companyId = entry.Entity is IBelongsToTenant owned ? owned.CompanyId.Value : Guid.Empty;
+            foreach (var ev in root.DomainEvents)
+            {
+                Outbox.Add(new OutboxMessage
+                {
+                    Id = ev.EventId == Guid.Empty ? Guid.NewGuid() : ev.EventId,
+                    CompanyId = companyId,
+                    Type = ev.GetType().Name,
+                    Payload = JsonSerializer.Serialize(ev, ev.GetType()),
+                    AggregateType = root.GetType().Name,
+                    AggregateId = null,
+                    OccurredAt = ev.OccurredAt,
+                });
+            }
+            root.ClearDomainEvents();
+        }
     }
 }

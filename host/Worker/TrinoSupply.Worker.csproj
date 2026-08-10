@@ -6,5 +6,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Foundation/Infrastructure/TrinoSupply.Foundation.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/Procurement/Infrastructure/TrinoSupply.Procurement.Infrastructure.csproj" />
   </ItemGroup>
 </Project>

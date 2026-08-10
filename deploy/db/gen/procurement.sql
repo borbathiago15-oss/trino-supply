@@ -504,5 +504,57 @@ BEGIN
     VALUES ('20260810121405_OcCancellation', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810143702_SupplierStatsProjection') THEN
+    CREATE TABLE procurement.processed_event (
+        event_id uuid NOT NULL,
+        processed_at timestamp with time zone NOT NULL,
+        CONSTRAINT "PK_processed_event" PRIMARY KEY (event_id)
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810143702_SupplierStatsProjection') THEN
+    CREATE TABLE procurement.supplier_stats (
+        company_id uuid NOT NULL,
+        supplier_id uuid NOT NULL,
+        orders_count integer NOT NULL,
+        total_value numeric(18,2) NOT NULL,
+        last_order_at timestamp with time zone,
+        CONSTRAINT "PK_supplier_stats" PRIMARY KEY (company_id, supplier_id)
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810143702_SupplierStatsProjection') THEN
+
+    ALTER TABLE procurement.supplier_stats ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE procurement.supplier_stats FORCE  ROW LEVEL SECURITY;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810143702_SupplierStatsProjection') THEN
+
+    CREATE POLICY tenant_isolation ON procurement.supplier_stats
+        USING      (company_id = foundation.current_company())
+        WITH CHECK (company_id = foundation.current_company());
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810143702_SupplierStatsProjection') THEN
+    INSERT INTO procurement.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260810143702_SupplierStatsProjection', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

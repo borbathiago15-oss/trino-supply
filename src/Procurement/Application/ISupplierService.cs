@@ -13,6 +13,10 @@ public sealed record SupplierInput(
     string? District = null, string? City = null, string? State = null, string? ZipCode = null,
     string? Phone = null, string? Email = null, string? PaymentTerms = null, string? PaymentMethod = null);
 
+/// <summary>Histórico/estatística de compras por fornecedor (projeção alimentada por eventos).</summary>
+public sealed record SupplierStatsView(
+    Guid SupplierId, string Code, string Name, int OrdersCount, decimal TotalValue, DateTimeOffset? LastOrderAt);
+
 /// <summary>Cadastro de fornecedores (PR-001 / PRC-005). O vencedor da concorrência vira o fornecedor da OC.</summary>
 public interface ISupplierService
 {
@@ -20,4 +24,7 @@ public interface ISupplierService
     Task<Result> UpdateAsync(Guid id, SupplierInput input, CancellationToken ct = default);
     Task<Result<SupplierView>> GetAsync(Guid id, CancellationToken ct = default);
     Task<IReadOnlyList<SupplierView>> ListAsync(CancellationToken ct = default);
+
+    /// <summary>Estatística de compras por fornecedor (read model assíncrono), ordenada por valor.</summary>
+    Task<IReadOnlyList<SupplierStatsView>> ListStatsAsync(CancellationToken ct = default);
 }

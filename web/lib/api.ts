@@ -149,6 +149,15 @@ export interface OrderView {
   lines: OrderLineView[];
 }
 
+export interface AuditView {
+  id: string;
+  occurredAt: string;
+  actor: string;
+  action: string;
+  targetType?: string | null;
+  targetId?: string | null;
+  metadata?: string | null;
+}
 export interface SupplierStatsView {
   supplierId: string;
   code: string;

@@ -186,6 +186,11 @@ dotnet ef database update \
   - **Validado (Testcontainers Postgres + RabbitMQ):** emitir OC → `OrderIssued` no Outbox → relay publica
     → consumidor projeta (`orders_count=1`, `total=100`); **cancelar** reverte para 0; **idempotência**
     (mesmo EventId aplicado 2× não duplica). `dotnet test` → **37 unidade + 18 integração**; web `tsc`/`build` OK.
+- ✅ **Trilha de auditoria na UI — Fase 1/5 (validado em navegador).** A auditoria imutável (append-only,
+  já existente no backend) ganhou tela: `GET /api/v1/audit` alimenta a página **Auditoria** (data/hora,
+  ator, ação, recurso alvo e metadados), com o item de menu gated por `audit.read`. Torna visível o
+  "quem fez o quê" para governança do piloto. **E2E (Playwright, stack real) 13/13** — o admin abre a
+  tela e vê os 7 registros gerados pelas ações de IAM da sessão; `next build`/`tsc` limpos.
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

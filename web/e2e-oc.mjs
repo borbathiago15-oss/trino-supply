@@ -135,6 +135,14 @@ try {
   const ultimaOc = await page.getByRole("cell", { name: "Rede & Vidros Decoracoes", exact: false }).count();
   check("Painel lista a última OC emitida", ultimaOc >= 1, `count=${ultimaOc}`);
 
+  // ===== Trilha de auditoria (governança) =====
+  await page.getByRole("link", { name: "Auditoria" }).first().click();
+  await page.waitForURL("**/auditoria");
+  await page.waitForLoadState("networkidle");
+  await page.locator("table tbody tr").first().waitFor({ timeout: 8000 }).catch(() => {});
+  const auditRows = await page.locator("table tbody tr").count();
+  check("tela de Auditoria lista registros", auditRows >= 1, `linhas=${auditRows}`);
+
   await page.screenshot({ path: "/tmp/trino-oc.png", fullPage: true });
 } catch (e) {
   check("execução sem exceção", false, String(e).slice(0, 300));

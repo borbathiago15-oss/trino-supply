@@ -14,6 +14,7 @@ const NAV = [
   { href: "/reposicao", label: "Reposição", perm: Perm.MaterialsRead },
   { href: "/compras", label: "Compras", perm: Perm.PurchasesRead },
   { href: "/cadastros", label: "Cadastros", perm: Perm.PurchasesRead },
+  { href: "/auditoria", label: "Auditoria", perm: Perm.AuditRead },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

@@ -141,6 +141,16 @@ dotnet ef database update \
   e data de emissão. **Validado:** 7 testes de unidade do PDF/extenso (assinatura `%PDF-`, casos de
   extenso) + o fluxo de integração baixa a OC pelo endpoint real e confere `application/pdf` + `%PDF-`.
   `dotnet test` → 41 unidade + 9 integração (10 no total do projeto de integração, incluindo os do PDF).
+- ✅ **OC — Fase 8, fatia 4: UI da Ordem de Compra (validada em navegador real).** Tela **Cadastros**
+  (empresas pagadoras/CNPJs + fornecedores com campos fiscais), **Nova requisição** com **item manual**
+  (montar item a item) e **importação em lote** (baixar modelo .xlsx + enviar planilha), e na aprovação
+  um painel **Emitir OC** que **seleciona a empresa pagadora + o fornecedor vencedor + preços por linha**
+  (com total ao vivo) e, na lista de **OCs emitidas** (nº, pagadora, fornecedor, valor líquido), o botão
+  **Baixar OC (PDF)**. Novo item de menu "Cadastros", cliente de API com download/upload autenticados,
+  componente `Select`. `npx tsc` limpo e `next build` OK. **E2E (Playwright, stack real API+Postgres) 8/8:**
+  admin cadastra pagadora + fornecedor pela tela → baixa o modelo Excel → cria requisição com item manual
+  → envia → **aprovador distinto aprova (SoD)** → admin emite a OC selecionando pagadora + fornecedor +
+  preço → **baixa o PDF da OC** (assinatura `%PDF-`).
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

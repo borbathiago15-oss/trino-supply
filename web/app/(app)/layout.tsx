@@ -13,6 +13,7 @@ const NAV = [
   { href: "/materiais", label: "Materiais", perm: Perm.MaterialsRead },
   { href: "/reposicao", label: "Reposição", perm: Perm.MaterialsRead },
   { href: "/compras", label: "Compras", perm: Perm.PurchasesRead },
+  { href: "/cadastros", label: "Cadastros", perm: Perm.PurchasesRead },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

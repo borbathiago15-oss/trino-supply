@@ -1,6 +1,6 @@
 "use client";
 
-import { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
 
 export function Card({ title, children, actions }: { title?: string; children: ReactNode; actions?: ReactNode }) {
   return (
@@ -42,6 +42,20 @@ export function Input({ label, className = "", ...props }: InputHTMLAttributes<H
         className={`w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand ${className}`}
         {...props}
       />
+    </label>
+  );
+}
+
+export function Select({ label, className = "", children, ...props }: SelectHTMLAttributes<HTMLSelectElement> & { label?: string }) {
+  return (
+    <label className="block text-sm">
+      {label && <span className="mb-1 block font-medium text-slate-600">{label}</span>}
+      <select
+        className={`w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand ${className}`}
+        {...props}
+      >
+        {children}
+      </select>
     </label>
   );
 }

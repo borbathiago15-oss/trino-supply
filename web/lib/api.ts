@@ -32,6 +32,44 @@ export async function api<T = unknown>(path: string, opts: RequestInit = {}): Pr
   return body as T;
 }
 
+/** Baixa um arquivo autenticado (blob) e dispara o download no navegador. */
+export async function download(path: string, filename: string): Promise<void> {
+  const token = useAuth.getState().token;
+  const res = await fetch(`/api/v1${path}`, {
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new ApiError(res.status, (body && (body.message as string)) || res.statusText, body?.code);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** Envia um arquivo (multipart/form-data) para um endpoint e devolve o JSON de resposta. */
+export async function upload<T = unknown>(path: string, file: File, field = "file"): Promise<T> {
+  const token = useAuth.getState().token;
+  const form = new FormData();
+  form.append(field, file);
+  const res = await fetch(`/api/v1${path}`, {
+    method: "POST",
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: form,
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new ApiError(res.status, (body && (body.message as string)) || res.statusText, body?.code);
+  }
+  return body as T;
+}
+
 // ---- Tipos das respostas da API ----
 export interface LoginResponse {
   accessToken: string;
@@ -71,13 +109,72 @@ export interface RequisitionView {
   decisionNote?: string | null;
   lines: { itemCode: string; quantity: number; unit: string }[];
 }
+export interface OrderLineView {
+  itemCode: string;
+  description: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  irrfPercent: number;
+  issPercent: number;
+  serviceValue: number;
+  irrfValue: number;
+  issValue: number;
+  deliveryDate?: string | null;
+}
 export interface OrderView {
   id: string;
+  number: number;
   requisitionId: string;
+  payingCompanyId: string;
+  payingCompanyName: string;
   supplierId: string;
   supplierCode: string;
+  supplierName: string;
   status: string;
   issuedBy: string;
   issuedAt: string;
-  lines: { itemCode: string; quantity: number; unit: string }[];
+  paymentTerms: string;
+  paymentMethod: string;
+  productsValue: number;
+  ipiValue: number;
+  icmsValue: number;
+  discountValue: number;
+  otherExpenses: number;
+  freightTerms: string;
+  netValue: number;
+  lines: OrderLineView[];
+}
+
+export interface PayingCompanyView {
+  id: string;
+  code: string;
+  legalName: string;
+  taxId: string;
+  stateRegistration: string;
+  address: string;
+  district: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  phone: string;
+  email: string;
+  status: string;
+}
+export interface SupplierFullView {
+  id: string;
+  code: string;
+  name: string;
+  taxId: string;
+  stateRegistration: string;
+  address: string;
+  district: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  phone: string;
+  email: string;
+  paymentTerms: string;
+  paymentMethod: string;
+  status: string;
 }

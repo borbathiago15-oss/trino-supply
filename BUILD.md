@@ -100,6 +100,25 @@ dotnet ef database update \
   (`materials.read`/`materials.manage`), RLS por tenant reusando o interceptor do Foundation.
   Comprovado: conversão 2 kg→2000 g / 1500 g→1.5 kg; cross-dimensão → 400; isolamento por RLS;
   deny-by-default cobrindo o módulo novo.
+- ✅ **OC / Ordem de Compra — Fase 8, fatia 1 (backend, validado em Postgres real):** modelo de dados
+  para emitir a OC no formato do grupo Trino (modelo OC 664). Novidades:
+  - **Cadastro de empresas pagadoras** (`procurement.paying_company`): registro de **vários CNPJs** do
+    grupo (razão social, CNPJ, Inscr. Estadual, endereço, bairro, cidade/UF, CEP, fone, e-mail). Na
+    emissão da OC escolhe-se **qual empresa/CNPJ é a responsável pelo pagamento** → vira o cabeçalho
+    comprador do documento. Tenant-scoped com **RLS forçada** + código único por tenant.
+  - **Fornecedor com dados fiscais** (`supplier` estendido): endereço, bairro, cidade/UF, CEP, fone,
+    e-mail, **Cond. Pgto** e **Forma Pgto** — o vencedor da concorrência/BID é o fornecedor da OC.
+  - **Pedido com preços e número de OC** (`purchase_order`/`order_line` estendidos): **nº sequencial
+    por tenant** (índice único), empresa pagadora, snapshot de Cond./Forma Pgto, totais de cabeçalho
+    (IPI/ICMS/descontos/outras despesas/frete) e, por linha, **valor unitário + %IRRF/%ISS + data de
+    entrega**; valores de serviço/IRRF/ISS/produtos/líquido calculados no domínio.
+  - **Item na requisição**: além do lote atual, `POST /requisitions/{id}/lines` acrescenta itens a um
+    rascunho (base do cadastro **manual na tela** e da **importação em lote**, próximas fatias).
+  - Endpoints REST: CRUD de `paying-companies` e `suppliers` (leitura sob `purchases.read`, escrita sob
+    `purchases.order`); emissão `POST /requisitions/{id}/order` agora recebe pagadora + fornecedor +
+    preços por linha + totais. **Validado:** solução compila; **34/34** testes de unidade; migration EF
+    aplicada em **Postgres 16 real** — nova tabela + colunas + índices únicos + **RLS forçada** em todas
+    as tabelas de `procurement` (script idempotente `deploy/db/gen/procurement.sql` regenerado).
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

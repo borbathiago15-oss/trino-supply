@@ -228,5 +228,238 @@ BEGIN
     VALUES ('20260809192236_SupplierAndOrder', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.supplier ADD address character varying(200) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.supplier ADD city character varying(120) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.supplier ADD district character varying(120) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.supplier ADD email character varying(200) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.supplier ADD payment_method character varying(80) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.supplier ADD payment_terms character varying(80) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.supplier ADD phone character varying(40) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.supplier ADD state character varying(2) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.supplier ADD state_registration character varying(30) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.supplier ADD zip_code character varying(12) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.purchase_order ADD discount_value numeric(18,2) NOT NULL DEFAULT 0.0;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.purchase_order ADD freight_terms character varying(80) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.purchase_order ADD icms_value numeric(18,2) NOT NULL DEFAULT 0.0;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.purchase_order ADD ipi_value numeric(18,2) NOT NULL DEFAULT 0.0;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.purchase_order ADD number bigint NOT NULL DEFAULT 0;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.purchase_order ADD other_expenses numeric(18,2) NOT NULL DEFAULT 0.0;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.purchase_order ADD paying_company_id uuid NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.purchase_order ADD payment_method character varying(80) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.purchase_order ADD payment_terms character varying(80) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.order_line ADD delivery_date timestamp with time zone;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.order_line ADD description character varying(300) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.order_line ADD irrf_percent numeric(9,4) NOT NULL DEFAULT 0.0;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.order_line ADD iss_percent numeric(9,4) NOT NULL DEFAULT 0.0;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    ALTER TABLE procurement.order_line ADD unit_price numeric(18,4) NOT NULL DEFAULT 0.0;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    CREATE TABLE procurement.paying_company (
+        id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        code character varying(60) NOT NULL,
+        legal_name character varying(200) NOT NULL,
+        tax_id character varying(30) NOT NULL,
+        state_registration character varying(30) NOT NULL,
+        address character varying(200) NOT NULL,
+        district character varying(120) NOT NULL,
+        city character varying(120) NOT NULL,
+        state character varying(2) NOT NULL,
+        zip_code character varying(12) NOT NULL,
+        phone character varying(40) NOT NULL,
+        email character varying(200) NOT NULL,
+        status smallint NOT NULL,
+        version integer NOT NULL,
+        CONSTRAINT "PK_paying_company" PRIMARY KEY (id)
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    CREATE UNIQUE INDEX "IX_purchase_order_company_id_number" ON procurement.purchase_order (company_id, number);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    CREATE UNIQUE INDEX "IX_paying_company_company_id_code" ON procurement.paying_company (company_id, code);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+
+    ALTER TABLE procurement.paying_company ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE procurement.paying_company FORCE  ROW LEVEL SECURITY;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+
+    CREATE POLICY tenant_isolation ON procurement.paying_company
+        USING      (company_id = foundation.current_company())
+        WITH CHECK (company_id = foundation.current_company());
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260810022704_OcPayingCompanyAndPricing') THEN
+    INSERT INTO procurement.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260810022704_OcPayingCompanyAndPricing', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

@@ -16,6 +16,8 @@ public sealed record RequisitionView(
 public interface IPurchaseRequisitionService
 {
     Task<Result<Guid>> CreateAsync(IReadOnlyList<RequisitionLineInput> lines, CancellationToken ct = default);
+    /// <summary>Acrescenta itens a um rascunho (item manual na tela ou importação em lote via planilha).</summary>
+    Task<Result> AddLinesAsync(Guid id, IReadOnlyList<RequisitionLineInput> lines, CancellationToken ct = default);
     Task<Result> SubmitAsync(Guid id, CancellationToken ct = default);
     Task<Result> ApproveAsync(Guid id, CancellationToken ct = default);
     Task<Result> RejectAsync(Guid id, string? note, CancellationToken ct = default);

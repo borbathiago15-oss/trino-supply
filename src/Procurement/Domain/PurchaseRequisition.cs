@@ -95,10 +95,30 @@ public sealed class PurchaseRequisition : AggregateRoot<RequisitionId>, IBelongs
         return Result.Success(req);
     }
 
+    /// <summary>Acrescenta itens a um rascunho (item manual na tela ou importação em lote via planilha).</summary>
+    public Result AddLines(IEnumerable<(string ItemCode, decimal Quantity, string Unit)> lines)
+    {
+        if (Status != RequisitionStatus.Draft)
+            return Result.Failure(new Error("purchases.not_draft", "Só rascunhos podem receber novos itens."));
+
+        var materialized = lines.ToList();
+        if (materialized.Count == 0)
+            return Result.Failure(new Error("purchases.lines_required", "Informe ao menos um item."));
+        if (materialized.Any(l => l.Quantity <= 0))
+            return Result.Failure(new Error("purchases.qty_invalid", "Quantidade das linhas deve ser positiva."));
+
+        foreach (var l in materialized)
+            _lines.Add(RequisitionLine.Create(CompanyId, Id, l.ItemCode, l.Quantity, l.Unit));
+        Version++;
+        return Result.Success();
+    }
+
     public Result Submit()
     {
         if (Status != RequisitionStatus.Draft)
             return Result.Failure(new Error("purchases.not_draft", "Só rascunhos podem ser enviados."));
+        if (_lines.Count == 0)
+            return Result.Failure(new Error("purchases.lines_required", "A requisição precisa de ao menos uma linha."));
         Status = RequisitionStatus.Submitted;
         Version++;
         return Result.Success();

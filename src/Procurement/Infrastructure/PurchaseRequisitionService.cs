@@ -33,6 +33,10 @@ public sealed class PurchaseRequisitionService(
         return Result.Success(result.Value.Id.Value);
     }
 
+    public Task<Result> AddLinesAsync(Guid id, IReadOnlyList<RequisitionLineInput> lines, CancellationToken ct = default) =>
+        MutateAsync(id, r => r.AddLines(lines.Select(l => (l.ItemCode, l.Quantity, l.Unit))),
+            "purchases.requisition.lines_added", ct);
+
     public Task<Result> SubmitAsync(Guid id, CancellationToken ct = default) =>
         MutateAsync(id, r => r.Submit(), "purchases.requisition.submitted", ct);
 
@@ -46,7 +50,7 @@ public sealed class PurchaseRequisitionService(
 
     private async Task<Result> MutateAsync(Guid id, Func<PurchaseRequisition, Result> action, string metric, CancellationToken ct)
     {
-        var req = await db.Requisitions.FirstOrDefaultAsync(r => r.Id == RequisitionId.From(id), ct);
+        var req = await db.Requisitions.Include(r => r.Lines).FirstOrDefaultAsync(r => r.Id == RequisitionId.From(id), ct);
         if (req is null)
             return Result.Failure(new Error("purchases.not_found", "Requisição não encontrada."));
 

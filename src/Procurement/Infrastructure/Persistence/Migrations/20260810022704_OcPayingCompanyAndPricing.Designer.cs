@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TrinoSupply.Procurement.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using TrinoSupply.Procurement.Infrastructure.Persistence;
 namespace TrinoSupply.Procurement.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ProcurementDbContext))]
-    partial class ProcurementDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260810022704_OcPayingCompanyAndPricing")]
+    partial class OcPayingCompanyAndPricing
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

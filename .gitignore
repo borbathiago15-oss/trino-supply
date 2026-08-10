@@ -28,3 +28,6 @@ appsettings.*.local.json
 
 # Resultados de teste (trx) gerados localmente/CI
 **/TestResults/
+
+# Cobertura de teste (coverlet)
+**/coverage*.xml

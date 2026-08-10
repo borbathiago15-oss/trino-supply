@@ -222,6 +222,15 @@ dotnet ef database update \
   e sem o tenant como rótulo (evita explosão de cardinalidade). **Validado:** ao provisionar uma empresa,
   `/metrics` mostrou `trino_business_actions_total{action="company.provisioned"} 1` e o histograma de
   request; 1 teste de integração fixa o contrato. `dotnet test` → 37 unidade + 23 integração.
+- ✅ **Conclusão das Fases 5 e 6 (MVP) — validado em navegador e no gate do CI.**
+  - **Fase 5 (frontend):** **filtros** (situação nas OCs; busca por ação/ator/recurso na Auditoria) e
+    **exportação CSV** (OCs e Auditoria, client-side, com `;` + BOM para Excel pt-BR). Fecha o item de
+    "filtros/exportação"; mobile (Expo) permanece explicitamente pós-MVP. **E2E (Playwright, stack real)
+    16/16** — inclui exportar OCs em CSV e filtrar a auditoria (7→2 registros) + exportar o filtrado.
+  - **Fase 6 (qualidade):** **contract tests de eventos** (o JSON de `OrderIssued`/`OrderCancelled`
+    mantém os campos que o consumidor depende — quebra antes de furar o consumidor) e **gate de cobertura
+    no CI**: o passo de unidade coleta cobertura do domínio (coverlet) e **falha se a linha < 50%**
+    (hoje 55,5%). `dotnet test` → **39 unidade + 23 integração**; web `tsc`/`build` OK.
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

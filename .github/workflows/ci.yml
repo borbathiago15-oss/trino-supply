@@ -23,10 +23,14 @@ jobs:
       - name: Build
         run: dotnet build TrinoSupply.slnx --configuration Release --no-restore
       # Unidade primeiro (rápido, sem Docker) → falha cedo se o domínio quebrar.
-      - name: Unit tests
+      # Coleta cobertura do DOMÍNIO e aplica um gate (linha ≥ 50%) — evita regressão de cobertura.
+      - name: Unit tests (+ gate de cobertura do domínio)
         run: >-
           dotnet test tests/TrinoSupply.Domain.Tests/TrinoSupply.Domain.Tests.csproj
-          --configuration Release --no-build --logger "trx;LogFileName=domain.trx"
+          --configuration Release --logger "trx;LogFileName=domain.trx"
+          /p:CollectCoverage=true /p:CoverletOutputFormat=cobertura
+          /p:Include="[TrinoSupply.*Domain]*"
+          /p:Threshold=50 /p:ThresholdType=line /p:ThresholdStat=total
       # Integração com Testcontainers (Postgres + RabbitMQ reais; Docker já roda no runner ubuntu).
       - name: Integration tests (Testcontainers)
         run: >-

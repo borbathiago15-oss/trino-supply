@@ -8,6 +8,7 @@ import {
 import { Button, Card, Empty, Input, Select, StatusPill, Table } from "@/components/ui";
 import { useToast } from "@/lib/toast";
 import { Perm, useHas } from "@/lib/me";
+import { downloadCsv } from "@/lib/csv";
 
 const money = (v: number) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -16,6 +17,7 @@ export default function ComprasPage() {
   const toast = useToast();
   const has = useHas();
   const [openOc, setOpenOc] = useState<string | null>(null);
+  const [ocStatus, setOcStatus] = useState<string>("");
 
   const reqs = useQuery({ queryKey: ["requisitions"], queryFn: () => api<RequisitionView[]>("/purchases/requisitions") });
   const orders = useQuery({ queryKey: ["orders"], queryFn: () => api<OrderView[]>("/purchases/orders") });
@@ -88,10 +90,27 @@ export default function ComprasPage() {
         )}
       </Card>
 
-      <Card title="Ordens de Compra emitidas">
-        {orders.data && orders.data.length > 0 ? (
+      <Card
+        title="Ordens de Compra emitidas"
+        actions={
+          <div className="flex items-center gap-2">
+            <select value={ocStatus} onChange={(e) => setOcStatus(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm">
+              <option value="">Todas</option>
+              <option value="Issued">Emitidas</option>
+              <option value="Cancelled">Canceladas</option>
+            </select>
+            <Button variant="ghost" onClick={() => {
+              const rows = (orders.data ?? []).filter((o) => !ocStatus || o.status === ocStatus)
+                .map((o) => [o.number, o.payingCompanyName, o.supplierCode, o.supplierName, o.netValue.toFixed(2), o.status, o.issuedAt?.slice(0, 10)]);
+              downloadCsv("ordens-de-compra.csv", ["OC", "Pagadora", "Cod.Fornecedor", "Fornecedor", "Valor líquido", "Situação", "Emissão"], rows);
+            }}>Exportar CSV</Button>
+          </div>
+        }
+      >
+        {(() => { const list = (orders.data ?? []).filter((o) => !ocStatus || o.status === ocStatus); return list.length > 0 ? (
           <Table head={["OC nº", "Empresa pagadora", "Fornecedor", "Valor líquido", "Situação", "OC"]}>
-            {orders.data.map((o) => (
+            {list.map((o) => (
               <Fragment key={o.id}>
                 <tr>
                   <td className="px-3 py-2 font-mono text-xs">{o.number}</td>
@@ -120,8 +139,8 @@ export default function ComprasPage() {
             ))}
           </Table>
         ) : (
-          <Empty>Nenhuma OC emitida ainda.</Empty>
-        )}
+          <Empty>{ocStatus ? "Nenhuma OC nesse filtro." : "Nenhuma OC emitida ainda."}</Empty>
+        ); })()}
       </Card>
     </>
   );

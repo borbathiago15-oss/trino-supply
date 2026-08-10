@@ -115,6 +115,14 @@ try {
   check("detalhe da OC na tela mostra itens e totais", temItem >= 1, `ocorrências=${temItem}`);
   await page.getByRole("button", { name: "Ocultar" }).first().click();
 
+  // Exportação CSV das OCs (Fase 5 — exportação)
+  const dlCsv = page.waitForEvent("download", { timeout: 8000 });
+  await page.getByRole("button", { name: "Exportar CSV" }).first().click();
+  const csv = await dlCsv;
+  const csvPath = await csv.path();
+  const csvText = readFileSync(csvPath, "utf8");
+  check("exporta OCs em CSV", /OC;Pagadora/.test(csvText) && /VIDRO|Rede & Vidros/.test(csvText), `bytes=${statSync(csvPath).size}`);
+
   // Baixar o PDF da OC
   const dlPdf = page.waitForEvent("download", { timeout: 10000 });
   await page.getByRole("button", { name: "Baixar OC (PDF)" }).first().click();
@@ -142,6 +150,17 @@ try {
   await page.locator("table tbody tr").first().waitFor({ timeout: 8000 }).catch(() => {});
   const auditRows = await page.locator("table tbody tr").count();
   check("tela de Auditoria lista registros", auditRows >= 1, `linhas=${auditRows}`);
+
+  // Filtro da auditoria (Fase 5 — filtros)
+  await page.getByPlaceholder("Filtrar por ação/ator/recurso").fill("role.permission_granted");
+  await page.waitForTimeout(300);
+  const filteredRows = await page.locator("table tbody tr").count();
+  check("filtro da auditoria reduz os registros", filteredRows >= 1 && filteredRows <= auditRows, `de ${auditRows} para ${filteredRows}`);
+  // Exporta o resultado filtrado
+  const dlAudit = page.waitForEvent("download", { timeout: 8000 });
+  await page.getByRole("button", { name: "Exportar CSV" }).first().click();
+  const auditCsv = await dlAudit;
+  check("exporta auditoria (filtrada) em CSV", /Data\/hora;Ator/.test(readFileSync(await auditCsv.path(), "utf8")));
 
   await page.screenshot({ path: "/tmp/trino-oc.png", fullPage: true });
 } catch (e) {

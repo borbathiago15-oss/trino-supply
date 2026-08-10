@@ -191,6 +191,14 @@ dotnet ef database update \
   ator, ação, recurso alvo e metadados), com o item de menu gated por `audit.read`. Torna visível o
   "quem fez o quê" para governança do piloto. **E2E (Playwright, stack real) 13/13** — o admin abre a
   tela e vê os 7 registros gerados pelas ações de IAM da sessão; `next build`/`tsc` limpos.
+- ✅ **Health/readiness de produção — Fase 7, fatia 2 (validado em Postgres real).** Sondas separadas
+  (OPS-001 §5): **`/health/live`** (liveness — só o processo, não checa dependências → não reinicia por
+  falha transitória), **`/health/ready`** (readiness — abre conexão + `SELECT 1` no Postgres, tag `ready`)
+  e **`/health`** agregado, todas com corpo JSON (status geral + por checagem). O **compose** ganhou
+  `healthcheck` na API (`curl /health/ready`) e o **web só sobe quando a API está `service_healthy`**;
+  o `Dockerfile.api` instala `curl` para o HEALTHCHECK. **Validado:** com o banco no ar `live`/`ready`/
+  `health` → 200 Healthy; **derrubando o Postgres, `ready` vira 503 Unhealthy e `live` continua 200**.
+  2 testes de integração fixam o comportamento. `dotnet test` → 37 unidade + 20 integração.
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

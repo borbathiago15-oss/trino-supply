@@ -64,6 +64,12 @@ services:
       Jwt__Audience: "trino-supply"
       Jwt__Keys__0__Kid: "pilot-1"
       Jwt__Keys__0__Secret: "troque-esta-chave-de-piloto-com-mais-de-32-bytes!!"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 15s
     ports:
       - "5098:8080"
 
@@ -89,7 +95,8 @@ services:
       context: ../web
       dockerfile: Dockerfile
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     environment:
       BACKEND_URL: "http://api:8080"
     ports:

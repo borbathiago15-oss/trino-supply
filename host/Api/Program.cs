@@ -21,7 +21,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddFoundationInfrastructure(builder.Configuration);
 builder.Services.AddMaterialsInfrastructure(builder.Configuration);
 builder.Services.AddProcurementInfrastructure(builder.Configuration);
-builder.Services.AddHealthChecks();
+builder.Services.AddHealthChecks()
+    .AddCheck<TrinoSupply.Api.Health.DatabaseHealthCheck>("postgres", tags: ["ready"]);
 
 // Multi-tenant: o tenant vem do JWT (FD-001-01). Sobrepõe o NullTenantContext do host de infra.
 builder.Services.AddHttpContextAccessor();
@@ -79,7 +80,23 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 // Health/readiness (aberto) para orquestração de containers e Cloudflare (ARC-003 §2, OPS-001 §5).
-app.MapHealthChecks("/health");
+//   /health/live  → liveness: processo de pé (não checa dependências — evita reinício por falha transitória).
+//   /health/ready → readiness: dependências OK (Postgres) — controla entrada em rota / rolling deploy.
+//   /health       → agregado (todas as checagens) para inspeção.
+app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false,
+    ResponseWriter = TrinoSupply.Api.Health.HealthJson.WriteAsync,
+});
+app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = c => c.Tags.Contains("ready"),
+    ResponseWriter = TrinoSupply.Api.Health.HealthJson.WriteAsync,
+});
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = TrinoSupply.Api.Health.HealthJson.WriteAsync,
+});
 
 var v1 = app.MapGroup("/api/v1");
 

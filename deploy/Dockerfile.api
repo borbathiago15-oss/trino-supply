@@ -7,9 +7,15 @@ RUN dotnet publish host/Api -c Release -o /app /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0
 WORKDIR /app
+# curl para o HEALTHCHECK (/health/ready) do orquestrador. Instalado como root antes de baixar o usuário.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app .
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 # Roda como usuário não-root (boa prática de container; SEC-003).
 USER app
+HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=6 \
+    CMD curl -fsS http://localhost:8080/health/ready || exit 1
 ENTRYPOINT ["dotnet", "TrinoSupply.Api.dll"]

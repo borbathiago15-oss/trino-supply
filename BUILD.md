@@ -199,6 +199,14 @@ dotnet ef database update \
   o `Dockerfile.api` instala `curl` para o HEALTHCHECK. **Validado:** com o banco no ar `live`/`ready`/
   `health` → 200 Healthy; **derrubando o Postgres, `ready` vira 503 Unhealthy e `live` continua 200**.
   2 testes de integração fixam o comportamento. `dotnet test` → 37 unidade + 20 integração.
+- ✅ **Observabilidade: logs estruturados + correlação — Fase 7, fatia 3 (validado em execução real).**
+  API e Worker passam a emitir **logs JSON** (uma linha por evento, com escopos) em vez de texto — prontos
+  para coletores. Um **middleware de correlação** usa o `X-Correlation-ID` recebido (ou gera um) e abre um
+  escopo de log, de modo que **toda linha do request sai com o `CorrelationId`** e o id é ecoado no
+  cabeçalho da resposta. Adicionado `global.json` fixando o **SDK .NET 9** (banda 9.0.1xx, `latestFeature`)
+  para reprodutibilidade. **Validado:** header ecoado quando enviado e gerado quando ausente; ao provisionar
+  uma empresa, 4 linhas de log JSON saíram com `{"CorrelationId":"corr-XYZ-999"}` no `Scopes`. 2 testes de
+  integração fixam o comportamento. `dotnet test` → 37 unidade + 22 integração.
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

@@ -17,6 +17,16 @@ QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Observabilidade: logs estruturados em JSON com escopos (inclui a correlação de request). Uma linha
+// por evento, amigável a coletores (OPS-001 §5). Em Development mantém-se legível via IncludeScopes.
+builder.Logging.ClearProviders();
+builder.Logging.AddJsonConsole(o =>
+{
+    o.IncludeScopes = true;
+    o.UseUtcTimestamp = true;
+    o.JsonWriterOptions = new System.Text.Json.JsonWriterOptions { Indented = false };
+});
+
 // --- Serviços ---------------------------------------------------------------
 builder.Services.AddFoundationInfrastructure(builder.Configuration);
 builder.Services.AddMaterialsInfrastructure(builder.Configuration);
@@ -76,6 +86,8 @@ builder.Services.AddAuthorization();
 var app = builder.Build();
 
 // --- Pipeline ---------------------------------------------------------------
+// Correlação primeiro, para que TODO log (inclusive de auth) já saia com o CorrelationId.
+app.UseMiddleware<TrinoSupply.Api.Observability.CorrelationMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 

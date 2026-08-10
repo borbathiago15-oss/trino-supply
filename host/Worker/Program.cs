@@ -4,6 +4,14 @@ using TrinoSupply.Procurement.Infrastructure.Projections;
 
 var builder = Host.CreateApplicationBuilder(args);
 
+// Observabilidade: logs estruturados em JSON (consistente com a API). OPS-001 §5.
+builder.Logging.ClearProviders();
+builder.Logging.AddJsonConsole(o =>
+{
+    o.IncludeScopes = true;
+    o.UseUtcTimestamp = true;
+});
+
 // Infra do Foundation (DbContext + relay do Outbox + publisher). ARC-005 §3.
 builder.Services.AddFoundationInfrastructure(builder.Configuration);
 builder.Services.AddHostedService<OutboxRelayWorker>();

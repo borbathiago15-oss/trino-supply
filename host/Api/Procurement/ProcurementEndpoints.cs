@@ -199,6 +199,40 @@ public static class ProcurementEndpoints
             return r.IsSuccess ? Results.Ok(r.Value) : Results.NotFound(new { code = r.Error.Code, message = r.Error.Message });
         }).RequireAuthorization();
 
+        // Download da OC em PDF (modelo do grupo Trino), preenchida com pagadora + fornecedor + preços.
+        p.MapGet("/orders/{id:guid}/pdf", async (Guid id, IPermissionChecker perm,
+            IPurchaseOrderService orders, IPayingCompanyService payingSvc, ISupplierService supplierSvc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
+
+            var orderRes = await orders.GetAsync(id, ct);
+            if (orderRes.IsFailure)
+                return Results.NotFound(new { code = orderRes.Error.Code, message = orderRes.Error.Message });
+            var o = orderRes.Value;
+
+            var payingRes = await payingSvc.GetAsync(o.PayingCompanyId, ct);
+            var supplierRes = await supplierSvc.GetAsync(o.SupplierId, ct);
+            if (payingRes.IsFailure || supplierRes.IsFailure)
+                return Results.BadRequest(new { code = "purchases.order.pdf_incomplete", message = "Pagadora ou fornecedor da OC não encontrados." });
+
+            var pay = payingRes.Value;
+            var sup = supplierRes.Value;
+            var data = new OcData(
+                o.Number, o.IssuedAt, o.IssuedBy,
+                new OcParty(pay.Code, pay.LegalName, pay.TaxId, pay.StateRegistration, pay.Address, pay.District,
+                    pay.City, pay.State, pay.ZipCode, pay.Phone, pay.Email),
+                new OcParty(sup.Code, sup.Name, sup.TaxId, sup.StateRegistration, sup.Address, sup.District,
+                    sup.City, sup.State, sup.ZipCode, sup.Phone, sup.Email),
+                o.PaymentTerms, o.PaymentMethod, o.FreightTerms,
+                o.Lines.Select(l => new OcLine(
+                    l.Quantity, l.Unit, l.ItemCode, l.Description, l.DeliveryDate, l.UnitPrice, l.ServiceValue,
+                    l.IrrfPercent, l.IssPercent, l.IrrfValue, l.IssValue)).ToList(),
+                o.ProductsValue, o.IpiValue, o.IcmsValue, o.DiscountValue, o.OtherExpenses, o.NetValue);
+
+            var pdf = OcPdf.Build(data);
+            return Results.File(pdf, "application/pdf", $"OC-{o.Number}.pdf");
+        }).RequireAuthorization();
+
         p.MapPost("/requisitions/{id:guid}/order", async (Guid id, IssueOrderInput req,
             IPermissionChecker perm, IPurchaseOrderService svc, CancellationToken ct) =>
         {

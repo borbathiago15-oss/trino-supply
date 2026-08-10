@@ -170,6 +170,16 @@ public sealed class OcFlowIntegrationTests(PilotFixture fixture)
         Assert.Equal(1600m, view.ProductsValue);
         Assert.Equal(1600m, view.NetValue);
         Assert.Contains(view.Lines, l => l.ItemCode == "VIDRO-TEMP" && l.UnitPrice == 120.00m && l.ServiceValue == 1200m);
+
+        // Download da OC em PDF (botão da tela de aprovação): retorna um PDF válido.
+        using var pdfReq = new HttpRequestMessage(HttpMethod.Get, $"/api/v1/purchases/orders/{order.OrderId}/pdf");
+        pdfReq.Headers.Authorization = new AuthenticationHeaderValue("Bearer", admin);
+        using var pdfRes = await c.SendAsync(pdfReq);
+        Assert.Equal(200, (int)pdfRes.StatusCode);
+        Assert.Equal("application/pdf", pdfRes.Content.Headers.ContentType?.MediaType);
+        var pdfBytes = await pdfRes.Content.ReadAsByteArrayAsync();
+        Assert.True(pdfBytes.Length > 1000);
+        Assert.Equal("%PDF-", System.Text.Encoding.ASCII.GetString(pdfBytes, 0, 5));
     }
 
     private record RoleResp(Guid RoleId);

@@ -131,6 +131,16 @@ dotnet ef database update \
   **SoD (aprovador ≠ requisitante)** → emite a **OC** selecionando empresa pagadora + fornecedor
   vencedor + preços → confere nº da OC, pagadora, snapshot de Cond. Pgto e **totais calculados**
   (produtos = Σ qtd×preço). `dotnet test` → 34 unidade + **9 integração**.
+- ✅ **OC — Fase 8, fatia 3: geração do PDF da Ordem de Compra + download (validado por integração).**
+  `GET /api/v1/purchases/orders/{id}/pdf` monta a OC no **formato do modelo do grupo Trino (OC 664)** e
+  devolve um **PDF** (via **QuestPDF**, licença Community): cabeçalho da **empresa pagadora** (comprador)
+  com CNPJ/IE/endereço/fone/e-mail, nº da OC e data; bloco do **fornecedor vencedor** (código, CNPJ,
+  endereço, Cond./Forma Pgto); **tabela de itens** (Qtd, U.M., código, descrição, data entrega,
+  Vlr.Unit, Vlr.Serviço, %IRRF/%ISS, Vlr.IRRF/Vlr.ISS); **totais** (Produtos/IPI/ICMS/Descontos/Outras
+  Despesas/Frete/Valor Líquido) e **valor por extenso** (conversor pt-BR próprio); rodapé com comprador
+  e data de emissão. **Validado:** 7 testes de unidade do PDF/extenso (assinatura `%PDF-`, casos de
+  extenso) + o fluxo de integração baixa a OC pelo endpoint real e confere `application/pdf` + `%PDF-`.
+  `dotnet test` → 41 unidade + 9 integração (10 no total do projeto de integração, incluindo os do PDF).
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

@@ -12,6 +12,9 @@ using TrinoSupply.Foundation.Infrastructure;
 using TrinoSupply.Materials.Infrastructure;
 using TrinoSupply.Procurement.Infrastructure;
 
+// Licença Community do QuestPDF (uso gratuito) — necessária para gerar o PDF da OC.
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // --- Serviços ---------------------------------------------------------------

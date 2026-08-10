@@ -28,4 +28,19 @@ public sealed class OutboxMessage
 
     public int RetryCount { get; set; }
     public string? LastError { get; set; }
+
+    /// <summary>Marca como publicado (idempotente): o publisher confirmou a entrega no broker.</summary>
+    public void MarkPublished(DateTimeOffset now)
+    {
+        PublishedAt = now;
+        LastError = null;
+    }
+
+    /// <summary>Registra uma falha de publicação para retry/backoff (ARC-005 §3).</summary>
+    public void RecordFailure(string error)
+    {
+        RetryCount++;
+        LastError = error.Length > 1000 ? error[..1000] : error;
+    }
 }
+

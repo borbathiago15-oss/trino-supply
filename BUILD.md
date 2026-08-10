@@ -82,7 +82,11 @@ dotnet ef database update \
   rotação** (guarda só o hash; reuso do antigo é negado), logout revoga. **Key-ring** com rotação de
   chave de assinatura (ativa assina, todas validam por `kid`) — token de chave antiga ainda valida na
   janela; chave fora do ring → 401. Endpoints `/api/v1/auth/{login,refresh,logout}`.
-- ✅ `host/Worker` com `OutboxRelayWorker` (placeholder do publisher).
+- ✅ **`host/Worker` — relay do Outbox real (Fase 4, ARC-005):** a cada ciclo drena as mensagens
+  pendentes e as entrega ao `IEventPublisher` (inicial = log; troca por RabbitMQ sem mudar o relay).
+  At-least-once, ordenado por ocorrência, retry/backoff e **dead-letter** após N tentativas.
+  Validado por integração (Testcontainers): provisionar gera eventos no Outbox → relay publica e
+  marca; falha do publisher incrementa retry sem marcar. No piloto (`worker` no compose).
 - ✅ **IAM (FD-001-01) — Fase 1 (validada em Postgres real):** agregados `User` e `Role`,
   catálogo de permissões, autorização **deny-by-default** (`IPermissionChecker`), provisionamento de
   empresa com admin, e **gestão de papéis por API** — criar papel, conceder/revogar permissão e

@@ -24,9 +24,13 @@ public sealed class PilotFixture : IAsyncLifetime
 
     private WebApplicationFactory<Program> _factory = default!;
 
+    /// <summary>Connection string de superuser (para testes que inspecionam infra, ex.: o relay do Outbox).</summary>
+    public string AdminConnectionString { get; private set; } = default!;
+
     public async Task InitializeAsync()
     {
         await _db.StartAsync();
+        AdminConnectionString = _db.GetConnectionString();
 
         // Aplica os scripts de bootstrap como superuser (igual ao serviço `bootstrap` do compose).
         var sqlDir = Path.Combine(AppContext.BaseDirectory, "sql");

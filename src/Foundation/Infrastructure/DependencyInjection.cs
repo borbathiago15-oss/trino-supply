@@ -4,7 +4,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using TrinoSupply.BuildingBlocks.Abstractions;
 using TrinoSupply.BuildingBlocks.Multitenancy;
+using TrinoSupply.BuildingBlocks.Outbox;
 using TrinoSupply.BuildingBlocks.Security;
+using TrinoSupply.Foundation.Infrastructure.Outbox;
 using TrinoSupply.Foundation.Application.Audit;
 using TrinoSupply.Foundation.Application.Auth;
 using TrinoSupply.Foundation.Application.Iam;
@@ -51,6 +53,10 @@ public static class DependencyInjection
         // AuthN (IdP local): hashing de senha + login/refresh. ITokenIssuer é provido pelo host.
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
         services.AddScoped<IAuthService, AuthService>();
+
+        // Eventos assíncronos: relay do Outbox (ARC-005). Publisher inicial = log; troca por RabbitMQ.
+        services.AddSingleton<IEventPublisher, LoggingEventPublisher>();
+        services.AddScoped<OutboxRelay>();
 
         // TODO(GO-001 · sprint 1): Redis, publisher Outbox→RabbitMQ, Audit.
         return services;

@@ -53,6 +53,18 @@ services:
     ports:
       - "5098:8080"
 
+  # Relay do Outbox (ARC-005): drena eventos de negócio pendentes e os publica.
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.worker
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      ConnectionStrings__Postgres: "Host=db;Port=5432;Database=trino;Username=trino_app;Password=apppw"
+
   web:
     build:
       context: ../web

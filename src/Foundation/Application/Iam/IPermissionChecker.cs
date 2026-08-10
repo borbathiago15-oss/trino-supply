@@ -8,4 +8,7 @@ namespace TrinoSupply.Foundation.Application.Iam;
 public interface IPermissionChecker
 {
     Task<bool> HasAsync(string permission, CancellationToken ct = default);
+
+    /// <summary>Permissões efetivas do usuário corrente (união dos papéis). Usada pela UI (endpoint /me).</summary>
+    Task<IReadOnlySet<string>> GetPermissionsAsync(CancellationToken ct = default);
 }

@@ -3,3 +3,4 @@ node_modules
 out
 e2e-smoke.mjs
 e2e-ux.mjs
+e2e-rbac.mjs

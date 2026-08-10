@@ -1,3 +1,5 @@
+using TrinoSupply.BuildingBlocks.Multitenancy;
+using TrinoSupply.BuildingBlocks.Security;
 using TrinoSupply.Foundation.Application.Iam;
 using TrinoSupply.Foundation.Domain.Iam;
 
@@ -17,6 +19,15 @@ public static class IamEndpoints
     public static IEndpointRouteBuilder MapIamEndpoints(this IEndpointRouteBuilder app)
     {
         var v1 = app.MapGroup("/api/v1");
+
+        // Identidade + permissões efetivas do usuário corrente (a UI usa para mostrar só o permitido).
+        v1.MapGet("/me", async (ITenantContext tenant, ICurrentUser user, IPermissionChecker perm, CancellationToken ct) =>
+            Results.Ok(new
+            {
+                subject = user.Subject,
+                companyId = tenant.HasTenant ? tenant.CompanyId.Value : (Guid?)null,
+                permissions = await perm.GetPermissionsAsync(ct),
+            })).RequireAuthorization();
 
         // Provisionamento de empresa (operação de PLATAFORMA). No MVP fica aberto para bootstrap;
         // em produção é restrito ao Admin de plataforma (SEC-001) — TODO(sprint 1).

@@ -9,32 +9,38 @@ namespace TrinoSupply.Foundation.Infrastructure.Iam;
 
 /// <summary>
 /// Autorização server-side deny-by-default (SEC-001). Resolve o usuário corrente pelo par
-/// (tenant, subject), soma as permissões de seus papéis ativos e verifica a permissão pedida.
-/// Qualquer lacuna (sem tenant, sem subject, usuário inativo/inexistente, permissão ausente) ⇒ nega.
+/// (tenant, subject) e soma as permissões de seus papéis ativos. Qualquer lacuna (sem tenant,
+/// sem subject, usuário inativo/inexistente, sem papéis) ⇒ conjunto vazio ⇒ nega.
 /// </summary>
 public sealed class PermissionChecker(
     FoundationDbContext db, ITenantContext tenant, ICurrentUser currentUser) : IPermissionChecker
 {
-    public async Task<bool> HasAsync(string permission, CancellationToken ct = default)
+    private static readonly IReadOnlySet<string> Empty = new HashSet<string>();
+
+    public async Task<bool> HasAsync(string permission, CancellationToken ct = default) =>
+        (await GetPermissionsAsync(ct)).Contains(permission);
+
+    public async Task<IReadOnlySet<string>> GetPermissionsAsync(CancellationToken ct = default)
     {
         if (!tenant.HasTenant || !currentUser.IsAuthenticated)
-            return false;
+            return Empty;
 
         var subject = currentUser.Subject;
         if (string.IsNullOrWhiteSpace(subject))
-            return false;
+            return Empty;
 
-        var user = await db.Users.AsNoTracking()
-            .FirstOrDefaultAsync(u => u.Subject == subject, ct);
+        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Subject == subject, ct);
         if (user is null || user.Status != UserStatus.Active)
-            return false;
+            return Empty;
 
         var roleIds = user.RoleIds.Select(r => r.Value).ToHashSet();
         if (roleIds.Count == 0)
-            return false;
+            return Empty;
 
-        // Papéis do tenant corrente (RLS já limita ao tenant); filtra pelos papéis do usuário.
+        // Papéis do tenant corrente (RLS limita ao tenant); une as permissões dos papéis do usuário.
         var roles = await db.Roles.AsNoTracking().ToListAsync(ct);
-        return roles.Any(r => roleIds.Contains(r.Id.Value) && r.Has(permission));
+        return roles.Where(r => roleIds.Contains(r.Id.Value))
+            .SelectMany(r => r.Permissions)
+            .ToHashSet();
     }
 }

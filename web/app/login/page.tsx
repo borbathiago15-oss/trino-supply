@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { api, ApiError, LoginResponse } from "@/lib/api";
 import { useAuth } from "@/lib/store";
@@ -15,6 +16,7 @@ const schema = z.object({
 
 export default function LoginPage() {
   const router = useRouter();
+  const qc = useQueryClient();
   const setAuth = useAuth((s) => s.setAuth);
   const [form, setForm] = useState({ companyId: "", email: "", password: "" });
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +36,7 @@ export default function LoginPage() {
         method: "POST",
         body: JSON.stringify(parsed.data),
       });
+      qc.clear(); // descarta dados de qualquer sessão anterior (ex.: /me de outro usuário)
       setAuth({
         token: res.accessToken,
         refreshToken: res.refreshToken,

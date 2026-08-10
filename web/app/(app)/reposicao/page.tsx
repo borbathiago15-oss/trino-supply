@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import { api, ApiError, Suggestion } from "@/lib/api";
 import { Button, Card, Empty, Table } from "@/components/ui";
 import { useToast } from "@/lib/toast";
+import { Perm, useHas } from "@/lib/me";
 
 export default function ReposicaoPage() {
   const qc = useQueryClient();
   const router = useRouter();
   const toast = useToast();
+  const has = useHas();
   const suggestions = useQuery({ queryKey: ["suggestions"], queryFn: () => api<Suggestion[]>("/materials/replenishment/suggestions") });
 
   const generate = useMutation({
@@ -24,9 +26,11 @@ export default function ReposicaoPage() {
     <>
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-slate-800">Reposição</h1>
-        <Button disabled={count === 0 || generate.isPending} onClick={() => generate.mutate()}>
-          Gerar requisição das sugestões
-        </Button>
+        {has(Perm.PurchasesRequest) && (
+          <Button disabled={count === 0 || generate.isPending} onClick={() => generate.mutate()}>
+            Gerar requisição das sugestões
+          </Button>
+        )}
       </div>
 
       <Card title={`Sugestões (${count})`}>

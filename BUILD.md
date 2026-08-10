@@ -129,6 +129,11 @@ dotnet ef database update \
   as ações, e **definição de política de reposição (mín/máx) pela UI** (fechava a lacuna: sem isso as
   sugestões só saíam via API). E2E (Playwright) 4/4: definir política pela tela → toast → sugestão
   aparece em Reposição.
+- ✅ **UI ciente de papéis (Fase 5, fatia 3):** endpoint `GET /api/v1/me` (identidade + permissões
+  efetivas); o frontend esconde navegação e ações que o usuário não pode executar. E2E (Playwright)
+  5/5: um "aprovador" (só `purchases.approve/read`) vê apenas Compras + o botão Aprovar — sem
+  Materiais nem cadastro de fornecedor; o admin vê tudo. Corrigido também vazamento de cache entre
+  sessões (limpa o cache de queries no login/logout).
 - ✅ **Testes automatizados (Fase 6, fatia 1 — QA-001):** projeto xUnit `tests/TrinoSupply.Domain.Tests`
   com **29 testes de unidade** das invariantes de domínio (SoD aprovação/rejeição, guard de saldo
   negativo, conversão de UoM e checagem de dimensão, cálculo de reposição, máquina de estados da

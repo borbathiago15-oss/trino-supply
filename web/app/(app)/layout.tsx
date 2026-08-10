@@ -3,26 +3,32 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/store";
 import { Toaster } from "@/components/Toaster";
+import { Perm, useHas } from "@/lib/me";
 
 const NAV = [
-  { href: "/dashboard", label: "Painel" },
-  { href: "/materiais", label: "Materiais" },
-  { href: "/reposicao", label: "Reposição" },
-  { href: "/compras", label: "Compras" },
+  { href: "/dashboard", label: "Painel", perm: null },
+  { href: "/materiais", label: "Materiais", perm: Perm.MaterialsRead },
+  { href: "/reposicao", label: "Reposição", perm: Perm.MaterialsRead },
+  { href: "/compras", label: "Compras", perm: Perm.PurchasesRead },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { token, email, logout } = useAuth();
+  const has = useHas();
+  const qc = useQueryClient();
 
   useEffect(() => {
     if (!token) router.replace("/login");
   }, [token, router]);
 
   if (!token) return null;
+
+  const nav = NAV.filter((n) => n.perm === null || has(n.perm));
 
   return (
     <div className="min-h-screen">
@@ -33,7 +39,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <span className="font-semibold text-slate-800">Trino Supply</span>
           </div>
           <nav className="space-y-1">
-            {NAV.map((n) => {
+            {nav.map((n) => {
               const active = pathname === n.href;
               return (
                 <Link key={n.href} href={n.href}
@@ -50,7 +56,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="min-w-0 flex-1">
           <header className="mb-6 flex items-center justify-between">
             <nav className="flex gap-2 md:hidden">
-              {NAV.map((n) => (
+              {nav.map((n) => (
                 <Link key={n.href} href={n.href} className="rounded-lg px-2 py-1 text-sm text-slate-600 hover:bg-slate-100">
                   {n.label}
                 </Link>
@@ -58,7 +64,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             </nav>
             <div className="ml-auto flex items-center gap-3 text-sm text-slate-500">
               <span className="hidden sm:inline">{email}</span>
-              <button onClick={() => { logout(); router.replace("/login"); }}
+              <button onClick={() => { qc.clear(); logout(); router.replace("/login"); }}
                 className="rounded-lg border border-slate-300 px-3 py-1 font-medium text-slate-700 hover:bg-slate-50">
                 Sair
               </button>

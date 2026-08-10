@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, BalanceView, ItemView } from "@/lib/api";
 import { Button, Card, Empty, Input, StatusPill, Table } from "@/components/ui";
 import { useToast } from "@/lib/toast";
+import { Perm, useHas } from "@/lib/me";
 
 function BalanceCell({ code }: { code: string }) {
   const { data } = useQuery({ queryKey: ["balance", code], queryFn: () => api<BalanceView>(`/materials/items/${code}/balance`) });
@@ -14,6 +15,7 @@ function BalanceCell({ code }: { code: string }) {
 export default function MateriaisPage() {
   const qc = useQueryClient();
   const toast = useToast();
+  const has = useHas();
   const items = useQuery({ queryKey: ["items"], queryFn: () => api<ItemView[]>("/materials/items") });
 
   const [unit, setUnit] = useState({ code: "", name: "", dimension: "contagem", factorToBase: "1" });
@@ -75,6 +77,7 @@ export default function MateriaisPage() {
         )}
       </Card>
 
+      {has(Perm.MaterialsManage) && (
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Nova unidade">
           <form className="space-y-3" onSubmit={(e) => submit(e, () => createUnit.mutate())}>
@@ -123,6 +126,7 @@ export default function MateriaisPage() {
           </form>
         </Card>
       </div>
+      )}
     </>
   );
 }

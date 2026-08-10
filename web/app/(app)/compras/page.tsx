@@ -5,12 +5,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, OrderView, RequisitionView } from "@/lib/api";
 import { Button, Card, Empty, Input, StatusPill, Table } from "@/components/ui";
 import { useToast } from "@/lib/toast";
+import { Perm, useHas } from "@/lib/me";
 
 interface SupplierView2 { id: string; code: string; name: string; taxId: string; status: string }
 
 export default function ComprasPage() {
   const qc = useQueryClient();
   const toast = useToast();
+  const has = useHas();
   const [orderSupplier, setOrderSupplier] = useState<Record<string, string>>({});
 
   const reqs = useQuery({ queryKey: ["requisitions"], queryFn: () => api<RequisitionView[]>("/purchases/requisitions") });
@@ -54,20 +56,23 @@ export default function ComprasPage() {
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    {r.status === "Draft" && <Button variant="ghost" onClick={() => submit.mutate(r.id)}>Enviar</Button>}
-                    {r.status === "Submitted" && (
+                    {r.status === "Draft" && has(Perm.PurchasesRequest) && <Button variant="ghost" onClick={() => submit.mutate(r.id)}>Enviar</Button>}
+                    {r.status === "Submitted" && has(Perm.PurchasesApprove) && (
                       <>
                         <Button onClick={() => approve.mutate(r.id)}>Aprovar</Button>
                         <Button variant="danger" onClick={() => reject.mutate(r.id)}>Rejeitar</Button>
                       </>
                     )}
-                    {r.status === "Approved" && (
+                    {r.status === "Approved" && has(Perm.PurchasesOrder) && (
                       <div className="flex items-center gap-1">
                         <input placeholder="fornecedor" value={orderSupplier[r.id] ?? ""}
                           onChange={(e) => setOrderSupplier({ ...orderSupplier, [r.id]: e.target.value })}
                           className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-sm" />
                         <Button variant="ghost" onClick={() => issue.mutate(r.id)}>Emitir pedido</Button>
                       </div>
+                    )}
+                    {r.status !== "Draft" && r.status !== "Submitted" && r.status !== "Approved" && (
+                      <span className="text-xs text-slate-400">—</span>
                     )}
                   </div>
                 </td>
@@ -97,12 +102,14 @@ export default function ComprasPage() {
         </Card>
 
         <Card title="Fornecedores">
+          {has(Perm.PurchasesOrder) && (
           <form className="mb-4 grid grid-cols-3 gap-2" onSubmit={(e: FormEvent) => { e.preventDefault(); createSupplier.mutate(); }}>
             <Input placeholder="Código" value={sup.code} onChange={(e) => setSup({ ...sup, code: e.target.value })} />
             <Input placeholder="Nome" value={sup.name} onChange={(e) => setSup({ ...sup, name: e.target.value })} />
             <Input placeholder="CNPJ" value={sup.taxId} onChange={(e) => setSup({ ...sup, taxId: e.target.value })} />
             <div className="col-span-3"><Button type="submit" disabled={createSupplier.isPending}>Cadastrar fornecedor</Button></div>
           </form>
+          )}
           {suppliers.data && suppliers.data.length > 0 ? (
             <Table head={["Código", "Nome", "Situação"]}>
               {suppliers.data.map((s) => (

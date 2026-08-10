@@ -4,12 +4,13 @@ import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, OrderView, RequisitionView } from "@/lib/api";
 import { Button, Card, Empty, Input, StatusPill, Table } from "@/components/ui";
+import { useToast } from "@/lib/toast";
 
 interface SupplierView2 { id: string; code: string; name: string; taxId: string; status: string }
 
 export default function ComprasPage() {
   const qc = useQueryClient();
-  const [err, setErr] = useState<string | null>(null);
+  const toast = useToast();
   const [orderSupplier, setOrderSupplier] = useState<Record<string, string>>({});
 
   const reqs = useQuery({ queryKey: ["requisitions"], queryFn: () => api<RequisitionView[]>("/purchases/requisitions") });
@@ -17,27 +18,27 @@ export default function ComprasPage() {
   const orders = useQuery({ queryKey: ["orders"], queryFn: () => api<OrderView[]>("/purchases/orders") });
 
   const invalidate = () => { qc.invalidateQueries({ queryKey: ["requisitions"] }); qc.invalidateQueries({ queryKey: ["orders"] }); };
-  const onErr = (e: unknown) => setErr(e instanceof ApiError ? `${e.message}` : "Erro");
+  const onErr = (e: unknown) => toast.push("error", e instanceof ApiError ? e.message : "Erro");
+  const ok = (msg: string) => { invalidate(); toast.push("success", msg); };
 
-  const submit = useMutation({ mutationFn: (id: string) => api(`/purchases/requisitions/${id}/submit`, { method: "POST" }), onSuccess: invalidate, onError: onErr });
-  const approve = useMutation({ mutationFn: (id: string) => api(`/purchases/requisitions/${id}/approve`, { method: "POST" }), onSuccess: invalidate, onError: onErr });
-  const reject = useMutation({ mutationFn: (id: string) => api(`/purchases/requisitions/${id}/reject`, { method: "POST", body: JSON.stringify({ note: "Rejeitada via UI" }) }), onSuccess: invalidate, onError: onErr });
+  const submit = useMutation({ mutationFn: (id: string) => api(`/purchases/requisitions/${id}/submit`, { method: "POST" }), onSuccess: () => ok("Requisição enviada."), onError: onErr });
+  const approve = useMutation({ mutationFn: (id: string) => api(`/purchases/requisitions/${id}/approve`, { method: "POST" }), onSuccess: () => ok("Requisição aprovada."), onError: onErr });
+  const reject = useMutation({ mutationFn: (id: string) => api(`/purchases/requisitions/${id}/reject`, { method: "POST", body: JSON.stringify({ note: "Rejeitada via UI" }) }), onSuccess: () => ok("Requisição rejeitada."), onError: onErr });
   const issue = useMutation({
     mutationFn: (id: string) => api(`/purchases/requisitions/${id}/order`, { method: "POST", body: JSON.stringify({ supplierCode: orderSupplier[id] ?? "" }) }),
-    onSuccess: invalidate, onError: onErr,
+    onSuccess: () => ok("Pedido emitido."), onError: onErr,
   });
 
   const [sup, setSup] = useState({ code: "", name: "", taxId: "" });
   const createSupplier = useMutation({
     mutationFn: () => api("/purchases/suppliers", { method: "POST", body: JSON.stringify(sup) }),
-    onSuccess: () => { setSup({ code: "", name: "", taxId: "" }); qc.invalidateQueries({ queryKey: ["suppliers"] }); },
+    onSuccess: () => { setSup({ code: "", name: "", taxId: "" }); qc.invalidateQueries({ queryKey: ["suppliers"] }); toast.push("success", "Fornecedor cadastrado."); },
     onError: onErr,
   });
 
   return (
     <>
       <h1 className="text-xl font-semibold text-slate-800">Compras</h1>
-      {err && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{err}</p>}
 
       <Card title="Requisições">
         {reqs.isLoading ? (
@@ -96,7 +97,7 @@ export default function ComprasPage() {
         </Card>
 
         <Card title="Fornecedores">
-          <form className="mb-4 grid grid-cols-3 gap-2" onSubmit={(e: FormEvent) => { e.preventDefault(); setErr(null); createSupplier.mutate(); }}>
+          <form className="mb-4 grid grid-cols-3 gap-2" onSubmit={(e: FormEvent) => { e.preventDefault(); createSupplier.mutate(); }}>
             <Input placeholder="Código" value={sup.code} onChange={(e) => setSup({ ...sup, code: e.target.value })} />
             <Input placeholder="Nome" value={sup.name} onChange={(e) => setSup({ ...sup, name: e.target.value })} />
             <Input placeholder="CNPJ" value={sup.taxId} onChange={(e) => setSup({ ...sup, taxId: e.target.value })} />

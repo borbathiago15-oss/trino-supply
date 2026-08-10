@@ -125,6 +125,10 @@ dotnet ef database update \
   autenticado e telas **Painel / Materiais / Reposição / Compras** consumindo a API via proxy
   same-origin (`/api` → backend). `npm run build` OK; **smoke E2E (Playwright) 6/6** — login pela UI →
   painel com dados reais → sugestão de reposição.
+- ✅ **Frontend — refino de UX (Fase 5, fatia 2):** **notificações (toasts)** de sucesso/erro em todas
+  as ações, e **definição de política de reposição (mín/máx) pela UI** (fechava a lacuna: sem isso as
+  sugestões só saíam via API). E2E (Playwright) 4/4: definir política pela tela → toast → sugestão
+  aparece em Reposição.
 - ✅ **Testes automatizados (Fase 6, fatia 1 — QA-001):** projeto xUnit `tests/TrinoSupply.Domain.Tests`
   com **29 testes de unidade** das invariantes de domínio (SoD aprovação/rejeição, guard de saldo
   negativo, conversão de UoM e checagem de dimensão, cálculo de reposição, máquina de estados da

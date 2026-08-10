@@ -1,21 +1,21 @@
 "use client";
 
-import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api, ApiError, Suggestion } from "@/lib/api";
 import { Button, Card, Empty, Table } from "@/components/ui";
+import { useToast } from "@/lib/toast";
 
 export default function ReposicaoPage() {
   const qc = useQueryClient();
   const router = useRouter();
-  const [msg, setMsg] = useState<string | null>(null);
+  const toast = useToast();
   const suggestions = useQuery({ queryKey: ["suggestions"], queryFn: () => api<Suggestion[]>("/materials/replenishment/suggestions") });
 
   const generate = useMutation({
     mutationFn: () => api<{ requisitionId: string; lines: number }>("/purchases/requisitions/from-suggestions", { method: "POST" }),
-    onSuccess: (r) => { qc.invalidateQueries({ queryKey: ["requisitions"] }); setMsg(`Requisição criada com ${r.lines} item(ns).`); setTimeout(() => router.push("/compras"), 900); },
-    onError: (e) => setMsg(e instanceof ApiError ? e.message : "Erro"),
+    onSuccess: (r) => { qc.invalidateQueries({ queryKey: ["requisitions"] }); toast.push("success", `Requisição criada com ${r.lines} item(ns).`); setTimeout(() => router.push("/compras"), 700); },
+    onError: (e) => toast.push("error", e instanceof ApiError ? e.message : "Erro"),
   });
 
   const count = suggestions.data?.length ?? 0;
@@ -24,11 +24,10 @@ export default function ReposicaoPage() {
     <>
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-slate-800">Reposição</h1>
-        <Button disabled={count === 0 || generate.isPending} onClick={() => { setMsg(null); generate.mutate(); }}>
+        <Button disabled={count === 0 || generate.isPending} onClick={() => generate.mutate()}>
           Gerar requisição das sugestões
         </Button>
       </div>
-      {msg && <p className="rounded-lg bg-brand-soft px-3 py-2 text-sm text-brand-fg">{msg}</p>}
 
       <Card title={`Sugestões (${count})`}>
         {suggestions.isLoading ? (

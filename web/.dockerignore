@@ -2,3 +2,4 @@ node_modules
 .next
 out
 e2e-smoke.mjs
+e2e-ux.mjs

@@ -8,3 +8,4 @@
 docs
 *.md
 web/e2e-smoke.mjs
+web/e2e-ux.mjs

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/store";
+import { Toaster } from "@/components/Toaster";
 
 const NAV = [
   { href: "/dashboard", label: "Painel" },
@@ -66,6 +67,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <main className="space-y-6">{children}</main>
         </div>
       </div>
+      <Toaster />
     </div>
   );
 }

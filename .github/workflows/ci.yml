@@ -10,6 +10,9 @@ jobs:
   backend:
     name: Backend (.NET 9)
     runs-on: ubuntu-latest
+    # Testes de integração usam Testcontainers (Docker já disponível no runner ubuntu).
+    env:
+      TESTCONTAINERS_RYUK_DISABLED: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4

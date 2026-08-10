@@ -125,6 +125,11 @@ dotnet ef database update \
   com **29 testes de unidade** das invariantes de domínio (SoD aprovação/rejeição, guard de saldo
   negativo, conversão de UoM e checagem de dimensão, cálculo de reposição, máquina de estados da
   requisição, hash de senha PBKDF2). Rodam no CI (`dotnet test TrinoSupply.slnx`). `dotnet test` → 29/29.
+- ✅ **Testes de integração (Fase 6, fatia 2 — SEC-004 §8):** `tests/TrinoSupply.Integration.Tests`
+  sobe **PostgreSQL real (Testcontainers)** + aplica os scripts de bootstrap + roda a API via
+  `WebApplicationFactory` como `trino_app`. **4 testes** pela stack HTTP completa: **isolamento por
+  RLS** entre tenants, **deny-by-default** (403), **SoD** (403), e **estoque sob concorrência**
+  (15 lançamentos paralelos → saldo exato). `dotnet test` → 4/4.
 - ✅ `docker-compose` (Postgres/Redis/RabbitMQ/MinIO) e pipeline CI.
 - ✅ **Piloto containerizado (Fase 7, fatia 1):** `deploy/docker-compose.pilot.yml` sobe banco +
   API + frontend com um comando. **`bootstrap`** aplica migrations (scripts idempotentes do EF em

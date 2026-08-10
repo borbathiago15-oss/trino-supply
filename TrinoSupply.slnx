@@ -23,5 +23,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/TrinoSupply.Domain.Tests/TrinoSupply.Domain.Tests.csproj" />
+    <Project Path="tests/TrinoSupply.Integration.Tests/TrinoSupply.Integration.Tests.csproj" />
   </Folder>
 </Solution>

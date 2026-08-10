@@ -38,6 +38,51 @@ public static class ProcurementEndpoints
                 : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
         }).RequireAuthorization();
 
+        // Modelo (template) de planilha para cadastro de itens em lote.
+        p.MapGet("/requisitions/import-template", async (IPermissionChecker perm, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRequest, ct)) return Results.Forbid();
+            var bytes = RequisitionExcel.BuildTemplate();
+            return Results.File(bytes, RequisitionExcel.ContentType, "modelo-itens-requisicao.xlsx");
+        }).RequireAuthorization();
+
+        // Importa itens em lote de uma planilha Excel → cria uma requisição (rascunho) com as linhas.
+        p.MapPost("/requisitions/import", async (HttpRequest http, IPermissionChecker perm,
+            IPurchaseRequisitionService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRequest, ct)) return Results.Forbid();
+            if (!http.HasFormContentType)
+                return Results.BadRequest(new { code = "purchases.import.no_file", message = "Envie a planilha no campo 'file' (multipart/form-data)." });
+
+            var form = await http.ReadFormAsync(ct);
+            var file = form.Files["file"] ?? form.Files.FirstOrDefault();
+            if (file is null || file.Length == 0)
+                return Results.BadRequest(new { code = "purchases.import.no_file", message = "Nenhum arquivo enviado." });
+
+            RequisitionExcel.ParseResult parsed;
+            await using (var stream = file.OpenReadStream())
+            {
+                using var mem = new MemoryStream();
+                await stream.CopyToAsync(mem, ct);
+                mem.Position = 0;
+                parsed = RequisitionExcel.Parse(mem);
+            }
+
+            if (parsed.Lines.Count == 0)
+                return Results.BadRequest(new
+                {
+                    code = "purchases.import.empty",
+                    message = "Nenhum item válido na planilha.",
+                    errors = parsed.Errors
+                });
+
+            var r = await svc.CreateAsync(parsed.Lines, ct);
+            return r.IsSuccess
+                ? Results.Created($"/api/v1/purchases/requisitions/{r.Value}",
+                    new { requisitionId = r.Value, imported = parsed.Lines.Count, warnings = parsed.Errors })
+                : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization().DisableAntiforgery();
+
         // Acrescenta itens a um rascunho: item manual na tela OU importação em lote (mesma rota).
         p.MapPost("/requisitions/{id:guid}/lines", async (Guid id, AddLinesRequest req,
             IPermissionChecker perm, IPurchaseRequisitionService svc, CancellationToken ct) =>

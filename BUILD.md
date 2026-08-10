@@ -119,6 +119,18 @@ dotnet ef database update \
     preços por linha + totais. **Validado:** solução compila; **34/34** testes de unidade; migration EF
     aplicada em **Postgres 16 real** — nova tabela + colunas + índices únicos + **RLS forçada** em todas
     as tabelas de `procurement` (script idempotente `deploy/db/gen/procurement.sql` regenerado).
+- ✅ **OC — Fase 8, fatia 2: cadastro de itens em lote via planilha Excel (validado por integração).**
+  `GET /api/v1/purchases/requisitions/import-template` gera o **modelo .xlsx** (aba "Itens" com cabeçalho
+  Código do Item / Quantidade / Unidade + aba de instruções) e `POST /requisitions/import` recebe a
+  planilha preenchida (multipart), **lê linha a linha com validação** (código vazio, quantidade
+  inválida/negativa → erro por linha; linhas vazias ignoradas) e cria a requisição (rascunho) com os
+  itens. Biblioteca **ClosedXML** (100% gerenciada, sem dependência de cripto do sistema). Também
+  `POST /requisitions/{id}/lines` para acrescentar **item manual** a um rascunho. **Validado por
+  integração (Testcontainers Postgres, role `trino_app`):** download do template abre como planilha com
+  o cabeçalho certo; **fluxo completo** — importa 2 itens da planilha → requisição → envia → aprova com
+  **SoD (aprovador ≠ requisitante)** → emite a **OC** selecionando empresa pagadora + fornecedor
+  vencedor + preços → confere nº da OC, pagadora, snapshot de Cond. Pgto e **totais calculados**
+  (produtos = Σ qtd×preço). `dotnet test` → 34 unidade + **9 integração**.
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

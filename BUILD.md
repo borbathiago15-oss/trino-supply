@@ -237,6 +237,14 @@ dotnet ef database update \
   **console** quando `OTEL_CONSOLE_TRACING=true` (dev/validação). **Validado:** ao provisionar uma empresa
   com o console exporter, saiu 1 span de request (`POST /api/v1/companies`) + **5 spans Npgsql** aninhados
   no mesmo trace. Complementa as métricas Prometheus e os logs correlacionados. `dotnet build` verde.
+- ✅ **CD: build & push das imagens no GHCR — Fase 7, fatia 7 (YAML validado; build roda no Actions).**
+  Novo workflow `.github/workflows/cd.yml`: a cada push na `main` e em tags `v*`, constrói e publica as
+  **três imagens** (api, worker, web) no **GitHub Container Registry** via `docker/build-push-action`
+  (matriz, cache `type=gha`, tags por branch/tag/sha + `latest` na default). Build e deploy ficam
+  desacoplados (ADR-016); as migrations continuam pelo bootstrap idempotente. **Verificado:** YAML válido,
+  `web/package-lock.json` presente (o `npm ci` do Dockerfile funciona) e os contextos batem
+  (api/worker = raiz, web = `web/`). O build das imagens em si roda no runner do Actions (no sandbox o
+  build de container falha no restore por causa do proxy TLS — limitação de ambiente, não do pipeline).
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

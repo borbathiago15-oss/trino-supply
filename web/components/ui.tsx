@@ -63,6 +63,7 @@ export function Select({ label, className = "", children, ...props }: SelectHTML
 const STATUS_STYLES: Record<string, string> = {
   Draft: "bg-slate-100 text-slate-600",
   Submitted: "bg-amber-100 text-amber-700",
+  ApprovedLevel1: "bg-sky-100 text-sky-700",
   Approved: "bg-emerald-100 text-emerald-700",
   Rejected: "bg-rose-100 text-rose-700",
   Issued: "bg-emerald-100 text-emerald-700",

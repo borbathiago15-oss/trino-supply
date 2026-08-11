@@ -53,11 +53,14 @@ export async function download(path: string, filename: string): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
-/** Envia um arquivo (multipart/form-data) para um endpoint e devolve o JSON de resposta. */
-export async function upload<T = unknown>(path: string, file: File, field = "file"): Promise<T> {
+/** Envia um arquivo (multipart/form-data) — com campos extras opcionais — e devolve o JSON de resposta. */
+export async function upload<T = unknown>(
+  path: string, file: File, fields: Record<string, string> = {}, field = "file",
+): Promise<T> {
   const token = useAuth.getState().token;
   const form = new FormData();
   form.append(field, file);
+  for (const [k, v] of Object.entries(fields)) form.append(k, v);
   const res = await fetch(`/api/v1${path}`, {
     method: "POST",
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -83,6 +86,21 @@ export interface ItemView {
   name: string;
   baseUnitId: string;
   status: string;
+  group: string;
+}
+export interface CostCenterView {
+  id: string;
+  code: string;
+  name: string;
+  status: string;
+}
+export interface UserView {
+  id: string;
+  subject: string;
+  email: string;
+  displayName: string;
+  status: string;
+  roleIds: string[];
 }
 export interface BalanceView {
   itemId: string;
@@ -104,8 +122,17 @@ export interface RequisitionView {
   requester: string;
   status: string;
   createdAt: string;
-  decidedBy?: string | null;
-  decidedAt?: string | null;
+  payingCompanyCode: string;
+  payingCompanyName: string;
+  costCenterCode: string;
+  costCenterName: string;
+  priority: string;
+  justification: string;
+  approverLevel1: string;
+  approverLevel2: string;
+  level1DecidedBy?: string | null;
+  level2DecidedBy?: string | null;
+  rejectedBy?: string | null;
   decisionNote?: string | null;
   lines: { itemCode: string; quantity: number; unit: string }[];
 }

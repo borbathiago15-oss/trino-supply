@@ -47,6 +47,15 @@ public static class ProcurementEndpoints
                 : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
         }).RequireAuthorization();
 
+        // Candidatos a aprovador (usuários com purchases.approve). Visível a quem pode requisitar,
+        // para escolher os aprovadores nível 1 e nível 2 sem precisar de users.read.
+        p.MapGet("/approvers", async (IPermissionChecker perm, IIamService iam, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRequest, ct)) return Results.Forbid();
+            var users = await iam.ListUsersWithPermissionAsync(PermissionCatalog.PurchasesApprove, ct);
+            return Results.Ok(users.Select(u => new { subject = u.Subject, displayName = u.DisplayName, email = u.Email }));
+        }).RequireAuthorization();
+
         // ---- Centros de custo (spec Sistema de Compras) ----
         p.MapGet("/cost-centers", async (IPermissionChecker perm, ICostCenterService svc, CancellationToken ct) =>
         {

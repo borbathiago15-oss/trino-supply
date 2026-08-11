@@ -99,8 +99,24 @@ public sealed class IamService(
         // Tenant-scoped por RLS + (defesa em profundidade) sem exposição cross-tenant.
         var users = await db.Users.AsNoTracking().OrderBy(u => u.Email).ToListAsync(ct);
         return users.Select(u => new UserView(
-            u.Id.Value, u.Email, u.DisplayName, u.Status.ToString(),
+            u.Id.Value, u.Subject, u.Email, u.DisplayName, u.Status.ToString(),
             u.RoleIds.Select(r => r.Value).ToList())).ToList();
+    }
+
+    public async Task<IReadOnlyList<UserView>> ListUsersWithPermissionAsync(string permission, CancellationToken ct = default)
+    {
+        // Papéis do tenant (RLS) que concedem a permissão → usuários ativos que carregam algum deles.
+        var roles = await db.Roles.AsNoTracking().ToListAsync(ct);
+        var roleIdsWith = roles.Where(r => r.Permissions.Contains(permission)).Select(r => r.Id.Value).ToHashSet();
+        if (roleIdsWith.Count == 0) return [];
+
+        var users = await db.Users.AsNoTracking().OrderBy(u => u.DisplayName).ToListAsync(ct);
+        return users
+            .Where(u => u.Status == UserStatus.Active && u.RoleIds.Any(r => roleIdsWith.Contains(r.Value)))
+            .Select(u => new UserView(
+                u.Id.Value, u.Subject, u.Email, u.DisplayName, u.Status.ToString(),
+                u.RoleIds.Select(r => r.Value).ToList()))
+            .ToList();
     }
 
     public async Task<Result<Guid>> CreateRoleAsync(string name, CancellationToken ct = default)

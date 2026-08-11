@@ -3,12 +3,13 @@
 import { Fragment, FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  api, ApiError, download, upload, OrderView, PayingCompanyView, RequisitionView, SupplierFullView,
+  api, ApiError, download, upload, ItemView, OrderView, PayingCompanyView, RequisitionView, SupplierFullView,
 } from "@/lib/api";
 import { Button, Card, Empty, Input, Select, StatusPill, Table } from "@/components/ui";
 import { useToast } from "@/lib/toast";
 import { Perm, useHas } from "@/lib/me";
 import { downloadCsv } from "@/lib/csv";
+import { ReqHeader, RequisitionHeaderFields, emptyHeader, headerError, useRequisitionRefData } from "@/components/requisitionHeader";
 
 const money = (v: number) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -57,23 +58,34 @@ export default function ComprasPage() {
           <Empty>Carregando…</Empty>
         ) : reqs.data && reqs.data.length > 0 ? (
           <div className="space-y-3">
-            {reqs.data.map((r) => (
+            {reqs.data.map((r) => {
+              const pendingLevel = r.status === "Submitted" ? 1 : r.status === "ApprovedLevel1" ? 2 : 0;
+              return (
               <div key={r.id} className="rounded-lg border border-slate-200 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
                       <StatusPill status={r.status} />
+                      {r.priority === "Emergencial" && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700">Emergencial</span>}
                       <span className="text-sm text-slate-600">{r.requester}</span>
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
+                      {[r.payingCompanyName && `Custo: ${r.payingCompanyName}`, r.costCenterName && `Centro: ${r.costCenterName}`]
+                        .filter(Boolean).join(" · ")}
+                    </div>
+                    <div className="mt-0.5 text-xs text-slate-500">
                       {r.lines.map((l) => `${l.itemCode}×${Number(l.quantity)} ${l.unit}`).join(", ")}
+                    </div>
+                    <div className="mt-0.5 text-xs text-slate-400">
+                      Aprovação: N1 {r.approverLevel1}{r.level1DecidedBy ? " ✓" : ""} → N2 {r.approverLevel2}{r.level2DecidedBy ? " ✓" : ""}
+                      {r.justification ? ` · ${r.justification}` : ""}
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {r.status === "Draft" && has(Perm.PurchasesRequest) && <Button variant="ghost" onClick={() => submit.mutate(r.id)}>Enviar</Button>}
-                    {r.status === "Submitted" && has(Perm.PurchasesApprove) && (
+                    {pendingLevel > 0 && has(Perm.PurchasesApprove) && (
                       <>
-                        <Button onClick={() => approve.mutate(r.id)}>Aprovar</Button>
+                        <Button onClick={() => approve.mutate(r.id)}>Aprovar (nível {pendingLevel})</Button>
                         <Button variant="danger" onClick={() => reject.mutate(r.id)}>Rejeitar</Button>
                       </>
                     )}
@@ -83,7 +95,7 @@ export default function ComprasPage() {
                   <EmitirOc req={r} onSuccess={() => ok("OC emitida.")} onErr={onErr} />
                 )}
               </div>
-            ))}
+            );})}
           </div>
         ) : (
           <Empty>Nenhuma requisição. Gere pela Reposição ou crie acima.</Empty>
@@ -204,13 +216,26 @@ function OcDetalhe({ o }: { o: OrderView }) {
   );
 }
 
-/** Criação de requisição: itens manuais (um a um) + importação em lote via planilha Excel. */
+type Linha = { itemCode: string; quantity: string; unit: string };
+
+/**
+ * Nova solicitação de compra (spec Sistema de Compras): cabeçalho comum (empresa do custo, centro de
+ * custo, tipo de demanda, motivo, 2 aprovadores) + um de dois modos — <b>pedido simples</b> (item a
+ * item ou por planilha) ou <b>solicitação em lote por família</b> (lista os produtos da família e o
+ * usuário informa as quantidades).
+ */
 function NovaRequisicao({ onDone, onErr }: { onDone: () => void; onErr: (e: unknown) => void }) {
   const qc = useQueryClient();
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [linhas, setLinhas] = useState<{ itemCode: string; quantity: string; unit: string }[]>([]);
+  const [modo, setModo] = useState<"simples" | "lote">("simples");
+  const [header, setHeader] = useState<ReqHeader>(emptyHeader);
+  const [linhas, setLinhas] = useState<Linha[]>([]);
   const [item, setItem] = useState({ itemCode: "", quantity: "", unit: "un" });
+
+  const { paying, centers, approvers } = useRequisitionRefData();
+
+  const done = () => { setLinhas([]); setHeader(emptyHeader); qc.invalidateQueries({ queryKey: ["requisitions"] }); onDone(); };
 
   const addItem = () => {
     const qty = Number(item.quantity.replace(",", "."));
@@ -220,14 +245,24 @@ function NovaRequisicao({ onDone, onErr }: { onDone: () => void; onErr: (e: unkn
     setItem({ itemCode: "", quantity: "", unit: "un" });
   };
 
-  const criar = useMutation({
-    mutationFn: () => api<{ requisitionId: string }>("/purchases/requisitions", {
-      method: "POST",
-      body: JSON.stringify({ lines: linhas.map((l) => ({ itemCode: l.itemCode, quantity: Number(l.quantity), unit: l.unit })) }),
-    }),
-    onSuccess: () => { setLinhas([]); qc.invalidateQueries({ queryKey: ["requisitions"] }); onDone(); },
-    onError: onErr,
+  const payload = (lines: Linha[]) => ({
+    ...header,
+    lines: lines.map((l) => ({ itemCode: l.itemCode, quantity: Number(l.quantity), unit: l.unit })),
   });
+
+  const criar = useMutation({
+    mutationFn: (lines: Linha[]) => api<{ requisitionId: string }>("/purchases/requisitions", {
+      method: "POST", body: JSON.stringify(payload(lines)),
+    }),
+    onSuccess: done, onError: onErr,
+  });
+
+  const criarManual = () => {
+    const err = headerError(header);
+    if (err) { toast.push("error", err); return; }
+    if (linhas.length === 0) { toast.push("error", "Adicione ao menos um item."); return; }
+    criar.mutate(linhas);
+  };
 
   const baixarModelo = async () => {
     try { await download("/purchases/requisitions/import-template", "modelo-itens-requisicao.xlsx"); }
@@ -235,57 +270,152 @@ function NovaRequisicao({ onDone, onErr }: { onDone: () => void; onErr: (e: unkn
   };
 
   const importar = useMutation({
-    mutationFn: (file: File) => upload<{ requisitionId: string; imported: number; warnings?: string[] }>("/purchases/requisitions/import", file),
+    mutationFn: (file: File) => upload<{ requisitionId: string; imported: number; warnings?: string[] }>(
+      "/purchases/requisitions/import", file, {
+        payingCompanyCode: header.payingCompanyCode, costCenterCode: header.costCenterCode,
+        priority: header.priority, justification: header.justification,
+        approverLevel1Subject: header.approverLevel1Subject, approverLevel2Subject: header.approverLevel2Subject,
+      }),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["requisitions"] });
       toast.push("success", `Planilha importada: ${r.imported} item(ns).`);
       if (r.warnings && r.warnings.length > 0) toast.push("error", `${r.warnings.length} linha(s) ignorada(s).`);
       if (fileRef.current) fileRef.current.value = "";
+      setHeader(emptyHeader);
     },
     onError: (e) => { onErr(e); if (fileRef.current) fileRef.current.value = ""; },
   });
 
-  return (
-    <Card
-      title="Nova requisição"
-      actions={
-        <div className="flex items-center gap-2">
-          <Button variant="ghost" onClick={baixarModelo}>Baixar modelo (Excel)</Button>
-          <Button variant="ghost" onClick={() => fileRef.current?.click()} disabled={importar.isPending}>
-            {importar.isPending ? "Importando…" : "Importar planilha"}
-          </Button>
-          <input ref={fileRef} type="file" accept=".xlsx" className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) importar.mutate(f); }} />
-        </div>
-      }
-    >
-      <form className="grid grid-cols-1 gap-2 sm:grid-cols-4" onSubmit={(e: FormEvent) => { e.preventDefault(); addItem(); }}>
-        <Input label="Código do item" value={item.itemCode} onChange={(e) => setItem({ ...item, itemCode: e.target.value })} />
-        <Input label="Quantidade" inputMode="decimal" value={item.quantity} onChange={(e) => setItem({ ...item, quantity: e.target.value })} />
-        <Input label="Unidade" value={item.unit} onChange={(e) => setItem({ ...item, unit: e.target.value })} />
-        <div className="flex items-end"><Button type="submit" variant="ghost">Adicionar item</Button></div>
-      </form>
+  const onImport = (f: File) => {
+    const err = headerError(header);
+    if (err) { toast.push("error", err); if (fileRef.current) fileRef.current.value = ""; return; }
+    importar.mutate(f);
+  };
 
-      {linhas.length > 0 && (
-        <div className="mt-4">
-          <Table head={["Código", "Qtd", "Unidade", ""]}>
-            {linhas.map((l, i) => (
-              <tr key={i}>
-                <td className="px-3 py-2 font-mono text-xs">{l.itemCode}</td>
-                <td className="px-3 py-2">{Number(l.quantity)}</td>
-                <td className="px-3 py-2">{l.unit}</td>
-                <td className="px-3 py-2 text-right">
-                  <button className="text-xs text-rose-600 hover:underline" onClick={() => setLinhas(linhas.filter((_, j) => j !== i))}>remover</button>
-                </td>
-              </tr>
-            ))}
-          </Table>
-          <div className="mt-3">
-            <Button onClick={() => criar.mutate()} disabled={criar.isPending}>Criar requisição ({linhas.length} item{linhas.length > 1 ? "ns" : ""})</Button>
+  return (
+    <Card title="Nova solicitação de compra">
+      <div className="mb-4 inline-flex rounded-lg border border-slate-200 p-0.5 text-sm">
+        <button className={`rounded-md px-3 py-1 ${modo === "simples" ? "bg-brand text-white" : "text-slate-600"}`} onClick={() => setModo("simples")}>Pedido simples</button>
+        <button className={`rounded-md px-3 py-1 ${modo === "lote" ? "bg-brand text-white" : "text-slate-600"}`} onClick={() => setModo("lote")}>Solicitação em lote (por família)</button>
+      </div>
+
+      <RequisitionHeaderFields value={header} onChange={setHeader} paying={paying.data} centers={centers.data} approvers={approvers.data} />
+
+      {modo === "simples" ? (
+        <div className="mt-5 border-t border-slate-100 pt-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="text-sm font-medium text-slate-700">Itens do pedido</h3>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" onClick={baixarModelo}>Baixar modelo (Excel)</Button>
+              <Button variant="ghost" onClick={() => fileRef.current?.click()} disabled={importar.isPending}>
+                {importar.isPending ? "Importando…" : "Importar planilha"}
+              </Button>
+              <input ref={fileRef} type="file" accept=".xlsx" className="hidden"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) onImport(f); }} />
+            </div>
           </div>
+
+          <form className="grid grid-cols-1 gap-2 sm:grid-cols-4" onSubmit={(e: FormEvent) => { e.preventDefault(); addItem(); }}>
+            <Input label="Código do item" value={item.itemCode} onChange={(e) => setItem({ ...item, itemCode: e.target.value })} />
+            <Input label="Quantidade" inputMode="decimal" value={item.quantity} onChange={(e) => setItem({ ...item, quantity: e.target.value })} />
+            <Input label="Unidade" value={item.unit} onChange={(e) => setItem({ ...item, unit: e.target.value })} />
+            <div className="flex items-end"><Button type="submit" variant="ghost">Adicionar item</Button></div>
+          </form>
+
+          {linhas.length > 0 && (
+            <div className="mt-4">
+              <Table head={["Código", "Qtd", "Unidade", ""]}>
+                {linhas.map((l, i) => (
+                  <tr key={i}>
+                    <td className="px-3 py-2 font-mono text-xs">{l.itemCode}</td>
+                    <td className="px-3 py-2">{Number(l.quantity)}</td>
+                    <td className="px-3 py-2">{l.unit}</td>
+                    <td className="px-3 py-2 text-right">
+                      <button className="text-xs text-rose-600 hover:underline" onClick={() => setLinhas(linhas.filter((_, j) => j !== i))}>remover</button>
+                    </td>
+                  </tr>
+                ))}
+              </Table>
+              <div className="mt-3">
+                <Button onClick={criarManual} disabled={criar.isPending}>Criar requisição ({linhas.length} item{linhas.length > 1 ? "ns" : ""})</Button>
+              </div>
+            </div>
+          )}
         </div>
+      ) : (
+        <SolicitacaoLote header={header} onSubmit={(lines) => {
+          const err = headerError(header);
+          if (err) { toast.push("error", err); return; }
+          if (lines.length === 0) { toast.push("error", "Informe a quantidade de ao menos um produto."); return; }
+          criar.mutate(lines);
+        }} pending={criar.isPending} onErr={onErr} />
       )}
     </Card>
+  );
+}
+
+/**
+ * Solicitação em lote por família: escolhe a família de produtos, lista todos os itens cadastrados
+ * dela e o usuário informa a quantidade de cada um. Envia só as linhas com quantidade &gt; 0.
+ */
+function SolicitacaoLote({ header, onSubmit, pending, onErr }: {
+  header: ReqHeader; onSubmit: (lines: Linha[]) => void; pending: boolean; onErr: (e: unknown) => void;
+}) {
+  const [group, setGroup] = useState("");
+  const [qty, setQty] = useState<Record<string, string>>({});
+
+  const groups = useQuery({ queryKey: ["product-groups"], queryFn: () => api<string[]>("/materials/product-groups") });
+  const items = useQuery({
+    queryKey: ["items", "group", group],
+    queryFn: () => api<ItemView[]>(`/materials/items?group=${encodeURIComponent(group)}`),
+    enabled: group !== "",
+  });
+
+  const lines = (items.data ?? [])
+    .map((it) => ({ itemCode: it.code, quantity: (qty[it.code] ?? "").replace(",", "."), unit: "un" }))
+    .filter((l) => Number(l.quantity) > 0)
+    .map((l) => ({ ...l, quantity: String(Number(l.quantity)) }));
+
+  return (
+    <div className="mt-5 border-t border-slate-100 pt-4">
+      <div className="max-w-sm">
+        <Select label="Família / tipo de produto" value={group} onChange={(e) => { setGroup(e.target.value); setQty({}); }}>
+          <option value="">Selecione a família…</option>
+          {(groups.data ?? []).map((g) => <option key={g} value={g}>{g}</option>)}
+        </Select>
+      </div>
+
+      {group !== "" && (
+        <div className="mt-4">
+          {items.isLoading ? (
+            <Empty>Carregando produtos…</Empty>
+          ) : items.data && items.data.length > 0 ? (
+            <>
+              <Table head={["Código", "Produto", "Quantidade"]}>
+                {items.data.map((it) => (
+                  <tr key={it.id}>
+                    <td className="px-3 py-2 font-mono text-xs">{it.code}</td>
+                    <td className="px-3 py-2">{it.name}</td>
+                    <td className="px-3 py-2">
+                      <input inputMode="decimal" value={qty[it.code] ?? ""} placeholder="0"
+                        onChange={(e) => setQty({ ...qty, [it.code]: e.target.value })}
+                        className="w-24 rounded-lg border border-slate-300 px-2 py-1 text-sm" />
+                    </td>
+                  </tr>
+                ))}
+              </Table>
+              <div className="mt-3">
+                <Button onClick={() => onSubmit(lines)} disabled={pending || lines.length === 0}>
+                  Enviar solicitação ({lines.length} produto{lines.length === 1 ? "" : "s"})
+                </Button>
+              </div>
+            </>
+          ) : (
+            <Empty>Nenhum produto cadastrado nessa família. Cadastre itens em Materiais com esse grupo.</Empty>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError, PayingCompanyView, SupplierFullView, SupplierStatsView } from "@/lib/api";
+import { api, ApiError, CostCenterView, PayingCompanyView, SupplierFullView, SupplierStatsView } from "@/lib/api";
 import { Button, Card, Empty, Input, StatusPill, Table } from "@/components/ui";
 import { useToast } from "@/lib/toast";
 import { Perm, useHas } from "@/lib/me";
@@ -30,6 +30,15 @@ export default function CadastrosPage() {
   const createPaying = useMutation({
     mutationFn: () => api("/purchases/paying-companies", { method: "POST", body: JSON.stringify(pc) }),
     onSuccess: () => { setPc(emptyPaying); qc.invalidateQueries({ queryKey: ["paying-companies"] }); toast.push("success", "Empresa pagadora cadastrada."); },
+    onError: onErr,
+  });
+
+  // ---- Centros de custo ----
+  const centers = useQuery({ queryKey: ["cost-centers"], queryFn: () => api<CostCenterView[]>("/purchases/cost-centers") });
+  const [cc, setCc] = useState({ code: "", name: "" });
+  const createCenter = useMutation({
+    mutationFn: () => api("/purchases/cost-centers", { method: "POST", body: JSON.stringify(cc) }),
+    onSuccess: () => { setCc({ code: "", name: "" }); qc.invalidateQueries({ queryKey: ["cost-centers"] }); toast.push("success", "Centro de custo cadastrado."); },
     onError: onErr,
   });
 
@@ -84,6 +93,30 @@ export default function CadastrosPage() {
           </Table>
         ) : (
           <Empty>Nenhuma empresa pagadora cadastrada.</Empty>
+        )}
+      </Card>
+
+      <Card title="Centros de custo">
+        {canManage && (
+          <form className="mb-5 grid grid-cols-1 gap-2 sm:grid-cols-3"
+            onSubmit={(e: FormEvent) => { e.preventDefault(); createCenter.mutate(); }}>
+            <Input label="Código" value={cc.code} onChange={(e) => setCc({ ...cc, code: e.target.value })} />
+            <Input label="Nome" className="sm:col-span-2" value={cc.name} onChange={(e) => setCc({ ...cc, name: e.target.value })} />
+            <div className="sm:col-span-3"><Button type="submit" disabled={createCenter.isPending}>Cadastrar centro de custo</Button></div>
+          </form>
+        )}
+        {centers.data && centers.data.length > 0 ? (
+          <Table head={["Código", "Nome", "Situação"]}>
+            {centers.data.map((c) => (
+              <tr key={c.id}>
+                <td className="px-3 py-2 font-mono text-xs">{c.code}</td>
+                <td className="px-3 py-2">{c.name}</td>
+                <td className="px-3 py-2"><StatusPill status={c.status} /></td>
+              </tr>
+            ))}
+          </Table>
+        ) : (
+          <Empty>Nenhum centro de custo cadastrado.</Empty>
         )}
       </Card>
 

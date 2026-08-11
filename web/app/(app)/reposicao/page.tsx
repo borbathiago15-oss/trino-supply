@@ -1,24 +1,35 @@
 "use client";
 
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api, ApiError, Suggestion } from "@/lib/api";
 import { Button, Card, Empty, Table } from "@/components/ui";
 import { useToast } from "@/lib/toast";
 import { Perm, useHas } from "@/lib/me";
+import { ReqHeader, RequisitionHeaderFields, emptyHeader, headerError, useRequisitionRefData } from "@/components/requisitionHeader";
 
 export default function ReposicaoPage() {
   const qc = useQueryClient();
   const router = useRouter();
   const toast = useToast();
   const has = useHas();
+  const [open, setOpen] = useState(false);
+  const [header, setHeader] = useState<ReqHeader>(emptyHeader);
   const suggestions = useQuery({ queryKey: ["suggestions"], queryFn: () => api<Suggestion[]>("/materials/replenishment/suggestions") });
+  const { paying, centers, approvers } = useRequisitionRefData(open);
 
   const generate = useMutation({
-    mutationFn: () => api<{ requisitionId: string; lines: number }>("/purchases/requisitions/from-suggestions", { method: "POST" }),
-    onSuccess: (r) => { qc.invalidateQueries({ queryKey: ["requisitions"] }); toast.push("success", `Requisição criada com ${r.lines} item(ns).`); setTimeout(() => router.push("/compras"), 700); },
+    mutationFn: () => api<{ requisitionId: string; lines: number }>("/purchases/requisitions/from-suggestions", { method: "POST", body: JSON.stringify(header) }),
+    onSuccess: (r) => { qc.invalidateQueries({ queryKey: ["requisitions"] }); setOpen(false); setHeader(emptyHeader); toast.push("success", `Requisição criada com ${r.lines} item(ns).`); setTimeout(() => router.push("/compras"), 700); },
     onError: (e) => toast.push("error", e instanceof ApiError ? e.message : "Erro"),
   });
+
+  const gerar = () => {
+    const err = headerError(header);
+    if (err) { toast.push("error", err); return; }
+    generate.mutate();
+  };
 
   const count = suggestions.data?.length ?? 0;
 
@@ -27,11 +38,22 @@ export default function ReposicaoPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-slate-800">Reposição</h1>
         {has(Perm.PurchasesRequest) && (
-          <Button disabled={count === 0 || generate.isPending} onClick={() => generate.mutate()}>
-            Gerar requisição das sugestões
+          <Button disabled={count === 0} onClick={() => setOpen((v) => !v)}>
+            {open ? "Fechar" : "Gerar requisição das sugestões"}
           </Button>
         )}
       </div>
+
+      {open && (
+        <Card title="Cabeçalho da solicitação (a partir das sugestões)">
+          <RequisitionHeaderFields value={header} onChange={setHeader} paying={paying.data} centers={centers.data} approvers={approvers.data} />
+          <div className="mt-4">
+            <Button disabled={generate.isPending} onClick={gerar}>
+              {generate.isPending ? "Gerando…" : `Gerar requisição (${count} item${count === 1 ? "" : "ns"})`}
+            </Button>
+          </div>
+        </Card>
+      )}
 
       <Card title={`Sugestões (${count})`}>
         {suggestions.isLoading ? (

@@ -4,7 +4,7 @@ using TrinoSupply.Foundation.Application.Audit;
 namespace TrinoSupply.Foundation.Application.Iam;
 
 /// <summary>Representação de leitura de um usuário (FD-001-01).</summary>
-public sealed record UserView(Guid Id, string Email, string DisplayName, string Status, IReadOnlyList<Guid> RoleIds);
+public sealed record UserView(Guid Id, string Subject, string Email, string DisplayName, string Status, IReadOnlyList<Guid> RoleIds);
 
 /// <summary>Representação de leitura de um papel (FD-001-01).</summary>
 public sealed record RoleView(Guid Id, string Name, IReadOnlyList<string> Permissions);
@@ -30,6 +30,13 @@ public interface IIamService
 
     /// <summary>Lista usuários do tenant corrente.</summary>
     Task<IReadOnlyList<UserView>> ListUsersAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Lista os usuários ativos do tenant que possuem a <paramref name="permission"/> informada
+    /// (via seus papéis). Usado para oferecer os candidatos a aprovador na criação da solicitação
+    /// sem expor o diretório completo de usuários.
+    /// </summary>
+    Task<IReadOnlyList<UserView>> ListUsersWithPermissionAsync(string permission, CancellationToken ct = default);
 
     // ---- Gestão de papéis (tenant corrente) ----
 

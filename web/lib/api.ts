@@ -176,6 +176,8 @@ export interface CostCenterView {
   code: string;
   name: string;
   status: string;
+  payingCompanyCode?: string | null;
+  payingCompanyName?: string | null;
 }
 export interface UserView {
   id: string;
@@ -184,6 +186,16 @@ export interface UserView {
   displayName: string;
   status: string;
   roleIds: string[];
+  costCenterCodes: string[];
+}
+export interface RoleView {
+  id: string;
+  name: string;
+  permissions: string[];
+}
+export interface ApprovalsView {
+  requisitions: RequisitionView[];
+  stockRequests: StockRequestView[];
 }
 export interface BalanceView {
   itemId: string;

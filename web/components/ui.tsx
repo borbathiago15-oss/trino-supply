@@ -82,9 +82,25 @@ const STATUS_STYLES: Record<string, string> = {
   Cancelado: "bg-rose-100 text-rose-700",
 };
 
+// Rótulos humanizados (v2): o usuário lê estados em português, não nomes de enum.
+const STATUS_LABELS: Record<string, string> = {
+  Draft: "Rascunho",
+  Submitted: "Aguardando nível 1",
+  ApprovedLevel1: "Aguardando nível 2",
+  Approved: "Aprovado",
+  Rejected: "Reprovado",
+  Issued: "Emitida",
+  Cancelled: "Cancelada",
+  Active: "Ativo",
+  Inactive: "Bloqueado",
+  EmSeparacao: "Em separação",
+  SolicitadoCompra: "Solicitado compra",
+  EmRota: "Em rota",
+};
+
 export function StatusPill({ status }: { status: string }) {
   const style = STATUS_STYLES[status] ?? "bg-slate-100 text-slate-600";
-  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${style}`}>{status}</span>;
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${style}`}>{STATUS_LABELS[status] ?? status}</span>;
 }
 
 export function Table({ head, children }: { head: string[]; children: ReactNode }) {

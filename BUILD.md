@@ -390,6 +390,15 @@ dotnet ef database update \
   Master Junior e Pleno. Migrations Foundation+Procurement (coluna `cost_center_codes` e
   `paying_company_id`). **Domínio 59/59** e **integração 38/38** (3 novos: papéis-modelo,
   vínculo CNPJ↔centro, escopo do junior — listagem, central e 403 fora do escopo).
+- ✅ **v2 — Fase B2: UI reestruturada (validada em navegador real, 8/8):** navegação nova —
+  **Dashboard de Suprimentos** (pedidos por situação, OCs; sem reposição), **Dashboard de Estoque**
+  (itens por família, ponto de reposição e ponte p/ pedido), **Central de Aprovação** (fila do
+  aprovador com Aprovar/Reprovar com motivo), **Pedido** (ex-Compras), **Estoque (Almox)** e
+  **Entregas (EPI)**. Escolher o **centro de custo pré-preenche a empresa vinculada** (CNPJ↔centro).
+  **Cadastros** ganhou o vínculo CNPJ no centro e o card **Usuários** (perfil, centros de
+  responsabilidade editáveis, bloquear/reativar). Status humanizados em PT ("Aguardando nível 1",
+  "Em separação"…). E2E: junior escopado vê SÓ o pedido do seu centro na Central e aprova; dashboards
+  renderizam; auto-preenchimento centro→empresa confere.
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e
   Auditoria; testes de integração de isolamento (Testcontainers — QA-001 / SEC-004 §8).

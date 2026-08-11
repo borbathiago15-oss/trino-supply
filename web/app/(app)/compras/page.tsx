@@ -49,11 +49,11 @@ export default function ComprasPage() {
 
   return (
     <>
-      <h1 className="text-xl font-semibold text-slate-800">Compras</h1>
+      <h1 className="text-xl font-semibold text-slate-800">Pedido</h1>
 
       {has(Perm.PurchasesRequest) && <NovaRequisicao onDone={() => ok("Requisição criada.")} onErr={onErr} />}
 
-      <Card title="Requisições">
+      <Card title="Pedidos">
         {reqs.isLoading ? (
           <Empty>Carregando…</Empty>
         ) : reqs.data && reqs.data.length > 0 ? (
@@ -293,7 +293,7 @@ function NovaRequisicao({ onDone, onErr }: { onDone: () => void; onErr: (e: unkn
   };
 
   return (
-    <Card title="Nova solicitação de compra">
+    <Card title="Novo pedido">
       <div className="mb-4 inline-flex rounded-lg border border-slate-200 p-0.5 text-sm">
         <button className={`rounded-md px-3 py-1 ${modo === "simples" ? "bg-brand text-white" : "text-slate-600"}`} onClick={() => setModo("simples")}>Pedido simples</button>
         <button className={`rounded-md px-3 py-1 ${modo === "lote" ? "bg-brand text-white" : "text-slate-600"}`} onClick={() => setModo("lote")}>Solicitação em lote (por família)</button>
@@ -337,7 +337,7 @@ function NovaRequisicao({ onDone, onErr }: { onDone: () => void; onErr: (e: unkn
                 ))}
               </Table>
               <div className="mt-3">
-                <Button onClick={criarManual} disabled={criar.isPending}>Criar requisição ({linhas.length} item{linhas.length > 1 ? "ns" : ""})</Button>
+                <Button onClick={criarManual} disabled={criar.isPending}>Criar pedido ({linhas.length} item{linhas.length > 1 ? "ns" : ""})</Button>
               </div>
             </div>
           )}

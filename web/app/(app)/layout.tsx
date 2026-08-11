@@ -8,15 +8,18 @@ import { useAuth } from "@/lib/store";
 import { Toaster } from "@/components/Toaster";
 import { Perm, useHas } from "@/lib/me";
 
+// Navegação v2: dashboards separados (Suprimentos × Estoque), Central de Aprovação, Pedido
+// (compras + EPI/fardamento) e Estoque/Almox. Cada item aparece só com a permissão necessária.
 const NAV = [
-  { href: "/dashboard", label: "Painel", perm: null },
-  { href: "/materiais", label: "Materiais", perm: Perm.MaterialsRead },
-  { href: "/almoxarifado", label: "Almoxarifado", perm: Perm.MaterialsRead },
-  { href: "/reposicao", label: "Reposição", perm: Perm.MaterialsRead },
-  { href: "/compras", label: "Compras", perm: Perm.PurchasesRead },
+  { href: "/dashboard", label: "Dashboard de Suprimentos", perm: null },
+  { href: "/dashboard-estoque", label: "Dashboard de Estoque", perm: Perm.MaterialsRead },
+  { href: "/aprovacao", label: "Central de Aprovação", perms: [Perm.PurchasesApprove, Perm.WarehouseApprove] },
+  { href: "/compras", label: "Pedido", perm: Perm.PurchasesRead },
+  { href: "/materiais", label: "Estoque (Almox)", perm: Perm.MaterialsRead },
+  { href: "/almoxarifado", label: "Entregas (EPI)", perm: Perm.MaterialsRead },
   { href: "/cadastros", label: "Cadastros", perm: Perm.PurchasesRead },
   { href: "/auditoria", label: "Auditoria", perm: Perm.AuditRead },
-];
+] as { href: string; label: string; perm?: string | null; perms?: string[] }[];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -31,7 +34,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (!token) return null;
 
-  const nav = NAV.filter((n) => n.perm === null || has(n.perm));
+  const nav = NAV.filter((n) =>
+    n.perms ? n.perms.some((p) => has(p)) : n.perm == null || has(n.perm));
 
   return (
     <div className="min-h-screen">
@@ -58,9 +62,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         <div className="min-w-0 flex-1">
           <header className="mb-6 flex items-center justify-between">
-            <nav className="flex gap-2 md:hidden">
+            <nav className="flex max-w-full gap-2 overflow-x-auto md:hidden">
               {nav.map((n) => (
-                <Link key={n.href} href={n.href} className="rounded-lg px-2 py-1 text-sm text-slate-600 hover:bg-slate-100">
+                <Link key={n.href} href={n.href}
+                  className={`whitespace-nowrap rounded-lg px-2 py-1 text-sm ${
+                    pathname === n.href ? "bg-brand-soft text-brand-fg font-medium" : "text-slate-600 hover:bg-slate-100"}`}>
                   {n.label}
                 </Link>
               ))}

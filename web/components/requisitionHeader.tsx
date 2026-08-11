@@ -51,15 +51,25 @@ export function RequisitionHeaderFields({
   approvers?: Approver[];
 }) {
   const set = (patch: Partial<ReqHeader>) => onChange({ ...value, ...patch });
+
+  // Vínculo v2 (CNPJ interno ↔ centro): escolher o centro pré-preenche a empresa do custo vinculada.
+  const onCenter = (code: string) => {
+    const center = (centers ?? []).find((c) => c.code === code);
+    set({
+      costCenterCode: code,
+      ...(center?.payingCompanyCode ? { payingCompanyCode: center.payingCompanyCode } : {}),
+    });
+  };
+
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <Select label="Centro de custo" value={value.costCenterCode} onChange={(e) => onCenter(e.target.value)}>
+        <option value="">Selecione…</option>
+        {(centers ?? []).map((c) => <option key={c.id} value={c.code}>{c.code} — {c.name}</option>)}
+      </Select>
       <Select label="Empresa do custo (CNPJ)" value={value.payingCompanyCode} onChange={(e) => set({ payingCompanyCode: e.target.value })}>
         <option value="">Selecione…</option>
         {(paying ?? []).map((p) => <option key={p.id} value={p.code}>{p.code} — {p.legalName}</option>)}
-      </Select>
-      <Select label="Centro de custo" value={value.costCenterCode} onChange={(e) => set({ costCenterCode: e.target.value })}>
-        <option value="">Selecione…</option>
-        {(centers ?? []).map((c) => <option key={c.id} value={c.code}>{c.code} — {c.name}</option>)}
       </Select>
       <Select label="Tipo de demanda" value={value.priority} onChange={(e) => set({ priority: e.target.value })}>
         <option value="Normal">Normal</option>

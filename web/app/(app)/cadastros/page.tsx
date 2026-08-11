@@ -2,8 +2,8 @@
 
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError, CostCenterView, PayingCompanyView, SupplierFullView, SupplierStatsView } from "@/lib/api";
-import { Button, Card, Empty, Input, StatusPill, Table } from "@/components/ui";
+import { api, ApiError, CostCenterView, PayingCompanyView, RoleView, SupplierFullView, SupplierStatsView, UserView } from "@/lib/api";
+import { Button, Card, Empty, Input, Select, StatusPill, Table } from "@/components/ui";
 import { useToast } from "@/lib/toast";
 import { Perm, useHas } from "@/lib/me";
 
@@ -33,12 +33,15 @@ export default function CadastrosPage() {
     onError: onErr,
   });
 
-  // ---- Centros de custo ----
+  // ---- Centros de custo (v2: nascem vinculados a um CNPJ interno do grupo) ----
   const centers = useQuery({ queryKey: ["cost-centers"], queryFn: () => api<CostCenterView[]>("/purchases/cost-centers") });
-  const [cc, setCc] = useState({ code: "", name: "" });
+  const [cc, setCc] = useState({ code: "", name: "", payingCompanyCode: "" });
   const createCenter = useMutation({
-    mutationFn: () => api("/purchases/cost-centers", { method: "POST", body: JSON.stringify(cc) }),
-    onSuccess: () => { setCc({ code: "", name: "" }); qc.invalidateQueries({ queryKey: ["cost-centers"] }); toast.push("success", "Centro de custo cadastrado."); },
+    mutationFn: () => api("/purchases/cost-centers", {
+      method: "POST",
+      body: JSON.stringify({ code: cc.code, name: cc.name, payingCompanyCode: cc.payingCompanyCode || null }),
+    }),
+    onSuccess: () => { setCc({ code: "", name: "", payingCompanyCode: "" }); qc.invalidateQueries({ queryKey: ["cost-centers"] }); toast.push("success", "Centro de custo cadastrado."); },
     onError: onErr,
   });
 
@@ -101,16 +104,21 @@ export default function CadastrosPage() {
           <form className="mb-5 grid grid-cols-1 gap-2 sm:grid-cols-3"
             onSubmit={(e: FormEvent) => { e.preventDefault(); createCenter.mutate(); }}>
             <Input label="Código" value={cc.code} onChange={(e) => setCc({ ...cc, code: e.target.value })} />
-            <Input label="Nome" className="sm:col-span-2" value={cc.name} onChange={(e) => setCc({ ...cc, name: e.target.value })} />
+            <Input label="Nome" value={cc.name} onChange={(e) => setCc({ ...cc, name: e.target.value })} />
+            <Select label="CNPJ interno vinculado" value={cc.payingCompanyCode} onChange={(e) => setCc({ ...cc, payingCompanyCode: e.target.value })}>
+              <option value="">Sem vínculo</option>
+              {(paying.data ?? []).map((p) => <option key={p.id} value={p.code}>{p.code} — {p.legalName}</option>)}
+            </Select>
             <div className="sm:col-span-3"><Button type="submit" disabled={createCenter.isPending}>Cadastrar centro de custo</Button></div>
           </form>
         )}
         {centers.data && centers.data.length > 0 ? (
-          <Table head={["Código", "Nome", "Situação"]}>
+          <Table head={["Código", "Nome", "CNPJ vinculado", "Situação"]}>
             {centers.data.map((c) => (
               <tr key={c.id}>
                 <td className="px-3 py-2 font-mono text-xs">{c.code}</td>
                 <td className="px-3 py-2">{c.name}</td>
+                <td className="px-3 py-2 text-slate-500">{c.payingCompanyCode ? `${c.payingCompanyCode} — ${c.payingCompanyName}` : "—"}</td>
                 <td className="px-3 py-2"><StatusPill status={c.status} /></td>
               </tr>
             ))}
@@ -119,6 +127,8 @@ export default function CadastrosPage() {
           <Empty>Nenhum centro de custo cadastrado.</Empty>
         )}
       </Card>
+
+      <Usuarios />
 
       <Card title="Fornecedores">
         {canManage && (
@@ -176,5 +186,110 @@ export default function CadastrosPage() {
         )}
       </Card>
     </>
+  );
+}
+
+/**
+ * Usuários (v2): cadastro com perfil (papel), centros de responsabilidade (escopo do Master Junior)
+ * e bloqueio ("Bloqueado: SIM" — corta login e sessão). Visível apenas para quem gerencia usuários.
+ */
+function Usuarios() {
+  const has = useHas();
+  if (!has(Perm.UsersManage)) return null;
+  return <UsuariosInner />;
+}
+
+function UsuariosInner() {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const users = useQuery({ queryKey: ["users"], queryFn: () => api<UserView[]>("/users") });
+  const roles = useQuery({ queryKey: ["roles"], queryFn: () => api<RoleView[]>("/roles") });
+  const empty = { subject: "", email: "", displayName: "", password: "", roleId: "" };
+  const [u, setU] = useState(empty);
+
+  const onErr = (e: unknown) => toast.push("error", e instanceof ApiError ? e.message : "Erro");
+  const refresh = () => qc.invalidateQueries({ queryKey: ["users"] });
+  const roleName = (ids: string[]) =>
+    ids.map((id) => roles.data?.find((r) => r.id === id)?.name).filter(Boolean).join(", ") || "—";
+
+  const criar = useMutation({
+    mutationFn: async () => {
+      const res = await api<{ userId: string }>("/users", {
+        method: "POST",
+        body: JSON.stringify({ subject: u.subject, email: u.email, displayName: u.displayName, password: u.password }),
+      });
+      if (u.roleId) await api(`/users/${res.userId}/roles`, { method: "POST", body: JSON.stringify({ roleId: u.roleId }) });
+    },
+    onSuccess: () => { setU(empty); refresh(); toast.push("success", "Usuário cadastrado."); },
+    onError: onErr,
+  });
+
+  const setStatus = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      api(`/users/${id}/status`, { method: "POST", body: JSON.stringify({ active }) }),
+    onSuccess: (_, v) => { refresh(); toast.push("success", v.active ? "Usuário reativado." : "Usuário bloqueado."); },
+    onError: onErr,
+  });
+
+  const setCenters = useMutation({
+    mutationFn: ({ id, codes }: { id: string; codes: string[] }) =>
+      api(`/users/${id}/cost-centers`, { method: "PUT", body: JSON.stringify({ codes }) }),
+    onSuccess: () => { refresh(); toast.push("success", "Centros de responsabilidade atualizados."); },
+    onError: onErr,
+  });
+
+  const editarCentros = (usr: UserView) => {
+    const atual = usr.costCenterCodes.join(", ");
+    const resp = typeof window !== "undefined"
+      ? window.prompt("Centros de responsabilidade (códigos separados por vírgula; vazio = todos):", atual)
+      : null;
+    if (resp === null) return;
+    const codes = resp.split(",").map((c) => c.trim()).filter(Boolean);
+    setCenters.mutate({ id: usr.id, codes });
+  };
+
+  return (
+    <Card title="Usuários">
+      <form className="mb-5 grid grid-cols-1 gap-2 sm:grid-cols-3"
+        onSubmit={(e: FormEvent) => { e.preventDefault(); criar.mutate(); }}>
+        <Input label="Usuário (login)" value={u.subject} onChange={(e) => setU({ ...u, subject: e.target.value })} />
+        <Input label="E-mail" value={u.email} onChange={(e) => setU({ ...u, email: e.target.value })} />
+        <Input label="Nome" value={u.displayName} onChange={(e) => setU({ ...u, displayName: e.target.value })} />
+        <Input label="Senha inicial" type="password" value={u.password} onChange={(e) => setU({ ...u, password: e.target.value })} />
+        <Select label="Perfil (papel)" value={u.roleId} onChange={(e) => setU({ ...u, roleId: e.target.value })}>
+          <option value="">Sem papel (defina depois)</option>
+          {(roles.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+        </Select>
+        <div className="flex items-end"><Button type="submit" disabled={criar.isPending}>Cadastrar usuário</Button></div>
+      </form>
+
+      {users.data && users.data.length > 0 ? (
+        <Table head={["Nome", "E-mail", "Perfil", "Centros de responsabilidade", "Situação", ""]}>
+          {users.data.map((usr) => (
+            <tr key={usr.id}>
+              <td className="px-3 py-2">{usr.displayName}</td>
+              <td className="px-3 py-2 text-slate-500">{usr.email}</td>
+              <td className="px-3 py-2 text-slate-500">{roleName(usr.roleIds)}</td>
+              <td className="px-3 py-2">
+                <button className="text-left text-xs text-brand hover:underline" onClick={() => editarCentros(usr)}
+                  title="Editar centros de responsabilidade">
+                  {usr.costCenterCodes.length > 0 ? usr.costCenterCodes.join(", ") : "Todos (sem restrição)"}
+                </button>
+              </td>
+              <td className="px-3 py-2"><StatusPill status={usr.status} /></td>
+              <td className="px-3 py-2 text-right">
+                {usr.status === "Active" ? (
+                  <Button variant="danger" onClick={() => setStatus.mutate({ id: usr.id, active: false })}>Bloquear</Button>
+                ) : (
+                  <Button variant="ghost" onClick={() => setStatus.mutate({ id: usr.id, active: true })}>Reativar</Button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </Table>
+      ) : (
+        <Empty>Nenhum usuário listado.</Empty>
+      )}
+    </Card>
   );
 }

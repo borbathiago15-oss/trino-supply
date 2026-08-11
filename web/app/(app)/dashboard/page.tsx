@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { api, download, ItemView, OrderView, RequisitionView, Suggestion } from "@/lib/api";
+import { api, download, OrderView, RequisitionView } from "@/lib/api";
 import { Button, Card, Empty, StatusPill, Table } from "@/components/ui";
 
 const money = (v: number) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -19,12 +19,11 @@ function Stat({ label, value, href, accent }: { label: string; value: string | n
 }
 
 export default function DashboardPage() {
-  const items = useQuery({ queryKey: ["items"], queryFn: () => api<ItemView[]>("/materials/items") });
-  const suggestions = useQuery({ queryKey: ["suggestions"], queryFn: () => api<Suggestion[]>("/materials/replenishment/suggestions") });
   const reqs = useQuery({ queryKey: ["requisitions"], queryFn: () => api<RequisitionView[]>("/purchases/requisitions") });
   const orders = useQuery({ queryKey: ["orders"], queryFn: () => api<OrderView[]>("/purchases/orders") });
 
-  const pending = reqs.data?.filter((r) => r.status === "Submitted").length ?? 0;
+  const byStatus = (s: string) => reqs.data?.filter((r) => r.status === s).length ?? 0;
+  const pending = byStatus("Submitted") + byStatus("ApprovedLevel1");
   const issued = orders.data?.filter((o) => o.status === "Issued") ?? [];
   const issuedTotal = issued.reduce((acc, o) => acc + Number(o.netValue), 0);
   const recent = [...(orders.data ?? [])].slice(0, 6);
@@ -35,12 +34,13 @@ export default function DashboardPage() {
 
   return (
     <>
-      <h1 className="text-xl font-semibold text-slate-800">Painel</h1>
+      <h1 className="text-xl font-semibold text-slate-800">Dashboard de Suprimentos</h1>
+      <p className="-mt-3 text-sm text-slate-500">Visão de pedidos e compras. O estoque tem dashboard próprio.</p>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Itens cadastrados" value={items.data?.length ?? "—"} href="/materiais" />
-        <Stat label="Sugestões de reposição" value={suggestions.data?.length ?? "—"} href="/reposicao" accent />
-        <Stat label="Aguardando aprovação" value={pending} href="/compras" accent />
-        <Stat label="OCs emitidas" value={issued.length} href="/compras" />
+        <Stat label="Pedidos pendentes" value={pending} href="/aprovacao" accent />
+        <Stat label="Em rascunho" value={byStatus("Draft")} href="/compras" />
+        <Stat label="Aprovados" value={byStatus("Approved")} href="/compras" accent />
+        <Stat label="Reprovados" value={byStatus("Rejected")} href="/compras" />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -48,7 +48,7 @@ export default function DashboardPage() {
           <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Valor emitido em OCs</p>
           <p className="mt-2 text-3xl font-semibold text-slate-800">R$ {money(issuedTotal)}</p>
         </div>
-        <Stat label="Requisições" value={reqs.data?.length ?? "—"} href="/compras" />
+        <Stat label="OCs emitidas" value={issued.length} href="/compras" />
         <Stat label="OCs canceladas" value={orders.data?.filter((o) => o.status === "Cancelled").length ?? 0} href="/compras" />
       </div>
 
@@ -73,7 +73,7 @@ export default function DashboardPage() {
 
       <Card title="Como funciona o ciclo">
         <ol className="grid gap-3 text-sm text-slate-600 sm:grid-cols-5">
-          {["Cadastrar item", "Movimentar estoque", "Reposição sugere", "Requisição + aprovação", "Emitir OC + PDF"].map(
+          {["Abrir pedido", "Aprovação (2 níveis)", "Estoque interno → baixa", "Sem estoque → compra", "Emitir OC + PDF"].map(
             (step, i) => (
               <li key={step} className="rounded-lg border border-slate-100 bg-slate-50 p-3">
                 <span className="mb-1 block font-mono text-xs text-brand">0{i + 1}</span>

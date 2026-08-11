@@ -8,7 +8,10 @@ namespace TrinoSupply.Api.Materials;
 
 public sealed record CreateUnitRequest(string Code, string Name, string Dimension, decimal FactorToBase);
 public sealed record CreateItemRequest(string Code, string Name, string BaseUnitCode, string? Group, string? Ca);
-public sealed record PostMovementRequest(StockDirection Direction, decimal Quantity, string? Reason);
+public sealed record PostMovementRequest(StockDirection Direction, decimal Quantity, string? Reason, string? CostCenterCode);
+public sealed record BatchMovementLine(string ItemCode, decimal Quantity);
+public sealed record BatchMovementRequest(
+    StockDirection Direction, string? Reason, string? CostCenterCode, IReadOnlyList<BatchMovementLine> Lines);
 public sealed record SetPolicyRequest(decimal MinLevel, decimal MaxLevel);
 public sealed record CreateCollaboratorRequest(
     string Name, string? Registration, string? CostCenterCode, string? CompanyCode, DateOnly? AdmissionDate);
@@ -233,9 +236,22 @@ public static class MaterialsEndpoints
             IPermissionChecker perm, IStockService stock, CancellationToken ct) =>
         {
             if (!await perm.HasAsync(PermissionCatalog.MaterialsManage, ct)) return Results.Forbid();
-            var r = await stock.PostMovementAsync(code, req.Direction, req.Quantity, req.Reason, ct);
+            var r = await stock.PostMovementAsync(code, req.Direction, req.Quantity, req.Reason, req.CostCenterCode, ct);
             return r.IsSuccess
                 ? Results.Ok(new { itemCode = code, balance = r.Value })
+                : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization();
+
+        // Entrada/saída em LOTE (spec v2) — atômico: qualquer linha inválida desfaz o lote inteiro.
+        m.MapPost("/movements/batch", async (BatchMovementRequest req,
+            IPermissionChecker perm, IStockService stock, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsManage, ct)) return Results.Forbid();
+            var lines = (req.Lines ?? []).Select(l => (l.ItemCode, l.Quantity)).ToList();
+            var r = await stock.PostBatchAsync(
+                req.Direction, lines, req.Reason ?? "Movimentação em lote", req.CostCenterCode, ct);
+            return r.IsSuccess
+                ? Results.Ok(new { posted = lines.Count })
                 : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
         }).RequireAuthorization();
 

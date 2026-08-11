@@ -473,5 +473,20 @@ BEGIN
     VALUES ('20260811024045_StockRequestFlow', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811133150_MovementCostCenter') THEN
+    ALTER TABLE materials.stock_movement ADD cost_center_code character varying(40);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811133150_MovementCostCenter') THEN
+    INSERT INTO materials.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260811133150_MovementCostCenter', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

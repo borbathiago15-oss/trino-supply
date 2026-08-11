@@ -79,6 +79,7 @@ public sealed class MaterialsDbContext(DbContextOptions<MaterialsDbContext> opti
             e.Property(x => x.Quantity).HasColumnName("quantity").HasColumnType("numeric(18,6)");
             e.Property(x => x.OccurredAt).HasColumnName("occurred_at");
             e.Property(x => x.Reason).HasColumnName("reason").HasMaxLength(300);
+            e.Property(x => x.CostCenterCode).HasColumnName("cost_center_code").HasMaxLength(40);
             e.HasIndex(x => new { x.CompanyId, x.ItemId, x.OccurredAt });
         });
 

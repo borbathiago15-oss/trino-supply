@@ -14,12 +14,16 @@ public sealed class StockService(MaterialsDbContext db, ITenantContext tenant, I
     : IStockService
 {
     public async Task<Result<decimal>> PostMovementAsync(
-        string itemCode, StockDirection direction, decimal quantity, string? reason, CancellationToken ct = default)
+        string itemCode, StockDirection direction, decimal quantity, string? reason,
+        string? costCenterCode = null, CancellationToken ct = default)
     {
         if (!tenant.HasTenant)
             return Result.Failure<decimal>(new Error("materials.no_tenant", "Requisição sem tenant."));
         if (quantity <= 0)
             return Result.Failure<decimal>(new Error("materials.stock.qty_invalid", "Quantidade deve ser positiva."));
+        // Spec v2: toda saída identifica o centro de custo que consumiu o material.
+        if (direction == StockDirection.Out && string.IsNullOrWhiteSpace(costCenterCode))
+            return Result.Failure<decimal>(new Error("materials.stock.center_required", "Saída exige o centro de custo."));
 
         var item = await db.Items.AsNoTracking()
             .FirstOrDefaultAsync(i => i.Code == itemCode.Trim().ToUpperInvariant(), ct);
@@ -43,27 +47,30 @@ public sealed class StockService(MaterialsDbContext db, ITenantContext tenant, I
             return Result.Failure<decimal>(applied.Error);
 
         db.StockMovements.Add(StockMovement.Create(
-            tenant.CompanyId, item.Id, direction, quantity, clock.UtcNow, reason));
+            tenant.CompanyId, item.Id, direction, quantity, clock.UtcNow, reason, costCenterCode));
 
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
 
         metrics.Record("materials.movement.posted", tenant.CompanyId.Value.ToString());
         await audit.RecordAsync("materials.movement.posted", "Item", item.Code,
-            new { direction = direction.ToString(), quantity, balance = balance.Quantity, reason }, ct);
+            new { direction = direction.ToString(), quantity, balance = balance.Quantity, reason, costCenterCode }, ct);
         return Result.Success(balance.Quantity);
     }
 
-    public async Task<Result> DebitBatchAsync(
-        IReadOnlyList<(string ItemCode, decimal Quantity)> lines, string reason, CancellationToken ct = default)
+    public async Task<Result> PostBatchAsync(
+        StockDirection direction, IReadOnlyList<(string ItemCode, decimal Quantity)> lines,
+        string reason, string? costCenterCode = null, CancellationToken ct = default)
     {
         if (!tenant.HasTenant)
             return Result.Failure(new Error("materials.no_tenant", "Requisição sem tenant."));
         if (lines.Count == 0 || lines.Any(l => l.Quantity <= 0))
             return Result.Failure(new Error("materials.stock.qty_invalid", "Linhas do lote inválidas."));
+        if (direction == StockDirection.Out && string.IsNullOrWhiteSpace(costCenterCode))
+            return Result.Failure(new Error("materials.stock.center_required", "Saída exige o centro de custo."));
 
-        // TODAS as saídas na MESMA transação: trava cada saldo (FOR UPDATE) e aplica; qualquer falha
-        // (item inexistente/saldo insuficiente) desfaz o lote inteiro — sem baixa parcial.
+        // TODAS as linhas na MESMA transação: trava cada saldo (FOR UPDATE) e aplica; qualquer falha
+        // (item inexistente/saldo insuficiente) desfaz o lote inteiro — sem movimento parcial.
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         foreach (var (rawCode, qty) in lines)
         {
@@ -79,18 +86,19 @@ public sealed class StockService(MaterialsDbContext db, ITenantContext tenant, I
             if (balance is null)
                 return Result.Failure(new Error("materials.stock.no_balance", $"Saldo do item '{code}' inexistente."));
 
-            var applied = balance.Apply(-qty);
+            var applied = balance.Apply(direction == StockDirection.In ? qty : -qty);
             if (applied.IsFailure) return applied;
 
             db.StockMovements.Add(StockMovement.Create(
-                tenant.CompanyId, item.Id, StockDirection.Out, qty, clock.UtcNow, reason));
+                tenant.CompanyId, item.Id, direction, qty, clock.UtcNow, reason, costCenterCode));
         }
 
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
-        metrics.Record("materials.stock.batch_debited", tenant.CompanyId.Value.ToString());
-        await audit.RecordAsync("materials.stock.batch_debited", null, null,
-            new { reason, items = lines.Select(l => $"{l.ItemCode}x{l.Quantity}").ToArray() }, ct);
+        var action = direction == StockDirection.Out ? "materials.stock.batch_debited" : "materials.stock.batch_credited";
+        metrics.Record(action, tenant.CompanyId.Value.ToString());
+        await audit.RecordAsync(action, null, null,
+            new { reason, costCenterCode, items = lines.Select(l => $"{l.ItemCode}x{l.Quantity}").ToArray() }, ct);
         return Result.Success();
     }
 
@@ -119,6 +127,6 @@ public sealed class StockService(MaterialsDbContext db, ITenantContext tenant, I
             .Take(Math.Clamp(limit, 1, 1000))
             .ToListAsync(ct);
         return movements.Select(mv => new MovementView(
-            mv.Id, mv.Direction.ToString(), mv.Quantity, mv.OccurredAt, mv.Reason)).ToList();
+            mv.Id, mv.Direction.ToString(), mv.Quantity, mv.OccurredAt, mv.Reason, mv.CostCenterCode)).ToList();
     }
 }

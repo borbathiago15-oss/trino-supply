@@ -27,9 +27,11 @@ public sealed class StockFulfillment(
             if (bal.IsFailure || bal.Value.Quantity < line.Quantity) return "purchase";
         }
 
-        var debit = await stock.DebitBatchAsync(
+        var debit = await stock.PostBatchAsync(
+            TrinoSupply.Materials.Domain.StockDirection.Out,
             req.Lines.Select(l => (l.ItemCode, l.Quantity)).ToList(),
-            $"Pedido aprovado — atendido pelo estoque interno (pedido {requisitionId})", ct);
+            $"Pedido aprovado — atendido pelo estoque interno (pedido {requisitionId})",
+            req.CostCenterCode, ct);
         if (debit.IsFailure)
         {
             // Corrida (outra saída consumiu o saldo entre a checagem e a baixa): sem baixa parcial —

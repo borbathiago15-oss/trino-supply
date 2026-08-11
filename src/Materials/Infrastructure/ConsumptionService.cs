@@ -56,7 +56,7 @@ public sealed class ConsumptionService(
 
             db.StockMovements.Add(StockMovement.Create(
                 tenant.CompanyId, item.Id, StockDirection.Out, line.Quantity, clock.UtcNow,
-                $"Consumo: {consumption.Reason} — colaborador {collaborator.Name}"));
+                $"Consumo: {consumption.Reason} — colaborador {collaborator.Name}", consumption.CostCenterCode));
         }
 
         db.Consumptions.Add(consumption);

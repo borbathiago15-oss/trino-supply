@@ -2,7 +2,7 @@
 
 import { FormEvent, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError, BalanceView, download, ItemView, upload } from "@/lib/api";
+import { api, ApiError, BalanceView, CostCenterView, download, ItemView, upload } from "@/lib/api";
 import { Button, Card, Empty, Input, Select, StatusPill, Table } from "@/components/ui";
 import { useToast } from "@/lib/toast";
 import { Perm, useHas } from "@/lib/me";
@@ -24,9 +24,12 @@ export default function MateriaisPage() {
   });
   const groups = useQuery({ queryKey: ["product-groups"], queryFn: () => api<string[]>("/materials/product-groups") });
 
+  const centers = useQuery({ queryKey: ["cost-centers"], queryFn: () => api<CostCenterView[]>("/purchases/cost-centers") });
+
   const [unit, setUnit] = useState({ code: "", name: "", dimension: "contagem", factorToBase: "1" });
   const [item, setItem] = useState({ code: "", name: "", baseUnitCode: "", group: "", ca: "" });
-  const [mov, setMov] = useState({ itemCode: "", direction: "1", quantity: "" });
+  const [mov, setMov] = useState({ itemCode: "", direction: "1", quantity: "", costCenterCode: "", reason: "" });
+  const [lote, setLote] = useState({ direction: "1", costCenterCode: "", reason: "", linhas: "" });
   const [pol, setPol] = useState({ itemCode: "", minLevel: "", maxLevel: "" });
 
   const fail = (e: unknown) => toast.push("error", e instanceof ApiError ? e.message : "Erro inesperado");
@@ -59,9 +62,34 @@ export default function MateriaisPage() {
   const postMov = useMutation({
     mutationFn: () => api(`/materials/items/${mov.itemCode}/movements`, {
       method: "POST",
-      body: JSON.stringify({ direction: Number(mov.direction), quantity: Number(mov.quantity) }),
+      body: JSON.stringify({
+        direction: Number(mov.direction), quantity: Number(mov.quantity),
+        costCenterCode: mov.costCenterCode || null, reason: mov.reason || null,
+      }),
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["balance"] }); qc.invalidateQueries({ queryKey: ["suggestions"] }); setMov({ ...mov, quantity: "" }); toast.push("success", "Movimento lançado."); },
+    onError: fail,
+  });
+  const postLote = useMutation({
+    mutationFn: () => {
+      // Uma linha por item: "CODIGO 10" ou "CODIGO;10".
+      const lines = lote.linhas.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => {
+        const [code, qty] = l.split(/[;,\s]+/);
+        return { itemCode: code, quantity: Number(qty) };
+      });
+      return api<{ posted: number }>("/materials/movements/batch", {
+        method: "POST",
+        body: JSON.stringify({
+          direction: Number(lote.direction), reason: lote.reason || null,
+          costCenterCode: lote.costCenterCode || null, lines,
+        }),
+      });
+    },
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["balance"] }); qc.invalidateQueries({ queryKey: ["suggestions"] });
+      setLote({ ...lote, linhas: "" });
+      toast.push("success", `Lote lançado: ${r.posted} linha(s).`);
+    },
     onError: fail,
   });
   const setPolicy = useMutation({
@@ -77,7 +105,7 @@ export default function MateriaisPage() {
 
   return (
     <>
-      <h1 className="text-xl font-semibold text-slate-800">Materiais</h1>
+      <h1 className="text-xl font-semibold text-slate-800">Estoque (Almox)</h1>
 
       <Card
         title="Itens e saldo"
@@ -159,7 +187,46 @@ export default function MateriaisPage() {
               </select>
             </label>
             <Input label="Quantidade" value={mov.quantity} onChange={(e) => setMov({ ...mov, quantity: e.target.value })} />
+            {mov.direction === "2" && (
+              <Select label="Centro de custo (obrigatório na saída)" value={mov.costCenterCode}
+                onChange={(e) => setMov({ ...mov, costCenterCode: e.target.value })}>
+                <option value="">Selecione…</option>
+                {(centers.data ?? []).map((c) => <option key={c.id} value={c.code}>{c.code} — {c.name}</option>)}
+              </Select>
+            )}
+            <Input label="Motivo (opcional)" value={mov.reason} onChange={(e) => setMov({ ...mov, reason: e.target.value })} />
             <Button type="submit" disabled={postMov.isPending}>Lançar</Button>
+          </form>
+        </Card>
+
+        <Card title="Entrada/saída em lote">
+          <form className="space-y-3" onSubmit={(e) => submit(e, () => postLote.mutate())}>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-sm">
+                <span className="mb-1 block font-medium text-slate-600">Sentido</span>
+                <select className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
+                  value={lote.direction} onChange={(e) => setLote({ ...lote, direction: e.target.value })}>
+                  <option value="1">Entrada</option>
+                  <option value="2">Saída</option>
+                </select>
+              </label>
+              {lote.direction === "2" ? (
+                <Select label="Centro de custo" value={lote.costCenterCode}
+                  onChange={(e) => setLote({ ...lote, costCenterCode: e.target.value })}>
+                  <option value="">Selecione…</option>
+                  {(centers.data ?? []).map((c) => <option key={c.id} value={c.code}>{c.code} — {c.name}</option>)}
+                </Select>
+              ) : <div />}
+            </div>
+            <Input label="Motivo" value={lote.reason} onChange={(e) => setLote({ ...lote, reason: e.target.value })} />
+            <label className="block text-sm">
+              <span className="mb-1 block font-medium text-slate-600">Linhas (uma por item: CÓDIGO QUANTIDADE)</span>
+              <textarea rows={5} className="w-full rounded-lg border border-slate-300 px-3 py-1.5 font-mono text-sm"
+                placeholder={"BOTINA-40 10\nLUVA-M 25"}
+                value={lote.linhas} onChange={(e) => setLote({ ...lote, linhas: e.target.value })} />
+            </label>
+            <Button type="submit" disabled={postLote.isPending}>Lançar lote</Button>
+            <p className="text-xs text-slate-400">O lote é atômico: qualquer linha inválida (item inexistente ou saldo insuficiente) cancela tudo.</p>
           </form>
         </Card>
 

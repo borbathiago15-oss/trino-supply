@@ -431,6 +431,17 @@ dotnet ef database update \
   antigas** do usuário; auditoria `auth.password_setup_requested`/`auth.password_set`.
   **Domínio 62/62**, **integração 41/41** (novo teste ponta-a-ponta: convite → reset → uso
   único → anti-enumeração → refresh antigo revogado) e build web ok.
+- ✅ **v3 — Saída com centro de custo + entrada/saída em lote (validado):** todo movimento de
+  SAÍDA agora identifica o **centro de custo** debitado (spec v2 "quando saída perguntar o centro
+  de custo"): coluna `cost_center_code` no ledger (`stock_movement`), exigido na saída avulsa e no
+  lote (`materials.stock.center_required`); os fluxos internos passam seus centros automaticamente
+  (entrega EPI → centro do colaborador; separação de solicitação → centro da solicitação;
+  atendimento de pedido pelo estoque → centro do pedido). Novo endpoint
+  **`POST /materials/movements/batch`** (entrada OU saída em lote, atômico — linha inválida
+  desfaz tudo). UI **Estoque (Almox)**: saída pede o centro (select), campo motivo, e card
+  **"Entrada/saída em lote"** (linhas `CÓDIGO QUANTIDADE`). **Domínio 62/62**, **integração
+  43/43** (2 novos: centro obrigatório + normalizado no ledger; lote atômico entrada/saída) e
+  build web ok.
 - ✅ **Fase C (parte 3): alertas + borda HTTPS + veredito de go-live:** serviço `alerts` no
   compose (vigia a API a cada minuto — caiu/voltou — e o frescor do backup a cada hora;
   notifica via `ALERT_WEBHOOK_URL` ou loga); `deploy/README.md` ganhou a seção **Borda HTTPS**

@@ -56,7 +56,7 @@ public sealed class StockMovement : IBelongsToTenant
 {
     private StockMovement(
         Guid id, CompanyId companyId, ItemId itemId, StockDirection direction,
-        decimal quantity, DateTimeOffset occurredAt, string? reason)
+        decimal quantity, DateTimeOffset occurredAt, string? reason, string? costCenterCode)
     {
         Id = id;
         CompanyId = companyId;
@@ -65,6 +65,7 @@ public sealed class StockMovement : IBelongsToTenant
         Quantity = quantity;
         OccurredAt = occurredAt;
         Reason = reason;
+        CostCenterCode = costCenterCode;
     }
 
     // Exigido pelo EF Core.
@@ -80,8 +81,12 @@ public sealed class StockMovement : IBelongsToTenant
     public DateTimeOffset OccurredAt { get; private set; }
     public string? Reason { get; private set; }
 
+    /// <summary>Centro de custo debitado (spec v2: TODA saída informa o centro; entrada é opcional).</summary>
+    public string? CostCenterCode { get; private set; }
+
     public static StockMovement Create(
         CompanyId companyId, ItemId itemId, StockDirection direction,
-        decimal quantity, DateTimeOffset occurredAt, string? reason) =>
-        new(Guid.NewGuid(), companyId, itemId, direction, quantity, occurredAt, reason);
+        decimal quantity, DateTimeOffset occurredAt, string? reason, string? costCenterCode = null) =>
+        new(Guid.NewGuid(), companyId, itemId, direction, quantity, occurredAt, reason,
+            string.IsNullOrWhiteSpace(costCenterCode) ? null : costCenterCode.Trim().ToUpperInvariant());
 }

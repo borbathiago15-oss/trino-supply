@@ -154,7 +154,7 @@ public sealed class StockRequestService(
 
             db.StockMovements.Add(StockMovement.Create(
                 tenant.CompanyId, item.Id, StockDirection.Out, line.Quantity, clock.UtcNow,
-                $"Entrega almoxarifado — solicitação {req.Id}"));
+                $"Entrega almoxarifado — solicitação {req.Id}", req.CostCenterCode));
         }
 
         await db.SaveChangesAsync(ct);

@@ -56,6 +56,6 @@ implantação/configuração que só podem ser feitos no ambiente real, no dia d
 1. **Cloudflare Access/SSO** na frente do piloto enquanto for uso interno.
 2. **Teste de restauração de backup** agendado (mensal): `pg_restore` num banco vazio.
 3. **Postgres gerenciado + segredos em cofre** quando virar SaaS externo (ARC-016/OPS-001).
-4. Saída avulsa de estoque pedindo **centro de custo** também fora do fluxo de entrega (hoje o
-   centro é obrigatório na entrega/baixa por colaborador e no pedido).
+4. ~~Saída avulsa de estoque pedindo **centro de custo**~~ — **feito**: toda saída (avulsa e em
+   lote) exige o centro; os fluxos internos gravam o centro automaticamente no ledger.
 5. Dashboards analíticos (consumo por colaborador/centro, tempo de ciclo, previsão) — backlog v3.

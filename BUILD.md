@@ -335,6 +335,15 @@ dotnet ef database update \
   aprovador — 403), **aprovadores distintos**, e cada nível só é aprovado pelo aprovador designado
   daquela etapa (`wrong_approver` → 403; `not_level1` bloqueia pular o nível 1). Rejeição exige
   justificativa e registra quem/quando/nota. **Domínio 43/43** e **integração 27/27** (`dotnet test`).
+- ✅ **Frontend do pedido manual (validado em navegador real):** tela **Compras** com nova
+  solicitação em **dois modos** — *pedido simples* (item a item ou por planilha) e *solicitação em
+  lote por família* (lista os produtos da família e o usuário informa as quantidades) — sobre um
+  **cabeçalho** comum (empresa do custo/CNPJ, centro de custo, tipo de demanda, motivo e os 2
+  aprovadores). Lista de requisições mostra custo/centro/aprovadores e **aprovar por nível**.
+  **Cadastros** ganhou Centro de Custo; **Materiais** ganhou família no item + filtro + importação de
+  produtos; **Reposição** coleta o cabeçalho antes de gerar a requisição. Apoio no backend:
+  `UserView.Subject` + `GET /purchases/approvers`. **E2E (Playwright, stack real como `trino_app`):
+  13/13** — cadastros → solicitação 2 níveis → emissão de OC → PDF.
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e
   Auditoria; testes de integração de isolamento (Testcontainers — QA-001 / SEC-004 §8).

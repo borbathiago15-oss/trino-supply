@@ -83,6 +83,12 @@ public sealed class User : AggregateRoot<UserId>, IBelongsToTenant
         Status = UserStatus.Inactive;
         Version++;
     }
+
+    public void Activate()
+    {
+        Status = UserStatus.Active;
+        Version++;
+    }
 }
 
 /// <summary>Evento de negócio: usuário registrado (ADR-010).</summary>

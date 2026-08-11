@@ -47,11 +47,13 @@ public static class DependencyInjection
         // IAM (FD-001-01) + métricas de uso (case de sucesso).
         services.AddSingleton<IUsageMetrics, LoggingUsageMetrics>();
         services.AddScoped<IAuditLog, DbAuditLog>();
+        services.AddScoped<Audit.IBusinessAudit, Audit.BusinessAudit>();
         services.AddScoped<IIamService, IamService>();
         services.AddScoped<IPermissionChecker, PermissionChecker>();
 
         // AuthN (IdP local): hashing de senha + login/refresh. ITokenIssuer é provido pelo host.
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
+        services.AddSingleton<Auth.ILoginThrottle, Auth.InMemoryLoginThrottle>();
         services.AddScoped<IAuthService, AuthService>();
 
         // Eventos assíncronos: relay do Outbox (ARC-005). Publisher = RabbitMQ se configurado; senão log.

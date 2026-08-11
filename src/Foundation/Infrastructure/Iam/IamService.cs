@@ -168,6 +168,29 @@ public sealed class IamService(
         return Result.Success();
     }
 
+    public async Task<Result> SetUserStatusAsync(Guid userId, bool active, CancellationToken ct = default)
+    {
+        var user = await db.Users.FindAsync([UserId.From(userId)], ct);
+        if (user is null)
+            return Result.Failure(new Error("iam.user.not_found", "Usuário não encontrado."));
+
+        if (active) user.Activate(); else user.Deactivate();
+
+        // Bloqueio corta a sessão: revoga os refresh tokens do usuário (o access token expira em minutos).
+        if (!active)
+        {
+            var now = clock.UtcNow;
+            var tokens = await db.RefreshTokens
+                .Where(t => t.UserId == userId && t.RevokedAt == null).ToListAsync(ct);
+            foreach (var t in tokens) t.Revoke(now);
+        }
+
+        audit.Record(active ? "user.activated" : "user.deactivated", "User", userId.ToString());
+        await db.SaveChangesAsync(ct);
+        metrics.Record(active ? "user.activated" : "user.deactivated", user.CompanyId.Value.ToString());
+        return Result.Success();
+    }
+
     public async Task<Result> AssignRoleToUserAsync(Guid userId, Guid roleId, CancellationToken ct = default)
     {
         // O papel precisa existir no tenant (RLS garante o escopo); evita atribuir papel inexistente.

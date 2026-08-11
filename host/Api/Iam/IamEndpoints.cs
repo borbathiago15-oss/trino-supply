@@ -12,6 +12,7 @@ public sealed record RegisterUserRequest(string Subject, string Email, string Di
 public sealed record CreateRoleRequest(string Name);
 public sealed record PermissionRequest(string Permission);
 public sealed record AssignRoleRequest(Guid RoleId);
+public sealed record SetUserStatusRequest(bool Active);
 
 /// <summary>Endpoints de IAM (FD-001-01). Gestão de usuários é protegida por permissão (deny-by-default).</summary>
 public static class IamEndpoints
@@ -29,10 +30,31 @@ public static class IamEndpoints
                 permissions = await perm.GetPermissionsAsync(ct),
             })).RequireAuthorization();
 
-        // Provisionamento de empresa (operação de PLATAFORMA). No MVP fica aberto para bootstrap;
-        // em produção é restrito ao Admin de plataforma (SEC-001) — TODO(sprint 1).
-        v1.MapPost("/companies", async (RegisterCompanyRequest req, IIamService iam, CancellationToken ct) =>
+        // Provisionamento de empresa (operação de PLATAFORMA — SEC-001). Protegido por chave:
+        //   Provisioning:Key configurada → exige o header X-Provisioning-Key (comparação em tempo constante);
+        //   sem chave: em Development fica aberto (bootstrap/testes); em produção o endpoint é DESABILITADO
+        //   (fail-closed — melhor recusar do que expor provisionamento anônimo).
+        v1.MapPost("/companies", async (RegisterCompanyRequest req, HttpRequest http, IConfiguration cfg,
+            IHostEnvironment env, IIamService iam, CancellationToken ct) =>
         {
+            var configuredKey = cfg["Provisioning:Key"];
+            if (!string.IsNullOrEmpty(configuredKey))
+            {
+                var provided = http.Headers["X-Provisioning-Key"].ToString();
+                var a = System.Text.Encoding.UTF8.GetBytes(provided);
+                var b = System.Text.Encoding.UTF8.GetBytes(configuredKey);
+                if (a.Length != b.Length || !System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(a, b))
+                    return Results.Json(new { code = "platform.forbidden", message = "Chave de provisionamento inválida." }, statusCode: 403);
+            }
+            else if (!env.IsDevelopment())
+            {
+                return Results.Json(new
+                {
+                    code = "platform.provisioning_disabled",
+                    message = "Provisionamento desabilitado: configure Provisioning:Key.",
+                }, statusCode: 403);
+            }
+
             var result = await iam.RegisterCompanyWithAdminAsync(
                 req.LegalName, req.TaxId, req.AdminSubject, req.AdminEmail, req.AdminName, req.AdminPassword, ct);
             return result.IsSuccess
@@ -104,6 +126,14 @@ public static class IamEndpoints
         {
             if (!await perm.HasAsync(PermissionCatalog.UsersManage, ct)) return Results.Forbid();
             return Map(await iam.RemoveRoleFromUserAsync(userId, roleId, ct));
+        }).RequireAuthorization();
+
+        // Bloqueio/reativação de usuário (spec "Bloqueado: SIM"). Bloquear revoga os refresh tokens.
+        v1.MapPost("/users/{userId:guid}/status", async (Guid userId, SetUserStatusRequest req,
+            IPermissionChecker perm, IIamService iam, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.UsersManage, ct)) return Results.Forbid();
+            return Map(await iam.SetUserStatusAsync(userId, req.Active, ct));
         }).RequireAuthorization();
 
         // ---- Auditoria (append-only, somente leitura) ----

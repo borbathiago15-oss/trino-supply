@@ -116,8 +116,10 @@ builder.Services.AddAuthorization();
 var app = builder.Build();
 
 // --- Pipeline ---------------------------------------------------------------
-// Correlação primeiro, para que TODO log (inclusive de auth) já saia com o CorrelationId.
+// Correlação primeiro, para que TODO log (inclusive de auth) já saia com o CorrelationId; em seguida
+// o guarda-chuva de exceções — nenhum erro interno vaza cru para o cliente.
 app.UseMiddleware<TrinoSupply.Api.Observability.CorrelationMiddleware>();
+app.UseMiddleware<TrinoSupply.Api.Observability.ApiExceptionMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 

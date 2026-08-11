@@ -11,7 +11,8 @@ namespace TrinoSupply.Procurement.Infrastructure;
 
 /// <summary>Solicitação de compra (PR-001): cabeçalho, fluxo em 2 níveis, SoD e concorrência otimista.</summary>
 public sealed class PurchaseRequisitionService(
-    ProcurementDbContext db, ITenantContext tenant, ICurrentUser currentUser, IUsageMetrics metrics, IClock clock)
+    ProcurementDbContext db, ITenantContext tenant, ICurrentUser currentUser, IUsageMetrics metrics, IClock clock,
+    TrinoSupply.Foundation.Infrastructure.Audit.IBusinessAudit audit)
     : IPurchaseRequisitionService
 {
     private static readonly Error Conflict = new("purchases.conflict",
@@ -44,6 +45,8 @@ public sealed class PurchaseRequisitionService(
         db.Requisitions.Add(result.Value);
         await db.SaveChangesAsync(ct);
         metrics.Record("purchases.requisition.created", tenant.CompanyId.Value.ToString());
+        await audit.RecordAsync("purchases.requisition.created", "Requisition", result.Value.Id.Value.ToString(),
+            new { payingCompany = payCode, costCenter = ccCode, priority = priority.ToString(), lines = result.Value.Lines.Count }, ct);
         return Result.Success(result.Value.Id.Value);
     }
 
@@ -89,6 +92,8 @@ public sealed class PurchaseRequisitionService(
         }
 
         metrics.Record(metric, req.CompanyId.Value.ToString());
+        // Trilha de auditoria da decisão (SEC-002): mesmo nome da métrica, alvo = a solicitação.
+        await audit.RecordAsync(metric, "Requisition", id.ToString(), new { status = req.Status.ToString() }, ct);
         return Result.Success();
     }
 

@@ -16,9 +16,10 @@ public static class AuthEndpoints
         auth.MapPost("/login", async (LoginRequest req, IAuthService svc, CancellationToken ct) =>
         {
             var result = await svc.LoginAsync(req.CompanyId, req.Email, req.Password, ct);
-            return result.IsSuccess
-                ? Results.Ok(result.Value)
-                : Results.Json(new { code = result.Error.Code, message = result.Error.Message }, statusCode: 401);
+            if (result.IsSuccess) return Results.Ok(result.Value);
+            // Conta sob freio de força bruta → 429 (Too Many Requests); credencial errada → 401.
+            var status = result.Error.Code == "auth.locked" ? 429 : 401;
+            return Results.Json(new { code = result.Error.Code, message = result.Error.Message }, statusCode: status);
         });
 
         auth.MapPost("/refresh", async (RefreshRequest req, IAuthService svc, CancellationToken ct) =>

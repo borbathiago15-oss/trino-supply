@@ -14,7 +14,8 @@ namespace TrinoSupply.Materials.Infrastructure;
 /// usuário corrente, a checagem de estoque na separação e a baixa no estoque na entrega (atômica).
 /// </summary>
 public sealed class StockRequestService(
-    MaterialsDbContext db, ITenantContext tenant, ICurrentUser currentUser, IUsageMetrics metrics, IClock clock)
+    MaterialsDbContext db, ITenantContext tenant, ICurrentUser currentUser, IUsageMetrics metrics, IClock clock,
+    TrinoSupply.Foundation.Infrastructure.Audit.IBusinessAudit audit)
     : IStockRequestService
 {
     public async Task<Result<Guid>> CreateAsync(CreateStockRequestInput input, CancellationToken ct = default)
@@ -30,6 +31,8 @@ public sealed class StockRequestService(
         db.StockRequests.Add(created.Value);
         await db.SaveChangesAsync(ct);
         metrics.Record("warehouse.request.created", tenant.CompanyId.Value.ToString());
+        await audit.RecordAsync("warehouse.request.created", "StockRequest", created.Value.Id.Value.ToString(),
+            new { costCenter = created.Value.CostCenterCode, manager = created.Value.ManagerSubject, reason = created.Value.Reason }, ct);
         return Result.Success(created.Value.Id.Value);
     }
 
@@ -59,16 +62,16 @@ public sealed class StockRequestService(
     }
 
     public Task<Result> ApproveAsync(Guid id, CancellationToken ct = default) =>
-        MutateAsync(id, r => r.Approve(currentUser.Subject ?? string.Empty, clock.UtcNow), ct);
+        MutateAsync(id, r => r.Approve(currentUser.Subject ?? string.Empty, clock.UtcNow), "warehouse.request.approved", ct);
 
     public Task<Result> RejectAsync(Guid id, string? note, CancellationToken ct = default) =>
-        MutateAsync(id, r => r.Reject(currentUser.Subject ?? string.Empty, note, clock.UtcNow), ct);
+        MutateAsync(id, r => r.Reject(currentUser.Subject ?? string.Empty, note, clock.UtcNow), "warehouse.request.rejected", ct);
 
     public Task<Result> DispatchAsync(Guid id, CancellationToken ct = default) =>
-        MutateAsync(id, r => r.Dispatch(clock.UtcNow), ct);
+        MutateAsync(id, r => r.Dispatch(clock.UtcNow), "warehouse.request.dispatched", ct);
 
     public Task<Result> CancelAsync(Guid id, string? note, CancellationToken ct = default) =>
-        MutateAsync(id, r => r.Cancel(currentUser.Subject ?? string.Empty, note, clock.UtcNow), ct);
+        MutateAsync(id, r => r.Cancel(currentUser.Subject ?? string.Empty, note, clock.UtcNow), "warehouse.request.cancelled", ct);
 
     public async Task<Result> StartSeparationAsync(Guid id, CancellationToken ct = default)
     {
@@ -92,6 +95,8 @@ public sealed class StockRequestService(
         await db.SaveChangesAsync(ct);
         metrics.Record(inStock ? "warehouse.request.separating" : "warehouse.request.purchase_needed",
             tenant.CompanyId.Value.ToString());
+        await audit.RecordAsync(inStock ? "warehouse.request.separating" : "warehouse.request.purchase_needed",
+            "StockRequest", id.ToString(), new { status = req.Status.ToString() }, ct);
         return Result.Success();
     }
 
@@ -127,10 +132,12 @@ public sealed class StockRequestService(
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         metrics.Record("warehouse.request.delivered", tenant.CompanyId.Value.ToString());
+        await audit.RecordAsync("warehouse.request.delivered", "StockRequest", id.ToString(),
+            new { items = req.Lines.Select(l => $"{l.ItemCode}x{l.Quantity}").ToArray() }, ct);
         return Result.Success();
     }
 
-    private async Task<Result> MutateAsync(Guid id, Func<StockRequest, Result> action, CancellationToken ct)
+    private async Task<Result> MutateAsync(Guid id, Func<StockRequest, Result> action, string auditAction, CancellationToken ct)
     {
         var req = await db.StockRequests.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == StockRequestId.From(id), ct);
         if (req is null) return Result.Failure(new Error("warehouse.not_found", "Solicitação não encontrada."));
@@ -138,6 +145,7 @@ public sealed class StockRequestService(
         var r = action(req);
         if (r.IsFailure) return r;
         await db.SaveChangesAsync(ct);
+        await audit.RecordAsync(auditAction, "StockRequest", id.ToString(), new { status = req.Status.ToString() }, ct);
         return Result.Success();
     }
 }

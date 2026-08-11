@@ -15,7 +15,8 @@ namespace TrinoSupply.Procurement.Infrastructure;
 /// número sequencial por tenant. Fonte de dados do PDF da OC.
 /// </summary>
 public sealed class PurchaseOrderService(
-    ProcurementDbContext db, ITenantContext tenant, ICurrentUser currentUser, IUsageMetrics metrics, IClock clock)
+    ProcurementDbContext db, ITenantContext tenant, ICurrentUser currentUser, IUsageMetrics metrics, IClock clock,
+    TrinoSupply.Foundation.Infrastructure.Audit.IBusinessAudit audit)
     : IPurchaseOrderService
 {
     public async Task<Result<Guid>> IssueFromRequisitionAsync(
@@ -75,6 +76,8 @@ public sealed class PurchaseOrderService(
             {
                 await db.SaveChangesAsync(ct);
                 metrics.Record("purchases.order.issued", tenant.CompanyId.Value.ToString());
+                await audit.RecordAsync("purchases.order.issued", "PurchaseOrder", order.Value.Id.Value.ToString(),
+                    new { number = order.Value.Number, netValue = order.Value.NetValue, requisitionId }, ct);
                 return Result.Success(order.Value.Id.Value);
             }
             catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" } pg)
@@ -114,6 +117,8 @@ public sealed class PurchaseOrderService(
         }
 
         metrics.Record("purchases.order.cancelled", tenant.CompanyId.Value.ToString());
+        await audit.RecordAsync("purchases.order.cancelled", "PurchaseOrder", id.ToString(),
+            new { number = order.Number, reason }, ct);
         return Result.Success();
     }
 

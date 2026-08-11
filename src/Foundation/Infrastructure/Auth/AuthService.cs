@@ -12,22 +12,51 @@ namespace TrinoSupply.Foundation.Infrastructure.Auth;
 
 /// <summary>Autenticação por e-mail/senha e ciclo de refresh tokens (SEC-001). Ver <see cref="IAuthService"/>.</summary>
 public sealed class AuthService(
-    FoundationDbContext db, IPasswordHasher hasher, ITokenIssuer issuer, IClock clock) : IAuthService
+    FoundationDbContext db, IPasswordHasher hasher, ITokenIssuer issuer, IClock clock, ILoginThrottle throttle) : IAuthService
 {
     private static readonly TimeSpan RefreshLifetime = TimeSpan.FromDays(30);
     private static readonly Error InvalidCredentials = new("auth.invalid_credentials", "Credenciais inválidas.");
     private static readonly Error InvalidRefresh = new("auth.invalid_refresh", "Refresh token inválido ou expirado.");
+    private static readonly Error Locked = new(
+        "auth.locked", "Conta temporariamente bloqueada por tentativas seguidas. Tente novamente em alguns minutos.");
 
     public async Task<Result<AuthTokens>> LoginAsync(Guid companyId, string email, string password, CancellationToken ct = default)
     {
+        var normalized = email.Trim().ToLowerInvariant();
+        var throttleKey = $"{companyId:N}:{normalized}";
+        if (throttle.IsLocked(throttleKey))
+            return Result.Failure<AuthTokens>(Locked);
+
         await using var tx = await db.Database.BeginTransactionAsync(ct);
         await SetTenantAsync(companyId, ct);
 
-        var normalized = email.Trim().ToLowerInvariant();
         var user = await db.Users.FirstOrDefaultAsync(u => u.Email == normalized, ct);
         if (user is null || user.Status != UserStatus.Active || user.PasswordHash is null
             || !hasher.Verify(user.PasswordHash, password))
+        {
+            throttle.RegisterFailure(throttleKey);
+            // Auditoria da falha somente quando a conta existe (evita poluir a trilha com lixo anônimo);
+            // o freio de força bruta acima vale de qualquer forma.
+            if (user is not null)
+            {
+                db.AuditEntries.Add(Domain.Audit.AuditEntry.Create(
+                    user.CompanyId, clock.UtcNow, normalized, "auth.login_failed", "User", user.Id.Value.ToString(), null));
+                await db.SaveChangesAsync(ct);
+                await tx.CommitAsync(ct);
+            }
             return Result.Failure<AuthTokens>(InvalidCredentials);
+        }
+
+        throttle.Reset(throttleKey);
+
+        // Higiene: expurga tokens do usuário já revogados/expirados há mais de 7 dias (tabela não cresce sem limite).
+        var cutoff = clock.UtcNow.AddDays(-7);
+        await db.RefreshTokens
+            .Where(t => t.UserId == user.Id.Value && (t.RevokedAt != null || t.ExpiresAt < cutoff))
+            .ExecuteDeleteAsync(ct);
+
+        db.AuditEntries.Add(Domain.Audit.AuditEntry.Create(
+            user.CompanyId, clock.UtcNow, user.Subject, "auth.login", "User", user.Id.Value.ToString(), null));
 
         var tokens = await IssueAsync(user, ct);
         await tx.CommitAsync(ct);

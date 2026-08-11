@@ -49,6 +49,12 @@ public interface IIamService
     Task<Result> AssignRoleToUserAsync(Guid userId, Guid roleId, CancellationToken ct = default);
     Task<Result> RemoveRoleFromUserAsync(Guid userId, Guid roleId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Bloqueia (<paramref name="active"/>=false) ou reativa um usuário. Usuário bloqueado não loga,
+    /// não renova sessão e perde todas as permissões (deny-by-default) — spec "Bloqueado: SIM".
+    /// </summary>
+    Task<Result> SetUserStatusAsync(Guid userId, bool active, CancellationToken ct = default);
+
     /// <summary>Lê a trilha de auditoria do tenant corrente (mais recentes primeiro).</summary>
     Task<IReadOnlyList<AuditView>> ListAuditAsync(int limit, CancellationToken ct = default);
 }

@@ -365,6 +365,19 @@ dotnet ef database update \
   com RLS por tenant. UI na página **Almoxarifado** (nova solicitação + visão com ações por status).
   **Domínio 59/59** e **integração 31/31** (fluxo completo cria→aprova→separa→despacha→entrega com
   baixa de saldo; sem estoque roteia p/ Solicitado Compra e bloqueia a entrega).
+- ✅ **Hardening de go-live — Fase A (validado):** diagnóstico completo apontou 6 bloqueadores P0;
+  todos corrigidos: **(1)** `POST /companies` protegido por chave de plataforma (`Provisioning:Key` +
+  header `X-Provisioning-Key`; produção sem chave = endpoint desabilitado, fail-closed); **(2)** ciclo
+  de sessão no frontend — access token renovado automaticamente via refresh (single-flight) e
+  401 definitivo → tela de login; **(3)** **auditoria de negócio**: login (ok/falha), movimentos de
+  estoque, baixas de consumo, solicitações de almoxarifado (todas as transições), requisições
+  (criar/submeter/aprovar/rejeitar) e OC (emitir/cancelar) agora gravam na trilha append-only;
+  **(4)** freio de força bruta no login (5 falhas/15 min → 429, por conta); **(5)** middleware global
+  de exceções (500 amigável com correlationId; detalhe só no log); **(6)** **bloqueio de usuário**
+  (`POST /users/{id}/status`) — bloquear revoga os refresh tokens (spec "Bloqueado: SIM").
+  Extras: expurgo automático de refresh tokens antigos no login e senha da role `trino_app`
+  parametrizada (`APP_DB_PASSWORD`, com rotação idempotente no bootstrap). **Domínio 59/59** e
+  **integração 35/35** (4 novos testes de hardening).
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e
   Auditoria; testes de integração de isolamento (Testcontainers — QA-001 / SEC-004 §8).

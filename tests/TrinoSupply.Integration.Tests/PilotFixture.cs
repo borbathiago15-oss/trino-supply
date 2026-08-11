@@ -75,6 +75,9 @@ public sealed class PilotFixture : IAsyncLifetime
 
     public HttpClient Client() => _factory.CreateClient();
 
+    /// <summary>Fábrica base — testes podem derivá-la (WithWebHostBuilder) p/ configurações específicas.</summary>
+    public WebApplicationFactory<Program> Factory => _factory;
+
     // ---- Helpers HTTP ----
 
     public static async Task<(int Status, T? Body)> PostAsync<T>(HttpClient c, string path, object body, string? token = null)

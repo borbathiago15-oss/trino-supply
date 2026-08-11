@@ -6,20 +6,72 @@ export class ApiError extends Error {
   }
 }
 
+// ---- Ciclo de sessão (SEC-001): access token de 15 min renovado automaticamente ----
+// Em 401, tenta UMA renovação via refresh token (single-flight: chamadas concorrentes compartilham a
+// mesma renovação) e repete a chamada original. Refresh falhou → sessão encerrada → tela de login.
+let refreshing: Promise<boolean> | null = null;
+
+async function tryRefresh(): Promise<boolean> {
+  const { refreshToken, companyId, email } = useAuth.getState();
+  if (!refreshToken || !companyId) return false;
+  refreshing ??= (async () => {
+    try {
+      const res = await fetch("/api/v1/auth/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, refreshToken }),
+      });
+      if (!res.ok) return false;
+      const body = await res.json();
+      useAuth.getState().setAuth({
+        token: body.accessToken, refreshToken: body.refreshToken, companyId, email: email ?? "",
+      });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      // Libera o single-flight só depois de o estado ser atualizado.
+      setTimeout(() => { refreshing = null; }, 0);
+    }
+  })();
+  return refreshing;
+}
+
+function endSession(): void {
+  useAuth.getState().logout();
+  if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+    window.location.href = "/login";
+  }
+}
+
+/** fetch autenticado com renovação automática. Endpoints /auth/* não disparam renovação (evita loop). */
+async function authFetch(path: string, init: () => RequestInit): Promise<Response> {
+  const go = () => {
+    const token = useAuth.getState().token;
+    const opts = init();
+    return fetch(`/api/v1${path}`, {
+      ...opts,
+      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(opts.headers ?? {}) },
+    });
+  };
+
+  let res = await go();
+  if (res.status === 401 && !path.startsWith("/auth/")) {
+    if (await tryRefresh()) res = await go();
+    if (res.status === 401) endSession();
+  }
+  return res;
+}
+
 /**
- * Cliente da API do Trino Supply (/api/v1). Anexa o Bearer token do estado de auth e normaliza
- * erros de negócio (code/message) em <see cref="ApiError"/>. Same-origin (proxy do Next).
+ * Cliente da API do Trino Supply (/api/v1). Anexa o Bearer token do estado de auth, renova a sessão
+ * automaticamente e normaliza erros de negócio (code/message) em <see cref="ApiError"/>.
  */
 export async function api<T = unknown>(path: string, opts: RequestInit = {}): Promise<T> {
-  const token = useAuth.getState().token;
-  const res = await fetch(`/api/v1${path}`, {
+  const res = await authFetch(path, () => ({
     ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(opts.headers ?? {}),
-    },
-  });
+    headers: { "Content-Type": "application/json", ...(opts.headers ?? {}) },
+  }));
 
   if (res.status === 204) return undefined as T;
 
@@ -34,10 +86,7 @@ export async function api<T = unknown>(path: string, opts: RequestInit = {}): Pr
 
 /** Baixa um arquivo autenticado (blob) e dispara o download no navegador. */
 export async function download(path: string, filename: string): Promise<void> {
-  const token = useAuth.getState().token;
-  const res = await fetch(`/api/v1${path}`, {
-    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-  });
+  const res = await authFetch(path, () => ({}));
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw new ApiError(res.status, (body && (body.message as string)) || res.statusText, body?.code);
@@ -57,15 +106,14 @@ export async function download(path: string, filename: string): Promise<void> {
 export async function upload<T = unknown>(
   path: string, file: File, fields: Record<string, string> = {}, field = "file",
 ): Promise<T> {
-  const token = useAuth.getState().token;
-  const form = new FormData();
-  form.append(field, file);
-  for (const [k, v] of Object.entries(fields)) form.append(k, v);
-  const res = await fetch(`/api/v1${path}`, {
-    method: "POST",
-    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    body: form,
-  });
+  // FormData recriado a cada tentativa (a renovação de sessão pode repetir a request).
+  const makeForm = () => {
+    const form = new FormData();
+    form.append(field, file);
+    for (const [k, v] of Object.entries(fields)) form.append(k, v);
+    return form;
+  };
+  const res = await authFetch(path, () => ({ method: "POST", body: makeForm() }));
   const body = await res.json().catch(() => null);
   if (!res.ok) {
     throw new ApiError(res.status, (body && (body.message as string)) || res.statusText, body?.code);

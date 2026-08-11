@@ -9,7 +9,8 @@ using TrinoSupply.Materials.Infrastructure.Persistence;
 namespace TrinoSupply.Materials.Infrastructure;
 
 /// <summary>Estoque (MMS-002): ledger + saldo (projeção), com serialização por chave de saldo.</summary>
-public sealed class StockService(MaterialsDbContext db, ITenantContext tenant, IUsageMetrics metrics, IClock clock)
+public sealed class StockService(MaterialsDbContext db, ITenantContext tenant, IUsageMetrics metrics, IClock clock,
+    TrinoSupply.Foundation.Infrastructure.Audit.IBusinessAudit audit)
     : IStockService
 {
     public async Task<Result<decimal>> PostMovementAsync(
@@ -48,6 +49,8 @@ public sealed class StockService(MaterialsDbContext db, ITenantContext tenant, I
         await tx.CommitAsync(ct);
 
         metrics.Record("materials.movement.posted", tenant.CompanyId.Value.ToString());
+        await audit.RecordAsync("materials.movement.posted", "Item", item.Code,
+            new { direction = direction.ToString(), quantity, balance = balance.Quantity, reason }, ct);
         return Result.Success(balance.Quantity);
     }
 

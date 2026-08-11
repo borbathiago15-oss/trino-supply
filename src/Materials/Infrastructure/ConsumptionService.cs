@@ -15,7 +15,8 @@ namespace TrinoSupply.Materials.Infrastructure;
 /// se faltar saldo em qualquer item, a baixa inteira é revertida (atômica).
 /// </summary>
 public sealed class ConsumptionService(
-    MaterialsDbContext db, ITenantContext tenant, ICurrentUser currentUser, IUsageMetrics metrics, IClock clock)
+    MaterialsDbContext db, ITenantContext tenant, ICurrentUser currentUser, IUsageMetrics metrics, IClock clock,
+    TrinoSupply.Foundation.Infrastructure.Audit.IBusinessAudit audit)
     : IConsumptionService
 {
     public async Task<Result<Guid>> CreateAsync(CreateConsumptionInput input, CancellationToken ct = default)
@@ -63,6 +64,9 @@ public sealed class ConsumptionService(
         await tx.CommitAsync(ct);
 
         metrics.Record("materials.consumption.posted", tenant.CompanyId.Value.ToString());
+        await audit.RecordAsync("materials.consumption.posted", "Consumption", consumption.Id.Value.ToString(),
+            new { collaborator = collaborator.Name, costCenter = consumption.CostCenterCode, reason = consumption.Reason,
+                  items = consumption.Lines.Select(l => $"{l.ItemCode}x{l.Quantity}").ToArray() }, ct);
         return Result.Success(consumption.Id.Value);
     }
 

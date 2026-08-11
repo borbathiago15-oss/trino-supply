@@ -44,6 +44,8 @@ services:
       DB_USER: trino
       DB_PASSWORD: trino
       DB_NAME: trino
+      # Senha da role da aplicação (trino_app). Troque em produção (e nas connection strings abaixo).
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-apppw}
     volumes:
       - ./db/gen:/sql:ro
       - ./bootstrap.sh:/bootstrap.sh:ro
@@ -59,11 +61,13 @@ services:
         condition: service_completed_successfully
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__Postgres: "Host=db;Port=5432;Database=trino;Username=trino_app;Password=apppw"
+      ConnectionStrings__Postgres: "Host=db;Port=5432;Database=trino;Username=trino_app;Password=${APP_DB_PASSWORD:-apppw}"
       Jwt__Issuer: "trino-supply"
       Jwt__Audience: "trino-supply"
       Jwt__Keys__0__Kid: "pilot-1"
-      Jwt__Keys__0__Secret: "troque-esta-chave-de-piloto-com-mais-de-32-bytes!!"
+      Jwt__Keys__0__Secret: ${JWT_SIGNING_SECRET:-troque-esta-chave-de-piloto-com-mais-de-32-bytes!!}
+      # Provisionamento de empresas (POST /companies) exige este header X-Provisioning-Key (SEC-001).
+      Provisioning__Key: ${PROVISIONING_KEY:-chave-de-provisionamento-do-piloto}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/health/ready"]
       interval: 10s
@@ -85,7 +89,7 @@ services:
         condition: service_healthy
     environment:
       DOTNET_ENVIRONMENT: Production
-      ConnectionStrings__Postgres: "Host=db;Port=5432;Database=trino;Username=trino_app;Password=apppw"
+      ConnectionStrings__Postgres: "Host=db;Port=5432;Database=trino;Username=trino_app;Password=${APP_DB_PASSWORD:-apppw}"
       RabbitMq__Host: "rabbitmq"
       RabbitMq__User: "trino"
       RabbitMq__Password: "trino"

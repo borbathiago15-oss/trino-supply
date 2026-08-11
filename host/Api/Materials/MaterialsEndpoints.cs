@@ -272,6 +272,21 @@ public static class MaterialsEndpoints
             return Results.Ok(await stock.ListMovementsAsync(code, limit ?? 200, ct));
         }).RequireAuthorization();
 
+        // ---- Analytics do Almox (v3): consumo por centro de custo e por colaborador ----
+        m.MapGet("/analytics/consumption-by-center", async (int? days,
+            IPermissionChecker perm, IMaterialsAnalytics analytics, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsRead, ct)) return Results.Forbid();
+            return Results.Ok(await analytics.ConsumptionByCenterAsync(days ?? 90, ct));
+        }).RequireAuthorization();
+
+        m.MapGet("/analytics/consumption-by-collaborator", async (int? days,
+            IPermissionChecker perm, IMaterialsAnalytics analytics, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsRead, ct)) return Results.Forbid();
+            return Results.Ok(await analytics.ConsumptionByCollaboratorAsync(days ?? 90, ct));
+        }).RequireAuthorization();
+
         // ---- Reposição (ADR-014) ----
         m.MapPut("/items/{code}/replenishment", async (string code, SetPolicyRequest req,
             IPermissionChecker perm, IReplenishmentService repl, CancellationToken ct) =>

@@ -64,6 +64,14 @@ public static class ProcurementEndpoints
 
         // Candidatos a aprovador (usuários com purchases.approve). Visível a quem pode requisitar,
         // para escolher os aprovadores nível 1 e nível 2 sem precisar de users.read.
+        // Tempo de ciclo de aprovação (v3) — respeita o escopo por centro do usuário.
+        p.MapGet("/analytics/cycle", async (int? days,
+            IPermissionChecker perm, IPurchaseRequisitionService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
+            return Results.Ok(await svc.CycleStatsAsync(days ?? 90, ct));
+        }).RequireAuthorization();
+
         p.MapGet("/approvers", async (IPermissionChecker perm, IIamService iam, CancellationToken ct) =>
         {
             if (!await perm.HasAsync(PermissionCatalog.PurchasesRequest, ct)) return Results.Forbid();

@@ -130,6 +130,38 @@ public sealed class PurchaseRequisitionService(
         return Result.Success(ToView(req, paying, cc));
     }
 
+    public async Task<CycleStatsView> CycleStatsAsync(int days = 90, CancellationToken ct = default)
+    {
+        var cutoff = clock.UtcNow.AddDays(-Math.Clamp(days, 1, 365));
+        var reqs = await db.Requisitions.AsNoTracking()
+            .Where(r => r.CreatedAt >= cutoff && r.Status != RequisitionStatus.Draft)
+            .Select(r => new { r.Status, r.CostCenterId, r.CreatedAt, r.Level1DecidedAt, r.Level2DecidedAt })
+            .ToListAsync(ct);
+
+        // Escopo v2: usuário restrito por centro só enxerga a estatística dos seus centros.
+        var scope = await centerScope.GetAsync(ct);
+        if (scope is not null)
+        {
+            var centers = (await db.CostCenters.AsNoTracking().ToListAsync(ct)).ToDictionary(c => c.Id.Value);
+            reqs = reqs.Where(r =>
+                centers.TryGetValue(r.CostCenterId.Value, out var cc) && scope.Contains(cc.Code)).ToList();
+        }
+
+        var l1 = reqs.Where(r => r.Level1DecidedAt is not null)
+            .Select(r => (r.Level1DecidedAt!.Value - r.CreatedAt).TotalHours).ToList();
+        var l2 = reqs.Where(r => r.Level2DecidedAt is not null)
+            .Select(r => (r.Level2DecidedAt!.Value - r.CreatedAt).TotalHours).ToList();
+
+        return new CycleStatsView(
+            Total: reqs.Count,
+            Approved: reqs.Count(r => r.Status == RequisitionStatus.Approved),
+            Rejected: reqs.Count(r => r.Status == RequisitionStatus.Rejected),
+            FulfilledFromStock: reqs.Count(r => r.Status == RequisitionStatus.FulfilledFromStock),
+            Pending: reqs.Count(r => r.Status is RequisitionStatus.Submitted or RequisitionStatus.ApprovedLevel1),
+            AvgHoursToLevel1: l1.Count > 0 ? Math.Round(l1.Average(), 1) : null,
+            AvgHoursToLevel2: l2.Count > 0 ? Math.Round(l2.Average(), 1) : null);
+    }
+
     public async Task<IReadOnlyList<RequisitionView>> ListAsync(int limit = 200, CancellationToken ct = default)
     {
         limit = Math.Clamp(limit, 1, 1000);

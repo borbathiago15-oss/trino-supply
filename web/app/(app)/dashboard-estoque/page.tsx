@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { api, ApiError, ItemView, Suggestion } from "@/lib/api";
+import { api, ApiError, CenterConsumptionRow, CollaboratorConsumptionRow, ItemView, Suggestion } from "@/lib/api";
 import { Button, Card, Empty, Table } from "@/components/ui";
 import { useToast } from "@/lib/toast";
 import { Perm, useHas } from "@/lib/me";
@@ -21,6 +21,14 @@ export default function DashboardEstoquePage() {
 
   const items = useQuery({ queryKey: ["items"], queryFn: () => api<ItemView[]>("/materials/items") });
   const suggestions = useQuery({ queryKey: ["suggestions"], queryFn: () => api<Suggestion[]>("/materials/replenishment/suggestions") });
+  const porCentro = useQuery({
+    queryKey: ["consumption-by-center"],
+    queryFn: () => api<CenterConsumptionRow[]>("/materials/analytics/consumption-by-center?days=90"),
+  });
+  const porColab = useQuery({
+    queryKey: ["consumption-by-collaborator"],
+    queryFn: () => api<CollaboratorConsumptionRow[]>("/materials/analytics/consumption-by-collaborator?days=90"),
+  });
   const { paying, centers, approvers } = useRequisitionRefData(open);
 
   const generate = useMutation({
@@ -42,6 +50,10 @@ export default function DashboardEstoquePage() {
   };
 
   const list = items.data ?? [];
+  // Total de saídas por centro (soma das quantidades) para as barras.
+  const centros = [...(porCentro.data ?? []).reduce((m, r) => m.set(r.costCenterCode, (m.get(r.costCenterCode) ?? 0) + Number(r.totalQuantity)), new Map<string, number>())]
+    .sort((a, b) => b[1] - a[1]);
+  const maxCentro = centros[0]?.[1] ?? 1;
   const familias = [...list.reduce((m, it) => m.set(it.group, (m.get(it.group) ?? 0) + 1), new Map<string, number>())]
     .sort((a, b) => b[1] - a[1]);
   const maxFam = familias[0]?.[1] ?? 1;
@@ -112,6 +124,45 @@ export default function DashboardEstoquePage() {
             </Table>
           ) : (
             <Empty>Nenhum item no ponto de reposição. Defina políticas (mín/máx) no Estoque.</Empty>
+          )}
+        </Card>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card title="Consumo por centro de custo (90 dias)">
+          {centros.length > 0 ? (
+            <div className="space-y-2">
+              {centros.map(([cc, total]) => (
+                <div key={cc} className="grid grid-cols-[130px_1fr_60px] items-center gap-2 text-sm">
+                  <span className="truncate font-mono text-xs text-slate-600">{cc}</span>
+                  <span className="h-2.5 overflow-hidden rounded-full border border-slate-200 bg-slate-50">
+                    <span className="block h-full rounded-full bg-brand" style={{ width: `${(total / maxCentro) * 100}%` }} />
+                  </span>
+                  <span className="text-right tabular-nums text-slate-500">{total}</span>
+                </div>
+              ))}
+              <p className="pt-1 text-xs text-slate-400">Soma das quantidades de saída identificadas por centro.</p>
+            </div>
+          ) : (
+            <Empty>Nenhuma saída com centro de custo na janela.</Empty>
+          )}
+        </Card>
+
+        <Card title="Consumo por colaborador (90 dias)">
+          {(porColab.data ?? []).length > 0 ? (
+            <Table head={["Colaborador", "Matrícula", "Centro", "Entregas", "Itens"]}>
+              {porColab.data!.slice(0, 10).map((r) => (
+                <tr key={`${r.collaboratorName}-${r.registration ?? ""}`}>
+                  <td className="px-3 py-2">{r.collaboratorName}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-slate-500">{r.registration || "—"}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-slate-500">{r.costCenterCode}</td>
+                  <td className="px-3 py-2 tabular-nums">{r.deliveries}</td>
+                  <td className="px-3 py-2 tabular-nums font-semibold">{Number(r.totalItems)}</td>
+                </tr>
+              ))}
+            </Table>
+          ) : (
+            <Empty>Nenhuma entrega de EPI/fardamento na janela.</Empty>
           )}
         </Card>
       </div>

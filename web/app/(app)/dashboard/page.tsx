@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
-import { api, download, OrderView, RequisitionView } from "@/lib/api";
+import { api, CycleStats, download, OrderView, RequisitionView } from "@/lib/api";
 import { Button, Card, Empty, StatusPill, Table } from "@/components/ui";
 
 const money = (v: number) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -21,6 +21,10 @@ function Stat({ label, value, href, accent }: { label: string; value: string | n
 export default function DashboardPage() {
   const reqs = useQuery({ queryKey: ["requisitions"], queryFn: () => api<RequisitionView[]>("/purchases/requisitions") });
   const orders = useQuery({ queryKey: ["orders"], queryFn: () => api<OrderView[]>("/purchases/orders") });
+  const cycle = useQuery({ queryKey: ["cycle-stats"], queryFn: () => api<CycleStats>("/purchases/analytics/cycle?days=90") });
+
+  const horas = (h: number | null) =>
+    h === null ? "—" : h < 48 ? `${Number(h).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} h` : `${(h / 24).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} dias`;
 
   const byStatus = (s: string) => reqs.data?.filter((r) => r.status === s).length ?? 0;
   const pending = byStatus("Submitted") + byStatus("ApprovedLevel1");
@@ -50,6 +54,29 @@ export default function DashboardPage() {
         </div>
         <Stat label="OCs emitidas" value={issued.length} href="/compras" />
         <Stat label="OCs canceladas" value={orders.data?.filter((o) => o.status === "Cancelled").length ?? 0} href="/compras" />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Tempo médio — nível 1</p>
+          <p className="mt-2 text-3xl font-semibold text-slate-800">{horas(cycle.data?.avgHoursToLevel1 ?? null)}</p>
+          <p className="mt-1 text-xs text-slate-400">da criação à decisão (90 dias)</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Tempo médio — nível 2</p>
+          <p className="mt-2 text-3xl font-semibold text-slate-800">{horas(cycle.data?.avgHoursToLevel2 ?? null)}</p>
+          <p className="mt-1 text-xs text-slate-400">da criação à decisão final</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Atendidos pelo estoque</p>
+          <p className="mt-2 text-3xl font-semibold text-teal-600">{cycle.data?.fulfilledFromStock ?? "—"}</p>
+          <p className="mt-1 text-xs text-slate-400">pedidos sem compra externa</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Pedidos na janela</p>
+          <p className="mt-2 text-3xl font-semibold text-slate-800">{cycle.data?.total ?? "—"}</p>
+          <p className="mt-1 text-xs text-slate-400">enviados nos últimos 90 dias</p>
+        </div>
       </div>
 
       <Card title="Últimas Ordens de Compra">

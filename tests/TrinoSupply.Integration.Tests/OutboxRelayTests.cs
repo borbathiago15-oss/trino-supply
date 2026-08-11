@@ -80,9 +80,13 @@ public sealed class OutboxRelayTests(PilotFixture fixture)
     {
         await ProvisionCompanyAsync();
 
-        // Pega uma mensagem pendente específica para inspecionar depois.
+        // Pega uma mensagem pendente específica para inspecionar depois. Tem de ser a MAIS ANTIGA:
+        // o relay drena em lotes de BatchSize ordenados por occurred_at — com backlog > BatchSize
+        // (a suíte inteira compartilha o banco), uma mensagem recente ficaria fora do primeiro lote.
         await using var db = NewContext();
-        var target = await db.Outbox.Where(m => m.PublishedAt == null).OrderByDescending(m => m.OccurredAt).FirstAsync();
+        var target = await db.Outbox
+            .Where(m => m.PublishedAt == null && m.RetryCount < OutboxRelay.MaxRetries)
+            .OrderBy(m => m.OccurredAt).FirstAsync();
         var retriesBefore = target.RetryCount;
 
         var relay = new OutboxRelay(db, new FailingPublisher(), new SystemClock(), NullLogger<OutboxRelay>.Instance);

@@ -13,6 +13,11 @@ public sealed record CreateRequisitionInput(
     string PayingCompanyCode, string CostCenterCode, string Priority, string Justification,
     string ApproverLevel1Subject, string ApproverLevel2Subject, IReadOnlyList<RequisitionLineInput> Lines);
 
+/// <summary>Tempo de ciclo dos pedidos na janela: médias em horas (criação → decisão de cada nível).</summary>
+public sealed record CycleStatsView(
+    int Total, int Approved, int Rejected, int FulfilledFromStock, int Pending,
+    double? AvgHoursToLevel1, double? AvgHoursToLevel2);
+
 public sealed record RequisitionView(
     Guid Id, string Requester, string Status, DateTimeOffset CreatedAt,
     string PayingCompanyCode, string PayingCompanyName, string CostCenterCode, string CostCenterName,
@@ -39,4 +44,7 @@ public interface IPurchaseRequisitionService
     Task<IReadOnlyList<RequisitionView>> ListMyApprovalsAsync(CancellationToken ct = default);
     /// <summary>Roteamento v2: marca o pedido APROVADO como atendido pelo estoque interno (baixa já feita).</summary>
     Task<Result> MarkFulfilledFromStockAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Tempo de ciclo de aprovação na janela (dias). Respeita o escopo por centro (v2).</summary>
+    Task<CycleStatsView> CycleStatsAsync(int days = 90, CancellationToken ct = default);
 }

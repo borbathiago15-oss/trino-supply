@@ -27,6 +27,7 @@ public static class DependencyInjection
         services.AddScoped<ICollaboratorService, CollaboratorService>();
         services.AddScoped<IConsumptionService, ConsumptionService>();
         services.AddScoped<IStockRequestService, StockRequestService>();
+        services.AddScoped<IMaterialsAnalytics, MaterialsAnalytics>();
         return services;
     }
 }

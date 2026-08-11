@@ -442,6 +442,18 @@ dotnet ef database update \
   **"Entrada/saída em lote"** (linhas `CÓDIGO QUANTIDADE`). **Domínio 62/62**, **integração
   43/43** (2 novos: centro obrigatório + normalizado no ledger; lote atômico entrada/saída) e
   build web ok.
+- ✅ **v3 — Dashboards analíticos (validado):** agora que toda saída carrega o centro de custo,
+  os dashboards ganharam leituras agregadas de verdade. **Dashboard de Estoque**: card
+  **"Consumo por centro de custo (90 dias)"** (barras — soma das saídas identificadas por centro,
+  avulsas + entregas + atendimentos de pedido) e **"Consumo por colaborador (90 dias)"**
+  (entregas de EPI/fardamento: matrícula, centro, nº de entregas, itens). **Dashboard de
+  Suprimentos**: **tempo de ciclo de aprovação** — média criação→decisão nível 1 e nível 2
+  (h/dias), pedidos atendidos pelo estoque e total na janela; a estatística **respeita o escopo
+  por centro** do usuário (Master Junior vê só os seus). Novos endpoints:
+  `GET /materials/analytics/consumption-by-center|consumption-by-collaborator` e
+  `GET /purchases/analytics/cycle` (com `?days=`). Corrigido teste do outbox que dependia do
+  tamanho do backlog (alvo agora é a mensagem mais antiga do lote). **Domínio 62/62**,
+  **integração 45/45** (2 novos) e build web ok.
 - ✅ **Fase C (parte 3): alertas + borda HTTPS + veredito de go-live:** serviço `alerts` no
   compose (vigia a API a cada minuto — caiu/voltou — e o frescor do backup a cada hora;
   notifica via `ALERT_WEBHOOK_URL` ou loga); `deploy/README.md` ganhou a seção **Borda HTTPS**

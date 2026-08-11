@@ -320,3 +320,26 @@ export interface SupplierFullView {
   paymentMethod: string;
   status: string;
 }
+export interface CenterConsumptionRow {
+  costCenterCode: string;
+  itemCode: string;
+  itemName: string;
+  totalQuantity: number;
+  movements: number;
+}
+export interface CollaboratorConsumptionRow {
+  collaboratorName: string;
+  registration: string | null;
+  costCenterCode: string;
+  deliveries: number;
+  totalItems: number;
+}
+export interface CycleStats {
+  total: number;
+  approved: number;
+  rejected: number;
+  fulfilledFromStock: number;
+  pending: number;
+  avgHoursToLevel1: number | null;
+  avgHoursToLevel2: number | null;
+}

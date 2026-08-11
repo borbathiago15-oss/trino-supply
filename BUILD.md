@@ -231,6 +231,12 @@ dotnet ef database update \
     mantém os campos que o consumidor depende — quebra antes de furar o consumidor) e **gate de cobertura
     no CI**: o passo de unidade coleta cobertura do domínio (coverlet) e **falha se a linha < 50%**
     (hoje 55,5%). `dotnet test` → **39 unidade + 23 integração**; web `tsc`/`build` OK.
+- ✅ **Tracing distribuído (OpenTelemetry) — Fase 7, fatia 6 (validado em execução real).** A API passou a
+  emitir **spans** de request (ASP.NET Core) + **queries de banco (Npgsql)** correlacionados por trace.
+  Exporta via **OTLP** quando `OTEL_EXPORTER_OTLP_ENDPOINT` está definido (collector/Tempo/Jaeger) e via
+  **console** quando `OTEL_CONSOLE_TRACING=true` (dev/validação). **Validado:** ao provisionar uma empresa
+  com o console exporter, saiu 1 span de request (`POST /api/v1/companies`) + **5 spans Npgsql** aninhados
+  no mesmo trace. Complementa as métricas Prometheus e os logs correlacionados. `dotnet build` verde.
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

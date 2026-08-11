@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 using TrinoSupply.BuildingBlocks.Abstractions;
 using TrinoSupply.Api.Auth;
 using TrinoSupply.Api.Iam;
@@ -44,7 +45,18 @@ builder.Services.AddOpenTelemetry()
     .WithMetrics(m => m
         .AddAspNetCoreInstrumentation()
         .AddMeter(TrinoSupply.Api.Observability.OpenTelemetryUsageMetrics.MeterName)
-        .AddPrometheusExporter());
+        .AddPrometheusExporter())
+    // Tracing distribuído: spans de request (ASP.NET Core) + queries (Npgsql). Exporta via OTLP quando
+    // OTEL_EXPORTER_OTLP_ENDPOINT está definido (ex.: collector/Tempo/Jaeger); console para dev/validação.
+    .WithTracing(t =>
+    {
+        t.AddAspNetCoreInstrumentation();
+        t.AddSource("Npgsql");
+        if (!string.IsNullOrWhiteSpace(builder.Configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]))
+            t.AddOtlpExporter();
+        if (builder.Configuration.GetValue<bool>("OTEL_CONSOLE_TRACING"))
+            t.AddConsoleExporter();
+    });
 // Sobrepõe o LoggingUsageMetrics do Foundation por métricas exportáveis (mesma interface, sem tocar call-sites).
 builder.Services.AddSingleton<IUsageMetrics, TrinoSupply.Api.Observability.OpenTelemetryUsageMetrics>();
 

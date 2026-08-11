@@ -144,6 +144,7 @@ public sealed class MaterialsDbContext(DbContextOptions<MaterialsDbContext> opti
             e.HasIndex(x => new { x.CompanyId, x.ConsumptionId });
         });
 
+        // Ponte v3: pedido de compra gerado a partir da solicitação (uma vez).
         b.Entity<StockRequest>(e =>
         {
             e.ToTable("stock_request");
@@ -160,6 +161,7 @@ public sealed class MaterialsDbContext(DbContextOptions<MaterialsDbContext> opti
             e.Property(x => x.DecisionBySubject).HasColumnName("decision_by").HasMaxLength(200);
             e.Property(x => x.DecisionAt).HasColumnName("decision_at");
             e.Property(x => x.DecisionNote).HasColumnName("decision_note").HasMaxLength(1000);
+            e.Property(x => x.LinkedRequisitionId).HasColumnName("linked_requisition_id");
             e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
             e.HasMany(x => x.Lines).WithOne().HasForeignKey(l => l.RequestId);
             e.HasIndex(x => new { x.CompanyId, x.Status });

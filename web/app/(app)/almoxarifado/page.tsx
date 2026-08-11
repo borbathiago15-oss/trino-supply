@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, ApiError, CollaboratorView, ConsumptionView, StockRequestView, download } from "@/lib/api";
+import { api, ApiError, CollaboratorView, ConsumptionView, CostCenterView, PayingCompanyView, StockRequestView, download } from "@/lib/api";
 import { Button, Card, Empty, Input, Select, StatusPill, Table } from "@/components/ui";
 import { useToast } from "@/lib/toast";
 import { Perm, useHas, useMe } from "@/lib/me";
@@ -127,6 +127,47 @@ function Solicitacoes() {
 
   const list = useQuery({ queryKey: ["stock-requests"], queryFn: () => api<StockRequestView[]>("/materials/requests") });
 
+  // Ponte v3: gerar pedido de compra a partir de uma solicitação em "Solicitado Compra".
+  const canRequestPurchase = has(Perm.PurchasesRequest);
+  const [gerarId, setGerarId] = useState<string | null>(null);
+  const [ger, setGer] = useState({ payingCompanyCode: "", approver1: "", approver2: "", priority: "Normal" });
+  const paying = useQuery({
+    queryKey: ["paying-companies"], enabled: gerarId !== null,
+    queryFn: () => api<PayingCompanyView[]>("/purchases/paying-companies"),
+  });
+  const centers = useQuery({
+    queryKey: ["cost-centers"], enabled: gerarId !== null,
+    queryFn: () => api<CostCenterView[]>("/purchases/cost-centers"),
+  });
+  const approvers = useQuery({
+    queryKey: ["approvers"], enabled: gerarId !== null,
+    queryFn: () => api<{ subject: string; displayName: string }[]>("/purchases/approvers"),
+  });
+
+  const abrirGerar = (r: StockRequestView) => {
+    // Pré-preenche a empresa pagadora vinculada ao centro da solicitação (CNPJ↔centro).
+    const cc = centers.data?.find((c) => c.code === r.costCenterCode);
+    setGer({ payingCompanyCode: cc?.payingCompanyCode ?? "", approver1: "", approver2: "", priority: "Normal" });
+    setGerarId(gerarId === r.id ? null : r.id);
+  };
+
+  const gerar = useMutation({
+    mutationFn: (id: string) => api<{ requisitionId: string }>(`/materials/requests/${id}/generate-purchase`, {
+      method: "POST",
+      body: JSON.stringify({
+        payingCompanyCode: ger.payingCompanyCode, priority: ger.priority,
+        approverLevel1Subject: ger.approver1, approverLevel2Subject: ger.approver2,
+      }),
+    }),
+    onSuccess: () => {
+      setGerarId(null);
+      qc.invalidateQueries({ queryKey: ["stock-requests"] });
+      qc.invalidateQueries({ queryKey: ["requisitions"] });
+      toast.push("success", "Pedido de compra gerado e enviado para aprovação.");
+    },
+    onError: (e) => toast.push("error", e instanceof ApiError ? e.message : "Erro"),
+  });
+
   const act = useMutation({
     mutationFn: ({ id, action, note }: { id: string; action: string; note?: string }) =>
       api(`/materials/requests/${id}/${action}`, {
@@ -177,6 +218,14 @@ function Solicitacoes() {
                         {semEstoque ? "Separar (falta estoque → compra)" : "Iniciar separação"}
                       </Button>
                     )}
+                    {r.status === "SolicitadoCompra" && canManage && canRequestPurchase && !r.linkedRequisitionId && (
+                      <Button variant="ghost" onClick={() => abrirGerar(r)}>
+                        {gerarId === r.id ? "Fechar" : "Gerar pedido de compra"}
+                      </Button>
+                    )}
+                    {r.linkedRequisitionId && (
+                      <span className="text-xs text-teal-700">Pedido gerado ✓</span>
+                    )}
                     {r.status === "EmSeparacao" && canManage && (
                       <Button onClick={() => act.mutate({ id: r.id, action: "dispatch" })}>Despachar</Button>
                     )}
@@ -188,6 +237,38 @@ function Solicitacoes() {
                     )}
                   </div>
                 </div>
+
+                {gerarId === r.id && (
+                  <div className="mt-3 grid grid-cols-1 gap-2 rounded-lg border border-slate-100 bg-slate-50 p-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <Select label="Empresa pagadora" value={ger.payingCompanyCode}
+                      onChange={(e) => setGer({ ...ger, payingCompanyCode: e.target.value })}>
+                      <option value="">Selecione…</option>
+                      {(paying.data ?? []).map((p) => <option key={p.id} value={p.code}>{p.code} — {p.legalName}</option>)}
+                    </Select>
+                    <Select label="Aprovador nível 1" value={ger.approver1}
+                      onChange={(e) => setGer({ ...ger, approver1: e.target.value })}>
+                      <option value="">Selecione…</option>
+                      {(approvers.data ?? []).map((a) => <option key={a.subject} value={a.subject}>{a.displayName}</option>)}
+                    </Select>
+                    <Select label="Aprovador nível 2" value={ger.approver2}
+                      onChange={(e) => setGer({ ...ger, approver2: e.target.value })}>
+                      <option value="">Selecione…</option>
+                      {(approvers.data ?? []).map((a) => <option key={a.subject} value={a.subject}>{a.displayName}</option>)}
+                    </Select>
+                    <div className="flex items-end">
+                      <Button disabled={gerar.isPending} onClick={() => {
+                        if (!ger.payingCompanyCode) { toast.push("error", "Selecione a empresa pagadora."); return; }
+                        if (!ger.approver1 || !ger.approver2) { toast.push("error", "Selecione os dois aprovadores."); return; }
+                        gerar.mutate(r.id);
+                      }}>
+                        {gerar.isPending ? "Gerando…" : "Gerar e enviar"}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-slate-400 sm:col-span-2 lg:col-span-4">
+                      As linhas e o centro de custo vêm da solicitação; o pedido já entra no fluxo de aprovação (2 níveis).
+                    </p>
+                  </div>
+                )}
               </div>
             );
           })}

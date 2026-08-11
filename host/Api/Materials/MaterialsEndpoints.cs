@@ -19,6 +19,9 @@ public sealed record CreateStockRequestRequest(
     string CompanyCode, string CostCenterCode, string ManagerSubject, string Reason,
     IReadOnlyList<StockRequestLineInput> Lines);
 public sealed record RequestNoteRequest(string? Note);
+public sealed record GeneratePurchaseRequest(
+    string PayingCompanyCode, string? Priority, string? Justification,
+    string ApproverLevel1Subject, string ApproverLevel2Subject);
 
 /// <summary>Endpoints de Materiais (MMS-002). Protegidos por permissão (deny-by-default).</summary>
 public static class MaterialsEndpoints
@@ -199,6 +202,46 @@ public static class MaterialsEndpoints
         {
             if (!await perm.HasAsync(PermissionCatalog.MaterialsManage, ct)) return Results.Forbid();
             return MapWarehouse(await svc.StartSeparationAsync(id, ct));
+        }).RequireAuthorization();
+
+        // Ponte v3: solicitação em "Solicitado Compra" gera o pedido no módulo Pedido — as linhas e o
+        // centro vêm da solicitação; quem gera escolhe empresa pagadora e aprovadores. Idempotente:
+        // uma solicitação gera no máximo UM pedido (warehouse.purchase_already_generated).
+        m.MapPost("/requests/{id:guid}/generate-purchase", async (Guid id, GeneratePurchaseRequest body,
+            IPermissionChecker perm, IStockRequestService svc, IPurchaseRequisitionService purchases,
+            CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsManage, ct)
+                || !await perm.HasAsync(PermissionCatalog.PurchasesRequest, ct)) return Results.Forbid();
+
+            var reqRes = await svc.GetAsync(id, ct);
+            if (reqRes.IsFailure)
+                return Results.NotFound(new { code = reqRes.Error.Code, message = reqRes.Error.Message });
+            var req = reqRes.Value;
+            if (req.Status != "SolicitadoCompra")
+                return Results.BadRequest(new { code = "warehouse.invalid_state", message = "Só solicitações em 'Solicitado Compra' geram pedido." });
+            if (req.LinkedRequisitionId is not null)
+                return Results.BadRequest(new { code = "warehouse.purchase_already_generated", message = "Esta solicitação já gerou um pedido de compra." });
+
+            var created = await purchases.CreateAsync(new CreateRequisitionInput(
+                body.PayingCompanyCode, req.CostCenterCode,
+                string.IsNullOrWhiteSpace(body.Priority) ? "Normal" : body.Priority!,
+                string.IsNullOrWhiteSpace(body.Justification)
+                    ? $"Solicitação do almoxarifado {id:N} — {req.Reason}" : body.Justification!,
+                body.ApproverLevel1Subject, body.ApproverLevel2Subject,
+                req.Lines.Select(l => new RequisitionLineInput(l.ItemCode, l.Quantity, "un")).ToList()), ct);
+            if (created.IsFailure)
+                return Results.BadRequest(new { code = created.Error.Code, message = created.Error.Message });
+
+            // Envia direto para o fluxo de aprovação e vincula (o vínculo é a trava de duplicidade).
+            var submitted = await purchases.SubmitAsync(created.Value, ct);
+            if (submitted.IsFailure)
+                return Results.BadRequest(new { code = submitted.Error.Code, message = submitted.Error.Message });
+            var mark = await svc.MarkPurchaseGeneratedAsync(id, created.Value, ct);
+            if (mark.IsFailure)
+                return Results.BadRequest(new { code = mark.Error.Code, message = mark.Error.Message, requisitionId = created.Value });
+
+            return Results.Ok(new { requisitionId = created.Value });
         }).RequireAuthorization();
 
         m.MapPost("/requests/{id:guid}/dispatch", async (Guid id, IPermissionChecker perm, IStockRequestService svc, CancellationToken ct) =>

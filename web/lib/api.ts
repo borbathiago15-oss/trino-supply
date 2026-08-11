@@ -169,6 +169,7 @@ export interface StockRequestView {
   decisionBy?: string | null;
   decisionAt?: string | null;
   decisionNote?: string | null;
+  linkedRequisitionId?: string | null;
   lines: { itemCode: string; quantity: number; balance: number }[];
 }
 export interface CostCenterView {

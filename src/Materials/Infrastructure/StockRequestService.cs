@@ -67,7 +67,7 @@ public sealed class StockRequestService(
 
         return list.Select(r => new StockRequestView(
             r.Id.Value, r.RequesterSubject, r.CompanyCode, r.CostCenterCode, r.ManagerSubject, r.Reason,
-            r.Status.ToString(), r.CreatedAt, r.DecisionBySubject, r.DecisionAt, r.DecisionNote,
+            r.Status.ToString(), r.CreatedAt, r.DecisionBySubject, r.DecisionAt, r.DecisionNote, r.LinkedRequisitionId,
             r.Lines.Select(l => new StockRequestLineView(l.ItemCode, l.Quantity, Bal(l.ItemCode))).ToList())).ToList();
     }
 
@@ -91,7 +91,7 @@ public sealed class StockRequestService(
 
         return list.Select(r => new StockRequestView(
             r.Id.Value, r.RequesterSubject, r.CompanyCode, r.CostCenterCode, r.ManagerSubject, r.Reason,
-            r.Status.ToString(), r.CreatedAt, r.DecisionBySubject, r.DecisionAt, r.DecisionNote,
+            r.Status.ToString(), r.CreatedAt, r.DecisionBySubject, r.DecisionAt, r.DecisionNote, r.LinkedRequisitionId,
             r.Lines.Select(l => new StockRequestLineView(l.ItemCode, l.Quantity, 0m)).ToList())).ToList();
     }
 
@@ -100,6 +100,22 @@ public sealed class StockRequestService(
 
     public Task<Result> CancelAsync(Guid id, string? note, CancellationToken ct = default) =>
         MutateAsync(id, r => r.Cancel(currentUser.Subject ?? string.Empty, note, clock.UtcNow), "warehouse.request.cancelled", ct);
+
+    public async Task<Result<StockRequestView>> GetAsync(Guid id, CancellationToken ct = default)
+    {
+        var r = await db.StockRequests.AsNoTracking().Include(x => x.Lines)
+            .FirstOrDefaultAsync(x => x.Id == StockRequestId.From(id), ct);
+        if (r is null)
+            return Result.Failure<StockRequestView>(new Error("warehouse.not_found", "Solicitação não encontrada."));
+
+        return Result.Success(new StockRequestView(
+            r.Id.Value, r.RequesterSubject, r.CompanyCode, r.CostCenterCode, r.ManagerSubject, r.Reason,
+            r.Status.ToString(), r.CreatedAt, r.DecisionBySubject, r.DecisionAt, r.DecisionNote, r.LinkedRequisitionId,
+            r.Lines.Select(l => new StockRequestLineView(l.ItemCode, l.Quantity, 0m)).ToList()));
+    }
+
+    public Task<Result> MarkPurchaseGeneratedAsync(Guid id, Guid requisitionId, CancellationToken ct = default) =>
+        MutateAsync(id, r => r.MarkPurchaseGenerated(requisitionId), "warehouse.request.purchase_generated", ct);
 
     public async Task<Result> StartSeparationAsync(Guid id, CancellationToken ct = default)
     {

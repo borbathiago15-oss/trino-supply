@@ -100,6 +100,9 @@ public sealed class StockRequest : AggregateRoot<StockRequestId>, IBelongsToTena
     public string? DecisionBySubject { get; private set; }
     public DateTimeOffset? DecisionAt { get; private set; }
     public string? DecisionNote { get; private set; }
+
+    /// <summary>Pedido de compra gerado a partir desta solicitação (ponte v3). Um por solicitação.</summary>
+    public Guid? LinkedRequisitionId { get; private set; }
     public IReadOnlyList<StockRequestLine> Lines => _lines;
 
     public static Result<StockRequest> Create(CompanyId companyId, string requesterSubject, string companyCode,
@@ -170,6 +173,18 @@ public sealed class StockRequest : AggregateRoot<StockRequestId>, IBelongsToTena
         if (Status != RequestStatus.Aprovado && Status != RequestStatus.SolicitadoCompra)
             return Result.Failure(new Error("warehouse.invalid_state", $"Separação inválida no estado {Status}."));
         Status = inStock ? RequestStatus.EmSeparacao : RequestStatus.SolicitadoCompra;
+        Version++;
+        return Result.Success();
+    }
+
+    /// <summary>Vincula o pedido de compra gerado (ponte v3) — só em Solicitado Compra e uma única vez.</summary>
+    public Result MarkPurchaseGenerated(Guid requisitionId)
+    {
+        if (Status != RequestStatus.SolicitadoCompra)
+            return Result.Failure(new Error("warehouse.invalid_state", $"Gerar pedido inválido no estado {Status}."));
+        if (LinkedRequisitionId is not null)
+            return Result.Failure(new Error("warehouse.purchase_already_generated", "Esta solicitação já gerou um pedido de compra."));
+        LinkedRequisitionId = requisitionId;
         Version++;
         return Result.Success();
     }

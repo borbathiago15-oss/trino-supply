@@ -454,6 +454,15 @@ dotnet ef database update \
   `GET /purchases/analytics/cycle` (com `?days=`). Corrigido teste do outbox que dependia do
   tamanho do backlog (alvo agora é a mensagem mais antiga do lote). **Domínio 62/62**,
   **integração 45/45** (2 novos) e build web ok.
+- ✅ **v3 — Ponte solicitação→pedido (validado):** solicitação do almoxarifado que cai em
+  **"Solicitado Compra"** (separação sem saldo) agora gera o pedido no módulo Pedido com um
+  clique: **`POST /materials/requests/{id}/generate-purchase`** (orquestração no host — BCs não
+  se referenciam) cria o pedido com as **linhas e o centro da solicitação**, empresa pagadora
+  pré-preenchida pelo vínculo CNPJ↔centro, aprovadores escolhidos na hora, e **já o submete** ao
+  fluxo de 2 níveis. O vínculo (`linked_requisition_id`) é **único por solicitação**
+  (idempotência — segunda geração é recusada) e aparece na UI ("Pedido gerado ✓"). Auditoria
+  `warehouse.request.purchase_generated`. **Domínio 62/62**, **integração 46/46** (novo teste
+  ponta-a-ponta da ponte) e build web ok.
 - ✅ **Fase C (parte 3): alertas + borda HTTPS + veredito de go-live:** serviço `alerts` no
   compose (vigia a API a cada minuto — caiu/voltou — e o frescor do backup a cada hora;
   notifica via `ALERT_WEBHOOK_URL` ou loga); `deploy/README.md` ganhou a seção **Borda HTTPS**

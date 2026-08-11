@@ -13,7 +13,7 @@ public sealed record CreateStockRequestInput(
 public sealed record StockRequestView(
     Guid Id, string RequesterSubject, string CompanyCode, string CostCenterCode, string ManagerSubject,
     string Reason, string Status, DateTimeOffset CreatedAt, string? DecisionBy, DateTimeOffset? DecisionAt,
-    string? DecisionNote, IReadOnlyList<StockRequestLineView> Lines);
+    string? DecisionNote, Guid? LinkedRequisitionId, IReadOnlyList<StockRequestLineView> Lines);
 
 /// <summary>
 /// Solicitação de material de estoque (Fluxo A). Fluxo: Pendente → Aprovado/Rejeitado (gestor) →
@@ -34,4 +34,9 @@ public interface IStockRequestService
     /// <summary>Entrega: dá baixa no estoque das linhas e conclui (total → Entregue).</summary>
     Task<Result> DeliverAsync(Guid id, CancellationToken ct = default);
     Task<Result> CancelAsync(Guid id, string? note, CancellationToken ct = default);
+
+    Task<Result<StockRequestView>> GetAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Ponte v3: vincula o pedido de compra gerado (uma única vez, em Solicitado Compra).</summary>
+    Task<Result> MarkPurchaseGeneratedAsync(Guid id, Guid requisitionId, CancellationToken ct = default);
 }

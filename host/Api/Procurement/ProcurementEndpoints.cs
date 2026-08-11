@@ -13,7 +13,7 @@ public sealed record FromSuggestionsRequest(
     string ApproverLevel1Subject, string ApproverLevel2Subject);
 public sealed record AddLinesRequest(IReadOnlyList<RequisitionLineInput> Lines);
 public sealed record RejectRequest(string? Note);
-public sealed record CreateCostCenterRequest(string Code, string Name);
+public sealed record CreateCostCenterRequest(string Code, string Name, string? PayingCompanyCode);
 public sealed record CancelOrderRequest(string Reason);
 
 /// <summary>Endpoints de Compras (PR-001). Requisitar e aprovar são permissões distintas (SoD).</summary>
@@ -47,6 +47,21 @@ public static class ProcurementEndpoints
                 : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
         }).RequireAuthorization();
 
+        // Central de Aprovação (v2): tudo que aguarda a decisão do usuário corrente — pedidos de compra
+        // na etapa dele (nível 1/2) + solicitações de almoxarifado onde ele é o gestor — no seu escopo
+        // de centros de custo. Aprovar/reprovar acontecem nos endpoints de cada tipo.
+        p.MapGet("/approvals", async (IPermissionChecker perm, IPurchaseRequisitionService reqs,
+            TrinoSupply.Materials.Application.IStockRequestService stock, CancellationToken ct) =>
+        {
+            var canPurchases = await perm.HasAsync(PermissionCatalog.PurchasesApprove, ct);
+            var canWarehouse = await perm.HasAsync(PermissionCatalog.WarehouseApprove, ct);
+            if (!canPurchases && !canWarehouse) return Results.Forbid();
+
+            var requisitions = canPurchases ? await reqs.ListMyApprovalsAsync(ct) : [];
+            var stockRequests = canWarehouse ? await stock.ListMyApprovalsAsync(ct) : [];
+            return Results.Ok(new { requisitions, stockRequests });
+        }).RequireAuthorization();
+
         // Candidatos a aprovador (usuários com purchases.approve). Visível a quem pode requisitar,
         // para escolher os aprovadores nível 1 e nível 2 sem precisar de users.read.
         p.MapGet("/approvers", async (IPermissionChecker perm, IIamService iam, CancellationToken ct) =>
@@ -66,7 +81,7 @@ public static class ProcurementEndpoints
         p.MapPost("/cost-centers", async (CreateCostCenterRequest req, IPermissionChecker perm, ICostCenterService svc, CancellationToken ct) =>
         {
             if (!await perm.HasAsync(PermissionCatalog.PurchasesOrder, ct)) return Results.Forbid();
-            var r = await svc.CreateAsync(new CostCenterInput(req.Code, req.Name), ct);
+            var r = await svc.CreateAsync(new CostCenterInput(req.Code, req.Name, req.PayingCompanyCode), ct);
             return r.IsSuccess
                 ? Results.Created($"/api/v1/purchases/cost-centers/{r.Value}", new { costCenterId = r.Value })
                 : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
@@ -322,7 +337,7 @@ public static class ProcurementEndpoints
         {
             "purchases.not_found" => Results.NotFound(new { code = result.Error.Code, message = result.Error.Message }),
             "purchases.conflict" => Results.Conflict(new { code = result.Error.Code, message = result.Error.Message }),
-            "purchases.sod_violation" or "purchases.wrong_approver"
+            "purchases.sod_violation" or "purchases.wrong_approver" or "purchases.center_forbidden"
                 => Results.Json(new { code = result.Error.Code, message = result.Error.Message }, statusCode: 403),
             _ => Results.BadRequest(new { code = result.Error.Code, message = result.Error.Message })
         };

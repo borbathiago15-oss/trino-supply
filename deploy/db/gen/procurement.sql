@@ -689,5 +689,20 @@ BEGIN
     VALUES ('20260811013526_RequisitionHeaderAndTwoLevel', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811113319_CostCenterPayingLink') THEN
+    ALTER TABLE procurement.cost_center ADD paying_company_id uuid;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811113319_CostCenterPayingLink') THEN
+    INSERT INTO procurement.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260811113319_CostCenterPayingLink', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

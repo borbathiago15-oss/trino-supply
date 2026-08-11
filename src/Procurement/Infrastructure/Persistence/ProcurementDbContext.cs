@@ -60,6 +60,8 @@ public sealed class ProcurementDbContext(DbContextOptions<ProcurementDbContext> 
             e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
             e.Property(x => x.Code).HasColumnName("code").HasMaxLength(60).IsRequired();
             e.Property(x => x.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+            e.Property(x => x.PayingCompanyId).HasColumnName("paying_company_id")
+                .HasConversion(id => id!.Value.Value, v => PayingCompanyId.From(v));
             e.Property(x => x.Status).HasColumnName("status").HasConversion<short>();
             e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
             e.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();

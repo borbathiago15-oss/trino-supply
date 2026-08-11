@@ -18,6 +18,7 @@ public sealed class User : AggregateRoot<UserId>, IBelongsToTenant
 {
     // Backing em Guid puro para mapear direto a uuid[] no PostgreSQL; a API pública é tipada.
     private readonly List<Guid> _roleIds = new();
+    private readonly List<string> _costCenterCodes = new();
 
     private User(UserId id, CompanyId companyId, string subject, string email, string displayName) : base(id)
     {
@@ -42,6 +43,23 @@ public sealed class User : AggregateRoot<UserId>, IBelongsToTenant
     /// <summary>Hash da senha (IdP local). Nulo para usuários de identidade externa — SEC-003.</summary>
     public string? PasswordHash { get; private set; }
     public IReadOnlyCollection<RoleId> RoleIds => _roleIds.Select(RoleId.From).ToArray();
+
+    /// <summary>
+    /// Centros de custo sob responsabilidade do usuário (escopo — spec v2). Lista VAZIA = sem
+    /// restrição (vê todos os centros: perfis Master/Pleno); preenchida = restrito a esses centros
+    /// (perfil Master Junior, que só vê e aprova o que é de sua responsabilidade).
+    /// </summary>
+    public IReadOnlyCollection<string> CostCenterCodes => _costCenterCodes;
+
+    public void SetCostCenters(IEnumerable<string> codes)
+    {
+        _costCenterCodes.Clear();
+        _costCenterCodes.AddRange(codes
+            .Select(c => (c ?? string.Empty).Trim().ToUpperInvariant())
+            .Where(c => c.Length > 0)
+            .Distinct(StringComparer.Ordinal));
+        Version++;
+    }
 
     public static Result<User> Register(CompanyId companyId, string subject, string email, string displayName)
     {

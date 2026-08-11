@@ -68,6 +68,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             e.Property(x => x.Status).HasColumnName("status").HasConversion<short>();
             e.Property(x => x.PasswordHash).HasColumnName("password_hash").HasMaxLength(300);
             e.PrimitiveCollection<List<Guid>>("_roleIds").HasColumnName("role_ids");
+            e.PrimitiveCollection<List<string>>("_costCenterCodes").HasColumnName("cost_center_codes");
             e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
             e.HasIndex(x => new { x.CompanyId, x.Subject }).IsUnique();
             e.HasIndex(x => new { x.CompanyId, x.Email }).IsUnique();

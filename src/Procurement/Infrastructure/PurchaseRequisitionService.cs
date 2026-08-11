@@ -12,11 +12,23 @@ namespace TrinoSupply.Procurement.Infrastructure;
 /// <summary>Solicitação de compra (PR-001): cabeçalho, fluxo em 2 níveis, SoD e concorrência otimista.</summary>
 public sealed class PurchaseRequisitionService(
     ProcurementDbContext db, ITenantContext tenant, ICurrentUser currentUser, IUsageMetrics metrics, IClock clock,
-    TrinoSupply.Foundation.Infrastructure.Audit.IBusinessAudit audit)
+    TrinoSupply.Foundation.Infrastructure.Audit.IBusinessAudit audit,
+    TrinoSupply.Foundation.Infrastructure.Iam.ICenterScope centerScope)
     : IPurchaseRequisitionService
 {
     private static readonly Error Conflict = new("purchases.conflict",
         "A solicitação foi alterada concorrentemente. Recarregue e tente novamente.");
+    private static readonly Error CenterForbidden = new("purchases.center_forbidden",
+        "Este pedido pertence a um centro de custo fora da sua responsabilidade.");
+
+    /// <summary>Escopo v2: o centro da solicitação está sob a responsabilidade do usuário corrente?</summary>
+    private async Task<bool> InScopeAsync(PurchaseRequisition req, CancellationToken ct)
+    {
+        var scope = await centerScope.GetAsync(ct);
+        if (scope is null) return true;
+        var cc = await db.CostCenters.AsNoTracking().FirstOrDefaultAsync(c => c.Id == req.CostCenterId, ct);
+        return cc is not null && scope.Contains(cc.Code);
+    }
 
     public async Task<Result<Guid>> CreateAsync(CreateRequisitionInput input, CancellationToken ct = default)
     {
@@ -67,17 +79,22 @@ public sealed class PurchaseRequisitionService(
                 RequisitionStatus.ApprovedLevel1 => r.ApproveLevel2(subject, clock.UtcNow),
                 _ => Result.Failure(new Error("purchases.not_submitted", "Solicitação não está em etapa de aprovação."))
             };
-        }, "purchases.requisition.approved", ct);
+        }, "purchases.requisition.approved", ct, enforceScope: true);
 
     public Task<Result> RejectAsync(Guid id, string? note, CancellationToken ct = default) =>
         MutateAsync(id, r => r.Reject(currentUser.Subject ?? string.Empty, note, clock.UtcNow),
-            "purchases.requisition.rejected", ct);
+            "purchases.requisition.rejected", ct, enforceScope: true);
 
-    private async Task<Result> MutateAsync(Guid id, Func<PurchaseRequisition, Result> action, string metric, CancellationToken ct)
+    private async Task<Result> MutateAsync(Guid id, Func<PurchaseRequisition, Result> action, string metric,
+        CancellationToken ct, bool enforceScope = false)
     {
         var req = await db.Requisitions.Include(r => r.Lines).FirstOrDefaultAsync(r => r.Id == RequisitionId.From(id), ct);
         if (req is null)
             return Result.Failure(new Error("purchases.not_found", "Solicitação não encontrada."));
+
+        // Decisões (aprovar/rejeitar) só dentro do escopo de centros do usuário (v2).
+        if (enforceScope && !await InScopeAsync(req, ct))
+            return Result.Failure(CenterForbidden);
 
         var result = action(req);
         if (result.IsFailure) return result;
@@ -115,6 +132,36 @@ public sealed class PurchaseRequisitionService(
             .OrderByDescending(r => r.CreatedAt).ToListAsync(ct);
         var paying = (await db.PayingCompanies.AsNoTracking().ToListAsync(ct)).ToDictionary(p => p.Id.Value);
         var centers = (await db.CostCenters.AsNoTracking().ToListAsync(ct)).ToDictionary(c => c.Id.Value);
+
+        // Escopo v2: usuário restrito por centro só vê pedidos dos seus centros.
+        var scope = await centerScope.GetAsync(ct);
+        if (scope is not null)
+            reqs = reqs.Where(r =>
+                centers.TryGetValue(r.CostCenterId.Value, out var cc) && scope.Contains(cc.Code)).ToList();
+
+        return reqs.Select(r => ToView(r,
+            paying.GetValueOrDefault(r.PayingCompanyId.Value),
+            centers.GetValueOrDefault(r.CostCenterId.Value))).ToList();
+    }
+
+    public async Task<IReadOnlyList<RequisitionView>> ListMyApprovalsAsync(CancellationToken ct = default)
+    {
+        // Central de Aprovação: pedidos na MINHA etapa (nível 1 se enviado; nível 2 se já passou o 1),
+        // dentro do meu escopo de centros.
+        var subject = currentUser.Subject ?? string.Empty;
+        var reqs = await db.Requisitions.AsNoTracking().Include(r => r.Lines)
+            .Where(r => (r.Status == RequisitionStatus.Submitted && r.ApproverLevel1Subject == subject)
+                     || (r.Status == RequisitionStatus.ApprovedLevel1 && r.ApproverLevel2Subject == subject))
+            .OrderBy(r => r.CreatedAt)
+            .ToListAsync(ct);
+        var paying = (await db.PayingCompanies.AsNoTracking().ToListAsync(ct)).ToDictionary(p => p.Id.Value);
+        var centers = (await db.CostCenters.AsNoTracking().ToListAsync(ct)).ToDictionary(c => c.Id.Value);
+
+        var scope = await centerScope.GetAsync(ct);
+        if (scope is not null)
+            reqs = reqs.Where(r =>
+                centers.TryGetValue(r.CostCenterId.Value, out var cc) && scope.Contains(cc.Code)).ToList();
+
         return reqs.Select(r => ToView(r,
             paying.GetValueOrDefault(r.PayingCompanyId.Value),
             centers.GetValueOrDefault(r.CostCenterId.Value))).ToList();

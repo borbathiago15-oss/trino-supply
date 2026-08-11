@@ -315,5 +315,20 @@ BEGIN
     VALUES ('20260809102400_AuthCredentials', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM foundation.__ef_migrations WHERE "MigrationId" = '20260811113310_UserCostCenterScope') THEN
+    ALTER TABLE foundation.app_user ADD cost_center_codes text[] NOT NULL DEFAULT ('{}');
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM foundation.__ef_migrations WHERE "MigrationId" = '20260811113310_UserCostCenterScope') THEN
+    INSERT INTO foundation.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260811113310_UserCostCenterScope', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

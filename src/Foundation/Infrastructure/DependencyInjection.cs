@@ -50,6 +50,7 @@ public static class DependencyInjection
         services.AddScoped<Audit.IBusinessAudit, Audit.BusinessAudit>();
         services.AddScoped<IIamService, IamService>();
         services.AddScoped<IPermissionChecker, PermissionChecker>();
+        services.AddScoped<Iam.ICenterScope, Iam.DbCenterScope>();
 
         // AuthN (IdP local): hashing de senha + login/refresh. ITokenIssuer é provido pelo host.
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();

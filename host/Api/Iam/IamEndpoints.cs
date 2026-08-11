@@ -13,6 +13,7 @@ public sealed record CreateRoleRequest(string Name);
 public sealed record PermissionRequest(string Permission);
 public sealed record AssignRoleRequest(Guid RoleId);
 public sealed record SetUserStatusRequest(bool Active);
+public sealed record SetUserCostCentersRequest(IReadOnlyList<string> Codes);
 
 /// <summary>Endpoints de IAM (FD-001-01). Gestão de usuários é protegida por permissão (deny-by-default).</summary>
 public static class IamEndpoints
@@ -134,6 +135,14 @@ public static class IamEndpoints
         {
             if (!await perm.HasAsync(PermissionCatalog.UsersManage, ct)) return Results.Forbid();
             return Map(await iam.SetUserStatusAsync(userId, req.Active, ct));
+        }).RequireAuthorization();
+
+        // Centros de custo sob responsabilidade do usuário (escopo v2 — Master Junior).
+        v1.MapPut("/users/{userId:guid}/cost-centers", async (Guid userId, SetUserCostCentersRequest req,
+            IPermissionChecker perm, IIamService iam, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.UsersManage, ct)) return Results.Forbid();
+            return Map(await iam.SetUserCostCentersAsync(userId, req.Codes ?? [], ct));
         }).RequireAuthorization();
 
         // ---- Auditoria (append-only, somente leitura) ----

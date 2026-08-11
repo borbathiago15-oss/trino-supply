@@ -15,9 +15,13 @@ namespace TrinoSupply.Materials.Infrastructure;
 /// </summary>
 public sealed class StockRequestService(
     MaterialsDbContext db, ITenantContext tenant, ICurrentUser currentUser, IUsageMetrics metrics, IClock clock,
-    TrinoSupply.Foundation.Infrastructure.Audit.IBusinessAudit audit)
+    TrinoSupply.Foundation.Infrastructure.Audit.IBusinessAudit audit,
+    TrinoSupply.Foundation.Infrastructure.Iam.ICenterScope centerScope)
     : IStockRequestService
 {
+    private static readonly Error CenterForbidden = new("warehouse.center_forbidden",
+        "Esta solicitação pertence a um centro de custo fora da sua responsabilidade.");
+
     public async Task<Result<Guid>> CreateAsync(CreateStockRequestInput input, CancellationToken ct = default)
     {
         if (!tenant.HasTenant || string.IsNullOrWhiteSpace(currentUser.Subject))
@@ -44,6 +48,12 @@ public sealed class StockRequestService(
             query = query.Where(x => x.RequesterSubject == subject || x.ManagerSubject == subject);
 
         var list = await query.OrderByDescending(x => x.CreatedAt).ToListAsync(ct);
+
+        // Escopo v2: usuário restrito por centro só vê solicitações dos seus centros.
+        var scope = await centerScope.GetAsync(ct);
+        if (scope is not null)
+            list = list.Where(x => scope.Contains(x.CostCenterCode)).ToList();
+
         if (list.Count == 0) return [];
 
         // Saldo atual por item (para a visão do almoxarifado decidir separação/compra).
@@ -62,10 +72,28 @@ public sealed class StockRequestService(
     }
 
     public Task<Result> ApproveAsync(Guid id, CancellationToken ct = default) =>
-        MutateAsync(id, r => r.Approve(currentUser.Subject ?? string.Empty, clock.UtcNow), "warehouse.request.approved", ct);
+        MutateAsync(id, r => r.Approve(currentUser.Subject ?? string.Empty, clock.UtcNow), "warehouse.request.approved", ct, enforceScope: true);
 
     public Task<Result> RejectAsync(Guid id, string? note, CancellationToken ct = default) =>
-        MutateAsync(id, r => r.Reject(currentUser.Subject ?? string.Empty, note, clock.UtcNow), "warehouse.request.rejected", ct);
+        MutateAsync(id, r => r.Reject(currentUser.Subject ?? string.Empty, note, clock.UtcNow), "warehouse.request.rejected", ct, enforceScope: true);
+
+    public async Task<IReadOnlyList<StockRequestView>> ListMyApprovalsAsync(CancellationToken ct = default)
+    {
+        // Central de Aprovação: solicitações pendentes em que EU sou o gestor designado, no meu escopo.
+        var subject = currentUser.Subject ?? string.Empty;
+        var list = await db.StockRequests.AsNoTracking().Include(x => x.Lines)
+            .Where(x => x.Status == RequestStatus.Pendente && x.ManagerSubject == subject)
+            .OrderBy(x => x.CreatedAt).ToListAsync(ct);
+
+        var scope = await centerScope.GetAsync(ct);
+        if (scope is not null)
+            list = list.Where(x => scope.Contains(x.CostCenterCode)).ToList();
+
+        return list.Select(r => new StockRequestView(
+            r.Id.Value, r.RequesterSubject, r.CompanyCode, r.CostCenterCode, r.ManagerSubject, r.Reason,
+            r.Status.ToString(), r.CreatedAt, r.DecisionBySubject, r.DecisionAt, r.DecisionNote,
+            r.Lines.Select(l => new StockRequestLineView(l.ItemCode, l.Quantity, 0m)).ToList())).ToList();
+    }
 
     public Task<Result> DispatchAsync(Guid id, CancellationToken ct = default) =>
         MutateAsync(id, r => r.Dispatch(clock.UtcNow), "warehouse.request.dispatched", ct);
@@ -137,10 +165,18 @@ public sealed class StockRequestService(
         return Result.Success();
     }
 
-    private async Task<Result> MutateAsync(Guid id, Func<StockRequest, Result> action, string auditAction, CancellationToken ct)
+    private async Task<Result> MutateAsync(Guid id, Func<StockRequest, Result> action, string auditAction,
+        CancellationToken ct, bool enforceScope = false)
     {
         var req = await db.StockRequests.Include(x => x.Lines).FirstOrDefaultAsync(x => x.Id == StockRequestId.From(id), ct);
         if (req is null) return Result.Failure(new Error("warehouse.not_found", "Solicitação não encontrada."));
+
+        if (enforceScope)
+        {
+            var scope = await centerScope.GetAsync(ct);
+            if (scope is not null && !scope.Contains(req.CostCenterCode))
+                return Result.Failure(CenterForbidden);
+        }
 
         var r = action(req);
         if (r.IsFailure) return r;

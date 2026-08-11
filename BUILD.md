@@ -378,6 +378,18 @@ dotnet ef database update \
   Extras: expurgo automático de refresh tokens antigos no login e senha da role `trino_app`
   parametrizada (`APP_DB_PASSWORD`, com rotação idempotente no bootstrap). **Domínio 59/59** e
   **integração 35/35** (4 novos testes de hardening).
+- ✅ **v2 — Fase B1: escopo por centro de custo + Central de Aprovação (validado):** fundação da
+  reestruturação aprovada no piloto. **(1) Escopo por centro:** usuário ganha centros de
+  responsabilidade (`PUT /users/{id}/cost-centers`; vazio = sem restrição) — o **Master Junior**
+  só vê e aprova pedidos (compras e almoxarifado) dos seus centros; decisão fora do escopo → 403
+  (`center_forbidden`). **(2) Central de Aprovação:** `GET /purchases/approvals` — a fila do
+  aprovador com tudo que aguarda a decisão DELE (pedidos de compra na etapa dele, nível 1/2, +
+  solicitações de almoxarifado onde é o gestor), já escopada. **(3) CNPJ interno ↔ centro:**
+  centro de custo pode nascer vinculado à empresa pagadora (`payingCompanyCode`), validado e
+  exposto na listagem. **(4) Papéis-modelo** criados no provisionamento: Administrador (Master),
+  Master Junior e Pleno. Migrations Foundation+Procurement (coluna `cost_center_codes` e
+  `paying_company_id`). **Domínio 59/59** e **integração 38/38** (3 novos: papéis-modelo,
+  vínculo CNPJ↔centro, escopo do junior — listagem, central e 403 fora do escopo).
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e
   Auditoria; testes de integração de isolamento (Testcontainers — QA-001 / SEC-004 §8).

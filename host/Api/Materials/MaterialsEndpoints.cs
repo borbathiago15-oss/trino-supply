@@ -295,7 +295,8 @@ public static class MaterialsEndpoints
         return result.Error.Code switch
         {
             "warehouse.not_found" => Results.NotFound(new { code = result.Error.Code, message = result.Error.Message }),
-            "warehouse.wrong_manager" => Results.Json(new { code = result.Error.Code, message = result.Error.Message }, statusCode: 403),
+            "warehouse.wrong_manager" or "warehouse.center_forbidden"
+                => Results.Json(new { code = result.Error.Code, message = result.Error.Message }, statusCode: 403),
             "warehouse.invalid_state" => Results.Conflict(new { code = result.Error.Code, message = result.Error.Message }),
             _ => Results.BadRequest(new { code = result.Error.Code, message = result.Error.Message })
         };

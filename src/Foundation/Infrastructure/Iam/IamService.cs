@@ -39,6 +39,23 @@ public sealed class IamService(
         var adminRole = roleResult.Value;
         foreach (var p in PermissionCatalog.All) adminRole.Grant(p);
 
+        // Papéis-modelo dos perfis da v2 (o admin pode ajustá-los depois):
+        //  Master Junior — pedidos + central de aprovação, escopado por centro de custo (SetCostCenters);
+        //  Pleno — módulos/ferramentas liberados (leitura + solicitar), sem administração.
+        var juniorRole = Role.Create(company.Id, "Master Junior").Value;
+        foreach (var p in new[]
+        {
+            PermissionCatalog.PurchasesRead, PermissionCatalog.PurchasesRequest,
+            PermissionCatalog.PurchasesApprove, PermissionCatalog.WarehouseApprove,
+        }) juniorRole.Grant(p);
+
+        var plenoRole = Role.Create(company.Id, "Pleno").Value;
+        foreach (var p in new[]
+        {
+            PermissionCatalog.MaterialsRead, PermissionCatalog.PurchasesRead,
+            PermissionCatalog.PurchasesRequest, PermissionCatalog.WarehouseRequest,
+        }) plenoRole.Grant(p);
+
         var userResult = User.Register(company.Id, adminSubject, adminEmail, adminName);
         if (userResult.IsFailure) return Result.Failure<Guid>(userResult.Error);
         var admin = userResult.Value;
@@ -54,6 +71,8 @@ public sealed class IamService(
 
         db.Companies.Add(company);
         db.Roles.Add(adminRole);
+        db.Roles.Add(juniorRole);
+        db.Roles.Add(plenoRole);
         db.Users.Add(admin);
 
         // Auditoria do provisionamento (ator = system; não há usuário autenticado no bootstrap).
@@ -100,7 +119,20 @@ public sealed class IamService(
         var users = await db.Users.AsNoTracking().OrderBy(u => u.Email).ToListAsync(ct);
         return users.Select(u => new UserView(
             u.Id.Value, u.Subject, u.Email, u.DisplayName, u.Status.ToString(),
-            u.RoleIds.Select(r => r.Value).ToList())).ToList();
+            u.RoleIds.Select(r => r.Value).ToList(), u.CostCenterCodes.ToList())).ToList();
+    }
+
+    public async Task<Result> SetUserCostCentersAsync(Guid userId, IReadOnlyList<string> codes, CancellationToken ct = default)
+    {
+        var user = await db.Users.FindAsync([UserId.From(userId)], ct);
+        if (user is null)
+            return Result.Failure(new Error("iam.user.not_found", "Usuário não encontrado."));
+
+        user.SetCostCenters(codes ?? []);
+        audit.Record("user.centers_set", "User", userId.ToString(), new { centers = user.CostCenterCodes });
+        await db.SaveChangesAsync(ct);
+        metrics.Record("user.centers_set", user.CompanyId.Value.ToString());
+        return Result.Success();
     }
 
     public async Task<IReadOnlyList<UserView>> ListUsersWithPermissionAsync(string permission, CancellationToken ct = default)
@@ -115,7 +147,7 @@ public sealed class IamService(
             .Where(u => u.Status == UserStatus.Active && u.RoleIds.Any(r => roleIdsWith.Contains(r.Value)))
             .Select(u => new UserView(
                 u.Id.Value, u.Subject, u.Email, u.DisplayName, u.Status.ToString(),
-                u.RoleIds.Select(r => r.Value).ToList()))
+                u.RoleIds.Select(r => r.Value).ToList(), u.CostCenterCodes.ToList()))
             .ToList();
     }
 

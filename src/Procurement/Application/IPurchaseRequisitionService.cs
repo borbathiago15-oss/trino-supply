@@ -35,4 +35,6 @@ public interface IPurchaseRequisitionService
     Task<Result> RejectAsync(Guid id, string? note, CancellationToken ct = default);
     Task<Result<RequisitionView>> GetAsync(Guid id, CancellationToken ct = default);
     Task<IReadOnlyList<RequisitionView>> ListAsync(CancellationToken ct = default);
+    /// <summary>Central de Aprovação: pedidos aguardando a decisão do usuário corrente (etapa atual + escopo).</summary>
+    Task<IReadOnlyList<RequisitionView>> ListMyApprovalsAsync(CancellationToken ct = default);
 }

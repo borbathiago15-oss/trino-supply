@@ -4,7 +4,9 @@ using TrinoSupply.Foundation.Application.Audit;
 namespace TrinoSupply.Foundation.Application.Iam;
 
 /// <summary>Representação de leitura de um usuário (FD-001-01).</summary>
-public sealed record UserView(Guid Id, string Subject, string Email, string DisplayName, string Status, IReadOnlyList<Guid> RoleIds);
+public sealed record UserView(
+    Guid Id, string Subject, string Email, string DisplayName, string Status,
+    IReadOnlyList<Guid> RoleIds, IReadOnlyList<string> CostCenterCodes);
 
 /// <summary>Representação de leitura de um papel (FD-001-01).</summary>
 public sealed record RoleView(Guid Id, string Name, IReadOnlyList<string> Permissions);
@@ -54,6 +56,12 @@ public interface IIamService
     /// não renova sessão e perde todas as permissões (deny-by-default) — spec "Bloqueado: SIM".
     /// </summary>
     Task<Result> SetUserStatusAsync(Guid userId, bool active, CancellationToken ct = default);
+
+    /// <summary>
+    /// Define os centros de custo sob responsabilidade do usuário (escopo v2). Lista vazia = sem
+    /// restrição; preenchida = o usuário só vê/aprova pedidos desses centros (Master Junior).
+    /// </summary>
+    Task<Result> SetUserCostCentersAsync(Guid userId, IReadOnlyList<string> codes, CancellationToken ct = default);
 
     /// <summary>Lê a trilha de auditoria do tenant corrente (mais recentes primeiro).</summary>
     Task<IReadOnlyList<AuditView>> ListAuditAsync(int limit, CancellationToken ct = default);

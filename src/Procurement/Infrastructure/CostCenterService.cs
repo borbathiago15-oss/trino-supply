@@ -17,7 +17,19 @@ public sealed class CostCenterService(ProcurementDbContext db, ITenantContext te
         if (!tenant.HasTenant)
             return Result.Failure<Guid>(new Error("purchases.no_tenant", "Requisição sem tenant."));
 
-        var result = CostCenter.Create(tenant.CompanyId, input.Code, input.Name);
+        // Vínculo v2: o centro pode nascer ligado a um CNPJ interno do grupo (empresa pagadora).
+        PayingCompanyId? payingId = null;
+        if (!string.IsNullOrWhiteSpace(input.PayingCompanyCode))
+        {
+            var code = input.PayingCompanyCode.Trim().ToUpperInvariant();
+            var paying = await db.PayingCompanies.AsNoTracking().FirstOrDefaultAsync(p => p.Code == code, ct);
+            if (paying is null)
+                return Result.Failure<Guid>(new Error("purchases.paying_company.not_found",
+                    $"CNPJ interno '{input.PayingCompanyCode}' não encontrado."));
+            payingId = paying.Id;
+        }
+
+        var result = CostCenter.Create(tenant.CompanyId, input.Code, input.Name, payingId);
         if (result.IsFailure) return Result.Failure<Guid>(result.Error);
 
         db.CostCenters.Add(result.Value);
@@ -37,6 +49,11 @@ public sealed class CostCenterService(ProcurementDbContext db, ITenantContext te
     public async Task<IReadOnlyList<CostCenterView>> ListAsync(CancellationToken ct = default)
     {
         var list = await db.CostCenters.AsNoTracking().OrderBy(x => x.Code).ToListAsync(ct);
-        return list.Select(x => new CostCenterView(x.Id.Value, x.Code, x.Name, x.Status.ToString())).ToList();
+        var paying = (await db.PayingCompanies.AsNoTracking().ToListAsync(ct)).ToDictionary(p => p.Id);
+        return list.Select(x =>
+        {
+            var pc = x.PayingCompanyId is { } pid && paying.TryGetValue(pid, out var p) ? p : null;
+            return new CostCenterView(x.Id.Value, x.Code, x.Name, x.Status.ToString(), pc?.Code, pc?.LegalName);
+        }).ToList();
     }
 }

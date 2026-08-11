@@ -318,6 +318,23 @@ dotnet ef database update \
   multi-stage (API .NET, web Next.js). **Validado:** bootstrap cria 19 tabelas + 14 policies RLS +
   role endurecida (idempotente); API em config de produção conecta como `trino_app` e serve
   (provisão + login 200). Ver `deploy/README.md`.
+- ✅ **Materials — grupo/família + importação em lote (validado):** o cadastro de item/produto agora
+  tem **classificação por grupo/família** (`ProductGroups`: Insumos, EPI, Fardamento, Limpeza,
+  Manutenção, Serviços, Imobilizado — aceita grupos livres, normaliza vazio p/ "Sem grupo") e
+  **importação de vários produtos via planilha** (`ClosedXML`): `GET /materials/items/import-template`
+  gera a planilha modelo (Código/Descrição/Unidade/Grupo) e `POST /materials/items/import` (multipart)
+  cria os itens em lote — cria unidades ausentes, deduplica por código, reporta erro por linha e
+  persiste em uma transação. Filtro `GET /materials/items?group=` e `GET /materials/product-groups`.
+  Integração (Testcontainers) cobre o fluxo de importação.
+- ✅ **Procurement — pedido manual com cabeçalho + aprovação em 2 níveis (validado):** a requisição
+  agora carrega o **cabeçalho do pedido manual** — **empresa do custo** (reusa a Empresa Pagadora /
+  CNPJ), **centro de custo**, **prioridade** (Normal/Emergencial), **justificativa** e os **dois
+  aprovadores designados** (nível 1 → nível 2). Novo cadastro de **Centro de Custo** (`procurement.cost_center`,
+  RLS por tenant, `GET/POST /purchases/cost-centers`). Máquina de estados
+  Draft→Submitted→ApprovedLevel1→Approved (ou Rejected) com **SoD** (requisitante não pode ser
+  aprovador — 403), **aprovadores distintos**, e cada nível só é aprovado pelo aprovador designado
+  daquela etapa (`wrong_approver` → 403; `not_level1` bloqueia pular o nível 1). Rejeição exige
+  justificativa e registra quem/quando/nota. **Domínio 43/43** e **integração 27/27** (`dotnet test`).
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e
   Auditoria; testes de integração de isolamento (Testcontainers — QA-001 / SEC-004 §8).

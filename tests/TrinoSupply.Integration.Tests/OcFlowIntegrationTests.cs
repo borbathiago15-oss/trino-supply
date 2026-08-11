@@ -45,6 +45,18 @@ public sealed class OcFlowIntegrationTests(PilotFixture fixture)
         return body!.AccessToken;
     }
 
+    /// <summary>Cria um usuário aprovador (purchases.read+approve) e devolve o token dele.</summary>
+    private async Task<string> CreateApproverAsync(HttpClient c, string admin, Guid company, string subject, string email)
+    {
+        var (_, user) = await PostAsync<UserResp>(c, "/api/v1/users",
+            new { subject, email, displayName = subject, password = Password }, admin);
+        var (_, role) = await PostAsync<RoleResp>(c, "/api/v1/roles", new { name = $"Aprovador-{subject}" }, admin);
+        await PostStatusAsync(c, $"/api/v1/roles/{role!.RoleId}/permissions", new { permission = "purchases.read" }, admin);
+        await PostStatusAsync(c, $"/api/v1/roles/{role.RoleId}/permissions", new { permission = "purchases.approve" }, admin);
+        await PostStatusAsync(c, $"/api/v1/users/{user!.UserId}/roles", new { roleId = role.RoleId }, admin);
+        return await LoginAsync(c, company, email);
+    }
+
     private static MultipartFormDataContent ExcelForm(params (string Code, decimal Qty, string Unit)[] rows)
     {
         using var wb = new XLWorkbook();
@@ -99,18 +111,10 @@ public sealed class OcFlowIntegrationTests(PilotFixture fixture)
         var company = await ProvisionAsync(c, "Empresa OC", "62.000.000/0001-02", "adminOc", "admin@oc.com");
         var admin = await LoginAsync(c, company, "admin@oc.com");
 
-        // Segundo usuário aprovador (o admin será o requisitante → SoD exige outro para aprovar).
-        var (createUser, user) = await PostAsync<UserResp>(c, "/api/v1/users",
-            new { subject = "aprovadorOc", email = "aprov@oc.com", displayName = "Aprovador", password = Password }, admin);
-        Assert.Equal(201, createUser);
-
-        // Cria papel de aprovador, concede as permissões e atribui ao segundo usuário (admin gerencia papéis).
-        var (roleStatus, role) = await PostAsync<RoleResp>(c, "/api/v1/roles", new { name = "Aprovador" }, admin);
-        Assert.Equal(201, roleStatus);
-        Assert.Equal(204, await PostStatusAsync(c, $"/api/v1/roles/{role!.RoleId}/permissions", new { permission = "purchases.read" }, admin));
-        Assert.Equal(204, await PostStatusAsync(c, $"/api/v1/roles/{role.RoleId}/permissions", new { permission = "purchases.approve" }, admin));
-        Assert.Equal(204, await PostStatusAsync(c, $"/api/v1/users/{user!.UserId}/roles", new { roleId = role.RoleId }, admin));
-        var approver = await LoginAsync(c, company, "aprov@oc.com");
+        // Dois aprovadores distintos (aprovação em 2 níveis) + centro de custo.
+        var aprov1 = await CreateApproverAsync(c, admin, company, "aprov1oc", "aprov1@oc.com");
+        var aprov2 = await CreateApproverAsync(c, admin, company, "aprov2oc", "aprov2@oc.com");
+        Assert.Equal(201, await PostStatusAsync(c, "/api/v1/purchases/cost-centers", new { code = "CC1", name = "Operacao PB" }, admin));
 
         // Empresa pagadora (CNPJ do grupo) + fornecedor vencedor com dados fiscais.
         Assert.Equal(201, await PostStatusAsync(c, "/api/v1/purchases/paying-companies", new
@@ -127,10 +131,16 @@ public sealed class OcFlowIntegrationTests(PilotFixture fixture)
             zipCode = "58038-341", paymentTerms = "A Vista", paymentMethod = "Deposito Bancario",
         }, admin));
 
-        // Importa itens em lote via planilha Excel → cria a requisição (rascunho).
+        // Importa itens em lote via planilha Excel → cria a solicitação (cabeçalho nos campos do form).
         ImportResp? imported;
         using (var form = ExcelForm(("VIDRO-TEMP", 10m, "un"), ("ESPELHO", 5m, "m2")))
         {
+            form.Add(new StringContent("EP1"), "payingCompanyCode");
+            form.Add(new StringContent("CC1"), "costCenterCode");
+            form.Add(new StringContent("aprov1oc"), "approverLevel1Subject");
+            form.Add(new StringContent("aprov2oc"), "approverLevel2Subject");
+            form.Add(new StringContent("Reposição de estoque"), "justification");
+            form.Add(new StringContent("Normal"), "priority");
             using var req = new HttpRequestMessage(HttpMethod.Post, "/api/v1/purchases/requisitions/import") { Content = form };
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", admin);
             using var res = await c.SendAsync(req);
@@ -140,9 +150,10 @@ public sealed class OcFlowIntegrationTests(PilotFixture fixture)
         Assert.Equal(2, imported!.Imported);
         var reqId = imported.RequisitionId;
 
-        // Envia (admin) e aprova (aprovador distinto — respeita SoD).
+        // Envia (admin) → aprova nível 1 (aprov1) → nível 2 (aprov2). SoD e 2 níveis.
         Assert.Equal(204, await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{reqId}/submit", null, admin));
-        Assert.Equal(204, await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{reqId}/approve", null, approver));
+        Assert.Equal(204, await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{reqId}/approve", null, aprov1));
+        Assert.Equal(204, await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{reqId}/approve", null, aprov2));
 
         // Emite a OC: seleciona pagadora + fornecedor vencedor + preços por linha + totais.
         var (orderStatus, order) = await PostAsync<OrderResp>(c, $"/api/v1/purchases/requisitions/{reqId}/order", new

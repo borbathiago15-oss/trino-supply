@@ -7,11 +7,18 @@ namespace TrinoSupply.Domain.Tests;
 public class PurchaseRequisitionTests
 {
     private static readonly CompanyId Company = CompanyId.New();
+    private static readonly PayingCompanyId Pay = PayingCompanyId.New();
+    private static readonly CostCenterId Cc = CostCenterId.New();
     private static readonly (string, decimal, string)[] Lines = [("PARAFUSO", 10m, "un")];
+    private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
 
-    private static PurchaseRequisition Submitted(string requester = "comprador")
+    private static PurchaseRequisition New(string requester = "solicitante", string a1 = "aprov1", string a2 = "aprov2",
+        string just = "Reposição de estoque") =>
+        PurchaseRequisition.Create(Company, requester, Pay, Cc, RequisitionPriority.Normal, just, a1, a2, Lines, Now).Value;
+
+    private static PurchaseRequisition Submitted(string requester = "solicitante")
     {
-        var req = PurchaseRequisition.Create(Company, requester, Lines, DateTimeOffset.UtcNow).Value;
+        var req = New(requester);
         req.Submit();
         return req;
     }
@@ -19,75 +26,98 @@ public class PurchaseRequisitionTests
     [Fact]
     public void Create_sem_linhas_falha()
     {
-        var result = PurchaseRequisition.Create(Company, "comprador", [], DateTimeOffset.UtcNow);
-        Assert.True(result.IsFailure);
-        Assert.Equal("purchases.lines_required", result.Error.Code);
+        var r = PurchaseRequisition.Create(Company, "sol", Pay, Cc, RequisitionPriority.Normal, "j", "a1", "a2", [], Now);
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.lines_required", r.Error.Code);
+    }
+
+    [Fact]
+    public void Create_sem_justificativa_falha()
+    {
+        var r = PurchaseRequisition.Create(Company, "sol", Pay, Cc, RequisitionPriority.Normal, "  ", "a1", "a2", Lines, Now);
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.justification_required", r.Error.Code);
     }
 
     [Fact]
     public void Create_com_quantidade_nao_positiva_falha()
     {
-        var result = PurchaseRequisition.Create(Company, "comprador", [("X", 0m, "un")], DateTimeOffset.UtcNow);
+        var r = PurchaseRequisition.Create(Company, "sol", Pay, Cc, RequisitionPriority.Normal, "j", "a1", "a2", [("X", 0m, "un")], Now);
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.qty_invalid", r.Error.Code);
+    }
+
+    [Fact]
+    public void SoD_requisitante_nao_pode_ser_aprovador()
+    {
+        var r = PurchaseRequisition.Create(Company, "sol", Pay, Cc, RequisitionPriority.Normal, "j", "sol", "a2", Lines, Now);
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.sod_violation", r.Error.Code);
+    }
+
+    [Fact]
+    public void Aprovadores_devem_ser_distintos()
+    {
+        var r = PurchaseRequisition.Create(Company, "sol", Pay, Cc, RequisitionPriority.Normal, "j", "a1", "a1", Lines, Now);
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.approvers_distinct", r.Error.Code);
+    }
+
+    [Fact]
+    public void Nova_requisicao_comeca_em_draft() => Assert.Equal(RequisitionStatus.Draft, New().Status);
+
+    [Fact]
+    public void Fluxo_dois_niveis_ate_aprovado()
+    {
+        var req = Submitted();
+        Assert.True(req.ApproveLevel1("aprov1", Now).IsSuccess);
+        Assert.Equal(RequisitionStatus.ApprovedLevel1, req.Status);
+        Assert.True(req.ApproveLevel2("aprov2", Now).IsSuccess);
+        Assert.Equal(RequisitionStatus.Approved, req.Status);
+        Assert.Equal("aprov1", req.Level1DecidedBySubject);
+        Assert.Equal("aprov2", req.Level2DecidedBySubject);
+    }
+
+    [Fact]
+    public void Nivel1_por_aprovador_errado_falha()
+    {
+        var result = Submitted().ApproveLevel1("intruso", Now);
         Assert.True(result.IsFailure);
-        Assert.Equal("purchases.qty_invalid", result.Error.Code);
+        Assert.Equal("purchases.wrong_approver", result.Error.Code);
     }
 
     [Fact]
-    public void Nova_requisicao_comeca_em_draft()
+    public void Nivel2_antes_do_nivel1_falha()
     {
-        var req = PurchaseRequisition.Create(Company, "comprador", Lines, DateTimeOffset.UtcNow).Value;
-        Assert.Equal(RequisitionStatus.Draft, req.Status);
+        var result = Submitted().ApproveLevel2("aprov2", Now);
+        Assert.True(result.IsFailure);
+        Assert.Equal("purchases.not_level1", result.Error.Code);
     }
 
     [Fact]
-    public void Approve_sem_submeter_falha()
+    public void ApproveLevel1_sem_submeter_falha()
     {
-        var req = PurchaseRequisition.Create(Company, "comprador", Lines, DateTimeOffset.UtcNow).Value;
-        var result = req.Approve("aprovador", DateTimeOffset.UtcNow);
+        var result = New().ApproveLevel1("aprov1", Now);
         Assert.True(result.IsFailure);
         Assert.Equal("purchases.not_submitted", result.Error.Code);
     }
 
     [Fact]
-    public void SoD_requisitante_nao_aprova_a_propria_requisicao()
+    public void Reject_exige_justificativa()
     {
-        var req = Submitted("comprador");
-        var result = req.Approve("comprador", DateTimeOffset.UtcNow); // mesmo subject
-
+        var result = Submitted().Reject("aprov1", "  ", Now);
         Assert.True(result.IsFailure);
-        Assert.Equal("purchases.sod_violation", result.Error.Code);
-        Assert.Equal(RequisitionStatus.Submitted, req.Status); // não mudou
+        Assert.Equal("purchases.reject_note_required", result.Error.Code);
     }
 
     [Fact]
-    public void Aprovador_distinto_aprova()
+    public void Reject_por_aprovador_da_etapa()
     {
-        var req = Submitted("comprador");
-        var result = req.Approve("aprovador", DateTimeOffset.UtcNow);
-
+        var req = Submitted();
+        var result = req.Reject("aprov1", "fora do orçamento", Now);
         Assert.True(result.IsSuccess);
-        Assert.Equal(RequisitionStatus.Approved, req.Status);
-        Assert.Equal("aprovador", req.DecidedBySubject);
-    }
-
-    [Fact]
-    public void Nao_decide_duas_vezes()
-    {
-        var req = Submitted("comprador");
-        req.Approve("aprovador", DateTimeOffset.UtcNow);
-        var second = req.Approve("outro", DateTimeOffset.UtcNow);
-
-        Assert.True(second.IsFailure);
-        Assert.Equal("purchases.not_submitted", second.Error.Code);
-    }
-
-    [Fact]
-    public void Reject_tambem_respeita_SoD()
-    {
-        var req = Submitted("comprador");
-        var result = req.Reject("comprador", "não", DateTimeOffset.UtcNow);
-        Assert.True(result.IsFailure);
-        Assert.Equal("purchases.sod_violation", result.Error.Code);
+        Assert.Equal(RequisitionStatus.Rejected, req.Status);
+        Assert.Equal("fora do orçamento", req.DecisionNote);
     }
 }
 

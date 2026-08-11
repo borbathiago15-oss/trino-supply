@@ -111,26 +111,25 @@ public sealed class SupplierStatsProjectionTests(PilotFixture fixture) : IAsyncL
             new { companyId, email = await AdminEmail(companyId), password = Password });
         var admin = login!.AccessToken;
 
-        var (_, user) = await PostAsync<UserResp>(c, "/api/v1/users",
-            new { subject = "aprovProj", email = "aprov@proj.com", displayName = "Aprovador", password = Password }, admin);
-        var (_, role) = await PostAsync<RoleResp>(c, "/api/v1/roles", new { name = "Aprovador" }, admin);
-        await PostStatusAsync(c, $"/api/v1/roles/{role!.RoleId}/permissions", new { permission = "purchases.read" }, admin);
-        await PostStatusAsync(c, $"/api/v1/roles/{role.RoleId}/permissions", new { permission = "purchases.approve" }, admin);
-        await PostStatusAsync(c, $"/api/v1/users/{user!.UserId}/roles", new { roleId = role.RoleId }, admin);
-        var (_, approverLogin) = await PostAsync<LoginResp>(c, "/api/v1/auth/login",
-            new { companyId, email = "aprov@proj.com", password = Password });
-        var approver = approverLogin!.AccessToken;
+        var aprov1 = await ApproverAsync(c, admin, companyId, "aprovProj1", "aprov1@proj.com");
+        var aprov2 = await ApproverAsync(c, admin, companyId, "aprovProj2", "aprov2@proj.com");
 
-        // Cadastros + requisição + aprovação + emissão.
+        // Cadastros + solicitação (2 níveis) + aprovação + emissão.
         await PostStatusAsync(c, "/api/v1/purchases/paying-companies",
             new { code = "EP1", legalName = "Pagadora", taxId = "05.345.258/0004-96" }, admin);
+        await PostStatusAsync(c, "/api/v1/purchases/cost-centers", new { code = "CC1", name = "Centro" }, admin);
         await PostStatusAsync(c, "/api/v1/purchases/suppliers",
             new { code = "FORN1", name = "Fornecedor Um", taxId = "17.381.510/0001-59" }, admin);
 
-        var (_, req) = await PostAsync<ReqResp>(c, "/api/v1/purchases/requisitions",
-            new { lines = new[] { new { itemCode = "ITEM-1", quantity = 4, unit = "un" } } }, admin);
+        var (_, req) = await PostAsync<ReqResp>(c, "/api/v1/purchases/requisitions", new
+        {
+            payingCompanyCode = "EP1", costCenterCode = "CC1", priority = "Normal", justification = "compra",
+            approverLevel1Subject = "aprovProj1", approverLevel2Subject = "aprovProj2",
+            lines = new[] { new { itemCode = "ITEM-1", quantity = 4, unit = "un" } },
+        }, admin);
         await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{req!.RequisitionId}/submit", null, admin);
-        await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{req.RequisitionId}/approve", null, approver);
+        await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{req.RequisitionId}/approve", null, aprov1);
+        await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{req.RequisitionId}/approve", null, aprov2);
 
         var (issueStatus, order) = await PostAsync<OrderResp>(c, $"/api/v1/purchases/requisitions/{req.RequisitionId}/order", new
         {
@@ -168,6 +167,17 @@ public sealed class SupplierStatsProjectionTests(PilotFixture fixture) : IAsyncL
         Assert.Equal(0, afterCancel.Count);
 
         await consumer.StopAsync();
+    }
+
+    private async Task<string> ApproverAsync(HttpClient c, string admin, Guid company, string subject, string email)
+    {
+        var (_, user) = await PostAsync<UserResp>(c, "/api/v1/users", new { subject, email, displayName = subject, password = Password }, admin);
+        var (_, role) = await PostAsync<RoleResp>(c, "/api/v1/roles", new { name = $"Ap-{subject}" }, admin);
+        await PostStatusAsync(c, $"/api/v1/roles/{role!.RoleId}/permissions", new { permission = "purchases.read" }, admin);
+        await PostStatusAsync(c, $"/api/v1/roles/{role.RoleId}/permissions", new { permission = "purchases.approve" }, admin);
+        await PostStatusAsync(c, $"/api/v1/users/{user!.UserId}/roles", new { roleId = role.RoleId }, admin);
+        var (_, l) = await PostAsync<LoginResp>(c, "/api/v1/auth/login", new { companyId = company, email, password = Password });
+        return l!.AccessToken;
     }
 
     // O e-mail do admin foi gerado aleatoriamente no provisionamento; recupera-o do banco (auditoria/infra).

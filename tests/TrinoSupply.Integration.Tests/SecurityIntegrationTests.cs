@@ -74,15 +74,17 @@ public sealed class SecurityIntegrationTests(PilotFixture fixture)
         var company = await ProvisionAsync(c, "Empresa SoD", "40.000.000/0001-04", "adminSod", "admin@sod.com");
         var admin = await LoginAsync(c, company, "admin@sod.com");
 
-        var (createStatus, req) = await PostAsync<IdResp>(c, "/api/v1/purchases/requisitions",
-            new { lines = new[] { new { itemCode = "X", quantity = 1, unit = "un" } } }, admin);
-        Assert.Equal(201, createStatus);
+        Assert.Equal(201, await PostStatusAsync(c, "/api/v1/purchases/paying-companies", new { code = "EPS", legalName = "Pagadora SoD", taxId = "40.000.000/0001-04" }, admin));
+        Assert.Equal(201, await PostStatusAsync(c, "/api/v1/purchases/cost-centers", new { code = "CCS", name = "Centro SoD" }, admin));
 
-        Assert.Equal(204, await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{req!.RequisitionId}/submit", null, admin));
-
-        // Admin TEM purchases.approve, mas é o requisitante → SoD bloqueia (403).
-        var approve = await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{req.RequisitionId}/approve", null, admin);
-        Assert.Equal(403, approve);
+        // SoD: o requisitante (adminSod) não pode ser designado aprovador → 400 sod_violation na criação.
+        var (createStatus, _) = await PostAsync<IdResp>(c, "/api/v1/purchases/requisitions", new
+        {
+            payingCompanyCode = "EPS", costCenterCode = "CCS", priority = "Normal", justification = "teste SoD",
+            approverLevel1Subject = "adminSod", approverLevel2Subject = "outro",
+            lines = new[] { new { itemCode = "X", quantity = 1, unit = "un" } },
+        }, admin);
+        Assert.Equal(400, createStatus);
     }
 
     [Fact]

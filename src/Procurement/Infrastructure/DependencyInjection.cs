@@ -21,6 +21,7 @@ public static class DependencyInjection
                 .AddInterceptors(sp.GetRequiredService<TenantConnectionInterceptor>()));
 
         services.AddScoped<IPurchaseRequisitionService, PurchaseRequisitionService>();
+        services.AddScoped<ICostCenterService, CostCenterService>();
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<IPayingCompanyService, PayingCompanyService>();
         services.AddScoped<IPurchaseOrderService, PurchaseOrderService>();

@@ -5,9 +5,15 @@ using TrinoSupply.Procurement.Application;
 
 namespace TrinoSupply.Api.Procurement;
 
-public sealed record CreateRequisitionRequest(IReadOnlyList<RequisitionLineInput> Lines);
+public sealed record CreateRequisitionRequest(
+    string PayingCompanyCode, string CostCenterCode, string? Priority, string Justification,
+    string ApproverLevel1Subject, string ApproverLevel2Subject, IReadOnlyList<RequisitionLineInput> Lines);
+public sealed record FromSuggestionsRequest(
+    string PayingCompanyCode, string CostCenterCode, string? Priority, string Justification,
+    string ApproverLevel1Subject, string ApproverLevel2Subject);
 public sealed record AddLinesRequest(IReadOnlyList<RequisitionLineInput> Lines);
 public sealed record RejectRequest(string? Note);
+public sealed record CreateCostCenterRequest(string Code, string Name);
 public sealed record CancelOrderRequest(string Reason);
 
 /// <summary>Endpoints de Compras (PR-001). Requisitar e aprovar são permissões distintas (SoD).</summary>
@@ -33,9 +39,27 @@ public static class ProcurementEndpoints
         p.MapPost("/requisitions", async (CreateRequisitionRequest req, IPermissionChecker perm, IPurchaseRequisitionService svc, CancellationToken ct) =>
         {
             if (!await perm.HasAsync(PermissionCatalog.PurchasesRequest, ct)) return Results.Forbid();
-            var r = await svc.CreateAsync(req.Lines, ct);
+            var input = new CreateRequisitionInput(req.PayingCompanyCode, req.CostCenterCode, req.Priority ?? "Normal",
+                req.Justification, req.ApproverLevel1Subject, req.ApproverLevel2Subject, req.Lines);
+            var r = await svc.CreateAsync(input, ct);
             return r.IsSuccess
                 ? Results.Created($"/api/v1/purchases/requisitions/{r.Value}", new { requisitionId = r.Value })
+                : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization();
+
+        // ---- Centros de custo (spec Sistema de Compras) ----
+        p.MapGet("/cost-centers", async (IPermissionChecker perm, ICostCenterService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
+            return Results.Ok(await svc.ListAsync(ct));
+        }).RequireAuthorization();
+
+        p.MapPost("/cost-centers", async (CreateCostCenterRequest req, IPermissionChecker perm, ICostCenterService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesOrder, ct)) return Results.Forbid();
+            var r = await svc.CreateAsync(new CostCenterInput(req.Code, req.Name), ct);
+            return r.IsSuccess
+                ? Results.Created($"/api/v1/purchases/cost-centers/{r.Value}", new { costCenterId = r.Value })
                 : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
         }).RequireAuthorization();
 
@@ -77,7 +101,13 @@ public static class ProcurementEndpoints
                     errors = parsed.Errors
                 });
 
-            var r = await svc.CreateAsync(parsed.Lines, ct);
+            // Cabeçalho da solicitação vem em campos do formulário (multipart) junto com o arquivo.
+            var input = new CreateRequisitionInput(
+                form["payingCompanyCode"].ToString(), form["costCenterCode"].ToString(),
+                form["priority"].ToString() is { Length: > 0 } pr ? pr : "Normal",
+                form["justification"].ToString(), form["approverLevel1Subject"].ToString(),
+                form["approverLevel2Subject"].ToString(), parsed.Lines);
+            var r = await svc.CreateAsync(input, ct);
             return r.IsSuccess
                 ? Results.Created($"/api/v1/purchases/requisitions/{r.Value}",
                     new { requisitionId = r.Value, imported = parsed.Lines.Count, warnings = parsed.Errors })
@@ -92,8 +122,8 @@ public static class ProcurementEndpoints
             return MapDecision(await svc.AddLinesAsync(id, req.Lines, ct));
         }).RequireAuthorization();
 
-        // Ponte reposição → requisição (fecha o ciclo estoque baixo → compra).
-        p.MapPost("/requisitions/from-suggestions", async (
+        // Ponte reposição → requisição (fecha o ciclo estoque baixo → compra). Cabeçalho no corpo.
+        p.MapPost("/requisitions/from-suggestions", async (FromSuggestionsRequest req,
             IPermissionChecker perm, IReplenishmentService repl, IPurchaseRequisitionService svc, CancellationToken ct) =>
         {
             if (!await perm.HasAsync(PermissionCatalog.PurchasesRequest, ct)) return Results.Forbid();
@@ -104,7 +134,9 @@ public static class ProcurementEndpoints
             var lines = suggestions
                 .Select(s => new RequisitionLineInput(s.ItemCode, s.SuggestedQuantity, "un"))
                 .ToList();
-            var r = await svc.CreateAsync(lines, ct);
+            var input = new CreateRequisitionInput(req.PayingCompanyCode, req.CostCenterCode, req.Priority ?? "Normal",
+                req.Justification, req.ApproverLevel1Subject, req.ApproverLevel2Subject, lines);
+            var r = await svc.CreateAsync(input, ct);
             return r.IsSuccess
                 ? Results.Created($"/api/v1/purchases/requisitions/{r.Value}", new { requisitionId = r.Value, lines = lines.Count })
                 : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
@@ -281,7 +313,8 @@ public static class ProcurementEndpoints
         {
             "purchases.not_found" => Results.NotFound(new { code = result.Error.Code, message = result.Error.Message }),
             "purchases.conflict" => Results.Conflict(new { code = result.Error.Code, message = result.Error.Message }),
-            "purchases.sod_violation" => Results.Json(new { code = result.Error.Code, message = result.Error.Message }, statusCode: 403),
+            "purchases.sod_violation" or "purchases.wrong_approver"
+                => Results.Json(new { code = result.Error.Code, message = result.Error.Message }, statusCode: 403),
             _ => Results.BadRequest(new { code = result.Error.Code, message = result.Error.Message })
         };
     }

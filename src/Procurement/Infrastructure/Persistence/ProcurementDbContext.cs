@@ -17,6 +17,7 @@ public sealed class ProcurementDbContext(DbContextOptions<ProcurementDbContext> 
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
     public DbSet<SupplierStats> SupplierStats => Set<SupplierStats>();
     public DbSet<ProcessedEvent> ProcessedEvents => Set<ProcessedEvent>();
+    public DbSet<CostCenter> CostCenters => Set<CostCenter>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -29,16 +30,40 @@ public sealed class ProcurementDbContext(DbContextOptions<ProcurementDbContext> 
             e.Property(x => x.Id).HasColumnName("id").HasConversion(id => id.Value, v => RequisitionId.From(v));
             e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
             e.Property(x => x.RequesterSubject).HasColumnName("requester_subject").HasMaxLength(200).IsRequired();
+            e.Property(x => x.PayingCompanyId).HasColumnName("paying_company_id").HasConversion(id => id.Value, v => PayingCompanyId.From(v));
+            e.Property(x => x.CostCenterId).HasColumnName("cost_center_id").HasConversion(id => id.Value, v => CostCenterId.From(v));
+            e.Property(x => x.Priority).HasColumnName("priority").HasConversion<short>();
+            e.Property(x => x.Justification).HasColumnName("justification").HasMaxLength(2000).IsRequired();
+            e.Property(x => x.ApproverLevel1Subject).HasColumnName("approver_l1_subject").HasMaxLength(200).IsRequired();
+            e.Property(x => x.ApproverLevel2Subject).HasColumnName("approver_l2_subject").HasMaxLength(200).IsRequired();
             e.Property(x => x.Status).HasColumnName("status").HasConversion<short>();
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
-            e.Property(x => x.DecidedBySubject).HasColumnName("decided_by_subject").HasMaxLength(200);
-            e.Property(x => x.DecidedAt).HasColumnName("decided_at");
+            e.Property(x => x.Level1DecidedBySubject).HasColumnName("l1_decided_by").HasMaxLength(200);
+            e.Property(x => x.Level1DecidedAt).HasColumnName("l1_decided_at");
+            e.Property(x => x.Level2DecidedBySubject).HasColumnName("l2_decided_by").HasMaxLength(200);
+            e.Property(x => x.Level2DecidedAt).HasColumnName("l2_decided_at");
+            e.Property(x => x.RejectedBySubject).HasColumnName("rejected_by").HasMaxLength(200);
+            e.Property(x => x.RejectedAt).HasColumnName("rejected_at");
             e.Property(x => x.DecisionNote).HasColumnName("decision_note").HasMaxLength(500);
             e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
             e.HasIndex(x => new { x.CompanyId, x.Status });
             e.Ignore(x => x.DomainEvents);
 
             e.HasMany(x => x.Lines).WithOne().HasForeignKey(l => l.RequisitionId);
+        });
+
+        b.Entity<CostCenter>(e =>
+        {
+            e.ToTable("cost_center");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").HasConversion(id => id.Value, v => CostCenterId.From(v));
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.Code).HasColumnName("code").HasMaxLength(60).IsRequired();
+            e.Property(x => x.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+            e.Property(x => x.Status).HasColumnName("status").HasConversion<short>();
+            e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
+            e.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
+            e.Ignore(x => x.DomainEvents);
         });
 
         b.Entity<RequisitionLine>(e =>

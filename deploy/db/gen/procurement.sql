@@ -556,5 +556,138 @@ BEGIN
     VALUES ('20260810143702_SupplierStatsProjection', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811013526_RequisitionHeaderAndTwoLevel') THEN
+    ALTER TABLE procurement.purchase_requisition RENAME COLUMN decided_by_subject TO rejected_by;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811013526_RequisitionHeaderAndTwoLevel') THEN
+    ALTER TABLE procurement.purchase_requisition RENAME COLUMN decided_at TO rejected_at;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811013526_RequisitionHeaderAndTwoLevel') THEN
+    ALTER TABLE procurement.purchase_requisition ADD approver_l1_subject character varying(200) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811013526_RequisitionHeaderAndTwoLevel') THEN
+    ALTER TABLE procurement.purchase_requisition ADD approver_l2_subject character varying(200) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811013526_RequisitionHeaderAndTwoLevel') THEN
+    ALTER TABLE procurement.purchase_requisition ADD cost_center_id uuid NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811013526_RequisitionHeaderAndTwoLevel') THEN
+    ALTER TABLE procurement.purchase_requisition ADD justification character varying(2000) NOT NULL DEFAULT '';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811013526_RequisitionHeaderAndTwoLevel') THEN
+    ALTER TABLE procurement.purchase_requisition ADD l1_decided_at timestamp with time zone;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811013526_RequisitionHeaderAndTwoLevel') THEN
+    ALTER TABLE procurement.purchase_requisition ADD l1_decided_by character varying(200);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811013526_RequisitionHeaderAndTwoLevel') THEN
+    ALTER TABLE procurement.purchase_requisition ADD l2_decided_at timestamp with time zone;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811013526_RequisitionHeaderAndTwoLevel') THEN
+    ALTER TABLE procurement.purchase_requisition ADD l2_decided_by character varying(200);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811013526_RequisitionHeaderAndTwoLevel') THEN
+    ALTER TABLE procurement.purchase_requisition ADD paying_company_id uuid NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811013526_RequisitionHeaderAndTwoLevel') THEN
+    ALTER TABLE procurement.purchase_requisition ADD priority smallint NOT NULL DEFAULT 0;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811013526_RequisitionHeaderAndTwoLevel') THEN
+    CREATE TABLE procurement.cost_center (
+        id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        code character varying(60) NOT NULL,
+        name character varying(200) NOT NULL,
+        status smallint NOT NULL,
+        version integer NOT NULL,
+        CONSTRAINT "PK_cost_center" PRIMARY KEY (id)
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811013526_RequisitionHeaderAndTwoLevel') THEN
+    CREATE UNIQUE INDEX "IX_cost_center_company_id_code" ON procurement.cost_center (company_id, code);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811013526_RequisitionHeaderAndTwoLevel') THEN
+
+    ALTER TABLE procurement.cost_center ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE procurement.cost_center FORCE  ROW LEVEL SECURITY;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811013526_RequisitionHeaderAndTwoLevel') THEN
+
+    CREATE POLICY tenant_isolation ON procurement.cost_center
+        USING      (company_id = foundation.current_company())
+        WITH CHECK (company_id = foundation.current_company());
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260811013526_RequisitionHeaderAndTwoLevel') THEN
+    INSERT INTO procurement.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260811013526_RequisitionHeaderAndTwoLevel', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

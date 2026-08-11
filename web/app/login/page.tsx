@@ -20,7 +20,30 @@ export default function LoginPage() {
   const setAuth = useAuth((s) => s.setAuth);
   const [form, setForm] = useState({ companyId: "", email: "", password: "" });
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  async function onForgot() {
+    setError(null);
+    setNotice(null);
+    const parsed = schema.omit({ password: true }).safeParse(form);
+    if (!parsed.success) {
+      setError("Para recuperar a senha, informe a empresa e o e-mail acima.");
+      return;
+    }
+    setLoading(true);
+    try {
+      await api("/auth/password/forgot", {
+        method: "POST",
+        body: JSON.stringify({ companyId: form.companyId, email: form.email }),
+      });
+      setNotice("Se o e-mail estiver cadastrado, enviaremos um link para definir a senha (válido por 24h).");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Falha ao solicitar recuperação.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -66,9 +89,14 @@ export default function LoginPage() {
         <Input label="Senha" type="password" autoComplete="current-password"
           value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
         {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
+        {notice && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</p>}
         <Button type="submit" disabled={loading} className="w-full">
           {loading ? "Entrando…" : "Entrar"}
         </Button>
+        <button type="button" onClick={onForgot} disabled={loading}
+          className="w-full text-center text-sm text-brand hover:underline disabled:opacity-50">
+          Esqueci minha senha
+        </button>
       </form>
     </main>
   );

@@ -69,6 +69,15 @@ services:
       Jwt__Keys__0__Secret: ${JWT_SIGNING_SECRET:-troque-esta-chave-de-piloto-com-mais-de-32-bytes!!}
       # Provisionamento de empresas (POST /companies) exige este header X-Provisioning-Key (SEC-001).
       Provisioning__Key: ${PROVISIONING_KEY:-chave-de-provisionamento-do-piloto}
+      # E-mail transacional (convite/recuperação de senha). Sem SMTP_HOST, a API loga o link em vez
+      # de enviar (fallback do piloto) — o operador copia o link do log do container `api`.
+      Email__Smtp__Host: ${SMTP_HOST:-}
+      Email__Smtp__Port: ${SMTP_PORT:-587}
+      Email__Smtp__User: ${SMTP_USER:-}
+      Email__Smtp__Password: ${SMTP_PASSWORD:-}
+      Email__From: ${SMTP_FROM:-no-reply@trinosupply.local}
+      # Base dos links enviados por e-mail (tela /criar-senha do frontend).
+      Email__WebBaseUrl: ${WEB_BASE_URL:-http://localhost:3000}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/health/ready"]
       interval: 10s

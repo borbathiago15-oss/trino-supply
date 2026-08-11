@@ -357,5 +357,55 @@ BEGIN
     VALUES ('20260811124757_OutboxRls', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM foundation.__ef_migrations WHERE "MigrationId" = '20260811130102_PasswordSetupTokens') THEN
+    CREATE TABLE foundation.password_setup_token (
+        id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        user_id uuid NOT NULL,
+        token_hash character varying(100) NOT NULL,
+        created_at timestamp with time zone NOT NULL,
+        expires_at timestamp with time zone NOT NULL,
+        used_at timestamp with time zone,
+        CONSTRAINT "PK_password_setup_token" PRIMARY KEY (id)
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM foundation.__ef_migrations WHERE "MigrationId" = '20260811130102_PasswordSetupTokens') THEN
+    CREATE UNIQUE INDEX "IX_password_setup_token_token_hash" ON foundation.password_setup_token (token_hash);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM foundation.__ef_migrations WHERE "MigrationId" = '20260811130102_PasswordSetupTokens') THEN
+
+    ALTER TABLE foundation.password_setup_token ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE foundation.password_setup_token FORCE  ROW LEVEL SECURITY;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM foundation.__ef_migrations WHERE "MigrationId" = '20260811130102_PasswordSetupTokens') THEN
+
+    CREATE POLICY tenant_isolation ON foundation.password_setup_token
+        USING      (company_id = foundation.current_company())
+        WITH CHECK (company_id = foundation.current_company());
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM foundation.__ef_migrations WHERE "MigrationId" = '20260811130102_PasswordSetupTokens') THEN
+    INSERT INTO foundation.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260811130102_PasswordSetupTokens', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

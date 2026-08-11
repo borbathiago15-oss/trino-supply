@@ -421,6 +421,16 @@ dotnet ef database update \
   atualizado (`WORKER_DB_PASSWORD`). **(4) Backup no piloto**: serviço `backup` no compose com
   `pg_dump -F c` diário e retenção de 14 dias em volume próprio. **Domínio 62/62** e
   **integração 40/40** (migration OutboxRls aplicada nos containers de teste).
+- ✅ **Fase C (parte 2): e-mail transacional + convite/recuperação de senha (validado):**
+  **(1) `IEmailSender`**: SMTP real quando `Email:Smtp:Host` está configurado (env `SMTP_*` no
+  compose); sem configuração, fallback que **loga o link** (piloto). **(2) Convite de usuário**:
+  criar usuário **sem senha** gera token de definição (hash em `password_setup_token`, RLS,
+  uso único, 24h) e envia o link `/criar-senha?company=...&token=...`. **(3) "Esqueci minha
+  senha"** na tela de login → `POST /auth/password/forgot` (sempre 202 — anti-enumeração).
+  **(4) Página `/criar-senha`**: valida token, define a senha (mín. 8) e **revoga as sessões
+  antigas** do usuário; auditoria `auth.password_setup_requested`/`auth.password_set`.
+  **Domínio 62/62**, **integração 41/41** (novo teste ponta-a-ponta: convite → reset → uso
+  único → anti-enumeração → refresh antigo revogado) e build web ok.
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e
   Auditoria; testes de integração de isolamento (Testcontainers — QA-001 / SEC-004 §8).

@@ -57,6 +57,22 @@ public static class DependencyInjection
         services.AddSingleton<Auth.ILoginThrottle, Auth.InMemoryLoginThrottle>();
         services.AddScoped<IAuthService, AuthService>();
 
+        // E-mail transacional (convite/recuperação de senha): SMTP quando Email:Smtp:Host existe;
+        // sem configuração, fallback que loga a mensagem (piloto/dev).
+        var emailOptions = new Email.EmailOptions(
+            SmtpHost: configuration["Email:Smtp:Host"],
+            SmtpPort: int.TryParse(configuration["Email:Smtp:Port"], out var smtpPort) ? smtpPort : 587,
+            SmtpUser: configuration["Email:Smtp:User"],
+            SmtpPassword: configuration["Email:Smtp:Password"],
+            UseSsl: !string.Equals(configuration["Email:Smtp:UseSsl"], "false", StringComparison.OrdinalIgnoreCase),
+            From: configuration["Email:From"] ?? "no-reply@trinosupply.local",
+            WebBaseUrl: configuration["Email:WebBaseUrl"] ?? "http://localhost:3000");
+        services.AddSingleton(emailOptions);
+        if (emailOptions.IsConfigured)
+            services.AddSingleton<Application.Email.IEmailSender, Email.SmtpEmailSender>();
+        else
+            services.AddSingleton<Application.Email.IEmailSender, Email.LogEmailSender>();
+
         // Eventos assíncronos: relay do Outbox (ARC-005). Publisher = RabbitMQ se configurado; senão log.
         var rabbitHost = configuration["RabbitMq:Host"];
         if (!string.IsNullOrWhiteSpace(rabbitHost))

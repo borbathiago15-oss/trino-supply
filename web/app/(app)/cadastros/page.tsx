@@ -214,13 +214,19 @@ function UsuariosInner() {
 
   const criar = useMutation({
     mutationFn: async () => {
-      const res = await api<{ userId: string }>("/users", {
+      const res = await api<{ userId: string; invited?: boolean }>("/users", {
         method: "POST",
-        body: JSON.stringify({ subject: u.subject, email: u.email, displayName: u.displayName, password: u.password }),
+        body: JSON.stringify({ subject: u.subject, email: u.email, displayName: u.displayName, password: u.password || null }),
       });
       if (u.roleId) await api(`/users/${res.userId}/roles`, { method: "POST", body: JSON.stringify({ roleId: u.roleId }) });
+      return res;
     },
-    onSuccess: () => { setU(empty); refresh(); toast.push("success", "Usuário cadastrado."); },
+    onSuccess: (res) => {
+      setU(empty); refresh();
+      toast.push("success", res?.invited
+        ? "Usuário cadastrado. Convite para definir a senha enviado por e-mail."
+        : "Usuário cadastrado.");
+    },
     onError: onErr,
   });
 
@@ -255,7 +261,7 @@ function UsuariosInner() {
         <Input label="Usuário (login)" value={u.subject} onChange={(e) => setU({ ...u, subject: e.target.value })} />
         <Input label="E-mail" value={u.email} onChange={(e) => setU({ ...u, email: e.target.value })} />
         <Input label="Nome" value={u.displayName} onChange={(e) => setU({ ...u, displayName: e.target.value })} />
-        <Input label="Senha inicial" type="password" value={u.password} onChange={(e) => setU({ ...u, password: e.target.value })} />
+        <Input label="Senha inicial (vazio = convite por e-mail)" type="password" value={u.password} onChange={(e) => setU({ ...u, password: e.target.value })} />
         <Select label="Perfil (papel)" value={u.roleId} onChange={(e) => setU({ ...u, roleId: e.target.value })}>
           <option value="">Sem papel (defina depois)</option>
           {(roles.data ?? []).map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}

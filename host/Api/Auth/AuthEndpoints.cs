@@ -5,6 +5,8 @@ namespace TrinoSupply.Api.Auth;
 public sealed record LoginRequest(Guid CompanyId, string Email, string Password);
 public sealed record RefreshRequest(Guid CompanyId, string RefreshToken);
 public sealed record LogoutRequest(Guid CompanyId, string RefreshToken);
+public sealed record ForgotPasswordRequest(Guid CompanyId, string Email);
+public sealed record ResetPasswordRequest(Guid CompanyId, string Token, string NewPassword);
 
 /// <summary>Endpoints de autenticação (IdP local — FD-001-01). Abertos (pré-autenticação).</summary>
 public static class AuthEndpoints
@@ -28,6 +30,23 @@ public static class AuthEndpoints
             return result.IsSuccess
                 ? Results.Ok(result.Value)
                 : Results.Json(new { code = result.Error.Code, message = result.Error.Message }, statusCode: 401);
+        });
+
+        // "Esqueci minha senha": SEMPRE 202 (não revela se o e-mail existe); o link chega por e-mail.
+        auth.MapPost("/password/forgot", async (ForgotPasswordRequest req, IAuthService svc, CancellationToken ct) =>
+        {
+            var result = await svc.RequestPasswordSetupAsync(req.CompanyId, req.Email, ct);
+            return result.IsSuccess
+                ? Results.Accepted()
+                : Results.BadRequest(new { code = result.Error.Code, message = result.Error.Message });
+        });
+
+        auth.MapPost("/password/reset", async (ResetPasswordRequest req, IAuthService svc, CancellationToken ct) =>
+        {
+            var result = await svc.CompletePasswordSetupAsync(req.CompanyId, req.Token, req.NewPassword, ct);
+            return result.IsSuccess
+                ? Results.NoContent()
+                : Results.BadRequest(new { code = result.Error.Code, message = result.Error.Message });
         });
 
         auth.MapPost("/logout", async (LogoutRequest req, IAuthService svc, CancellationToken ct) =>

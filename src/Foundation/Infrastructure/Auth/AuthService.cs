@@ -12,9 +12,11 @@ namespace TrinoSupply.Foundation.Infrastructure.Auth;
 
 /// <summary>Autenticação por e-mail/senha e ciclo de refresh tokens (SEC-001). Ver <see cref="IAuthService"/>.</summary>
 public sealed class AuthService(
-    FoundationDbContext db, IPasswordHasher hasher, ITokenIssuer issuer, IClock clock, ILoginThrottle throttle) : IAuthService
+    FoundationDbContext db, IPasswordHasher hasher, ITokenIssuer issuer, IClock clock, ILoginThrottle throttle,
+    Application.Email.IEmailSender emailSender, Email.EmailOptions emailOptions) : IAuthService
 {
     private static readonly TimeSpan RefreshLifetime = TimeSpan.FromDays(30);
+    private static readonly TimeSpan SetupTokenLifetime = TimeSpan.FromHours(24);
     private static readonly Error InvalidCredentials = new("auth.invalid_credentials", "Credenciais inválidas.");
     private static readonly Error InvalidRefresh = new("auth.invalid_refresh", "Refresh token inválido ou expirado.");
     private static readonly Error Locked = new(
@@ -98,6 +100,81 @@ public sealed class AuthService(
         }
         await tx.CommitAsync(ct);
         return Result.Success(); // idempotente
+    }
+
+    public async Task<Result> RequestPasswordSetupAsync(Guid companyId, string email, CancellationToken ct = default)
+    {
+        var normalized = email.Trim().ToLowerInvariant();
+        if (normalized.Length == 0)
+            return Result.Failure(new Error("auth.email_required", "Informe o e-mail."));
+
+        string? rawToken = null;
+        string? displayName = null;
+
+        await using (var tx = await db.Database.BeginTransactionAsync(ct))
+        {
+            await SetTenantAsync(companyId, ct);
+
+            var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == normalized, ct);
+            // Anti-enumeração: e-mail inexistente/bloqueado responde igual ao sucesso — só não envia nada.
+            if (user is not null && user.Status == UserStatus.Active)
+            {
+                // Higiene: no máximo um token pendente por usuário (o novo invalida os anteriores).
+                await db.PasswordSetupTokens.Where(t => t.UserId == user.Id.Value).ExecuteDeleteAsync(ct);
+
+                rawToken = Base64Url(RandomNumberGenerator.GetBytes(32));
+                displayName = user.DisplayName;
+                db.PasswordSetupTokens.Add(PasswordSetupToken.Issue(
+                    user.CompanyId, user.Id.Value, HashToken(rawToken), clock.UtcNow, SetupTokenLifetime));
+                db.AuditEntries.Add(Domain.Audit.AuditEntry.Create(
+                    user.CompanyId, clock.UtcNow, normalized, "auth.password_setup_requested",
+                    "User", user.Id.Value.ToString(), null));
+                await db.SaveChangesAsync(ct);
+            }
+            await tx.CommitAsync(ct);
+        }
+
+        // Envio pós-commit (melhor-esforço): o token já está persistido; falha de e-mail não desfaz nada.
+        if (rawToken is not null)
+        {
+            var link = $"{emailOptions.WebBaseUrl.TrimEnd('/')}/criar-senha?company={companyId}&token={rawToken}";
+            await emailSender.SendAsync(normalized, "Trino Supply — defina sua senha",
+                $"Olá, {displayName}!\n\nPara definir (ou redefinir) sua senha de acesso ao Trino Supply, " +
+                $"abra o link abaixo (válido por 24 horas):\n\n{link}\n\n" +
+                "Se você não solicitou isto, ignore esta mensagem.", ct);
+        }
+        return Result.Success();
+    }
+
+    public async Task<Result> CompletePasswordSetupAsync(Guid companyId, string token, string newPassword, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(newPassword) || newPassword.Length < 8)
+            return Result.Failure(new Error("iam.password.weak", "Senha deve ter ao menos 8 caracteres."));
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await SetTenantAsync(companyId, ct);
+
+        var hash = HashToken(token ?? string.Empty);
+        var setup = await db.PasswordSetupTokens.FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
+        if (setup is null || !setup.IsUsable(clock.UtcNow))
+            return Result.Failure(new Error("auth.invalid_setup_token", "Link inválido ou expirado. Solicite um novo."));
+
+        var user = await db.Users.FindAsync([UserId.From(setup.UserId)], ct);
+        if (user is null || user.Status != UserStatus.Active)
+            return Result.Failure(new Error("auth.invalid_setup_token", "Link inválido ou expirado. Solicite um novo."));
+
+        user.SetPasswordHash(hasher.Hash(newPassword));
+        setup.MarkUsed(clock.UtcNow);
+
+        // Sessões antigas caem: quem tinha refresh token deste usuário perde o acesso.
+        var tokens = await db.RefreshTokens.Where(t => t.UserId == user.Id.Value && t.RevokedAt == null).ToListAsync(ct);
+        foreach (var t in tokens) t.Revoke(clock.UtcNow);
+
+        db.AuditEntries.Add(Domain.Audit.AuditEntry.Create(
+            user.CompanyId, clock.UtcNow, user.Subject, "auth.password_set", "User", user.Id.Value.ToString(), null));
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return Result.Success();
     }
 
     private async Task<AuthTokens> IssueAsync(User user, CancellationToken ct)

@@ -21,4 +21,13 @@ public interface IAuthService
 
     /// <summary>Revoga um refresh token (logout).</summary>
     Task<Result> LogoutAsync(Guid companyId, string refreshToken, CancellationToken ct = default);
+
+    /// <summary>
+    /// Gera um token de definição de senha e envia o link por e-mail (convite/"esqueci minha senha").
+    /// SEMPRE retorna sucesso quando o payload é válido — não revela se o e-mail existe (anti-enumeração).
+    /// </summary>
+    Task<Result> RequestPasswordSetupAsync(Guid companyId, string email, CancellationToken ct = default);
+
+    /// <summary>Define a senha a partir de um token válido (uso único); revoga as sessões do usuário.</summary>
+    Task<Result> CompletePasswordSetupAsync(Guid companyId, string token, string newPassword, CancellationToken ct = default);
 }

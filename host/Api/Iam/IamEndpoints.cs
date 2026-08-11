@@ -71,15 +71,25 @@ public static class IamEndpoints
             return Results.Ok(await iam.ListUsersAsync(ct));
         }).RequireAuthorization();
 
-        // Cria usuário no tenant — exige users.manage.
-        v1.MapPost("/users", async (RegisterUserRequest req, IPermissionChecker perm, IIamService iam, CancellationToken ct) =>
+        // Cria usuário no tenant — exige users.manage. Sem senha no payload → convite por e-mail
+        // (link de definição de senha), em vez de senha provisória circulando por fora.
+        v1.MapPost("/users", async (RegisterUserRequest req, IPermissionChecker perm, IIamService iam,
+            TrinoSupply.Foundation.Application.Auth.IAuthService auth,
+            TrinoSupply.BuildingBlocks.Multitenancy.ITenantContext tenant, CancellationToken ct) =>
         {
             if (!await perm.HasAsync(PermissionCatalog.UsersManage, ct))
                 return Results.Forbid();
             var result = await iam.RegisterUserAsync(req.Subject, req.Email, req.DisplayName, req.Password, ct);
-            return result.IsSuccess
-                ? Results.Created($"/api/v1/users/{result.Value}", new { userId = result.Value })
-                : Results.BadRequest(new { code = result.Error.Code, message = result.Error.Message });
+            if (result.IsFailure)
+                return Results.BadRequest(new { code = result.Error.Code, message = result.Error.Message });
+
+            var invited = false;
+            if (string.IsNullOrEmpty(req.Password) && tenant.HasTenant)
+            {
+                await auth.RequestPasswordSetupAsync(tenant.CompanyId.Value, req.Email, ct);
+                invited = true;
+            }
+            return Results.Created($"/api/v1/users/{result.Value}", new { userId = result.Value, invited });
         }).RequireAuthorization();
 
         // ---- Papéis ----

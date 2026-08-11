@@ -22,6 +22,7 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<PasswordSetupToken> PasswordSetupTokens => Set<PasswordSetupToken>();
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
 
     protected override void OnModelCreating(ModelBuilder b)
@@ -87,6 +88,20 @@ public sealed class FoundationDbContext(DbContextOptions<FoundationDbContext> op
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
             e.Property(x => x.ExpiresAt).HasColumnName("expires_at");
             e.Property(x => x.RevokedAt).HasColumnName("revoked_at");
+            e.HasIndex(x => x.TokenHash).IsUnique();
+        });
+
+        b.Entity<PasswordSetupToken>(e =>
+        {
+            e.ToTable("password_setup_token");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.UserId).HasColumnName("user_id");
+            e.Property(x => x.TokenHash).HasColumnName("token_hash").HasMaxLength(100).IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.ExpiresAt).HasColumnName("expires_at");
+            e.Property(x => x.UsedAt).HasColumnName("used_at");
             e.HasIndex(x => x.TokenHash).IsUnique();
         });
 

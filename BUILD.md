@@ -431,6 +431,12 @@ dotnet ef database update \
   antigas** do usuário; auditoria `auth.password_setup_requested`/`auth.password_set`.
   **Domínio 62/62**, **integração 41/41** (novo teste ponta-a-ponta: convite → reset → uso
   único → anti-enumeração → refresh antigo revogado) e build web ok.
+- ✅ **Fase C (parte 3): alertas + borda HTTPS + veredito de go-live:** serviço `alerts` no
+  compose (vigia a API a cada minuto — caiu/voltou — e o frescor do backup a cada hora;
+  notifica via `ALERT_WEBHOOK_URL` ou loga); `deploy/README.md` ganhou a seção **Borda HTTPS**
+  (Cloudflare Tunnel ou Caddy) e a tabela de variáveis de ambiente; **`GO-LIVE.md`** com o
+  checklist final — veredito **APTO condicionado a 4 itens de implantação** (borda HTTPS,
+  troca de segredos padrão, SMTP real e webhook de alertas).
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e
   Auditoria; testes de integração de isolamento (Testcontainers — QA-001 / SEC-004 §8).

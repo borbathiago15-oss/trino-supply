@@ -136,5 +136,20 @@ services:
         sleep 86400;
       done"
 
+  # Vigia (OPS-001): alerta quando a API cai/volta e quando o backup diário não aconteceu.
+  # Configure ALERT_WEBHOOK_URL (Slack/Discord/Google Chat) para receber as notificações;
+  # sem webhook, os alertas ficam em `docker compose logs -f alerts`.
+  alerts:
+    image: curlimages/curl:8.10.1
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      ALERT_WEBHOOK_URL: ${ALERT_WEBHOOK_URL:-}
+    volumes:
+      - ./alerts.sh:/alerts.sh:ro
+      - backups:/backups:ro
+    entrypoint: ["sh", "/alerts.sh"]
+
 volumes:
   backups:

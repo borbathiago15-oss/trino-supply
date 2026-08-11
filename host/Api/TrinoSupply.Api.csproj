@@ -8,6 +8,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Provisionamento das roles no MIGRATE_ON_STARTUP (PaaS): mesmo grants.sql do bootstrap. -->
+    <Content Include="../../deploy/db/gen/grants.sql" Link="grants.sql"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.105.1" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
     <PackageReference Include="OpenTelemetry.Exporter.Console" Version="1.17.0" />

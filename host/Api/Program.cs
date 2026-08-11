@@ -21,6 +21,10 @@ QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// PaaS (Railway etc.): DATABASE_URL/PORT/nomes amigáveis → configuração. ANTES de registrar os
+// serviços, pois as connection strings são lidas no registro (deploy/railway.md).
+TrinoSupply.Api.Startup.CloudEnvironment.ApplyTo(builder);
+
 // Observabilidade: logs estruturados em JSON com escopos (inclui a correlação de request). Uma linha
 // por evento, amigável a coletores (OPS-001 §5). Em Development mantém-se legível via IncludeScopes.
 builder.Logging.ClearProviders();
@@ -175,6 +179,9 @@ app.MapMaterialsEndpoints();
 
 // Compras (PR-001): requisição + aprovação com SoD; ponte da reposição.
 app.MapProcurementEndpoints();
+
+// PaaS: MIGRATE_ON_STARTUP=true aplica as migrations + roles (substitui o bootstrap do compose).
+await TrinoSupply.Api.Startup.CloudEnvironment.MigrateIfRequestedAsync(app);
 
 app.Run();
 

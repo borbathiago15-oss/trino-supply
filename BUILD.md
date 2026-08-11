@@ -463,6 +463,17 @@ dotnet ef database update \
   (idempotência — segunda geração é recusada) e aparece na UI ("Pedido gerado ✓"). Auditoria
   `warehouse.request.purchase_generated`. **Domínio 62/62**, **integração 46/46** (novo teste
   ponta-a-ponta da ponte) e build web ok.
+- ✅ **Deploy no Railway (validado em simulação idêntica):** a API agora entende as convenções
+  de PaaS (`host/Api/Startup/CloudEnvironment.cs`): `DATABASE_URL` vira a connection string
+  (como **`trino_app`** quando `APP_DB_PASSWORD` está definido — RLS efetivo e guard SEC-004
+  passa), `PORT` injetado vira o bind do Kestrel, e **`MIGRATE_ON_STARTUP=true`** aplica as
+  migrations dos 3 contextos + provisiona as roles via `grants.sql` (copiado para o publish) —
+  substitui o serviço `bootstrap` do compose. Nomes amigáveis (`JWT_SIGNING_SECRET`,
+  `PROVISIONING_KEY`, `WEB_BASE_URL`, `SMTP_*`) preenchem a configuração. **Validado de ponta a
+  ponta em simulação Railway** (Postgres 16 superuser + DATABASE_URL + PORT, Production):
+  migrations ok, roles criadas, guard OK como trino_app, health Healthy, empresa provisionada
+  com chave (403 sem chave), login e movimentação de estoque. Guia passo a passo em
+  **`deploy/railway.md`**. Suites 62/62 + 46/46 seguem verdes.
 - ✅ **Fase C (parte 3): alertas + borda HTTPS + veredito de go-live:** serviço `alerts` no
   compose (vigia a API a cada minuto — caiu/voltou — e o frescor do backup a cada hora;
   notifica via `ALERT_WEBHOOK_URL` ou loga); `deploy/README.md` ganhou a seção **Borda HTTPS**

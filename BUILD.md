@@ -245,6 +245,14 @@ dotnet ef database update \
   `web/package-lock.json` presente (o `npm ci` do Dockerfile funciona) e os contextos batem
   (api/worker = raiz, web = `web/`). O build das imagens em si roda no runner do Actions (no sandbox o
   build de container falha no restore por causa do proxy TLS — limitação de ambiente, não do pipeline).
+- ✅ **Fail-fast de segurança na inicialização (SEC-004) — Fase 7, fatia 8 (validado em execução real).**
+  Um `DatabasePrivilegeGuard` (IHostedService) faz a API, **em produção**, **recusar iniciar** se: (a) faltar
+  a connection string do Postgres, ou (b) o papel de banco conectado tiver **SUPERUSER/BYPASSRLS** — que
+  ignoraria as policies de RLS e quebraria o isolamento multi-tenant. Implementa o requisito documentado
+  ("proíbe BYPASSRLS em produção"). **Validado:** como **`trino_app`** (NOSUPERUSER/NOBYPASSRLS) a API sobe e
+  loga o guard OK; como **superuser** o start **aborta** (exit≠0, `/health/live` sem resposta, mensagem
+  SEC-004 no log). 3 testes de integração (aceita trino_app, recusa superuser, ignora em dev). `dotnet test`
+  → 39 unidade + 26 integração.
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

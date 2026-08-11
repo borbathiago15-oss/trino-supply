@@ -60,6 +60,10 @@ builder.Services.AddOpenTelemetry()
 // Sobrepõe o LoggingUsageMetrics do Foundation por métricas exportáveis (mesma interface, sem tocar call-sites).
 builder.Services.AddSingleton<IUsageMetrics, TrinoSupply.Api.Observability.OpenTelemetryUsageMetrics>();
 
+// Fail-fast de segurança (SEC-004): em produção, recusa iniciar se conectar ao banco como papel
+// privilegiado (SUPERUSER/BYPASSRLS) ou sem connection string. Melhor não subir do que subir inseguro.
+builder.Services.AddHostedService<TrinoSupply.Api.Security.DatabasePrivilegeGuard>();
+
 // Multi-tenant: o tenant vem do JWT (FD-001-01). Sobrepõe o NullTenantContext do host de infra.
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();

@@ -69,6 +69,9 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ITenantContext, HttpTenantContext>();
 builder.Services.AddScoped<ICurrentUser, HttpCurrentUser>();
 
+// Roteamento pós-aprovação do Pedido unificado (v2): interno → baixa; sem estoque → compra.
+builder.Services.AddScoped<TrinoSupply.Api.Procurement.StockFulfillment>();
+
 // AuthN (JWT Bearer) — SEC-001/003. IdP LOCAL: o próprio Trino emite e valida tokens usando um
 // key-ring (rotação de chaves — SEC-001). FAIL-CLOSED: só aceitamos tokens efetivamente validados
 // (assinatura por kid + emissor + audiência + expiração). Sem chaves nem Authority → nada é aceito.

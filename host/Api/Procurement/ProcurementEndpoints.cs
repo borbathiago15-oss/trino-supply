@@ -172,10 +172,17 @@ public static class ProcurementEndpoints
             return MapDecision(await svc.SubmitAsync(id, ct));
         }).RequireAuthorization();
 
-        p.MapPost("/requisitions/{id:guid}/approve", async (Guid id, IPermissionChecker perm, IPurchaseRequisitionService svc, CancellationToken ct) =>
+        p.MapPost("/requisitions/{id:guid}/approve", async (Guid id, IPermissionChecker perm,
+            IPurchaseRequisitionService svc, StockFulfillment fulfillment, CancellationToken ct) =>
         {
             if (!await perm.HasAsync(PermissionCatalog.PurchasesApprove, ct)) return Results.Forbid();
-            return MapDecision(await svc.ApproveAsync(id, ct));
+            var result = await svc.ApproveAsync(id, ct);
+            if (result.IsFailure) return MapDecision(result);
+
+            // Roteamento v2: se o pedido chegou a Aprovado e o Almox tem saldo, atende pelo estoque
+            // (baixa em lote atômica); senão segue a rota de compra. A resposta informa o destino.
+            var route = await fulfillment.TryFulfillAsync(id, ct);
+            return Results.Ok(new { route }); // "stock" = atendido pelo estoque; "purchase" = segue p/ OC
         }).RequireAuthorization();
 
         p.MapPost("/requisitions/{id:guid}/reject", async (Guid id, RejectRequest req, IPermissionChecker perm, IPurchaseRequisitionService svc, CancellationToken ct) =>

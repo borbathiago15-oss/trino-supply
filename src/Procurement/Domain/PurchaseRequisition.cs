@@ -17,10 +17,11 @@ public readonly record struct RequisitionId(Guid Value)
 public enum RequisitionStatus
 {
     Draft = 1,
-    Submitted = 2,        // aguardando aprovação nível 1
-    ApprovedLevel1 = 3,   // nível 1 liberou o custo; aguardando nível 2
-    Approved = 4,         // aprovado (nível 2) — pronto para OC
-    Rejected = 5
+    Submitted = 2,          // aguardando aprovação nível 1
+    ApprovedLevel1 = 3,     // nível 1 liberou o custo; aguardando nível 2
+    Approved = 4,           // aprovado (nível 2) — segue para compra (OC)
+    Rejected = 5,
+    FulfilledFromStock = 6, // aprovado e atendido pelo ESTOQUE INTERNO (baixa no Almox) — v2, sem OC
 }
 
 /// <summary>Tipo de demanda / prioridade da solicitação.</summary>
@@ -190,6 +191,19 @@ public sealed class PurchaseRequisition : AggregateRoot<RequisitionId>, IBelongs
         Status = RequisitionStatus.Approved;
         Level2DecidedBySubject = approverSubject;
         Level2DecidedAt = now;
+        Version++;
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Roteamento pós-aprovação (v2): o pedido aprovado foi atendido pelo estoque interno do Almox
+    /// (baixa já efetuada) — encerra sem OC. Só a partir de <see cref="RequisitionStatus.Approved"/>.
+    /// </summary>
+    public Result MarkFulfilledFromStock(DateTimeOffset now)
+    {
+        if (Status != RequisitionStatus.Approved)
+            return Result.Failure(new Error("purchases.not_approved", "Só um pedido aprovado pode ser atendido pelo estoque."));
+        Status = RequisitionStatus.FulfilledFromStock;
         Version++;
         return Result.Success();
     }

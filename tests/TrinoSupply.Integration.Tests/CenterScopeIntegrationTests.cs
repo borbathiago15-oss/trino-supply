@@ -124,6 +124,6 @@ public sealed class CenterScopeIntegrationTests(PilotFixture fixture)
 
         // Decisão fora do escopo → 403; dentro do escopo → 204.
         Assert.Equal(403, await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{reqB}/approve", null, junior));
-        Assert.Equal(204, await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{reqA}/approve", null, junior));
+        Assert.Equal(200, await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{reqA}/approve", null, junior));
     }
 }

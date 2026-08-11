@@ -54,6 +54,46 @@ public sealed class StockService(MaterialsDbContext db, ITenantContext tenant, I
         return Result.Success(balance.Quantity);
     }
 
+    public async Task<Result> DebitBatchAsync(
+        IReadOnlyList<(string ItemCode, decimal Quantity)> lines, string reason, CancellationToken ct = default)
+    {
+        if (!tenant.HasTenant)
+            return Result.Failure(new Error("materials.no_tenant", "Requisição sem tenant."));
+        if (lines.Count == 0 || lines.Any(l => l.Quantity <= 0))
+            return Result.Failure(new Error("materials.stock.qty_invalid", "Linhas do lote inválidas."));
+
+        // TODAS as saídas na MESMA transação: trava cada saldo (FOR UPDATE) e aplica; qualquer falha
+        // (item inexistente/saldo insuficiente) desfaz o lote inteiro — sem baixa parcial.
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        foreach (var (rawCode, qty) in lines)
+        {
+            var code = rawCode.Trim().ToUpperInvariant();
+            var item = await db.Items.AsNoTracking().FirstOrDefaultAsync(i => i.Code == code, ct);
+            if (item is null)
+                return Result.Failure(new Error("materials.item.not_found", $"Item '{rawCode}' não encontrado."));
+
+            await db.Database.ExecuteSqlRawAsync(
+                "SELECT 1 FROM materials.stock_balance WHERE item_id = {0} FOR UPDATE", item.Id.Value);
+
+            var balance = await db.StockBalances.FirstOrDefaultAsync(bx => bx.Id == item.Id, ct);
+            if (balance is null)
+                return Result.Failure(new Error("materials.stock.no_balance", $"Saldo do item '{code}' inexistente."));
+
+            var applied = balance.Apply(-qty);
+            if (applied.IsFailure) return applied;
+
+            db.StockMovements.Add(StockMovement.Create(
+                tenant.CompanyId, item.Id, StockDirection.Out, qty, clock.UtcNow, reason));
+        }
+
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        metrics.Record("materials.stock.batch_debited", tenant.CompanyId.Value.ToString());
+        await audit.RecordAsync("materials.stock.batch_debited", null, null,
+            new { reason, items = lines.Select(l => $"{l.ItemCode}x{l.Quantity}").ToArray() }, ct);
+        return Result.Success();
+    }
+
     public async Task<Result<BalanceView>> GetBalanceAsync(string itemCode, CancellationToken ct = default)
     {
         var item = await db.Items.AsNoTracking()

@@ -85,6 +85,10 @@ public sealed class PurchaseRequisitionService(
         MutateAsync(id, r => r.Reject(currentUser.Subject ?? string.Empty, note, clock.UtcNow),
             "purchases.requisition.rejected", ct, enforceScope: true);
 
+    public Task<Result> MarkFulfilledFromStockAsync(Guid id, CancellationToken ct = default) =>
+        MutateAsync(id, r => r.MarkFulfilledFromStock(clock.UtcNow),
+            "purchases.requisition.fulfilled_from_stock", ct);
+
     private async Task<Result> MutateAsync(Guid id, Func<PurchaseRequisition, Result> action, string metric,
         CancellationToken ct, bool enforceScope = false)
     {

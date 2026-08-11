@@ -28,7 +28,13 @@ export default function ComprasPage() {
   const ok = (msg: string) => { invalidate(); toast.push("success", msg); };
 
   const submit = useMutation({ mutationFn: (id: string) => api(`/purchases/requisitions/${id}/submit`, { method: "POST" }), onSuccess: () => ok("Requisição enviada."), onError: onErr });
-  const approve = useMutation({ mutationFn: (id: string) => api(`/purchases/requisitions/${id}/approve`, { method: "POST" }), onSuccess: () => ok("Requisição aprovada."), onError: onErr });
+  const approve = useMutation({
+    mutationFn: (id: string) => api<{ route?: string } | undefined>(`/purchases/requisitions/${id}/approve`, { method: "POST" }),
+    onSuccess: (body) => ok(body?.route === "stock"
+      ? "Pedido aprovado e atendido pelo estoque interno (baixa efetuada)."
+      : "Pedido aprovado."),
+    onError: onErr,
+  });
   const reject = useMutation({ mutationFn: (id: string) => api(`/purchases/requisitions/${id}/reject`, { method: "POST", body: JSON.stringify({ note: "Rejeitada via UI" }) }), onSuccess: () => ok("Requisição rejeitada."), onError: onErr });
 
   const baixarOc = async (o: OrderView) => {

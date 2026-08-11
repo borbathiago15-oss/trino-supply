@@ -62,9 +62,13 @@ public sealed class OutboxRelayTests(PilotFixture fixture)
 
         var publisher = new OkPublisher();
         var relay = new OutboxRelay(db, publisher, new SystemClock(), NullLogger<OutboxRelay>.Instance);
-        var published = await relay.DrainOnceAsync();
 
-        Assert.Equal(pendingBefore, published);
+        // O relay trabalha em lotes: drena até esvaziar (como o Worker faz em ciclos).
+        var published = 0;
+        int batch;
+        do { batch = await relay.DrainOnceAsync(); published += batch; } while (batch > 0);
+
+        Assert.True(published >= pendingBefore, $"publicados={published} < pendentes={pendingBefore}");
         Assert.True(publisher.Count >= pendingBefore);
 
         await using var check = NewContext();

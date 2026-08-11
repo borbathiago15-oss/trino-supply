@@ -26,8 +26,10 @@ export default function AprovacaoPage() {
 
   const act = useMutation({
     mutationFn: ({ path, note }: { path: string; note?: string }) =>
-      api(path, { method: "POST", body: note !== undefined ? JSON.stringify({ note }) : undefined }),
-    onSuccess: () => done("Decisão registrada."),
+      api<{ route?: string } | undefined>(path, { method: "POST", body: note !== undefined ? JSON.stringify({ note }) : undefined }),
+    onSuccess: (body) => done(body?.route === "stock"
+      ? "Aprovado e atendido pelo estoque interno (baixa efetuada)."
+      : "Decisão registrada."),
     onError: onErr,
   });
 

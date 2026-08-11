@@ -255,3 +255,46 @@ public class PayingCompanyTests
         Assert.Equal(PayingCompanyStatus.Active, pc.Status);
     }
 }
+
+public class RequisitionFulfillmentTests
+{
+    private static readonly CompanyId Company = CompanyId.New();
+    private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
+
+    private static PurchaseRequisition Approved()
+    {
+        var req = PurchaseRequisition.Create(Company, "sol", PayingCompanyId.New(), CostCenterId.New(),
+            RequisitionPriority.Normal, "j", "a1", "a2", [("BOTA", 2m, "un")], Now).Value;
+        req.Submit();
+        req.ApproveLevel1("a1", Now);
+        req.ApproveLevel2("a2", Now);
+        return req;
+    }
+
+    [Fact]
+    public void Pedido_aprovado_pode_ser_atendido_pelo_estoque()
+    {
+        var req = Approved();
+        Assert.True(req.MarkFulfilledFromStock(Now).IsSuccess);
+        Assert.Equal(RequisitionStatus.FulfilledFromStock, req.Status);
+    }
+
+    [Fact]
+    public void Atender_pelo_estoque_sem_aprovacao_falha()
+    {
+        var req = PurchaseRequisition.Create(Company, "sol", PayingCompanyId.New(), CostCenterId.New(),
+            RequisitionPriority.Normal, "j", "a1", "a2", [("BOTA", 2m, "un")], Now).Value;
+        req.Submit();
+        var r = req.MarkFulfilledFromStock(Now);
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.not_approved", r.Error.Code);
+    }
+
+    [Fact]
+    public void Atendido_pelo_estoque_nao_pode_ser_atendido_de_novo()
+    {
+        var req = Approved();
+        req.MarkFulfilledFromStock(Now);
+        Assert.True(req.MarkFulfilledFromStock(Now).IsFailure);
+    }
+}

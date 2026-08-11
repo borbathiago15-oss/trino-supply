@@ -399,6 +399,16 @@ dotnet ef database update \
   responsabilidade editáveis, bloquear/reativar). Status humanizados em PT ("Aguardando nível 1",
   "Em separação"…). E2E: junior escopado vê SÓ o pedido do seu centro na Central e aprova; dashboards
   renderizam; auto-preenchimento centro→empresa confere.
+- ✅ **v2 — Fase B3: Pedido unificado com roteamento pós-aprovação (validado):** quando o pedido
+  chega a **Aprovado** (nível 2), o sistema verifica o estoque do Almox: com saldo para TODAS as
+  linhas → **baixa em lote ATÔMICA** (novo `IStockService.DebitBatchAsync`, uma transação; falha em
+  qualquer linha desfaz tudo) e o pedido encerra como **"Atendido pelo estoque"**
+  (`FulfilledFromStock`, sem OC); sem saldo (ou item fora do catálogo) → permanece Aprovado e segue
+  a **rota de compra** (OC), como antes. Orquestração no HOST (`StockFulfillment`) — os bounded
+  contexts não se referenciam; corrida entre checagem e baixa cai com segurança na rota de compra.
+  O approve responde `{route: "stock"|"purchase"}` e a UI avisa ("aprovado e atendido pelo estoque").
+  **Domínio 62/62** e **integração 40/40** (2 novos: com estoque → baixa 10→6 + OC bloqueada; sem
+  estoque → Approved com saldo intacto).
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e
   Auditoria; testes de integração de isolamento (Testcontainers — QA-001 / SEC-004 §8).

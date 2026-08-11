@@ -16,6 +16,13 @@ public interface IStockService
     Task<Result<decimal>> PostMovementAsync(
         string itemCode, StockDirection direction, decimal quantity, string? reason, CancellationToken ct = default);
 
+    /// <summary>
+    /// Baixa em lote ATÔMICA (v2 — atendimento de pedido pelo estoque interno): todas as linhas saem
+    /// em uma transação; item inexistente ou saldo insuficiente em QUALQUER linha aborta tudo.
+    /// </summary>
+    Task<Result> DebitBatchAsync(
+        IReadOnlyList<(string ItemCode, decimal Quantity)> lines, string reason, CancellationToken ct = default);
+
     Task<Result<BalanceView>> GetBalanceAsync(string itemCode, CancellationToken ct = default);
     Task<IReadOnlyList<MovementView>> ListMovementsAsync(string itemCode, CancellationToken ct = default);
 }

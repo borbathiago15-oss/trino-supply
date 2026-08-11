@@ -152,8 +152,8 @@ public sealed class OcFlowIntegrationTests(PilotFixture fixture)
 
         // Envia (admin) → aprova nível 1 (aprov1) → nível 2 (aprov2). SoD e 2 níveis.
         Assert.Equal(204, await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{reqId}/submit", null, admin));
-        Assert.Equal(204, await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{reqId}/approve", null, aprov1));
-        Assert.Equal(204, await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{reqId}/approve", null, aprov2));
+        Assert.Equal(200, await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{reqId}/approve", null, aprov1));
+        Assert.Equal(200, await PostStatusAsync(c, $"/api/v1/purchases/requisitions/{reqId}/approve", null, aprov2));
 
         // Emite a OC: seleciona pagadora + fornecedor vencedor + preços por linha + totais.
         var (orderStatus, order) = await PostAsync<OrderResp>(c, $"/api/v1/purchases/requisitions/{reqId}/order", new

@@ -37,4 +37,6 @@ public interface IPurchaseRequisitionService
     Task<IReadOnlyList<RequisitionView>> ListAsync(CancellationToken ct = default);
     /// <summary>Central de Aprovação: pedidos aguardando a decisão do usuário corrente (etapa atual + escopo).</summary>
     Task<IReadOnlyList<RequisitionView>> ListMyApprovalsAsync(CancellationToken ct = default);
+    /// <summary>Roteamento v2: marca o pedido APROVADO como atendido pelo estoque interno (baixa já feita).</summary>
+    Task<Result> MarkFulfilledFromStockAsync(Guid id, CancellationToken ct = default);
 }

@@ -29,7 +29,7 @@ public sealed record ConsumptionFicha(
 public interface IConsumptionService
 {
     Task<Result<Guid>> CreateAsync(CreateConsumptionInput input, CancellationToken ct = default);
-    Task<IReadOnlyList<ConsumptionView>> ListAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<ConsumptionView>> ListAsync(int limit = 200, CancellationToken ct = default);
     /// <summary>Monta os dados da ficha de entrega (para gerar o PDF pré-preenchido).</summary>
     Task<Result<ConsumptionFicha>> GetFichaAsync(Guid id, CancellationToken ct = default);
 }

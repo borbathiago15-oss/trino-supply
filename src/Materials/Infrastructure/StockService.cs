@@ -107,7 +107,7 @@ public sealed class StockService(MaterialsDbContext db, ITenantContext tenant, I
         return Result.Success(new BalanceView(item.Id.Value, item.Code, qty, version));
     }
 
-    public async Task<IReadOnlyList<MovementView>> ListMovementsAsync(string itemCode, CancellationToken ct = default)
+    public async Task<IReadOnlyList<MovementView>> ListMovementsAsync(string itemCode, int limit = 200, CancellationToken ct = default)
     {
         var normalized = itemCode.Trim().ToUpperInvariant();
         var item = await db.Items.AsNoTracking().FirstOrDefaultAsync(i => i.Code == normalized, ct);
@@ -116,6 +116,7 @@ public sealed class StockService(MaterialsDbContext db, ITenantContext tenant, I
         var movements = await db.StockMovements.AsNoTracking()
             .Where(mv => mv.ItemId == item.Id)
             .OrderByDescending(mv => mv.OccurredAt)
+            .Take(Math.Clamp(limit, 1, 1000))
             .ToListAsync(ct);
         return movements.Select(mv => new MovementView(
             mv.Id, mv.Direction.ToString(), mv.Quantity, mv.OccurredAt, mv.Reason)).ToList();

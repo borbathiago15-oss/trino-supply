@@ -44,8 +44,9 @@ services:
       DB_USER: trino
       DB_PASSWORD: trino
       DB_NAME: trino
-      # Senha da role da aplicação (trino_app). Troque em produção (e nas connection strings abaixo).
+      # Senhas das roles da aplicação/worker. Troque em produção (e nas connection strings abaixo).
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:-apppw}
+      WORKER_DB_PASSWORD: ${WORKER_DB_PASSWORD:-workerpw}
     volumes:
       - ./db/gen:/sql:ro
       - ./bootstrap.sh:/bootstrap.sh:ro
@@ -89,7 +90,8 @@ services:
         condition: service_healthy
     environment:
       DOTNET_ENVIRONMENT: Production
-      ConnectionStrings__Postgres: "Host=db;Port=5432;Database=trino;Username=trino_app;Password=${APP_DB_PASSWORD:-apppw}"
+      # Role dedicada do worker: cross-tenant SÓ no outbox (policy por current_user), sem BYPASSRLS.
+      ConnectionStrings__Postgres: "Host=db;Port=5432;Database=trino;Username=trino_worker;Password=${WORKER_DB_PASSWORD:-workerpw}"
       RabbitMq__Host: "rabbitmq"
       RabbitMq__User: "trino"
       RabbitMq__Password: "trino"
@@ -105,3 +107,25 @@ services:
       BACKEND_URL: "http://api:8080"
     ports:
       - "3000:3000"
+
+  # Backup diário do banco (OPS-001): pg_dump comprimido em volume, retenção de 14 dias.
+  # Restaurar: pg_restore -h db -U trino -d trino --clean /backups/<arquivo>.dump
+  backup:
+    image: postgres:16
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: trino
+    volumes:
+      - backups:/backups
+    entrypoint: >
+      sh -c "while true; do
+        pg_dump -h db -U trino -d trino -F c -f /backups/trino-$$(date +%Y%m%d-%H%M).dump
+        && echo \"backup ok: $$(date)\";
+        find /backups -name '*.dump' -mtime +14 -delete;
+        sleep 86400;
+      done"
+
+volumes:
+  backups:

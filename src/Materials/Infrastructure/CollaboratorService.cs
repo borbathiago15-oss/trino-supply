@@ -27,9 +27,9 @@ public sealed class CollaboratorService(MaterialsDbContext db, ITenantContext te
         return Result.Success(result.Value.Id.Value);
     }
 
-    public async Task<IReadOnlyList<CollaboratorView>> ListAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<CollaboratorView>> ListAsync(int limit = 500, CancellationToken ct = default)
     {
-        var list = await db.Collaborators.AsNoTracking().OrderBy(x => x.Name).ToListAsync(ct);
+        var list = await db.Collaborators.AsNoTracking().OrderBy(x => x.Name).Take(Math.Clamp(limit, 1, 2000)).ToListAsync(ct);
         return list.Select(x => new CollaboratorView(
             x.Id.Value, x.Name, x.Registration, x.CostCenterCode, x.CompanyCode, x.AdmissionDate, x.Status.ToString())).ToList();
     }

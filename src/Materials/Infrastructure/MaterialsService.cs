@@ -53,7 +53,7 @@ public sealed class MaterialsService(MaterialsDbContext db, ITenantContext tenan
         return Result.Success(result.Value.Id.Value);
     }
 
-    public async Task<IReadOnlyList<ItemView>> ListItemsAsync(string? group = null, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ItemView>> ListItemsAsync(string? group = null, int limit = 500, CancellationToken ct = default)
     {
         var query = db.Items.AsNoTracking().AsQueryable();
         if (!string.IsNullOrWhiteSpace(group))
@@ -61,7 +61,7 @@ public sealed class MaterialsService(MaterialsDbContext db, ITenantContext tenan
             var g = ProductGroups.Normalize(group);
             query = query.Where(i => i.Group == g);
         }
-        var items = await query.OrderBy(i => i.Code).ToListAsync(ct);
+        var items = await query.OrderBy(i => i.Code).Take(Math.Clamp(limit, 1, 2000)).ToListAsync(ct);
         return items.Select(i => new ItemView(
             i.Id.Value, i.Code, i.Name, i.BaseUnitId.Value, i.Status.ToString(), i.Group, i.Ca)).ToList();
     }

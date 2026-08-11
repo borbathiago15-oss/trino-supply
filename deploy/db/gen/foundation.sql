@@ -330,5 +330,32 @@ BEGIN
     VALUES ('20260811113310_UserCostCenterScope', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM foundation.__ef_migrations WHERE "MigrationId" = '20260811124757_OutboxRls') THEN
+
+    ALTER TABLE foundation.outbox ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE foundation.outbox FORCE  ROW LEVEL SECURITY;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM foundation.__ef_migrations WHERE "MigrationId" = '20260811124757_OutboxRls') THEN
+
+    CREATE POLICY tenant_isolation ON foundation.outbox
+        USING      (company_id = foundation.current_company() OR current_user = 'trino_worker')
+        WITH CHECK (company_id = foundation.current_company() OR current_user = 'trino_worker');
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM foundation.__ef_migrations WHERE "MigrationId" = '20260811124757_OutboxRls') THEN
+    INSERT INTO foundation.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260811124757_OutboxRls', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

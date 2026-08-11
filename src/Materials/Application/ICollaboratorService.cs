@@ -13,5 +13,5 @@ public sealed record CollaboratorInput(
 public interface ICollaboratorService
 {
     Task<Result<Guid>> CreateAsync(CollaboratorInput input, CancellationToken ct = default);
-    Task<IReadOnlyList<CollaboratorView>> ListAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<CollaboratorView>> ListAsync(int limit = 500, CancellationToken ct = default);
 }

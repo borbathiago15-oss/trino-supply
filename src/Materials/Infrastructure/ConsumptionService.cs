@@ -70,10 +70,10 @@ public sealed class ConsumptionService(
         return Result.Success(consumption.Id.Value);
     }
 
-    public async Task<IReadOnlyList<ConsumptionView>> ListAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<ConsumptionView>> ListAsync(int limit = 200, CancellationToken ct = default)
     {
         var list = await db.Consumptions.AsNoTracking().Include(x => x.Lines)
-            .OrderByDescending(x => x.IssuedAt).ToListAsync(ct);
+            .OrderByDescending(x => x.IssuedAt).Take(Math.Clamp(limit, 1, 1000)).ToListAsync(ct);
         if (list.Count == 0) return [];
 
         var collaborators = await db.Collaborators.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, ct);

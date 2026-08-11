@@ -41,10 +41,10 @@ public static class MaterialsEndpoints
         }).RequireAuthorization();
 
         // ---- Itens (com grupo/família — spec Sistema de Compras) ----
-        m.MapGet("/items", async (string? group, IPermissionChecker perm, IMaterialsService svc, CancellationToken ct) =>
+        m.MapGet("/items", async (string? group, int? limit, IPermissionChecker perm, IMaterialsService svc, CancellationToken ct) =>
         {
             if (!await perm.HasAsync(PermissionCatalog.MaterialsRead, ct)) return Results.Forbid();
-            return Results.Ok(await svc.ListItemsAsync(group, ct));
+            return Results.Ok(await svc.ListItemsAsync(group, limit ?? 500, ct));
         }).RequireAuthorization();
 
         // Catálogo de grupos/famílias de produto (alimenta filtros e a solicitação em lote por família).
@@ -101,10 +101,10 @@ public static class MaterialsEndpoints
         }).RequireAuthorization().DisableAntiforgery();
 
         // ---- Colaboradores (spec Almoxarifado) — quem recebe o EPI/fardamento na baixa ----
-        m.MapGet("/collaborators", async (IPermissionChecker perm, ICollaboratorService svc, CancellationToken ct) =>
+        m.MapGet("/collaborators", async (IPermissionChecker perm, ICollaboratorService svc, int? limit, CancellationToken ct) =>
         {
             if (!await perm.HasAsync(PermissionCatalog.MaterialsRead, ct)) return Results.Forbid();
-            return Results.Ok(await svc.ListAsync(ct));
+            return Results.Ok(await svc.ListAsync(limit ?? 500, ct));
         }).RequireAuthorization();
 
         m.MapPost("/collaborators", async (CreateCollaboratorRequest req, IPermissionChecker perm, ICollaboratorService svc, CancellationToken ct) =>
@@ -117,10 +117,10 @@ public static class MaterialsEndpoints
         }).RequireAuthorization();
 
         // ---- Baixa de consumo (spec Almoxarifado) — entrega ao colaborador dá saída no estoque ----
-        m.MapGet("/consumptions", async (IPermissionChecker perm, IConsumptionService svc, CancellationToken ct) =>
+        m.MapGet("/consumptions", async (IPermissionChecker perm, IConsumptionService svc, int? limit, CancellationToken ct) =>
         {
             if (!await perm.HasAsync(PermissionCatalog.MaterialsRead, ct)) return Results.Forbid();
-            return Results.Ok(await svc.ListAsync(ct));
+            return Results.Ok(await svc.ListAsync(limit ?? 200, ct));
         }).RequireAuthorization();
 
         m.MapPost("/consumptions", async (CreateConsumptionInput req, IPermissionChecker perm, IConsumptionService svc, CancellationToken ct) =>
@@ -167,7 +167,7 @@ public static class MaterialsEndpoints
                 || await perm.HasAsync(PermissionCatalog.WarehouseApprove, ct);
             if (!canSee) return Results.Forbid();
             // Visão do almoxarifado (todas) só para quem gerencia; senão, apenas as próprias/como gestor.
-            return Results.Ok(await svc.ListAsync(all: manage, ct));
+            return Results.Ok(await svc.ListAsync(all: manage, ct: ct));
         }).RequireAuthorization();
 
         m.MapPost("/requests", async (CreateStockRequestRequest req, IPermissionChecker perm, IStockRequestService svc, CancellationToken ct) =>
@@ -250,10 +250,10 @@ public static class MaterialsEndpoints
         }).RequireAuthorization();
 
         m.MapGet("/items/{code}/movements", async (string code,
-            IPermissionChecker perm, IStockService stock, CancellationToken ct) =>
+            IPermissionChecker perm, IStockService stock, int? limit, CancellationToken ct) =>
         {
             if (!await perm.HasAsync(PermissionCatalog.MaterialsRead, ct)) return Results.Forbid();
-            return Results.Ok(await stock.ListMovementsAsync(code, ct));
+            return Results.Ok(await stock.ListMovementsAsync(code, limit ?? 200, ct));
         }).RequireAuthorization();
 
         // ---- Reposição (ADR-014) ----

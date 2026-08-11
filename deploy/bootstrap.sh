@@ -18,10 +18,11 @@ for f in foundation materials procurement; do
     psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 -f "/sql/${f}.sql"
 done
 
-# grants.sql lê a senha da role da app do setting trino.app_password (APP_DB_PASSWORD).
+# grants.sql lê as senhas das roles (app e worker) de settings de sessão (APP/WORKER_DB_PASSWORD).
 echo "bootstrap: aplicando grants.sql"
 psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
     -c "SET trino.app_password = '$(printf "%s" "${APP_DB_PASSWORD:-apppw}" | sed "s/'/''/g")'" \
+    -c "SET trino.worker_password = '$(printf "%s" "${WORKER_DB_PASSWORD:-workerpw}" | sed "s/'/''/g")'" \
     -f "/sql/grants.sql"
 
 echo "bootstrap: concluído."

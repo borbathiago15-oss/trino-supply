@@ -38,5 +38,5 @@ public interface IPurchaseOrderService
     Task<Result> CancelAsync(Guid id, string reason, CancellationToken ct = default);
 
     Task<Result<PurchaseOrderView>> GetAsync(Guid id, CancellationToken ct = default);
-    Task<IReadOnlyList<PurchaseOrderView>> ListAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<PurchaseOrderView>> ListAsync(int limit = 200, CancellationToken ct = default);
 }

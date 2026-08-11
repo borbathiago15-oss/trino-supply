@@ -18,3 +18,21 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA foundation, materia
 -- Auditoria é append-only: a role da app não recebe UPDATE/DELETE (SEC-002).
 REVOKE UPDATE, DELETE ON foundation.audit_entry FROM trino_app;
 GRANT EXECUTE ON FUNCTION foundation.current_company() TO trino_app;
+
+-- Role do WORKER (relay do Outbox + projeções): mínimo necessário, cross-tenant só no outbox
+-- (a policy tenant_isolation do outbox libera por current_user = 'trino_worker'; sem BYPASSRLS).
+DO $$
+DECLARE pw text := coalesce(nullif(current_setting('trino.worker_password', true), ''), 'workerpw');
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'trino_worker') THEN
+        EXECUTE format('CREATE ROLE trino_worker LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS', pw);
+    ELSE
+        EXECUTE format('ALTER ROLE trino_worker PASSWORD %L', pw);
+    END IF;
+END $$;
+
+GRANT USAGE ON SCHEMA foundation, procurement TO trino_worker;
+GRANT SELECT, UPDATE ON foundation.outbox TO trino_worker;                             -- drenar + marcar publicado
+GRANT SELECT, INSERT, UPDATE, DELETE ON procurement.supplier_stats  TO trino_worker;   -- projeção
+GRANT SELECT, INSERT, UPDATE, DELETE ON procurement.processed_event TO trino_worker;   -- idempotência
+GRANT EXECUTE ON FUNCTION foundation.current_company() TO trino_worker;

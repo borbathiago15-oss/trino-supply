@@ -23,7 +23,7 @@ public interface IStockRequestService
 {
     Task<Result<Guid>> CreateAsync(CreateStockRequestInput input, CancellationToken ct = default);
     /// <summary><paramref name="all"/> = visão do almoxarifado (todas); senão, apenas as do solicitante/gestor.</summary>
-    Task<IReadOnlyList<StockRequestView>> ListAsync(bool all, CancellationToken ct = default);
+    Task<IReadOnlyList<StockRequestView>> ListAsync(bool all, int limit = 200, CancellationToken ct = default);
     /// <summary>Central de Aprovação: solicitações pendentes onde o usuário corrente é o gestor (no escopo).</summary>
     Task<IReadOnlyList<StockRequestView>> ListMyApprovalsAsync(CancellationToken ct = default);
     Task<Result> ApproveAsync(Guid id, CancellationToken ct = default);

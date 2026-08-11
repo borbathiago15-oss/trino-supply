@@ -134,10 +134,10 @@ public sealed class PurchaseOrderService(
         return Result.Success(ToView(order, supplier, paying));
     }
 
-    public async Task<IReadOnlyList<PurchaseOrderView>> ListAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<PurchaseOrderView>> ListAsync(int limit = 200, CancellationToken ct = default)
     {
         var orders = await db.Orders.AsNoTracking().Include(o => o.Lines)
-            .OrderByDescending(o => o.Number).ToListAsync(ct);
+            .OrderByDescending(o => o.Number).Take(Math.Clamp(limit, 1, 1000)).ToListAsync(ct);
         var suppliers = (await db.Suppliers.AsNoTracking().ToListAsync(ct)).ToDictionary(s => s.Id.Value);
         var paying = (await db.PayingCompanies.AsNoTracking().ToListAsync(ct)).ToDictionary(p => p.Id.Value);
         return orders.Select(o => ToView(o,

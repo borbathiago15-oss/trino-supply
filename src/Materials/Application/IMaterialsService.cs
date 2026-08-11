@@ -19,7 +19,7 @@ public interface IMaterialsService
     Task<Result<Guid>> CreateItemAsync(string code, string name, string baseUnitCode, string? group = null, string? ca = null, CancellationToken ct = default);
 
     /// <summary>Lista itens, opcionalmente filtrando por grupo/família.</summary>
-    Task<IReadOnlyList<ItemView>> ListItemsAsync(string? group = null, CancellationToken ct = default);
+    Task<IReadOnlyList<ItemView>> ListItemsAsync(string? group = null, int limit = 500, CancellationToken ct = default);
 
     /// <summary>Importa itens em lote (planilha); cria unidades ausentes automaticamente. Não lança.</summary>
     Task<ItemImportResult> ImportItemsAsync(IReadOnlyList<ItemImportRow> rows, CancellationToken ct = default);

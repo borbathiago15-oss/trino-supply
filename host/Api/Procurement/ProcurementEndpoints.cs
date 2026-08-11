@@ -23,10 +23,10 @@ public static class ProcurementEndpoints
     {
         var p = app.MapGroup("/api/v1/purchases");
 
-        p.MapGet("/requisitions", async (IPermissionChecker perm, IPurchaseRequisitionService svc, CancellationToken ct) =>
+        p.MapGet("/requisitions", async (int? limit, IPermissionChecker perm, IPurchaseRequisitionService svc, CancellationToken ct) =>
         {
             if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
-            return Results.Ok(await svc.ListAsync(ct));
+            return Results.Ok(await svc.ListAsync(limit ?? 200, ct));
         }).RequireAuthorization();
 
         p.MapGet("/requisitions/{id:guid}", async (Guid id, IPermissionChecker perm, IPurchaseRequisitionService svc, CancellationToken ct) =>
@@ -257,10 +257,10 @@ public static class ProcurementEndpoints
         }).RequireAuthorization();
 
         // ---- Pedidos de compra (emitidos de requisição aprovada) ----
-        p.MapGet("/orders", async (IPermissionChecker perm, IPurchaseOrderService svc, CancellationToken ct) =>
+        p.MapGet("/orders", async (int? limit, IPermissionChecker perm, IPurchaseOrderService svc, CancellationToken ct) =>
         {
             if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
-            return Results.Ok(await svc.ListAsync(ct));
+            return Results.Ok(await svc.ListAsync(limit ?? 200, ct));
         }).RequireAuthorization();
 
         p.MapGet("/orders/{id:guid}", async (Guid id, IPermissionChecker perm, IPurchaseOrderService svc, CancellationToken ct) =>

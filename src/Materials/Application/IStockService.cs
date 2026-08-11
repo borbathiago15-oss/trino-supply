@@ -24,5 +24,5 @@ public interface IStockService
         IReadOnlyList<(string ItemCode, decimal Quantity)> lines, string reason, CancellationToken ct = default);
 
     Task<Result<BalanceView>> GetBalanceAsync(string itemCode, CancellationToken ct = default);
-    Task<IReadOnlyList<MovementView>> ListMovementsAsync(string itemCode, CancellationToken ct = default);
+    Task<IReadOnlyList<MovementView>> ListMovementsAsync(string itemCode, int limit = 200, CancellationToken ct = default);
 }

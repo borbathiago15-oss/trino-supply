@@ -40,14 +40,14 @@ public sealed class StockRequestService(
         return Result.Success(created.Value.Id.Value);
     }
 
-    public async Task<IReadOnlyList<StockRequestView>> ListAsync(bool all, CancellationToken ct = default)
+    public async Task<IReadOnlyList<StockRequestView>> ListAsync(bool all, int limit = 200, CancellationToken ct = default)
     {
         var subject = currentUser.Subject ?? string.Empty;
         var query = db.StockRequests.AsNoTracking().Include(x => x.Lines).AsQueryable();
         if (!all)
             query = query.Where(x => x.RequesterSubject == subject || x.ManagerSubject == subject);
 
-        var list = await query.OrderByDescending(x => x.CreatedAt).ToListAsync(ct);
+        var list = await query.OrderByDescending(x => x.CreatedAt).Take(Math.Clamp(limit, 1, 1000)).ToListAsync(ct);
 
         // Escopo v2: usuário restrito por centro só vê solicitações dos seus centros.
         var scope = await centerScope.GetAsync(ct);

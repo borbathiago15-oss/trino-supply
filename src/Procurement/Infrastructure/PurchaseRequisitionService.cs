@@ -130,10 +130,11 @@ public sealed class PurchaseRequisitionService(
         return Result.Success(ToView(req, paying, cc));
     }
 
-    public async Task<IReadOnlyList<RequisitionView>> ListAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<RequisitionView>> ListAsync(int limit = 200, CancellationToken ct = default)
     {
+        limit = Math.Clamp(limit, 1, 1000);
         var reqs = await db.Requisitions.AsNoTracking().Include(r => r.Lines)
-            .OrderByDescending(r => r.CreatedAt).ToListAsync(ct);
+            .OrderByDescending(r => r.CreatedAt).Take(limit).ToListAsync(ct);
         var paying = (await db.PayingCompanies.AsNoTracking().ToListAsync(ct)).ToDictionary(p => p.Id.Value);
         var centers = (await db.CostCenters.AsNoTracking().ToListAsync(ct)).ToDictionary(c => c.Id.Value);
 

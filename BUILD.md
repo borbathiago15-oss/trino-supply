@@ -409,6 +409,18 @@ dotnet ef database update \
   O approve responde `{route: "stock"|"purchase"}` e a UI avisa ("aprovado e atendido pelo estoque").
   **Domínio 62/62** e **integração 40/40** (2 novos: com estoque → baixa 10→6 + OC bloqueada; sem
   estoque → Approved com saldo intacto).
+- ✅ **Fase C (parte 1): prontidão operacional — paginação, RLS no outbox e backup (validado):**
+  **(1) Paginação**: todas as listagens (pedidos, OCs, itens, movimentos, solicitações, baixas,
+  colaboradores) aceitam `?limit=` com teto e padrão sensatos (`Take` + clamp) — sem mais
+  "listar tudo" ilimitado. **(2) RLS no outbox**: migration `OutboxRls` habilita
+  ENABLE/FORCE ROW LEVEL SECURITY em `foundation.outbox` com policy
+  `company_id = current_company() OR current_user = 'trino_worker'` — fecha a última tabela
+  multi-tenant sem RLS. **(3) Role dedicada `trino_worker`** (grants.sql, senha via
+  `trino.worker_password` na sessão do bootstrap): apenas SELECT/UPDATE no outbox e CRUD nas
+  projeções (`supplier_stats`, `processed_event`) — o Worker deixa de usar superuser; compose
+  atualizado (`WORKER_DB_PASSWORD`). **(4) Backup no piloto**: serviço `backup` no compose com
+  `pg_dump -F c` diário e retenção de 14 dias em volume próprio. **Domínio 62/62** e
+  **integração 40/40** (migration OutboxRls aplicada nos containers de teste).
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e
   Auditoria; testes de integração de isolamento (Testcontainers — QA-001 / SEC-004 §8).

@@ -15,6 +15,8 @@ export const Perm = {
   AuditRead: "audit.read",
   MaterialsRead: "materials.read",
   MaterialsManage: "materials.manage",
+  WarehouseRequest: "warehouse.request",
+  WarehouseApprove: "warehouse.approve",
   PurchasesRead: "purchases.read",
   PurchasesRequest: "purchases.request",
   PurchasesApprove: "purchases.approve",

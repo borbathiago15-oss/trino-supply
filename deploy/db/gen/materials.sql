@@ -378,5 +378,100 @@ BEGIN
     VALUES ('20260811022344_AlmoxarifadoConsumption', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811024045_StockRequestFlow') THEN
+    CREATE TABLE materials.stock_request (
+        id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        requester_subject character varying(200) NOT NULL,
+        company_code character varying(60) NOT NULL,
+        cost_center_code character varying(60) NOT NULL,
+        manager_subject character varying(200) NOT NULL,
+        reason character varying(200) NOT NULL,
+        status smallint NOT NULL,
+        created_at timestamp with time zone NOT NULL,
+        decision_by character varying(200),
+        decision_at timestamp with time zone,
+        decision_note character varying(1000),
+        version integer NOT NULL,
+        CONSTRAINT "PK_stock_request" PRIMARY KEY (id)
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811024045_StockRequestFlow') THEN
+    CREATE TABLE materials.stock_request_line (
+        id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        request_id uuid NOT NULL,
+        item_code character varying(60) NOT NULL,
+        quantity numeric(18,6) NOT NULL,
+        CONSTRAINT "PK_stock_request_line" PRIMARY KEY (id),
+        CONSTRAINT "FK_stock_request_line_stock_request_request_id" FOREIGN KEY (request_id) REFERENCES materials.stock_request (id) ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811024045_StockRequestFlow') THEN
+    CREATE INDEX "IX_stock_request_company_id_requester_subject" ON materials.stock_request (company_id, requester_subject);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811024045_StockRequestFlow') THEN
+    CREATE INDEX "IX_stock_request_company_id_status" ON materials.stock_request (company_id, status);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811024045_StockRequestFlow') THEN
+    CREATE INDEX "IX_stock_request_line_company_id_request_id" ON materials.stock_request_line (company_id, request_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811024045_StockRequestFlow') THEN
+    CREATE INDEX "IX_stock_request_line_request_id" ON materials.stock_request_line (request_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811024045_StockRequestFlow') THEN
+
+    ALTER TABLE materials.stock_request      ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE materials.stock_request      FORCE  ROW LEVEL SECURITY;
+    ALTER TABLE materials.stock_request_line ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE materials.stock_request_line FORCE  ROW LEVEL SECURITY;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811024045_StockRequestFlow') THEN
+
+    CREATE POLICY tenant_isolation ON materials.stock_request
+        USING (company_id = foundation.current_company()) WITH CHECK (company_id = foundation.current_company());
+    CREATE POLICY tenant_isolation ON materials.stock_request_line
+        USING (company_id = foundation.current_company()) WITH CHECK (company_id = foundation.current_company());
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811024045_StockRequestFlow') THEN
+    INSERT INTO materials.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260811024045_StockRequestFlow', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

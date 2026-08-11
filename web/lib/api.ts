@@ -109,6 +109,20 @@ export interface ConsumptionView {
   issuedAt: string;
   lines: { itemCode: string; quantity: number }[];
 }
+export interface StockRequestView {
+  id: string;
+  requesterSubject: string;
+  companyCode: string;
+  costCenterCode: string;
+  managerSubject: string;
+  reason: string;
+  status: string;
+  createdAt: string;
+  decisionBy?: string | null;
+  decisionAt?: string | null;
+  decisionNote?: string | null;
+  lines: { itemCode: string; quantity: number; balance: number }[];
+}
 export interface CostCenterView {
   id: string;
   code: string;

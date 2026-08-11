@@ -17,6 +17,7 @@ public sealed class MaterialsDbContext(DbContextOptions<MaterialsDbContext> opti
     public DbSet<ReplenishmentPolicy> ReplenishmentPolicies => Set<ReplenishmentPolicy>();
     public DbSet<Collaborator> Collaborators => Set<Collaborator>();
     public DbSet<Consumption> Consumptions => Set<Consumption>();
+    public DbSet<StockRequest> StockRequests => Set<StockRequest>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -140,6 +141,41 @@ public sealed class MaterialsDbContext(DbContextOptions<MaterialsDbContext> opti
             e.Property(x => x.ItemCode).HasColumnName("item_code").HasMaxLength(60).IsRequired();
             e.Property(x => x.Quantity).HasColumnName("quantity").HasColumnType("numeric(18,6)");
             e.HasIndex(x => new { x.CompanyId, x.ConsumptionId });
+        });
+
+        b.Entity<StockRequest>(e =>
+        {
+            e.ToTable("stock_request");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").HasConversion(id => id.Value, v => StockRequestId.From(v));
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.RequesterSubject).HasColumnName("requester_subject").HasMaxLength(200).IsRequired();
+            e.Property(x => x.CompanyCode).HasColumnName("company_code").HasMaxLength(60).IsRequired();
+            e.Property(x => x.CostCenterCode).HasColumnName("cost_center_code").HasMaxLength(60).IsRequired();
+            e.Property(x => x.ManagerSubject).HasColumnName("manager_subject").HasMaxLength(200).IsRequired();
+            e.Property(x => x.Reason).HasColumnName("reason").HasMaxLength(200).IsRequired();
+            e.Property(x => x.Status).HasColumnName("status").HasConversion<short>();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.DecisionBySubject).HasColumnName("decision_by").HasMaxLength(200);
+            e.Property(x => x.DecisionAt).HasColumnName("decision_at");
+            e.Property(x => x.DecisionNote).HasColumnName("decision_note").HasMaxLength(1000);
+            e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
+            e.HasMany(x => x.Lines).WithOne().HasForeignKey(l => l.RequestId);
+            e.HasIndex(x => new { x.CompanyId, x.Status });
+            e.HasIndex(x => new { x.CompanyId, x.RequesterSubject });
+            e.Ignore(x => x.DomainEvents);
+        });
+
+        b.Entity<StockRequestLine>(e =>
+        {
+            e.ToTable("stock_request_line");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.RequestId).HasColumnName("request_id").HasConversion(id => id.Value, v => StockRequestId.From(v));
+            e.Property(x => x.ItemCode).HasColumnName("item_code").HasMaxLength(60).IsRequired();
+            e.Property(x => x.Quantity).HasColumnName("quantity").HasColumnType("numeric(18,6)");
+            e.HasIndex(x => new { x.CompanyId, x.RequestId });
         });
     }
 }

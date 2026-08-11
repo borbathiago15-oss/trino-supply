@@ -355,6 +355,16 @@ dotnet ef database update \
   espaço de assinatura por item. Tabelas novas com RLS por tenant. Página **Almoxarifado** no
   frontend (cadastro + baixa + fichas). **Domínio 51/51**, **integração 29/29** (baixa reduz saldo,
   guarda de saldo, ficha em PDF via HTTP) e **E2E navegador 4/4** (colaborador → baixa → ficha).
+- ✅ **Almoxarifado — solicitação de EPI/fardamento com fluxo de status (Fluxo A):** o solicitante
+  pede produtos ligados a **empresa, centro de custo, gestor aprovador e motivo**; a solicitação segue
+  **Pendente → Aprovado/Rejeitado (gestor designado) → Em Separação/Solicitado Compra (almoxarifado,
+  conforme houver estoque) → Em Rota → Entregue (baixa no estoque) / Cancelado**. Linhas imutáveis
+  após a criação (compliance). Perfis por permissão nova: `warehouse.request` (solicitante) e
+  `warehouse.approve` (gestor); o almoxarife usa `materials.manage`. Visibilidade: solicitante vê as
+  próprias, gestor as que aprova, almoxarifado todas. Tabelas `stock_request`/`stock_request_line`
+  com RLS por tenant. UI na página **Almoxarifado** (nova solicitação + visão com ações por status).
+  **Domínio 59/59** e **integração 31/31** (fluxo completo cria→aprova→separa→despacha→entrega com
+  baixa de saldo; sem estoque roteia p/ Solicitado Compra e bloqueia a entrega).
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e
   Auditoria; testes de integração de isolamento (Testcontainers — QA-001 / SEC-004 §8).

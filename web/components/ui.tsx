@@ -70,6 +70,16 @@ const STATUS_STYLES: Record<string, string> = {
   Cancelled: "bg-rose-100 text-rose-700",
   Active: "bg-emerald-100 text-emerald-700",
   Inactive: "bg-slate-100 text-slate-600",
+  // Solicitação de almoxarifado (Fluxo A)
+  Pendente: "bg-amber-100 text-amber-700",
+  Aprovado: "bg-sky-100 text-sky-700",
+  Rejeitado: "bg-rose-100 text-rose-700",
+  EmSeparacao: "bg-indigo-100 text-indigo-700",
+  SolicitadoCompra: "bg-orange-100 text-orange-700",
+  EmRota: "bg-violet-100 text-violet-700",
+  Entregue: "bg-emerald-100 text-emerald-700",
+  Parcial: "bg-yellow-100 text-yellow-700",
+  Cancelado: "bg-rose-100 text-rose-700",
 };
 
 export function StatusPill({ status }: { status: string }) {

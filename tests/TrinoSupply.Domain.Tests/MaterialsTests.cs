@@ -172,3 +172,81 @@ public class CollaboratorTests
         Assert.Equal("materials.collaborator.name_required", r.Error.Code);
     }
 }
+
+public class StockRequestTests
+{
+    private static readonly CompanyId Company = CompanyId.New();
+    private static readonly (string, decimal)[] Lines = [("BOTA-42", 2m)];
+    private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
+
+    private static StockRequest New(string requester = "solic", string manager = "gestor", string motivo = "Danificado",
+        (string, decimal)[]? lines = null) =>
+        StockRequest.Create(Company, requester, "EP1", "CC1", manager, motivo, lines ?? Lines, Now).Value;
+
+    [Fact]
+    public void Nova_comeca_pendente() => Assert.Equal(RequestStatus.Pendente, New().Status);
+
+    [Fact]
+    public void Sem_gestor_falha()
+    {
+        var r = StockRequest.Create(Company, "solic", "EP1", "CC1", "  ", "Danificado", Lines, Now);
+        Assert.True(r.IsFailure);
+        Assert.Equal("warehouse.manager_required", r.Error.Code);
+    }
+
+    [Fact]
+    public void Sem_linhas_falha()
+    {
+        var r = StockRequest.Create(Company, "solic", "EP1", "CC1", "gestor", "Danificado", [], Now);
+        Assert.True(r.IsFailure);
+        Assert.Equal("warehouse.lines_required", r.Error.Code);
+    }
+
+    [Fact]
+    public void Aprovacao_por_gestor_errado_falha()
+    {
+        var r = New().Approve("intruso", Now);
+        Assert.True(r.IsFailure);
+        Assert.Equal("warehouse.wrong_manager", r.Error.Code);
+    }
+
+    [Fact]
+    public void Fluxo_completo_ate_entregue()
+    {
+        var req = New();
+        Assert.True(req.Approve("gestor", Now).IsSuccess);
+        Assert.Equal(RequestStatus.Aprovado, req.Status);
+        Assert.True(req.StartSeparation(inStock: true, Now).IsSuccess);
+        Assert.Equal(RequestStatus.EmSeparacao, req.Status);
+        Assert.True(req.Dispatch(Now).IsSuccess);
+        Assert.Equal(RequestStatus.EmRota, req.Status);
+        Assert.True(req.Deliver(partial: false, Now).IsSuccess);
+        Assert.Equal(RequestStatus.Entregue, req.Status);
+    }
+
+    [Fact]
+    public void Separacao_sem_estoque_vai_para_solicitado_compra()
+    {
+        var req = New();
+        req.Approve("gestor", Now);
+        Assert.True(req.StartSeparation(inStock: false, Now).IsSuccess);
+        Assert.Equal(RequestStatus.SolicitadoCompra, req.Status);
+    }
+
+    [Fact]
+    public void Reject_exige_nota_e_marca_rejeitado()
+    {
+        var req = New();
+        Assert.Equal("warehouse.reject_note_required", req.Reject("gestor", " ", Now).Error.Code);
+        Assert.True(req.Reject("gestor", "fora do padrão", Now).IsSuccess);
+        Assert.Equal(RequestStatus.Rejeitado, req.Status);
+    }
+
+    [Fact]
+    public void Separar_sem_aprovar_falha()
+    {
+        var r = New().StartSeparation(inStock: true, Now);
+        Assert.True(r.IsFailure);
+        Assert.Equal("warehouse.invalid_state", r.Error.Code);
+    }
+}

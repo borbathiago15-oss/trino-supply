@@ -18,6 +18,10 @@ public static class PermissionCatalog
     public const string MaterialsRead = "materials.read";
     public const string MaterialsManage = "materials.manage";
 
+    // Almoxarifado (spec Sistema de Almoxarifado). Solicitar e aprovar são perfis distintos.
+    public const string WarehouseRequest = "warehouse.request";   // solicitante de EPI/fardamento
+    public const string WarehouseApprove = "warehouse.approve";   // gestor que aprova a solicitação
+
     // Compras (PR-001). Segregação: requisitar e aprovar são permissões distintas (SoD).
     public const string PurchasesRead = "purchases.read";
     public const string PurchasesRequest = "purchases.request";
@@ -29,6 +33,7 @@ public static class PermissionCatalog
     {
         UsersRead, UsersManage, RolesRead, RolesManage, AuditRead,
         MaterialsRead, MaterialsManage,
+        WarehouseRequest, WarehouseApprove,
         PurchasesRead, PurchasesRequest, PurchasesApprove, PurchasesOrder
     };
 

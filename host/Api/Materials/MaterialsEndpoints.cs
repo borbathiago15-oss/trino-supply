@@ -12,6 +12,10 @@ public sealed record PostMovementRequest(StockDirection Direction, decimal Quant
 public sealed record SetPolicyRequest(decimal MinLevel, decimal MaxLevel);
 public sealed record CreateCollaboratorRequest(
     string Name, string? Registration, string? CostCenterCode, string? CompanyCode, DateOnly? AdmissionDate);
+public sealed record CreateStockRequestRequest(
+    string CompanyCode, string CostCenterCode, string ManagerSubject, string Reason,
+    IReadOnlyList<StockRequestLineInput> Lines);
+public sealed record RequestNoteRequest(string? Note);
 
 /// <summary>Endpoints de Materiais (MMS-002). Protegidos por permissão (deny-by-default).</summary>
 public static class MaterialsEndpoints
@@ -147,6 +151,72 @@ public static class MaterialsEndpoints
             return Results.File(FichaPdf.Build(data), "application/pdf", "ficha-entrega-epi.pdf");
         }).RequireAuthorization();
 
+        // ---- Solicitações de almoxarifado (Fluxo A: EPI/fardamento com fluxo de status) ----
+        // Gestores aprovadores (usuários com warehouse.approve), para escolher na solicitação.
+        m.MapGet("/managers", async (IPermissionChecker perm, IIamService iam, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.WarehouseRequest, ct)) return Results.Forbid();
+            var users = await iam.ListUsersWithPermissionAsync(PermissionCatalog.WarehouseApprove, ct);
+            return Results.Ok(users.Select(u => new { subject = u.Subject, displayName = u.DisplayName, email = u.Email }));
+        }).RequireAuthorization();
+
+        m.MapGet("/requests", async (IPermissionChecker perm, IStockRequestService svc, CancellationToken ct) =>
+        {
+            var manage = await perm.HasAsync(PermissionCatalog.MaterialsManage, ct);
+            var canSee = manage || await perm.HasAsync(PermissionCatalog.WarehouseRequest, ct)
+                || await perm.HasAsync(PermissionCatalog.WarehouseApprove, ct);
+            if (!canSee) return Results.Forbid();
+            // Visão do almoxarifado (todas) só para quem gerencia; senão, apenas as próprias/como gestor.
+            return Results.Ok(await svc.ListAsync(all: manage, ct));
+        }).RequireAuthorization();
+
+        m.MapPost("/requests", async (CreateStockRequestRequest req, IPermissionChecker perm, IStockRequestService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.WarehouseRequest, ct)) return Results.Forbid();
+            var r = await svc.CreateAsync(new CreateStockRequestInput(
+                req.CompanyCode, req.CostCenterCode, req.ManagerSubject, req.Reason, req.Lines), ct);
+            return r.IsSuccess
+                ? Results.Created($"/api/v1/materials/requests/{r.Value}", new { requestId = r.Value })
+                : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization();
+
+        m.MapPost("/requests/{id:guid}/approve", async (Guid id, IPermissionChecker perm, IStockRequestService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.WarehouseApprove, ct)) return Results.Forbid();
+            return MapWarehouse(await svc.ApproveAsync(id, ct));
+        }).RequireAuthorization();
+
+        m.MapPost("/requests/{id:guid}/reject", async (Guid id, RequestNoteRequest body, IPermissionChecker perm, IStockRequestService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.WarehouseApprove, ct)) return Results.Forbid();
+            return MapWarehouse(await svc.RejectAsync(id, body.Note, ct));
+        }).RequireAuthorization();
+
+        m.MapPost("/requests/{id:guid}/separation", async (Guid id, IPermissionChecker perm, IStockRequestService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsManage, ct)) return Results.Forbid();
+            return MapWarehouse(await svc.StartSeparationAsync(id, ct));
+        }).RequireAuthorization();
+
+        m.MapPost("/requests/{id:guid}/dispatch", async (Guid id, IPermissionChecker perm, IStockRequestService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsManage, ct)) return Results.Forbid();
+            return MapWarehouse(await svc.DispatchAsync(id, ct));
+        }).RequireAuthorization();
+
+        m.MapPost("/requests/{id:guid}/deliver", async (Guid id, IPermissionChecker perm, IStockRequestService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsManage, ct)) return Results.Forbid();
+            return MapWarehouse(await svc.DeliverAsync(id, ct));
+        }).RequireAuthorization();
+
+        m.MapPost("/requests/{id:guid}/cancel", async (Guid id, RequestNoteRequest body, IPermissionChecker perm, IStockRequestService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsManage, ct) && !await perm.HasAsync(PermissionCatalog.WarehouseApprove, ct))
+                return Results.Forbid();
+            return MapWarehouse(await svc.CancelAsync(id, body.Note, ct));
+        }).RequireAuthorization();
+
         // ---- Conversão (ADR-013) ----
         m.MapGet("/convert", async (decimal quantity, string from, string to,
             IPermissionChecker perm, IMaterialsService svc, CancellationToken ct) =>
@@ -216,5 +286,18 @@ public static class MaterialsEndpoints
         }).RequireAuthorization();
 
         return app;
+    }
+
+    /// <summary>Mapeia o resultado das transições da solicitação de almoxarifado para HTTP.</summary>
+    private static IResult MapWarehouse(TrinoSupply.BuildingBlocks.Result result)
+    {
+        if (result.IsSuccess) return Results.NoContent();
+        return result.Error.Code switch
+        {
+            "warehouse.not_found" => Results.NotFound(new { code = result.Error.Code, message = result.Error.Message }),
+            "warehouse.wrong_manager" => Results.Json(new { code = result.Error.Code, message = result.Error.Message }, statusCode: 403),
+            "warehouse.invalid_state" => Results.Conflict(new { code = result.Error.Code, message = result.Error.Message }),
+            _ => Results.BadRequest(new { code = result.Error.Code, message = result.Error.Message })
+        };
     }
 }

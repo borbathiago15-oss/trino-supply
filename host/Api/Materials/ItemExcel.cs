@@ -17,7 +17,7 @@ public static class ItemExcel
     {
         using var wb = new XLWorkbook();
         var ws = wb.AddWorksheet(Sheet);
-        string[] headers = ["Código", "Descrição", "Unidade", "Grupo"];
+        string[] headers = ["Código", "Descrição", "Unidade", "Grupo", "C.A"];
         for (var i = 0; i < headers.Length; i++)
         {
             var c = ws.Cell(1, i + 1);
@@ -30,6 +30,7 @@ public static class ItemExcel
         ws.Cell(2, 2).Value = "Detergente neutro 5L";
         ws.Cell(2, 3).Value = "un";
         ws.Cell(2, 4).Value = "Limpeza";
+        ws.Cell(2, 5).Value = "";
         ws.Columns().AdjustToContents();
         ws.Range(1, 1, 1, headers.Length).SetAutoFilter();
 
@@ -40,7 +41,8 @@ public static class ItemExcel
         notes.Cell(4, 1).Value = "2. Código: código do produto (ERP). Descrição: nome do produto.";
         notes.Cell(5, 1).Value = "3. Unidade: un, cx, pc, kg… (se não existir, é criada automaticamente).";
         notes.Cell(6, 1).Value = "4. Grupo/família: " + string.Join(", ", ProductGroups.All) + " (aceita outros).";
-        notes.Cell(7, 1).Value = "5. Remova a linha de exemplo antes de importar.";
+        notes.Cell(7, 1).Value = "5. C.A: número do Certificado de Aprovação (apenas EPI; deixe vazio p/ fardamento).";
+        notes.Cell(8, 1).Value = "6. Remova a linha de exemplo antes de importar.";
         notes.Columns().AdjustToContents();
 
         using var ms = new MemoryStream();
@@ -70,12 +72,14 @@ public static class ItemExcel
                 var name = ws.Cell(row, 2).GetString().Trim();
                 var unit = ws.Cell(row, 3).GetString().Trim();
                 var group = ws.Cell(row, 4).GetString().Trim();
+                var ca = ws.Cell(row, 5).GetString().Trim();
 
                 if (code.Length == 0 && name.Length == 0 && unit.Length == 0 && group.Length == 0) continue;
                 if (code.Length == 0) { errors.Add($"Linha {row}: código vazio."); continue; }
                 if (name.Length == 0) { errors.Add($"Linha {row}: descrição vazia."); continue; }
 
-                rows.Add(new ItemImportRow(code, name, unit.Length == 0 ? "un" : unit, group.Length == 0 ? null : group));
+                rows.Add(new ItemImportRow(code, name, unit.Length == 0 ? "un" : unit,
+                    group.Length == 0 ? null : group, ca.Length == 0 ? null : ca));
             }
         }
         return (rows, errors);

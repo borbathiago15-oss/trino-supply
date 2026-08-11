@@ -11,6 +11,7 @@ import { Perm, useHas } from "@/lib/me";
 const NAV = [
   { href: "/dashboard", label: "Painel", perm: null },
   { href: "/materiais", label: "Materiais", perm: Perm.MaterialsRead },
+  { href: "/almoxarifado", label: "Almoxarifado", perm: Perm.MaterialsRead },
   { href: "/reposicao", label: "Reposição", perm: Perm.MaterialsRead },
   { href: "/compras", label: "Compras", perm: Perm.PurchasesRead },
   { href: "/cadastros", label: "Cadastros", perm: Perm.PurchasesRead },

@@ -37,13 +37,14 @@ public static class ProductGroups
 /// </summary>
 public sealed class Item : AggregateRoot<ItemId>, IBelongsToTenant
 {
-    private Item(ItemId id, CompanyId companyId, string code, string name, UnitId baseUnitId, string group) : base(id)
+    private Item(ItemId id, CompanyId companyId, string code, string name, UnitId baseUnitId, string group, string? ca) : base(id)
     {
         CompanyId = companyId;
         Code = code;
         Name = name;
         BaseUnitId = baseUnitId;
         Group = group;
+        Ca = ca;
         Status = ItemStatus.Active;
     }
 
@@ -55,9 +56,11 @@ public sealed class Item : AggregateRoot<ItemId>, IBelongsToTenant
     public string Name { get; private set; } = string.Empty;
     public UnitId BaseUnitId { get; private set; }
     public string Group { get; private set; } = "Sem grupo"; // grupo/família (ProductGroups)
+    public string? Ca { get; private set; }                  // Certificado de Aprovação (EPI) — spec Almoxarifado
     public ItemStatus Status { get; private set; }
 
-    public static Result<Item> Create(CompanyId companyId, string code, string name, UnitId baseUnitId, string? group = null)
+    public static Result<Item> Create(CompanyId companyId, string code, string name, UnitId baseUnitId,
+        string? group = null, string? ca = null)
     {
         if (string.IsNullOrWhiteSpace(code))
             return Result.Failure<Item>(new Error("materials.item.code_required", "Código do item é obrigatório."));
@@ -65,7 +68,8 @@ public sealed class Item : AggregateRoot<ItemId>, IBelongsToTenant
             return Result.Failure<Item>(new Error("materials.item.name_required", "Nome do item é obrigatório."));
 
         return Result.Success(new Item(
-            ItemId.New(), companyId, code.Trim().ToUpperInvariant(), name.Trim(), baseUnitId, ProductGroups.Normalize(group)));
+            ItemId.New(), companyId, code.Trim().ToUpperInvariant(), name.Trim(), baseUnitId,
+            ProductGroups.Normalize(group), string.IsNullOrWhiteSpace(ca) ? null : ca.Trim()));
     }
 
     public void Deactivate()

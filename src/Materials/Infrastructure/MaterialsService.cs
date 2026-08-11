@@ -33,7 +33,7 @@ public sealed class MaterialsService(MaterialsDbContext db, ITenantContext tenan
     }
 
     public async Task<Result<Guid>> CreateItemAsync(
-        string code, string name, string baseUnitCode, string? group = null, CancellationToken ct = default)
+        string code, string name, string baseUnitCode, string? group = null, string? ca = null, CancellationToken ct = default)
     {
         if (!tenant.HasTenant)
             return Result.Failure<Guid>(new Error("materials.no_tenant", "Requisição sem tenant."));
@@ -42,7 +42,7 @@ public sealed class MaterialsService(MaterialsDbContext db, ITenantContext tenan
         if (unit is null)
             return Result.Failure<Guid>(new Error("materials.unit.not_found", $"Unidade '{baseUnitCode}' não encontrada."));
 
-        var result = Item.Create(tenant.CompanyId, code, name, unit.Id, group);
+        var result = Item.Create(tenant.CompanyId, code, name, unit.Id, group, ca);
         if (result.IsFailure) return Result.Failure<Guid>(result.Error);
 
         db.Items.Add(result.Value);
@@ -63,7 +63,7 @@ public sealed class MaterialsService(MaterialsDbContext db, ITenantContext tenan
         }
         var items = await query.OrderBy(i => i.Code).ToListAsync(ct);
         return items.Select(i => new ItemView(
-            i.Id.Value, i.Code, i.Name, i.BaseUnitId.Value, i.Status.ToString(), i.Group)).ToList();
+            i.Id.Value, i.Code, i.Name, i.BaseUnitId.Value, i.Status.ToString(), i.Group, i.Ca)).ToList();
     }
 
     public async Task<ItemImportResult> ImportItemsAsync(IReadOnlyList<ItemImportRow> rows, CancellationToken ct = default)
@@ -99,7 +99,7 @@ public sealed class MaterialsService(MaterialsDbContext db, ITenantContext tenan
                 newUnits[unitCode] = unitId;
             }
 
-            var it = Item.Create(tenant.CompanyId, code, r.Name, unitId, r.Group);
+            var it = Item.Create(tenant.CompanyId, code, r.Name, unitId, r.Group, r.Ca);
             if (it.IsFailure) { errors.Add($"Linha {line}: {it.Error.Message}"); continue; }
             db.Items.Add(it.Value);
             db.StockBalances.Add(StockBalance.Create(tenant.CompanyId, it.Value.Id));

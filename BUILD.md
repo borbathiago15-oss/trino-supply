@@ -344,6 +344,17 @@ dotnet ef database update \
   produtos; **Reposição** coleta o cabeçalho antes de gerar a requisição. Apoio no backend:
   `UserView.Subject` + `GET /purchases/approvers`. **E2E (Playwright, stack real como `trino_app`):
   13/13** — cadastros → solicitação 2 níveis → emissão de OC → PDF.
+- ✅ **Almoxarifado — baixa de consumo + Ficha de Entrega de EPI (validado ponta a ponta):** o
+  responsável pelo estoque registra a **entrega de EPI/fardamento ao colaborador** informando
+  empresa, centro de custo, colaborador e motivo (ex.: nova contratação, substituição) + os produtos;
+  cada linha vira uma **saída no ledger** (com garantia de saldo, atômica). Novos cadastros:
+  **Colaborador** (nome, matrícula, centro/empresa, **data de contratação**) e **Nº C.A** no item
+  (EPI). A baixa **gera a Ficha de Entrega de EPI's/Uniformes (PDF)** pré-preenchida (QuestPDF):
+  cabeçalho (empresa/CNPJ, colaborador, matrícula, centro, data de contratação), termo de
+  responsabilidade e uma linha por item — código quando fardamento, **Nº C.A quando EPI** — com
+  espaço de assinatura por item. Tabelas novas com RLS por tenant. Página **Almoxarifado** no
+  frontend (cadastro + baixa + fichas). **Domínio 51/51**, **integração 29/29** (baixa reduz saldo,
+  guarda de saldo, ficha em PDF via HTTP) e **E2E navegador 4/4** (colaborador → baixa → ficha).
 - ⏳ **Próximo (GO-001 · sprint 1):** migrations EF Core; policies RLS aplicadas às tabelas de
   negócio reais; publisher Outbox→RabbitMQ real com role dedicada; IAM (usuários/papéis) e
   Auditoria; testes de integração de isolamento (Testcontainers — QA-001 / SEC-004 §8).

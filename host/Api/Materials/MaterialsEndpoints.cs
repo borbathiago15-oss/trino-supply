@@ -2,13 +2,16 @@ using TrinoSupply.Foundation.Application.Iam;
 using TrinoSupply.Foundation.Domain.Iam;
 using TrinoSupply.Materials.Application;
 using TrinoSupply.Materials.Domain;
+using TrinoSupply.Procurement.Application;
 
 namespace TrinoSupply.Api.Materials;
 
 public sealed record CreateUnitRequest(string Code, string Name, string Dimension, decimal FactorToBase);
-public sealed record CreateItemRequest(string Code, string Name, string BaseUnitCode, string? Group);
+public sealed record CreateItemRequest(string Code, string Name, string BaseUnitCode, string? Group, string? Ca);
 public sealed record PostMovementRequest(StockDirection Direction, decimal Quantity, string? Reason);
 public sealed record SetPolicyRequest(decimal MinLevel, decimal MaxLevel);
+public sealed record CreateCollaboratorRequest(
+    string Name, string? Registration, string? CostCenterCode, string? CompanyCode, DateOnly? AdmissionDate);
 
 /// <summary>Endpoints de Materiais (MMS-002). Protegidos por permissão (deny-by-default).</summary>
 public static class MaterialsEndpoints
@@ -50,7 +53,7 @@ public static class MaterialsEndpoints
         m.MapPost("/items", async (CreateItemRequest req, IPermissionChecker perm, IMaterialsService svc, CancellationToken ct) =>
         {
             if (!await perm.HasAsync(PermissionCatalog.MaterialsManage, ct)) return Results.Forbid();
-            var r = await svc.CreateItemAsync(req.Code, req.Name, req.BaseUnitCode, req.Group, ct);
+            var r = await svc.CreateItemAsync(req.Code, req.Name, req.BaseUnitCode, req.Group, req.Ca, ct);
             return r.IsSuccess
                 ? Results.Created($"/api/v1/materials/items/{r.Value}", new { itemId = r.Value })
                 : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
@@ -92,6 +95,57 @@ public static class MaterialsEndpoints
             var warnings = parseErrors.Concat(result.Errors).ToList();
             return Results.Ok(new { imported = result.Imported, warnings });
         }).RequireAuthorization().DisableAntiforgery();
+
+        // ---- Colaboradores (spec Almoxarifado) — quem recebe o EPI/fardamento na baixa ----
+        m.MapGet("/collaborators", async (IPermissionChecker perm, ICollaboratorService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsRead, ct)) return Results.Forbid();
+            return Results.Ok(await svc.ListAsync(ct));
+        }).RequireAuthorization();
+
+        m.MapPost("/collaborators", async (CreateCollaboratorRequest req, IPermissionChecker perm, ICollaboratorService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsManage, ct)) return Results.Forbid();
+            var r = await svc.CreateAsync(new CollaboratorInput(req.Name, req.Registration, req.CostCenterCode, req.CompanyCode, req.AdmissionDate), ct);
+            return r.IsSuccess
+                ? Results.Created($"/api/v1/materials/collaborators/{r.Value}", new { collaboratorId = r.Value })
+                : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization();
+
+        // ---- Baixa de consumo (spec Almoxarifado) — entrega ao colaborador dá saída no estoque ----
+        m.MapGet("/consumptions", async (IPermissionChecker perm, IConsumptionService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsRead, ct)) return Results.Forbid();
+            return Results.Ok(await svc.ListAsync(ct));
+        }).RequireAuthorization();
+
+        m.MapPost("/consumptions", async (CreateConsumptionInput req, IPermissionChecker perm, IConsumptionService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsManage, ct)) return Results.Forbid();
+            var r = await svc.CreateAsync(req, ct);
+            return r.IsSuccess
+                ? Results.Created($"/api/v1/materials/consumptions/{r.Value}", new { consumptionId = r.Value })
+                : Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization();
+
+        // Ficha de Entrega de EPI/Uniformes (PDF) pré-preenchida a partir da baixa — para assinatura.
+        m.MapGet("/consumptions/{id:guid}/ficha", async (Guid id, IPermissionChecker perm,
+            IConsumptionService svc, IPayingCompanyService payingSvc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsRead, ct)) return Results.Forbid();
+            var r = await svc.GetFichaAsync(id, ct);
+            if (r.IsFailure) return Results.NotFound(new { code = r.Error.Code, message = r.Error.Message });
+            var f = r.Value;
+
+            // Resolve empresa (razão social + CNPJ) pelo código informado na baixa; fallback ao próprio código.
+            var companies = await payingSvc.ListAsync(ct);
+            var comp = companies.FirstOrDefault(p => string.Equals(p.Code, f.CompanyCode, StringComparison.OrdinalIgnoreCase));
+            var data = new FichaPdfData(
+                comp?.LegalName ?? f.CompanyCode, comp?.TaxId ?? "", f.CostCenterCode, f.CollaboratorName,
+                f.Registration, f.AdmissionDate, f.Reason, f.IssuedBy, f.IssuedAt,
+                f.Lines.Select(l => new FichaPdfLine(l.Quantity, l.Description, l.ItemCode, l.Group, l.Ca, l.DeliveredAt)).ToList());
+            return Results.File(FichaPdf.Build(data), "application/pdf", "ficha-entrega-epi.pdf");
+        }).RequireAuthorization();
 
         // ---- Conversão (ADR-013) ----
         m.MapGet("/convert", async (decimal quantity, string from, string to,

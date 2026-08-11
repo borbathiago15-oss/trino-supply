@@ -87,6 +87,27 @@ export interface ItemView {
   baseUnitId: string;
   status: string;
   group: string;
+  ca?: string | null;
+}
+export interface CollaboratorView {
+  id: string;
+  name: string;
+  registration?: string | null;
+  costCenterCode?: string | null;
+  companyCode?: string | null;
+  admissionDate?: string | null;
+  status: string;
+}
+export interface ConsumptionView {
+  id: string;
+  companyCode: string;
+  costCenterCode: string;
+  collaboratorId: string;
+  collaboratorName: string;
+  reason: string;
+  issuedBy: string;
+  issuedAt: string;
+  lines: { itemCode: string; quantity: number }[];
 }
 export interface CostCenterView {
   id: string;

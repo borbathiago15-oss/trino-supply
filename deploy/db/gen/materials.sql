@@ -258,5 +258,125 @@ BEGIN
     VALUES ('20260811012012_ItemProductGroup', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811022344_AlmoxarifadoConsumption') THEN
+    ALTER TABLE materials.item ADD ca character varying(60);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811022344_AlmoxarifadoConsumption') THEN
+    CREATE TABLE materials.collaborator (
+        id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        name character varying(200) NOT NULL,
+        registration character varying(60),
+        cost_center_code character varying(60),
+        company_code character varying(60),
+        admission_date date,
+        status smallint NOT NULL,
+        version integer NOT NULL,
+        CONSTRAINT "PK_collaborator" PRIMARY KEY (id)
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811022344_AlmoxarifadoConsumption') THEN
+    CREATE TABLE materials.consumption (
+        id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        company_code character varying(60) NOT NULL,
+        cost_center_code character varying(60) NOT NULL,
+        collaborator_id uuid NOT NULL,
+        reason character varying(200) NOT NULL,
+        issued_by character varying(200) NOT NULL,
+        issued_at timestamp with time zone NOT NULL,
+        version integer NOT NULL,
+        CONSTRAINT "PK_consumption" PRIMARY KEY (id)
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811022344_AlmoxarifadoConsumption') THEN
+    CREATE TABLE materials.consumption_line (
+        id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        consumption_id uuid NOT NULL,
+        item_code character varying(60) NOT NULL,
+        quantity numeric(18,6) NOT NULL,
+        CONSTRAINT "PK_consumption_line" PRIMARY KEY (id),
+        CONSTRAINT "FK_consumption_line_consumption_consumption_id" FOREIGN KEY (consumption_id) REFERENCES materials.consumption (id) ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811022344_AlmoxarifadoConsumption') THEN
+    CREATE INDEX "IX_collaborator_company_id_name" ON materials.collaborator (company_id, name);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811022344_AlmoxarifadoConsumption') THEN
+    CREATE INDEX "IX_consumption_company_id_collaborator_id" ON materials.consumption (company_id, collaborator_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811022344_AlmoxarifadoConsumption') THEN
+    CREATE INDEX "IX_consumption_line_company_id_consumption_id" ON materials.consumption_line (company_id, consumption_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811022344_AlmoxarifadoConsumption') THEN
+    CREATE INDEX "IX_consumption_line_consumption_id" ON materials.consumption_line (consumption_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811022344_AlmoxarifadoConsumption') THEN
+
+    ALTER TABLE materials.collaborator     ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE materials.collaborator     FORCE  ROW LEVEL SECURITY;
+    ALTER TABLE materials.consumption      ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE materials.consumption      FORCE  ROW LEVEL SECURITY;
+    ALTER TABLE materials.consumption_line ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE materials.consumption_line FORCE  ROW LEVEL SECURITY;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811022344_AlmoxarifadoConsumption') THEN
+
+    CREATE POLICY tenant_isolation ON materials.collaborator
+        USING (company_id = foundation.current_company()) WITH CHECK (company_id = foundation.current_company());
+    CREATE POLICY tenant_isolation ON materials.consumption
+        USING (company_id = foundation.current_company()) WITH CHECK (company_id = foundation.current_company());
+    CREATE POLICY tenant_isolation ON materials.consumption_line
+        USING (company_id = foundation.current_company()) WITH CHECK (company_id = foundation.current_company());
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811022344_AlmoxarifadoConsumption') THEN
+    INSERT INTO materials.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260811022344_AlmoxarifadoConsumption', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

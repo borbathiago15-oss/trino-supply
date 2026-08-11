@@ -25,7 +25,7 @@ export default function MateriaisPage() {
   const groups = useQuery({ queryKey: ["product-groups"], queryFn: () => api<string[]>("/materials/product-groups") });
 
   const [unit, setUnit] = useState({ code: "", name: "", dimension: "contagem", factorToBase: "1" });
-  const [item, setItem] = useState({ code: "", name: "", baseUnitCode: "", group: "" });
+  const [item, setItem] = useState({ code: "", name: "", baseUnitCode: "", group: "", ca: "" });
   const [mov, setMov] = useState({ itemCode: "", direction: "1", quantity: "" });
   const [pol, setPol] = useState({ itemCode: "", minLevel: "", maxLevel: "" });
 
@@ -38,7 +38,7 @@ export default function MateriaisPage() {
   });
   const createItem = useMutation({
     mutationFn: () => api("/materials/items", { method: "POST", body: JSON.stringify(item) }),
-    onSuccess: () => { setItem({ code: "", name: "", baseUnitCode: "", group: "" }); qc.invalidateQueries({ queryKey: ["items"] }); toast.push("success", "Item criado."); },
+    onSuccess: () => { setItem({ code: "", name: "", baseUnitCode: "", group: "", ca: "" }); qc.invalidateQueries({ queryKey: ["items"] }); toast.push("success", "Item criado."); },
     onError: fail,
   });
 
@@ -104,12 +104,13 @@ export default function MateriaisPage() {
         {items.isLoading ? (
           <Empty>Carregando…</Empty>
         ) : items.data && items.data.length > 0 ? (
-          <Table head={["Código", "Nome", "Família", "Situação", "Saldo"]}>
+          <Table head={["Código", "Nome", "Família", "Nº C.A", "Situação", "Saldo"]}>
             {items.data.map((it) => (
               <tr key={it.id}>
                 <td className="px-3 py-2 font-mono text-xs">{it.code}</td>
                 <td className="px-3 py-2">{it.name}</td>
                 <td className="px-3 py-2 text-slate-500">{it.group}</td>
+                <td className="px-3 py-2 text-slate-500">{it.ca || "—"}</td>
                 <td className="px-3 py-2"><StatusPill status={it.status} /></td>
                 <td className="px-3 py-2"><BalanceCell code={it.code} /></td>
               </tr>
@@ -141,6 +142,7 @@ export default function MateriaisPage() {
               <option value="">Sem grupo</option>
               {(groups.data ?? []).map((g) => <option key={g} value={g}>{g}</option>)}
             </Select>
+            <Input label="Nº C.A (EPI — opcional)" value={item.ca} onChange={(e) => setItem({ ...item, ca: e.target.value })} />
             <Button type="submit" disabled={createItem.isPending}>Criar item</Button>
           </form>
         </Card>

@@ -44,7 +44,9 @@ public sealed class MaterialsDbContext(DbContextOptions<MaterialsDbContext> opti
             e.Property(x => x.Code).HasColumnName("code").HasMaxLength(60).IsRequired();
             e.Property(x => x.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
             e.Property(x => x.BaseUnitId).HasColumnName("base_unit_id").HasConversion(id => id.Value, v => UnitId.From(v));
+            e.Property(x => x.Group).HasColumnName("product_group").HasMaxLength(60).IsRequired().HasDefaultValue("Sem grupo");
             e.Property(x => x.Status).HasColumnName("status").HasConversion<short>();
+            e.HasIndex(x => new { x.CompanyId, x.Group });
             e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
             e.HasIndex(x => new { x.CompanyId, x.Code }).IsUnique();
             e.Ignore(x => x.DomainEvents);

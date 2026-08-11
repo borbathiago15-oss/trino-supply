@@ -236,5 +236,27 @@ BEGIN
     VALUES ('20260809130854_ReplenishmentPolicy', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811012012_ItemProductGroup') THEN
+    ALTER TABLE materials.item ADD product_group character varying(60) NOT NULL DEFAULT 'Sem grupo';
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811012012_ItemProductGroup') THEN
+    CREATE INDEX "IX_item_company_id_product_group" ON materials.item (company_id, product_group);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM materials.__ef_migrations WHERE "MigrationId" = '20260811012012_ItemProductGroup') THEN
+    INSERT INTO materials.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260811012012_ItemProductGroup', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

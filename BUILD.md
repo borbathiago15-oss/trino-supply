@@ -253,6 +253,16 @@ dotnet ef database update \
   loga o guard OK; como **superuser** o start **aborta** (exit≠0, `/health/live` sem resposta, mensagem
   SEC-004 no log). 3 testes de integração (aceita trino_app, recusa superuser, ignora em dev). `dotnet test`
   → 39 unidade + 26 integração.
+- ✅ **Catálogo de itens: grupo/família + importação em lote (spec Sistema de Compras) — validado.**
+  A partir do documento do cliente: o item ganhou **grupo/família** (`ProductGroups`: Insumos, EPI,
+  Fardamento, Limpeza, Manutenção, Serviços, Imobilizado — aceita outros) no cadastro. Novo
+  **`GET /materials/items/import-template`** (modelo .xlsx: Código, Descrição, Unidade, Grupo) e
+  **`POST /materials/items/import`** que cadastra produtos **em lote**, **criando unidades ausentes
+  automaticamente**, com validação/erros por linha. `GET /materials/items?group=` filtra por família
+  (base da futura "solicitação em lote por família") e `GET /materials/product-groups` lista o catálogo.
+  Migration Materials + índice `(company, product_group)`. **Validado (Testcontainers):** template baixável,
+  3 itens importados com grupos (unidades `un`/`cx` criadas sozinhas), filtro por grupo recorta a lista.
+  `dotnet test` → 39 unidade + 27 integração.
 - ✅ **Publisher RabbitMQ real (Fase 4, fatia 2):** `RabbitMqEventPublisher` (exchange topic durável,
   mensagem persistente, `MessageId=EventId` p/ idempotência). Selecionado por configuração
   (`RabbitMq:Host`); sem broker, cai no publisher de log. Piloto: serviço `rabbitmq` no compose +

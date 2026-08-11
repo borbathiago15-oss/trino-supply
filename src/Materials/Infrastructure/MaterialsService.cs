@@ -33,7 +33,7 @@ public sealed class MaterialsService(MaterialsDbContext db, ITenantContext tenan
     }
 
     public async Task<Result<Guid>> CreateItemAsync(
-        string code, string name, string baseUnitCode, CancellationToken ct = default)
+        string code, string name, string baseUnitCode, string? group = null, CancellationToken ct = default)
     {
         if (!tenant.HasTenant)
             return Result.Failure<Guid>(new Error("materials.no_tenant", "Requisição sem tenant."));
@@ -42,7 +42,7 @@ public sealed class MaterialsService(MaterialsDbContext db, ITenantContext tenan
         if (unit is null)
             return Result.Failure<Guid>(new Error("materials.unit.not_found", $"Unidade '{baseUnitCode}' não encontrada."));
 
-        var result = Item.Create(tenant.CompanyId, code, name, unit.Id);
+        var result = Item.Create(tenant.CompanyId, code, name, unit.Id, group);
         if (result.IsFailure) return Result.Failure<Guid>(result.Error);
 
         db.Items.Add(result.Value);
@@ -53,11 +53,69 @@ public sealed class MaterialsService(MaterialsDbContext db, ITenantContext tenan
         return Result.Success(result.Value.Id.Value);
     }
 
-    public async Task<IReadOnlyList<ItemView>> ListItemsAsync(CancellationToken ct = default)
+    public async Task<IReadOnlyList<ItemView>> ListItemsAsync(string? group = null, CancellationToken ct = default)
     {
-        var items = await db.Items.AsNoTracking().OrderBy(i => i.Code).ToListAsync(ct);
+        var query = db.Items.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(group))
+        {
+            var g = ProductGroups.Normalize(group);
+            query = query.Where(i => i.Group == g);
+        }
+        var items = await query.OrderBy(i => i.Code).ToListAsync(ct);
         return items.Select(i => new ItemView(
-            i.Id.Value, i.Code, i.Name, i.BaseUnitId.Value, i.Status.ToString())).ToList();
+            i.Id.Value, i.Code, i.Name, i.BaseUnitId.Value, i.Status.ToString(), i.Group)).ToList();
+    }
+
+    public async Task<ItemImportResult> ImportItemsAsync(IReadOnlyList<ItemImportRow> rows, CancellationToken ct = default)
+    {
+        if (!tenant.HasTenant)
+            return new ItemImportResult(0, new[] { "Requisição sem tenant." });
+
+        var errors = new List<string>();
+        var existing = (await db.Items.AsNoTracking().Select(i => i.Code).ToListAsync(ct))
+            .ToHashSet(StringComparer.Ordinal);
+        var unitByCode = (await db.Units.AsNoTracking().ToListAsync(ct)).ToDictionary(u => u.Code, u => u.Id);
+        var newUnits = new Dictionary<string, UnitId>(StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var imported = 0;
+
+        for (var idx = 0; idx < rows.Count; idx++)
+        {
+            var r = rows[idx];
+            var line = idx + 2; // linha 1 = cabeçalho
+            var code = (r.Code ?? string.Empty).Trim().ToUpperInvariant();
+            if (code.Length == 0) { errors.Add($"Linha {line}: código vazio."); continue; }
+            if (string.IsNullOrWhiteSpace(r.Name)) { errors.Add($"Linha {line}: descrição vazia."); continue; }
+            if (existing.Contains(code) || !seen.Add(code)) { errors.Add($"Linha {line}: código '{code}' duplicado."); continue; }
+
+            var unitCode = (r.BaseUnitCode ?? "un").Trim().ToLowerInvariant();
+            if (unitCode.Length == 0) unitCode = "un";
+            if (!unitByCode.TryGetValue(unitCode, out var unitId) && !newUnits.TryGetValue(unitCode, out unitId))
+            {
+                var uc = UnitOfMeasure.Create(tenant.CompanyId, unitCode, unitCode, "contagem", 1m);
+                if (uc.IsFailure) { errors.Add($"Linha {line}: unidade '{unitCode}' inválida."); continue; }
+                db.Units.Add(uc.Value);
+                unitId = uc.Value.Id;
+                newUnits[unitCode] = unitId;
+            }
+
+            var it = Item.Create(tenant.CompanyId, code, r.Name, unitId, r.Group);
+            if (it.IsFailure) { errors.Add($"Linha {line}: {it.Error.Message}"); continue; }
+            db.Items.Add(it.Value);
+            db.StockBalances.Add(StockBalance.Create(tenant.CompanyId, it.Value.Id));
+            imported++;
+        }
+
+        if (imported > 0)
+        {
+            try { await db.SaveChangesAsync(ct); }
+            catch (DbUpdateException)
+            {
+                return new ItemImportResult(0, new[] { "Falha ao salvar a importação (possível código duplicado)." });
+            }
+            metrics.Record("materials.item.imported", tenant.CompanyId.Value.ToString());
+        }
+        return new ItemImportResult(imported, errors);
     }
 
     public async Task<Result<decimal>> ConvertAsync(

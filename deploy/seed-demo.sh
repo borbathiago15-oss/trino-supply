@@ -94,15 +94,19 @@ criar_usuario pleno      pleno@trino.com      "Paula (perfil Pleno)"      "$R_PL
 echo "   aprovador1, aprovador2, junior (escopado em CC-101), pleno"
 
 etapa "8/8 Pedidos de exemplo…"
+# $1 CNPJ  $2 centro  $3 justificativa  $4 linhas  $5 aprovador nível 1 (padrão: aprovador1)
 novo_pedido() { post /purchases/requisitions "{\"payingCompanyCode\":\"$1\",\"costCenterCode\":\"$2\",\"priority\":\"Normal\",
-  \"justification\":\"$3\",\"approverLevel1Subject\":\"aprovador1\",\"approverLevel2Subject\":\"aprovador2\",
+  \"justification\":\"$3\",\"approverLevel1Subject\":\"${5:-aprovador1}\",\"approverLevel2Subject\":\"aprovador2\",
   \"lines\":$4}" | campo requisitionId; }
-P1=$(novo_pedido TRINO-SP CC-101 "Reposição de botinas da Obra Norte" '[{"itemCode":"BOTINA-40","quantity":5,"unit":"par"}]')
+novo_pedido TRINO-SP CC-101 "Reposição de botinas da Obra Norte" '[{"itemCode":"BOTINA-40","quantity":5,"unit":"par"}]' >/dev/null
 P2=$(novo_pedido TRINO-SP CC-102 "Uniformes para novos contratados"   '[{"itemCode":"CAMISA-M","quantity":10,"unit":"un"}]')
-P3=$(novo_pedido TRINO-MG CC-201 "Capacetes para equipe de manutenção" '[{"itemCode":"CAPACETE","quantity":4,"unit":"un"}]')
-post "/purchases/requisitions/$P2/submit" "" >/dev/null   # aguardando nível 1
-post "/purchases/requisitions/$P3/submit" "" >/dev/null   # aguardando nível 1
-echo "   1 rascunho + 2 aguardando aprovação (aparecem na Central de Aprovação da Ana)"
+P3=$(novo_pedido TRINO-MG CC-201 "Capacetes para equipe de manutenção" '[{"itemCode":"CAPACETE","quantity":40,"unit":"un"}]')
+# Dois pedidos com o JÚNIOR como aprovador de nível 1, em centros diferentes: ele só enxerga o do
+# CC-101 (o de CC-201 fica invisível para ele) — é a demonstração do escopo por centro.
+P4=$(novo_pedido TRINO-SP CC-101 "EPI para a Obra Norte (aprovação do Júnior)"    '[{"itemCode":"LUVA-M","quantity":6,"unit":"par"}]' junior)
+P5=$(novo_pedido TRINO-MG CC-201 "EPI da Manutenção MG (fora do escopo do Júnior)" '[{"itemCode":"OCULOS","quantity":5,"unit":"un"}]' junior)
+for id in "$P2" "$P3" "$P4" "$P5"; do post "/purchases/requisitions/$id/submit" "" >/dev/null; done
+echo "   1 rascunho + 4 aguardando aprovação (2 deles com o Júnior como aprovador)"
 
 cat <<FIM
 
@@ -125,10 +129,14 @@ cat <<FIM
   1. Entre como aprovador1 → Central de Aprovação → aprove
      "Uniformes para novos contratados"; entre como aprovador2
      e aprove de novo: como HÁ saldo, o pedido é atendido pelo
-     estoque e dá baixa automática (situação "Atendido pelo estoque").
-  2. Faça o mesmo com "Capacetes": mude a quantidade para mais do
-     que existe em estoque e veja o pedido seguir para compra (OC).
-  3. Entre como junior → a Central mostra SÓ o pedido do CC-101.
+     estoque e dá baixa automática ("Atendido pelo estoque"),
+     e o saldo de CAMISA-M cai de 50 para 40.
+  2. Faça o mesmo com "Capacetes" (40 un, mais do que os 30 em
+     estoque): ele fica Aprovado e segue para compra — emita a OC
+     em Pedido e baixe o PDF.
+  3. Entre como junior@trino.com: ele é aprovador de DOIS pedidos,
+     mas a Central mostra só o do CC-101. O de CC-201 não aparece
+     para ele — é o escopo por centro de custo em ação.
   4. Em Entregas (EPI) → baixa para José da Silva → baixe a
      Ficha de Entrega em PDF para assinatura.
   5. Dashboard de Estoque → CALCA-42 aparece em "Reposição sugerida";

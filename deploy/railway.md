@@ -77,6 +77,17 @@ curl -X POST https://api-xxxx.up.railway.app/api/v1/companies \
 Guarde o `companyId` retornado. Abra a URL do web, faça login com o `companyId`,
 `admin@trino.com` e a senha. Pronto para testar.
 
+### 5) (Opcional) Popular com dados de demonstração
+Em vez do passo 4, o script abaixo cria a empresa **e** já preenche tudo — CNPJs, centros,
+catálogo de EPI com saldo, colaboradores, os quatro perfis de usuário e pedidos em situações
+diferentes — imprimindo os logins e um roteiro de teste no final:
+
+```bash
+API_URL=https://SUA-API.up.railway.app PROVISIONING_KEY=SUA_CHAVE ./deploy/seed-demo.sh
+```
+
+Rode uma única vez, numa instância nova. Só precisa de `bash` e `curl`.
+
 ## Dicas
 - **Logs**: painel do serviço → Deploy Logs. Convite de senha sem SMTP aparece lá
   (`SMTP não configurado — e-mail NÃO enviado ... /criar-senha?...`).

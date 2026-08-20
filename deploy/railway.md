@@ -88,17 +88,6 @@ API_URL=https://sua-api.up.railway.app PROVISIONING_KEY=sua-chave ./deploy/seed-
 
 Rode **uma vez**, numa instância nova (não é idempotente). Só precisa de `bash` + `curl`.
 
-### 5) (Opcional) Popular com dados de demonstração
-Em vez do passo 4, o script abaixo cria a empresa **e** já preenche tudo — CNPJs, centros,
-catálogo de EPI com saldo, colaboradores, os quatro perfis de usuário e pedidos em situações
-diferentes — imprimindo os logins e um roteiro de teste no final:
-
-```bash
-API_URL=https://SUA-API.up.railway.app PROVISIONING_KEY=SUA_CHAVE ./deploy/seed-demo.sh
-```
-
-Rode uma única vez, numa instância nova. Só precisa de `bash` e `curl`.
-
 ## Dicas
 - **Logs**: painel do serviço → Deploy Logs. Convite de senha sem SMTP aparece lá
   (`SMTP não configurado — e-mail NÃO enviado ... /criar-senha?...`).

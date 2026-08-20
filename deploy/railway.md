@@ -1,4 +1,10 @@
-# Deploy de teste no Railway
+# Deploy de teste no Railway (e em qualquer PaaS)
+
+> **O mesmo contrato vale em qualquer plataforma.** A API não tem nada específico do Railway:
+> ela lê `DATABASE_URL`, `PORT` e `MIGRATE_ON_STARTUP` — convenções usadas também por Render,
+> Fly.io, Google Cloud Run, Heroku e afins. Se o Railway pedir um plano, veja
+> **[Alternativas](#alternativas-se-o-railway-pedir-um-plano)** no fim deste guia: a tabela de
+> variáveis abaixo é a mesma em todas.
 
 Guia para subir o Trino Supply no [Railway](https://railway.app) e testar pelo navegador.
 São **3 serviços**: Postgres (gerenciado), API (.NET) e Web (Next.js). O Worker/RabbitMQ é
@@ -73,3 +79,40 @@ Guarde o `companyId` retornado. Abra a URL do web, faça login com o `companyId`
   em simulação idêntica (Postgres 16 + DATABASE_URL + PORT injetado).
 - **Custos**: os 3 serviços cabem no plano Hobby; o Postgres do Railway já faz backup próprio,
   mas o teste não substitui o piloto do compose (backup/alertas/worker completos).
+
+## Alternativas (se o Railway pedir um plano)
+
+O Railway encerrou o trial gratuito para novas contas — sem plano, ele bloqueia a criação do
+projeto. Nada disso depende do nosso código: as três rotas abaixo usam **as mesmas variáveis**.
+
+### A) Na sua máquina / servidor interno — R$ 0, disponível hoje
+É o **piloto completo** (`deploy/docker-compose.pilot.yml`), com Worker, backup diário e vigia
+de alertas — coisas que os PaaS gratuitos não dão:
+
+```bash
+docker compose -f deploy/docker-compose.pilot.yml up --build
+```
+
+Abra `http://localhost:3000`. Para outras pessoas testarem de fora sem abrir porta nenhuma no
+roteador, use o **Cloudflare Tunnel** (grátis) — passo a passo em `deploy/README.md`
+(§ Borda HTTPS). Requisito: uma máquina ligada durante o teste.
+
+### B) Railway pago — menor esforço, tudo já configurado
+Plano Hobby (na casa de **US$ 5/mês**, confira o valor atual no site). É seguir este guia do
+começo: o projeto já está pronto, leva ~10 minutos.
+
+### C) Outro PaaS com camada gratuita
+Mesmas variáveis do passo 2.3, mudando só onde se aponta o Dockerfile:
+
+| Plataforma | API (.NET) | Banco | Observação |
+| ---------- | ---------- | ----- | ---------- |
+| **Render** | Web Service → Docker, `deploy/Dockerfile.api` | Postgres do próprio Render | Serviço grátis **hiberna** após inatividade (primeiro acesso demora); o Postgres grátis tem validade — confirme o prazo atual |
+| **Google Cloud Run** | Deploy do container, `PORT` é injetado | **Neon** ou **Supabase** (grátis) via `DATABASE_URL` | Camada gratuita generosa; exige conta com faturamento ativo |
+| **Fly.io** | `fly launch` usando o Dockerfile | Neon/Supabase ou Fly Postgres | Pago por uso, valores baixos |
+
+Em qualquer uma: **Root Directory `/`** e Dockerfile `deploy/Dockerfile.api` para a API;
+**Root Directory `web`** para o frontend, com `BACKEND_URL` apontando para a URL pública da API.
+
+> Em todas as opções, **defina `APP_DB_PASSWORD`**: é ele que faz a API conectar como
+> `trino_app` (sem superuser) e manter o isolamento multi-tenant real. Sem ele, em Production
+> a API se recusa a subir quando o banco só oferece um usuário privilegiado (guard SEC-004).

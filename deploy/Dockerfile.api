@@ -17,5 +17,5 @@ EXPOSE 8080
 # Roda como usuário não-root (boa prática de container; SEC-003).
 USER app
 HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=6 \
-    CMD curl -fsS http://localhost:8080/health/ready || exit 1
+    CMD curl -fsS "http://localhost:${PORT:-8080}/health/ready" || exit 1
 ENTRYPOINT ["dotnet", "TrinoSupply.Api.dll"]

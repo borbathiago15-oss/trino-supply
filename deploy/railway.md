@@ -22,8 +22,10 @@ A API já entende as convenções do Railway (`host/Api/Startup/CloudEnvironment
 ### 2) Serviço da API
 1. **New → GitHub Repo** → selecione `borbathiago15-oss/trino-supply` (branch
    `claude/docs-system-architecture-4driu8`).
-2. Em **Settings → Build**: Builder = `Dockerfile`, **Dockerfile Path** = `deploy/Dockerfile.api`
-   (Root Directory = `/`, o Dockerfile usa a raiz como contexto).
+2. Em **Settings → Build**: deixe **Root Directory = `/`**. O arquivo `railway.json` na raiz do
+   repo já diz ao Railway para usar o `deploy/Dockerfile.api` e o healthcheck `/health/ready` —
+   normalmente não é preciso configurar nada aqui. (Se o painel não pegar: Builder = `Dockerfile`,
+   **Dockerfile Path** = `deploy/Dockerfile.api`.)
 3. Em **Variables**, adicione:
 
    | Variável | Valor |
@@ -41,13 +43,19 @@ A API já entende as convenções do Railway (`host/Api/Startup/CloudEnvironment
 
 ### 3) Serviço do Web
 1. **New → GitHub Repo** → mesmo repo/branch.
-2. **Settings → Build**: Builder = `Dockerfile`, **Root Directory** = `web`
-   (o `web/Dockerfile` usa o diretório `web` como contexto).
+2. **Settings → Build**: **Root Directory = `web`**. O `web/railway.json` já aponta o
+   `web/Dockerfile`. (Fallback manual: Builder = `Dockerfile`, Dockerfile Path = `Dockerfile`.)
 3. **Variables**:
 
    | Variável | Valor |
    | -------- | ----- |
    | `BACKEND_URL` | a URL pública da API (passo 2.4), ex. `https://api-xxxx.up.railway.app` |
+
+   > Opcional (mais rápido e sem custo de saída): use a **rede privada** —
+   > `BACKEND_URL = http://<nome-do-servico-api>.railway.internal:<PORT-da-API>` (a porta é a que
+   > o Railway injeta no serviço da API — veja a variável `PORT` dele). A API escuta em `[::]`
+   > justamente para isso (a rede interna do Railway é IPv6). Se der qualquer problema, volte
+   > para a URL pública, que sempre funciona.
 
 4. **Generate Domain** → esta é a URL que você abre no navegador
    (ex.: `https://web-xxxx.up.railway.app`).

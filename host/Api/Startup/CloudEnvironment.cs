@@ -49,9 +49,15 @@ public static class CloudEnvironment
         }
 
         // --- PORT da plataforma → bind do Kestrel --------------------------------------------
+        // Onde há IPv6, escutamos em [::] (socket dual-stack: aceita IPv4 mapeado também). Isso é
+        // exigido pela rede privada do Railway (*.railway.internal é IPv6-only) e continua servindo
+        // o tráfego público. Em hosts sem IPv6 (alguns runners/containers), cai para 0.0.0.0.
         var port = Environment.GetEnvironmentVariable("PORT");
         if (!string.IsNullOrWhiteSpace(port) && int.TryParse(port, out var p))
-            builder.WebHost.UseUrls($"http://0.0.0.0:{p}");
+        {
+            var bind = System.Net.Sockets.Socket.OSSupportsIPv6 ? $"http://[::]:{p}" : $"http://0.0.0.0:{p}";
+            builder.WebHost.UseUrls(bind);
+        }
 
         // --- Nomes amigáveis → chaves de configuração (só quando ainda não definidas) --------
         Map(cfg, "Jwt:Keys:0:Secret", "JWT_SIGNING_SECRET");

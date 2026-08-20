@@ -6,6 +6,9 @@
 # Uso:
 #   API_URL=https://sua-api.up.railway.app PROVISIONING_KEY=sua-chave ./deploy/seed-demo.sh
 #
+# Se a empresa JÁ existir, informe COMPANY_ID (e a senha do admin) para popular só os dados:
+#   API_URL=... COMPANY_ID=<uuid> ADMIN_PASSWORD=<senha> ./deploy/seed-demo.sh
+#
 # Rode UMA vez, numa instância recém-criada. Requer apenas bash + curl.
 set -euo pipefail
 
@@ -16,7 +19,9 @@ ADMIN_PASSWORD="${ADMIN_PASSWORD:-Trino@2026}"
 SENHA_PADRAO="${SENHA_PADRAO:-Trino@2026}"
 B="$API/api/v1"
 
-[ -n "$KEY" ] || { echo "ERRO: defina PROVISIONING_KEY (a mesma variável do serviço da API)."; exit 1; }
+# A chave só é necessária para criar a empresa; com COMPANY_ID definido, populamos uma existente.
+[ -n "$KEY" ] || [ -n "${COMPANY_ID:-}" ] || {
+  echo "ERRO: defina PROVISIONING_KEY (para criar a empresa) ou COMPANY_ID (para popular uma existente)."; exit 1; }
 
 campo() { grep -o "\"$1\":\"[^\"]*\"" | head -1 | cut -d'"' -f4; }
 req()   { curl -sS -X "$1" "$B$2" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' ${3:+-d "$3"}; }
@@ -24,12 +29,18 @@ post()  { req POST "$1" "$2"; }
 put()   { req PUT  "$1" "$2"; }
 etapa() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 
-etapa "1/8 Criando empresa e administrador…"
-COMPANY=$(curl -sS -X POST "$B/companies" -H 'Content-Type: application/json' -H "X-Provisioning-Key: $KEY" \
-  -d "{\"legalName\":\"Grupo Trino\",\"taxId\":\"11.111.111/0001-11\",\"adminSubject\":\"admin\",
-       \"adminEmail\":\"$ADMIN_EMAIL\",\"adminName\":\"Administrador\",\"adminPassword\":\"$ADMIN_PASSWORD\"}" \
-  | campo companyId)
-[ -n "$COMPANY" ] || { echo "ERRO: não foi possível criar a empresa. Confira API_URL e PROVISIONING_KEY."; exit 1; }
+etapa "1/8 Empresa e administrador…"
+if [ -n "${COMPANY_ID:-}" ]; then
+  # Empresa já existe (ex.: criada antes pelo painel/curl): apenas populamos os dados nela.
+  COMPANY="$COMPANY_ID"
+  echo "   usando empresa existente"
+else
+  COMPANY=$(curl -sS -X POST "$B/companies" -H 'Content-Type: application/json' -H "X-Provisioning-Key: $KEY" \
+    -d "{\"legalName\":\"Grupo Trino\",\"taxId\":\"11.111.111/0001-11\",\"adminSubject\":\"admin\",
+         \"adminEmail\":\"$ADMIN_EMAIL\",\"adminName\":\"Administrador\",\"adminPassword\":\"$ADMIN_PASSWORD\"}" \
+    | campo companyId)
+  [ -n "$COMPANY" ] || { echo "ERRO: não foi possível criar a empresa. Confira API_URL e PROVISIONING_KEY."; exit 1; }
+fi
 TOKEN=$(curl -sS -X POST "$B/auth/login" -H 'Content-Type: application/json' \
   -d "{\"companyId\":\"$COMPANY\",\"email\":\"$ADMIN_EMAIL\",\"password\":\"$ADMIN_PASSWORD\"}" | campo accessToken)
 [ -n "$TOKEN" ] || { echo "ERRO: login do admin falhou."; exit 1; }

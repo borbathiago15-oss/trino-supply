@@ -111,6 +111,7 @@
 | MMS-004-12 | Inventory Management — Business Journey | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/12-business-journey.md` |
 | MMS-004-13 | Inventory Management — API | 1.0.0 | 🟢 Approved | `docs/07-api/materials/MMS-004/README.md` |
 | MMS-004-14 | Inventory Management — UX | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/14-ux.md` |
+| MMS-004-15 | Inventory Management — Wireframes | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/15-wireframes.md` |
 | MMS-005 | Receiving | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/README.md` |
 
 ---
@@ -223,3 +224,4 @@
 | 2026-08-23 | MMS-004-12 — Business Journey do Inventory Management criado e aprovado (versão 1.0.0): jornada macro do saldo (entrada→reserva→entrega→inventário) e jornadas do Almoxarife, do Supervisor (ajuste com SoD e estorno), do Gestor (alertas e capital), do Solicitante (consumidor indireto) e do Auditor, com pontos de dor, momentos de verdade e KPIs por etapa — padrão MMS-002-12 | MMS-004-12 |
 | 2026-08-23 | MMS-004-13 — API do Inventory Management criada e aprovada (versão 1.0.0): convenções (envelope, keyset, idempotência dupla — chave de cliente + origem funcional, autorização com SoD, rate limit com classe M2M), modelos de recursos (StockMovement com saldos por linha, StockBalanceView somente leitura), 31 endpoints `/api/v1/inventory` mapeados a UC/permissão/evento (sem endpoint de escrita de saldo), catálogo de erros IV-ERR → HTTP, segurança, versionamento, NFRs e roadmap — padrão MMS-002-13 (docs/07-api) | MMS-004-13 |
 | 2026-08-23 | MMS-004-14 — UX do Inventory Management criado e aprovado (versão 1.0.0): princípios IV-UX-001..008, personas com negação explícita do Requester, telas IV-SCR-01..08 (visão do almoxarifado por vencimento, posição/extrato, documento com resumo de efeito, ajustes com SoD visível, inventário com contagem cega, locais, alertas, configurações), jornadas por papel, WCAG 2.1 AA, responsividade com operação em campo, i18n, DS-001, métricas e critérios de aceite — padrão MMS-002-14 | MMS-004-14 |
+| 2026-08-23 | MMS-004-15 — Wireframes do Inventory Management criados e aprovados (versão 1.0.0): WF-IV-01..08 (fila do almoxarifado por vencimento, posição/extrato com saldos antes→depois, documento com diálogo de efeito e estorno, ajustes com SoD visível, inventário com contagem cega e fechamento condicionado, locais, alertas com ruptura priorizada, configurações) com zonas, variantes responsivas, estados, matriz de rastreabilidade e critérios CA-WF-IV — padrão MMS-002-15 | MMS-004-15 |

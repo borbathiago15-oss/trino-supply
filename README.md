@@ -26,6 +26,22 @@ docs/
 └── 90-archive           # Documentos substituídos (somente histórico)
 ```
 
+## Implementação
+
+A implementação segue a ordem oficial (ADR-011: Foundation antes das APIs). Primeiro incremento executável:
+
+```text
+src/backend/
+├── TrinoSupply.sln
+├── Foundation/TrinoSupply.Foundation.Api   # FD-001-01 IAM mínimo: login JWT (15 min) +
+│                                           # refresh rotativo, seed do admin por env,
+│                                           # tela de login em /, health em /health
+└── tests/TrinoSupply.Foundation.Tests      # testes do serviço de autenticação
+```
+
+- **Rodar local:** `docker compose up --build` → http://localhost:8080
+- **Deploy (Railway):** ver [`DEPLOY.md`](DEPLOY.md) — o acesso inicial (usuário/senha) é definido pelas variáveis `ADMIN_EMAIL`/`ADMIN_PASSWORD`.
+
 ## Regras
 
 1. Primeiro documentação, depois implementação.

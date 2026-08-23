@@ -106,6 +106,7 @@
 | MMS-004-07 | Inventory Management — Use Cases | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/07-use-cases.md` |
 | MMS-004-08 | Inventory Management — User Stories | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/08-user-stories.md` |
 | MMS-004-09 | Inventory Management — Permissions | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/09-permissions.md` |
+| MMS-004-10 | Inventory Management — Notifications | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-004/10-notifications.md` |
 | MMS-005 | Receiving | 1.0.0 | 🟢 Approved | `docs/03-business/materials/MMS-005/README.md` |
 
 ---
@@ -213,3 +214,4 @@
 | 2026-07-30 | MMS-004-07 — Use Cases do Inventory Management criados e aprovados (versão 1.0.0): UC-IV-001..011 (entrada, saída/atendimento, criar reserva, liberar/vencer, transferência, ajuste com aprovação, inventário, estorno, locais, alertas, posição/extrato) em especificação UML completa + matriz de rastreabilidade com 100% de cobertura de regras (40/40) e eventos (16/16) — padrão MMS-002-07 | MMS-004-07 |
 | 2026-07-30 | MMS-004-08 — User Stories do Inventory Management criadas e aprovadas (versão 1.0.0): 16 stories US-IV-001..016 em 5 Features (Movimentação, Reservas, Ajustes, Inventário, Consulta/Visão/Alertas) com persona, Gherkin, regras, eventos e matriz de rastreabilidade — padrão MMS-002-08 | MMS-004-08 |
 | 2026-07-30 | MMS-004-09 — Permissions do Inventory Management criado e aprovado (versão 1.0.0): modelo híbrido RBAC+ABAC+Escopo, 6 papéis (Requester com negação explícita da visão do almoxarifado), 11 permissões IV-PERM, restrições por estado das 4 entidades, policies POL-IV-AUTH, JWT claims, scopes inventory.*, Permission Matrix, SoD (SOD-IV-001/002 não desligáveis), Inheritance, Delegation e Evaluation Flow — padrão MMS-002-09 | MMS-004-09 |
+| 2026-08-23 | MMS-004-10 — Notifications do Inventory Management criado e aprovado (versão 1.0.0): 14 eventos notificáveis (parcimônia — movimentações bem-sucedidas não notificam), 13 templates IV-NOT, cadeias de escalonamento (ajuste, ruptura, item inativado, DLQ), especificação operacional (queues, prioridades, retry, template version, localization, scheduling por timers TMR-IV, preferências, NOT-IV-BR-001..013, auditoria de entrega) — padrão MMS-002-10 | MMS-004-10 |

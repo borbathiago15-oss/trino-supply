@@ -1,0 +1,19 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+.vscode/
+artifacts/
+
+# Node
+node_modules/
+
+# Ambiente
+.env
+.env.*
+!.env.example
+
+# SO
+.DS_Store
+Thumbs.db

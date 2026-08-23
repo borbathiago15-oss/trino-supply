@@ -164,6 +164,8 @@
 | Aggregate enxuto do PR-001 (referências ao Foundation em vez de tabelas próprias de attachment/comment/approval) | PR-001-11, seção 14 | Em análise — exigirá ADR própria |
 | Business Event Catalog corporativo | PR-001-05, seção 13 | Aprovado para roadmap, sem data |
 | Mecanismo de pseudonimização LGPD compatível com cadeia de hash (cofre selado vs. HMAC com chave rotacionada) | FD-001-06, seção 6 | Em análise — exigirá ADR antes da v2 do Audit Service |
+| Períodos de orçamento com teto por ciclo (requisições de compra dentro de ciclo orçamentário com limite por período — inspiração validada em análise de ERPs open source, 2026-08-23) | Análise de continuidade (sessão 2026-08-23); PR-001-01 (centro de custo) | Em análise — módulo/extensão fora da ordem oficial de roadmap: exigirá ADR própria (ADR-012, consequência 4) antes de qualquer documento |
+| Divergência de numeração das regras IV-BR: o catálogo MMS-004-02 e os documentos MMS-004-07/08/09 (e, por consequência, 10–17) usam esquemas de códigos IV-BR/IV-ERR/TC-IV distintos para as mesmas regras | Detectada na produção do pacote MMS-004 (2026-08-23) | Em análise — exigirá revisão de reconciliação (1.1.0) do MMS-004-02 ou dos MMS-004-07/08/09 para restabelecer a rastreabilidade única |
 
 ---
 

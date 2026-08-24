@@ -43,10 +43,11 @@ public static class AppModules
     public const string Compras = "COMPRAS";             // demandas e pedidos de compra
     public const string Produtos = "PRODUTOS";           // cadastro de produtos (catálogo)
     public const string Fornecedores = "FORNECEDORES";   // cadastro de fornecedores
+    public const string CentrosCusto = "CENTROS_CUSTO";  // cadastro de centros de custo (regional/gerente/cliente)
     public const string Usuarios = "USUARIOS";           // cadastro de usuários (somente admin)
 
     public static readonly string[] All =
-        [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, Usuarios];
+        [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, CentrosCusto, Usuarios];
 
     /// <summary>Padrão por papel, aplicado quando o cadastro não define módulos.</summary>
     public static string[] DefaultsFor(string role) => role switch
@@ -57,7 +58,7 @@ public static class AppModules
         Roles.PurchasingOfficer => [Compras, Fornecedores, Estoque],
         Roles.WarehouseOperator => [Estoque],
         Roles.WarehouseSupervisor => [Estoque, Produtos],
-        Roles.SupplyManager => [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores],
+        Roles.SupplyManager => [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, CentrosCusto],
         Roles.Auditor => [Solicitacoes, Estoque, Compras],
         _ => [],
     };

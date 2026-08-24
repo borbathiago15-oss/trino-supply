@@ -47,6 +47,8 @@ builder.Services.AddScoped<InventoryService>();
 builder.Services.AddScoped<MaterialRequisitionService>();
 builder.Services.AddScoped<SupplierService>();
 builder.Services.AddScoped<PurchaseOrderService>();
+builder.Services.AddScoped<CostCenterService>();
+builder.Services.AddScoped<TrinoSupply.Foundation.Api.Analytics.AnalyticsService>();
 
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseNpgsql(ConnectionStringFactory.Resolve(builder.Configuration)));
@@ -805,6 +807,71 @@ pos.MapPost("/{id:guid}/cancel", async (Guid id, ReasonRequest body, PurchaseOrd
         : Ok(PoView(order!), ctx);
 });
 
+// ---- Centros de custo (master data mínimo — dimensões dos dashboards) --------
+static object CcView(CostCenter c) => new
+{
+    id = c.Id, code = c.Code, name = c.Name, region = c.Region,
+    managerName = c.ManagerName, clientName = c.ClientName, active = c.Active,
+};
+
+var ccs = app.MapGroup("/api/v1/cost-centers").RequireAuthorization();
+
+// listagem aberta a autenticados: os formulários de requisição/solicitação usam o picker
+ccs.MapGet("/", async (CostCenterService svc, ClaimsPrincipal p, HttpContext ctx, bool? all) =>
+{
+    var includeInactive = all == true && CostCenterService.CanMaintain(RoleOf(p));
+    return Ok(new { items = (await svc.ListAsync(includeInactive)).Select(CcView) }, ctx);
+});
+
+ccs.MapPost("/", async (CreateCostCenterRequest body, CostCenterService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!CostCenterService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.CentrosCusto))
+        return Error(ctx, 403, "CC-ERR-900", "Seu usuário não mantém centros de custo.");
+    var (cc, error) = await svc.CreateAsync(ActorId(p), body.Code, body.Name, body.Region, body.ManagerName, body.ClientName);
+    return error is not null ? Error(ctx, 400, error.Code, error.Message)
+        : Results.Json(new { data = CcView(cc!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+ccs.MapPatch("/{id:guid}", async (Guid id, UpdateCostCenterRequest body, CostCenterService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!CostCenterService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.CentrosCusto))
+        return Error(ctx, 403, "CC-ERR-900", "Seu usuário não mantém centros de custo.");
+    var (cc, error) = await svc.UpdateAsync(id, body.Name, body.Region, body.ManagerName, body.ClientName, body.Active);
+    return error is not null ? Error(ctx, error.Code == "CC-ERR-404" ? 404 : 400, error.Code, error.Message)
+        : Ok(CcView(cc!), ctx);
+});
+
+// ---- Dashboards analíticos ---------------------------------------------------
+var analytics = app.MapGroup("/api/v1/analytics").RequireAuthorization();
+
+analytics.MapGet("/supply", async (TrinoSupply.Foundation.Api.Analytics.AnalyticsService svc,
+    ClaimsPrincipal p, HttpContext ctx, TimeProvider clock,
+    DateOnly? from, DateOnly? to, Guid? supplierId, Guid? buyerId, Guid? requesterId,
+    string? family, string? costCenter, string? region, string? manager, string? client) =>
+{
+    if (!TrinoSupply.Foundation.Api.Analytics.AnalyticsService.CanViewSupply(RoleOf(p)))
+        return Error(ctx, 403, "AN-ERR-900", "Seu papel não acessa o dashboard de suprimentos.");
+    var mods = ModulesOf(p);
+    if (!mods.Contains(AppModules.Solicitacoes) && !mods.Contains(AppModules.Aprovacao) && !mods.Contains(AppModules.Compras))
+        return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para este módulo.");
+    var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+    var f = from ?? new DateOnly(today.Year, today.Month, 1).AddMonths(-11);
+    var t = to ?? today;
+    if (t < f) (f, t) = (t, f);
+    return Ok(await svc.SupplyAsync(f, t, supplierId, buyerId, requesterId, family, costCenter, region, manager, client), ctx);
+});
+
+analytics.MapGet("/stock", async (TrinoSupply.Foundation.Api.Analytics.AnalyticsService svc,
+    ClaimsPrincipal p, HttpContext ctx, Guid? locationId, string? family, int? months) =>
+{
+    if (!InventoryService.CanView(RoleOf(p)))
+        return Error(ctx, 403, "AN-ERR-900", "Seu papel não acessa o dashboard de estoque.");
+    var mods = ModulesOf(p);
+    if (!mods.Contains(AppModules.Estoque) && !mods.Contains(AppModules.Compras))
+        return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para este módulo.");
+    return Ok(await svc.StockAsync(locationId, family, months ?? 6), ctx);
+});
+
 app.MapFallbackToFile("index.html");
 
 app.Run();
@@ -855,6 +922,8 @@ public record UpdateSupplierRequest(string? TradeName, string? Email, string? Ph
 public record PoItemRequest(string Description, decimal Quantity, string? UnitOfMeasure, decimal? UnitPrice, Guid? CatalogItemId);
 public record CreatePurchaseOrderRequest(Guid SupplierId, string? Notes, List<PoItemRequest>? Items, Guid? SourcePrId);
 public record ReceiveOrderRequest(Guid LocationId);
+public record CreateCostCenterRequest(string Code, string Name, string? Region, string? ManagerName, string? ClientName);
+public record UpdateCostCenterRequest(string? Name, string? Region, string? ManagerName, string? ClientName, bool? Active);
 public record UpdateRequisitionRequest(string? Justification, string? CostCenter, string? Priority, DateOnly? NeededBy, bool? ClearNeededBy);
 public record ReasonRequest(string? Reason);
 public record DecisionRequest(string? Reason, string? Comments);

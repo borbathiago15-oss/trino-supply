@@ -118,6 +118,47 @@
         <div class="module"><span>MMS-004 · Estoque</span><span class="badge dev">EM DESENVOLVIMENTO</span></div>
       </div>
 
+      <section id="pr-view" hidden>
+        <h2>Requisições de Compra</h2>
+        <div id="pr-msg" class="msg" role="alert" aria-live="polite"></div>
+
+        <div class="toolbar">
+          <div>
+            <button id="pr-tab-mine" class="secondary" type="button">Minhas requisições</button>
+            <button id="pr-tab-appr" class="secondary" type="button" hidden>Aprovações <span id="appr-count"></span></button>
+          </div>
+          <button id="pr-new" type="button" hidden>+ Nova requisição</button>
+        </div>
+
+        <div id="pr-list"></div>
+
+        <form id="pr-form" hidden>
+          <h2 id="pr-form-title">Nova requisição</h2>
+          <div class="grid2">
+            <div><label for="pr-cc">Centro de custo</label><input id="pr-cc" required placeholder="ex.: CC-TI-001" /></div>
+            <div>
+              <label for="pr-priority">Prioridade</label>
+              <select id="pr-priority">
+                <option value="LOW">Baixa</option>
+                <option value="NORMAL" selected>Normal</option>
+                <option value="HIGH">Alta</option>
+                <option value="URGENT">Urgente</option>
+              </select>
+            </div>
+          </div>
+          <label for="pr-needed">Necessário até (opcional)</label>
+          <input id="pr-needed" type="date" />
+          <label for="pr-just">Justificativa</label>
+          <input id="pr-just" required placeholder="Por que esta compra é necessária?" />
+
+          <h2>Itens</h2>
+          <div id="pr-items"></div>
+          <button id="pr-add-item" class="secondary" type="button">+ Adicionar item</button>
+          <button type="submit" class="full">Salvar rascunho</button>
+          <button id="pr-form-cancel" class="secondary full" type="button" style="margin-top:8px">Voltar</button>
+        </form>
+      </section>
+
       <section id="admin-view" hidden>
         <h2>Usuários</h2>
         <div id="users-msg" class="msg" role="alert" aria-live="polite"></div>
@@ -182,6 +223,10 @@
 
     let currentUser = null;
 
+    const canCreatePr = (r) => ['Requester', 'SupplyManager', 'SystemAdministrator'].includes(r);
+    const canDecidePr = (r) => ['Approver', 'SupplyManager', 'SystemAdministrator'].includes(r);
+    const canAccessPr = (r) => canCreatePr(r) || canDecidePr(r) || r === 'Auditor';
+
     function showApp(user) {
       currentUser = user;
       $('login-view').hidden = true;
@@ -190,8 +235,16 @@
       $('user-role').textContent = '(' + (ROLE_LABELS[user.role] || user.role) + ')';
       const isAdmin = user.role === 'SystemAdministrator';
       $('admin-view').hidden = !isAdmin;
-      $('card').classList.toggle('wide', isAdmin);
+      const hasPr = canAccessPr(user.role);
+      $('pr-view').hidden = !hasPr;
+      $('card').classList.toggle('wide', isAdmin || hasPr);
       if (isAdmin) loadUsers();
+      if (hasPr) {
+        $('pr-new').hidden = !canCreatePr(user.role);
+        $('pr-tab-appr').hidden = !canDecidePr(user.role);
+        prTab = 'mine';
+        loadRequisitions();
+      }
     }
 
     function showLogin() {
@@ -277,6 +330,136 @@
         ev.target.reset();
         loadUsers();
       } catch (err) { flash($('users-msg'), err.message || 'Não foi possível criar o usuário.', 'error'); }
+    });
+
+    // ---- PR-001 — Requisições de Compra ----
+    let prTab = 'mine';
+    const STATUS_PR = {
+      DRAFT: ['Rascunho', 'dev'], IN_APPROVAL: ['Em aprovação', ''], APPROVED: ['Aprovada', 'on'],
+      REJECTED: ['Rejeitada', 'off'], RETURNED: ['Devolvida p/ ajuste', 'dev'], CANCELLED: ['Cancelada', 'off'],
+      SUBMITTED: ['Enviada', ''],
+    };
+    const money = (v) => (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    async function loadRequisitions() {
+      try {
+        const path = prTab === 'appr' ? '/api/v1/approvals/pending' : '/api/v1/purchase-requisitions/';
+        const data = await api(path);
+        renderRequisitions(data.items);
+        if (canDecidePr(currentUser.role)) {
+          const appr = prTab === 'appr' ? data.items : (await api('/api/v1/approvals/pending')).items;
+          $('appr-count').textContent = '(' + appr.length + ')';
+        }
+      } catch (err) { flash($('pr-msg'), err.message || 'Falha ao carregar requisições.', 'error'); }
+    }
+
+    function prActions(r) {
+      const mine = r.requesterId === currentUser.id;
+      const acts = [];
+      if (prTab === 'appr' && canDecidePr(currentUser.role) && r.status === 'IN_APPROVAL' && !mine) {
+        acts.push('<button data-act="approve">Aprovar</button>',
+                  '<button class="secondary" data-act="return">Devolver</button>',
+                  '<button class="danger" data-act="reject">Rejeitar</button>');
+      }
+      if (prTab === 'mine' && mine) {
+        if (['DRAFT', 'RETURNED'].includes(r.status)) acts.push('<button data-act="submit">Enviar p/ aprovação</button>');
+        if (r.status === 'DRAFT') acts.push('<button class="danger" data-act="delete">Excluir</button>');
+        if (['DRAFT', 'RETURNED', 'IN_APPROVAL'].includes(r.status)) acts.push('<button class="danger" data-act="cancel">Cancelar</button>');
+      }
+      return acts.join('');
+    }
+
+    function renderRequisitions(items) {
+      if (!items.length) {
+        $('pr-list').innerHTML = '<p class="hello">' + (prTab === 'appr'
+          ? 'Nenhuma requisição aguardando a sua aprovação.'
+          : 'Nenhuma requisição ainda. Crie a primeira!') + '</p>';
+        return;
+      }
+      $('pr-list').innerHTML = '<table aria-label="Requisições"><thead><tr><th>Número</th><th>Resumo</th><th>Valor est.</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+        items.map(r => {
+          const [label, cls] = STATUS_PR[r.status] || [r.status, ''];
+          const reason = r.decisionReason ? `<div class="sub">Motivo: ${escapeHtml(r.decisionReason)} (${escapeHtml(r.decidedByLabel || '')})</div>` : '';
+          const itemsTxt = r.items.map(i => `${i.quantity}× ${escapeHtml(i.description)}`).join(' · ');
+          return `<tr data-id="${r.id}">
+            <td>${escapeHtml(r.number)}<div class="sub">${prTab === 'appr' ? escapeHtml(r.requesterLabel) : 'ciclo ' + r.cycle}</div></td>
+            <td>${escapeHtml(r.justification)}<div class="sub">${itemsTxt}</div><div class="sub">CC: ${escapeHtml(r.costCenter)}${r.neededBy ? ' · até ' + r.neededBy : ''}</div>${reason}</td>
+            <td>${money(r.totalEstimatedValue)}</td>
+            <td><span class="badge ${cls}">${label}</span></td>
+            <td class="row-actions">${prActions(r)}</td>
+          </tr>`;
+        }).join('') + '</tbody></table>';
+    }
+
+    $('pr-tab-mine').addEventListener('click', () => { prTab = 'mine'; $('pr-form').hidden = true; $('pr-list').hidden = false; loadRequisitions(); });
+    $('pr-tab-appr').addEventListener('click', () => { prTab = 'appr'; $('pr-form').hidden = true; $('pr-list').hidden = false; loadRequisitions(); });
+
+    $('pr-list').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act]');
+      if (!btn) return;
+      const id = btn.closest('tr').dataset.id;
+      const act = btn.dataset.act;
+      try {
+        if (act === 'submit') await api(`/api/v1/purchase-requisitions/${id}/submit`, { method: 'POST', body: {} });
+        else if (act === 'approve') {
+          const comments = prompt('Comentário da aprovação (opcional):') || null;
+          await api(`/api/v1/purchase-requisitions/${id}/approve`, { method: 'POST', body: { comments } });
+        } else if (act === 'reject' || act === 'return') {
+          const reason = prompt(act === 'reject' ? 'Motivo da rejeição (obrigatório):' : 'O que o solicitante deve ajustar? (obrigatório)');
+          if (!reason) return;
+          await api(`/api/v1/purchase-requisitions/${id}/${act}`, { method: 'POST', body: { reason } });
+        } else if (act === 'cancel') {
+          const reason = prompt('Motivo do cancelamento (obrigatório):');
+          if (!reason) return;
+          await api(`/api/v1/purchase-requisitions/${id}/cancel`, { method: 'POST', body: { reason } });
+        } else if (act === 'delete') {
+          if (!confirm('Excluir este rascunho?')) return;
+          await api(`/api/v1/purchase-requisitions/${id}`, { method: 'DELETE' });
+        }
+        flash($('pr-msg'), 'Operação realizada com sucesso.', 'ok');
+        loadRequisitions();
+      } catch (err) { flash($('pr-msg'), err.message || 'Operação não permitida.', 'error'); }
+    });
+
+    // ---- formulário de nova requisição ----
+    function itemRow() {
+      const div = document.createElement('div');
+      div.className = 'grid2 pr-item-row';
+      div.innerHTML = `
+        <div><label>Descrição</label><input class="it-desc" required minlength="3" placeholder="ex.: Capacete de segurança CA 12345" /></div>
+        <div class="grid2">
+          <div><label>Qtd</label><input class="it-qty" type="number" min="0.01" step="0.01" required value="1" /></div>
+          <div><label>Preço unit. (R$)</label><input class="it-price" type="number" min="0" step="0.01" placeholder="opcional" /></div>
+        </div>`;
+      return div;
+    }
+
+    $('pr-new').addEventListener('click', () => {
+      $('pr-list').hidden = true;
+      $('pr-form').hidden = false;
+      $('pr-items').innerHTML = '';
+      $('pr-items').appendChild(itemRow());
+      $('pr-form').reset && $('pr-form').reset();
+    });
+    $('pr-add-item').addEventListener('click', () => $('pr-items').appendChild(itemRow()));
+    $('pr-form-cancel').addEventListener('click', () => { $('pr-form').hidden = true; $('pr-list').hidden = false; });
+
+    $('pr-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const items = [...document.querySelectorAll('.pr-item-row')].map(row => ({
+        description: row.querySelector('.it-desc').value,
+        quantity: parseFloat(row.querySelector('.it-qty').value),
+        estimatedUnitPrice: row.querySelector('.it-price').value ? parseFloat(row.querySelector('.it-price').value) : null,
+      })).filter(i => i.description);
+      try {
+        await api('/api/v1/purchase-requisitions/', { method: 'POST', body: {
+          justification: $('pr-just').value, costCenter: $('pr-cc').value,
+          priority: $('pr-priority').value, neededBy: $('pr-needed').value || null, items,
+        }});
+        flash($('pr-msg'), 'Rascunho criado. Revise e clique em "Enviar p/ aprovação".', 'ok');
+        $('pr-form').hidden = true; $('pr-list').hidden = false;
+        prTab = 'mine'; loadRequisitions();
+      } catch (err) { flash($('pr-msg'), err.message || 'Não foi possível criar a requisição.', 'error'); }
     });
 
     // sessão existente? valida contra /me

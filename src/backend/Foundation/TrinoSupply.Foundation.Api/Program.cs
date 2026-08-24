@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using TrinoSupply.Foundation.Api.Auth;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Infrastructure;
+using TrinoSupply.Foundation.Api.Procurement;
 using TrinoSupply.Foundation.Api.Users;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -36,6 +37,8 @@ builder.Services.AddSingleton<TokenService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<IPrNumberGenerator, PostgresPrNumberGenerator>();
+builder.Services.AddScoped<RequisitionService>();
 
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseNpgsql(ConnectionStringFactory.Resolve(builder.Configuration)));
@@ -178,6 +181,177 @@ users.MapPost("/{id:guid}/reset-password", async (Guid id, ResetPasswordRequest 
         : Ok(new { message = "Senha redefinida. As sessões do usuário foram encerradas." }, ctx);
 });
 
+// ---- PR-001 — Requisição de Compra (MVP conforme PR-001-03/13) --------------
+static Actor? BuildActor(ClaimsPrincipal p)
+{
+    var id = ActorId(p);
+    if (id == Guid.Empty) return null;
+    var actor = new Actor(id,
+        p.FindFirstValue("name") ?? p.FindFirstValue(ClaimTypes.Email) ?? "Usuário",
+        p.FindFirstValue(ClaimTypes.Role) ?? "");
+    return actor.CanAccessModule ? actor : null;
+}
+
+static object PrView(PurchaseRequisition r) => new
+{
+    id = r.Id,
+    number = r.Number,
+    status = r.Status switch
+    {
+        RequisitionStatus.Draft => "DRAFT",
+        RequisitionStatus.Submitted => "SUBMITTED",
+        RequisitionStatus.InApproval => "IN_APPROVAL",
+        RequisitionStatus.Approved => "APPROVED",
+        RequisitionStatus.Rejected => "REJECTED",
+        RequisitionStatus.Returned => "RETURNED",
+        _ => "CANCELLED",
+    },
+    cycle = r.Cycle,
+    priority = r.Priority,
+    neededBy = r.NeededBy,
+    justification = r.Justification,
+    costCenter = r.CostCenter,
+    currency = r.Currency,
+    requesterId = r.RequesterId,
+    requesterLabel = r.RequesterLabel,
+    totalEstimatedValue = r.TotalEstimatedValue,
+    decisionReason = r.DecisionReason,
+    decidedByLabel = r.DecidedByLabel,
+    decidedAt = r.DecidedAt,
+    submittedAt = r.SubmittedAt,
+    items = r.Items.OrderBy(i => i.Sequence).Select(i => new
+    {
+        itemId = i.Id, sequence = i.Sequence, description = i.Description,
+        quantity = i.Quantity, unitOfMeasure = i.UnitOfMeasure,
+        estimatedUnitPrice = i.EstimatedUnitPrice,
+        estimatedTotal = i.Quantity * (i.EstimatedUnitPrice ?? 0),
+        notes = i.Notes,
+    }),
+    version = r.Version,
+    createdAt = r.CreatedAt,
+    updatedAt = r.UpdatedAt,
+};
+
+static IResult PrError(HttpContext ctx, UserError e) => Error(ctx, e.Code switch
+{
+    "PR-ERR-404" => 404,
+    "PR-ERR-001" => 403,
+    "PR-ERR-040" => 409,
+    "PR-ERR-041" or "PR-ERR-042" or "PR-ERR-043" or "PR-ERR-050" => 422,
+    _ => 400,
+}, e.Code, e.Message);
+
+var prs = app.MapGroup("/api/v1/purchase-requisitions").RequireAuthorization();
+
+prs.MapGet("/", async (RequisitionService svc, ClaimsPrincipal p, HttpContext ctx, string? status) =>
+{
+    if (BuildActor(p) is not { } actor) return Error(ctx, 403, "PR-ERR-001", "Seu papel não acessa o módulo de requisições.");
+    RequisitionStatus? filter = status?.ToUpperInvariant() switch
+    {
+        null or "" => null,
+        "DRAFT" => RequisitionStatus.Draft,
+        "IN_APPROVAL" => RequisitionStatus.InApproval,
+        "APPROVED" => RequisitionStatus.Approved,
+        "REJECTED" => RequisitionStatus.Rejected,
+        "RETURNED" => RequisitionStatus.Returned,
+        "CANCELLED" => RequisitionStatus.Cancelled,
+        _ => null,
+    };
+    return Ok(new { items = (await svc.ListAsync(actor, filter)).Select(PrView) }, ctx);
+});
+
+prs.MapGet("/{id:guid}", async (Guid id, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (BuildActor(p) is not { } actor) return Error(ctx, 403, "PR-ERR-001", "Seu papel não acessa o módulo de requisições.");
+    var pr = await svc.GetAsync(actor, id);
+    return pr is null ? Error(ctx, 404, "PR-ERR-404", "Requisição não encontrada.") : Ok(PrView(pr), ctx);
+});
+
+prs.MapPost("/", async (CreateRequisitionRequest body, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (BuildActor(p) is not { CanCreate: true } actor)
+        return Error(ctx, 403, "PR-ERR-001", "Seu papel não cria requisições.");
+    var items = (body.Items ?? []).Select(i => new ItemInput(i.Description, i.Quantity, i.UnitOfMeasure, i.EstimatedUnitPrice, i.Notes)).ToList();
+    var (pr, error) = await svc.CreateAsync(actor, body.Justification, body.CostCenter, body.Priority, body.NeededBy, items);
+    return error is not null ? PrError(ctx, error)
+        : Results.Json(new { data = PrView(pr!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+prs.MapPatch("/{id:guid}", async (Guid id, UpdateRequisitionRequest body, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (BuildActor(p) is not { } actor) return Error(ctx, 403, "PR-ERR-001", "Seu papel não acessa o módulo de requisições.");
+    var (pr, error) = await svc.UpdateHeaderAsync(actor, id, body.Justification, body.CostCenter, body.Priority, body.NeededBy, body.ClearNeededBy == true);
+    return error is not null ? PrError(ctx, error) : Ok(PrView(pr!), ctx);
+});
+
+prs.MapDelete("/{id:guid}", async (Guid id, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (BuildActor(p) is not { } actor) return Error(ctx, 403, "PR-ERR-001", "Seu papel não acessa o módulo de requisições.");
+    var error = await svc.DeleteDraftAsync(actor, id);
+    return error is not null ? PrError(ctx, error) : Results.NoContent();
+});
+
+prs.MapPost("/{id:guid}/submit", async (Guid id, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (BuildActor(p) is not { } actor) return Error(ctx, 403, "PR-ERR-001", "Seu papel não acessa o módulo de requisições.");
+    var (pr, error) = await svc.SubmitAsync(actor, id);
+    return error is not null ? PrError(ctx, error) : Ok(PrView(pr!), ctx);
+});
+
+prs.MapPost("/{id:guid}/cancel", async (Guid id, ReasonRequest body, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (BuildActor(p) is not { } actor) return Error(ctx, 403, "PR-ERR-001", "Seu papel não acessa o módulo de requisições.");
+    var (pr, error) = await svc.CancelAsync(actor, id, body.Reason);
+    return error is not null ? PrError(ctx, error) : Ok(PrView(pr!), ctx);
+});
+
+prs.MapPost("/{id:guid}/items", async (Guid id, ItemRequest body, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (BuildActor(p) is not { } actor) return Error(ctx, 403, "PR-ERR-001", "Seu papel não acessa o módulo de requisições.");
+    var (pr, error) = await svc.AddItemAsync(actor, id, new ItemInput(body.Description, body.Quantity, body.UnitOfMeasure, body.EstimatedUnitPrice, body.Notes));
+    return error is not null ? PrError(ctx, error)
+        : Results.Json(new { data = PrView(pr!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+prs.MapDelete("/{id:guid}/items/{itemId:guid}", async (Guid id, Guid itemId, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (BuildActor(p) is not { } actor) return Error(ctx, 403, "PR-ERR-001", "Seu papel não acessa o módulo de requisições.");
+    var (pr, error) = await svc.RemoveItemAsync(actor, id, itemId);
+    return error is not null ? PrError(ctx, error) : Ok(PrView(pr!), ctx);
+});
+
+// ---- decisão (Approver/SupplyManager/Admin, com SoD no serviço) --------------
+prs.MapPost("/{id:guid}/approve", async (Guid id, DecisionRequest body, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (BuildActor(p) is not { CanDecide: true } actor)
+        return Error(ctx, 403, "PR-ERR-001", "Seu papel não aprova requisições.");
+    var (pr, error) = await svc.ApproveAsync(actor, id, body.Comments);
+    return error is not null ? PrError(ctx, error) : Ok(PrView(pr!), ctx);
+});
+
+prs.MapPost("/{id:guid}/reject", async (Guid id, DecisionRequest body, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (BuildActor(p) is not { CanDecide: true } actor)
+        return Error(ctx, 403, "PR-ERR-001", "Seu papel não decide requisições.");
+    var (pr, error) = await svc.RejectAsync(actor, id, body.Reason);
+    return error is not null ? PrError(ctx, error) : Ok(PrView(pr!), ctx);
+});
+
+prs.MapPost("/{id:guid}/return", async (Guid id, DecisionRequest body, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (BuildActor(p) is not { CanDecide: true } actor)
+        return Error(ctx, 403, "PR-ERR-001", "Seu papel não decide requisições.");
+    var (pr, error) = await svc.ReturnAsync(actor, id, body.Reason);
+    return error is not null ? PrError(ctx, error) : Ok(PrView(pr!), ctx);
+});
+
+app.MapGet("/api/v1/approvals/pending", async (RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (BuildActor(p) is not { CanDecide: true } actor)
+        return Error(ctx, 403, "PR-ERR-001", "Seu papel não possui fila de aprovação.");
+    return Ok(new { items = (await svc.PendingApprovalsAsync(actor)).Select(PrView) }, ctx);
+}).RequireAuthorization();
+
 app.MapFallbackToFile("index.html");
 
 app.Run();
@@ -196,5 +370,10 @@ public record RefreshRequest(string RefreshToken);
 public record CreateUserRequest(string Email, string Name, string Role, string Password);
 public record UpdateUserRequest(string? Name, string? Role, bool? Active);
 public record ResetPasswordRequest(string NewPassword);
+public record ItemRequest(string Description, decimal Quantity, string? UnitOfMeasure, decimal? EstimatedUnitPrice, string? Notes);
+public record CreateRequisitionRequest(string Justification, string CostCenter, string? Priority, DateOnly? NeededBy, List<ItemRequest>? Items);
+public record UpdateRequisitionRequest(string? Justification, string? CostCenter, string? Priority, DateOnly? NeededBy, bool? ClearNeededBy);
+public record ReasonRequest(string? Reason);
+public record DecisionRequest(string? Reason, string? Comments);
 
 public partial class Program;

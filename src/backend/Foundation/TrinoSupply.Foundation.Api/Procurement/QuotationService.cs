@@ -8,6 +8,9 @@ namespace TrinoSupply.Foundation.Api.Procurement;
 public record ProposalInput(
     int? DeliveryDays, string? PaymentTerms, decimal? FreightValue, DateOnly? ValidUntil,
     string? Notes, IReadOnlyList<ProposalItemInput> Items);
+/// <summary>SC já designada a um comprador, mas ainda retida na aprovação.</summary>
+public record QueueBlocked(PurchaseRequisition Pr, string Reason);
+
 public record ProposalItemInput(Guid QuotationItemId, decimal UnitPrice, decimal? Quantity);
 
 /// <summary>
@@ -50,16 +53,45 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
     /// <summary>Fila de Suprimentos: PRs aprovadas sem cotação ativa e sem OC.</summary>
     public async Task<List<PurchaseRequisition>> AwaitingQuotationAsync(CancellationToken ct = default)
     {
+        var (ready, _) = await QueueAsync(ct);
+        return ready;
+    }
+
+    /// <summary>
+    /// Fila de Suprimentos completa: as PRs prontas para cotar e as que já têm comprador designado
+    /// mas continuam retidas na aprovação — o comprador precisa enxergar o que está a caminho.
+    /// </summary>
+    public async Task<(List<PurchaseRequisition> ready, List<QueueBlocked> blocked)> QueueAsync(
+        CancellationToken ct = default)
+    {
         var activeQuotationPrs = await db.Quotations
             .Where(q => q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected)
             .Select(q => q.SourcePrId).ToListAsync(ct);
         var linkedPoPrs = await db.PurchaseOrders
             .Where(o => o.SourcePrId != null && o.Status != PurchaseOrderStatus.Cancelled)
             .Select(o => o.SourcePrId!.Value).ToListAsync(ct);
-        return await db.Requisitions.Include(r => r.Items)
-            .Where(r => r.Status == RequisitionStatus.Approved
+
+        var open = await db.Requisitions.Include(r => r.Items)
+            .Where(r => r.DeletedAt == null
+                        && (r.Status == RequisitionStatus.Approved || r.Status == RequisitionStatus.InApproval)
                         && !activeQuotationPrs.Contains(r.Id) && !linkedPoPrs.Contains(r.Id))
-            .OrderBy(r => r.DecidedAt).Take(100).ToListAsync(ct);
+            .OrderBy(r => r.DecidedAt ?? r.SubmittedAt).Take(200).ToListAsync(ct);
+
+        var ready = open.Where(r => r.Status == RequisitionStatus.Approved).ToList();
+        var waiting = open.Where(r => r.Status == RequisitionStatus.InApproval).ToList();
+        if (waiting.Count == 0) return (ready, []);
+
+        var codes = waiting.Select(r => r.CostCenter.ToUpperInvariant()).Distinct().ToList();
+        var managers = await db.CostCenters.Where(c => c.Active && codes.Contains(c.Code.ToUpper()))
+            .Select(c => new { c.Code, c.ManagerName }).ToListAsync(ct);
+        var blocked = waiting.Select(r =>
+        {
+            var manager = managers.FirstOrDefault(m => m.Code.ToUpperInvariant() == r.CostCenter.ToUpperInvariant())?.ManagerName;
+            return new QueueBlocked(r, string.IsNullOrWhiteSpace(manager)
+                ? "Aguardando aprovação — nenhum gerente vinculado a este centro de custo."
+                : $"Aguardando aprovação de {manager}.");
+        }).ToList();
+        return (ready, blocked);
     }
 
     // ---- abertura (RFQ-BR-001/002) ------------------------------------------

@@ -92,6 +92,81 @@ public class CatalogStockTests
         Assert.Null(item.Suppliers.Single(s => s.SupplierName == "Comercial Beta").TaxId);
     }
 
+    // ---- tipo de produto e conformidade (FISPQ / C.A.) -----------------------
+
+    [Fact]
+    public async Task Epi_sem_ca_e_recusado_e_com_ca_e_aceito()
+    {
+        var svc = Build(out _);
+        var (_, error) = await svc.CreateAsync(Actor, null, "Capacete classe B", "EPI", "UN", 30m,
+            productType: ProductTypes.Epi);
+        Assert.Equal("IC-ERR-023", error!.Code);
+
+        var (item, ok) = await svc.CreateAsync(Actor, null, "Capacete classe B", "EPI", "UN", 30m,
+            productType: ProductTypes.Epi, caNumber: "31469");
+        Assert.Null(ok);
+        Assert.Equal("31469", item!.CaNumber);
+        Assert.Equal(ProductTypes.Epi, item.ProductType);
+    }
+
+    [Fact]
+    public async Task Quimico_sem_fispq_nao_pode_ser_solicitado()
+    {
+        var svc = Build(out _);
+        var (item, _) = await svc.CreateAsync(Actor, null, "Soda cáustica 1kg", "QUIMICOS", "KG", 25m,
+            productType: ProductTypes.Quimicos);
+        Assert.NotNull(item);
+
+        var (_, error) = await svc.ResolveForRequisitionAsync([item!.Id]);
+        Assert.Equal("IC-ERR-024", error!.Code);
+
+        await svc.AttachFispqAsync(item.Id, Guid.NewGuid(), "fispq-soda.pdf");
+        var (resolved, none) = await svc.ResolveForRequisitionAsync([item.Id]);
+        Assert.Null(none);
+        Assert.Single(resolved!);
+    }
+
+    [Fact]
+    public async Task Epi_sem_ca_no_cadastro_antigo_nao_circula()
+    {
+        var svc = Build(out var db);
+        var (item, _) = await svc.CreateAsync(Actor, null, "Luva de vaqueta", "EPI", "PAR", 18m);
+        var tracked = await db.CatalogItems.SingleAsync(i => i.Id == item!.Id);
+        tracked.ProductType = ProductTypes.Epi;    // classificado depois, sem C.A.
+        await db.SaveChangesAsync();
+
+        var (_, error) = await svc.ResolveForRequisitionAsync([item!.Id]);
+        Assert.Equal("IC-ERR-023", error!.Code);
+    }
+
+    [Fact]
+    public async Task Tipo_invalido_e_recusado()
+    {
+        var svc = Build(out _);
+        var (_, error) = await svc.CreateAsync(Actor, null, "Item", "EPI", "UN", 1m, productType: "OUTRO");
+        Assert.Equal("IC-ERR-025", error!.Code);
+    }
+
+    [Fact]
+    public async Task Produto_pode_ser_de_estoque_e_de_compra_ao_mesmo_tempo()
+    {
+        var svc = Build(out _);
+        var (both, error) = await svc.CreateAsync(Actor, null, "Detergente", "HIGIENE", "UN", 2m,
+            stockControlled: true, minimumQty: 10m, purchasable: true);
+        Assert.Null(error);
+        Assert.True(both!.StockControlled);
+        Assert.True(both.Purchasable);
+
+        var estoque = await svc.ListAsync(null, null, false, stockOnly: true);
+        Assert.Contains(estoque, i => i.Id == both.Id);           // aparece no almoxarifado
+        var todos = await svc.ListAsync(null, null, false);
+        Assert.Contains(todos, i => i.Id == both.Id);             // e continua comprável
+
+        var (_, semUso) = await svc.CreateAsync(Actor, null, "Sem uso", "HIGIENE", "UN", 1m,
+            stockControlled: false, purchasable: false);
+        Assert.Equal("IC-ERR-018", semUso!.Code);
+    }
+
     // ---- famílias: cadastro próprio evita variações da mesma família ---------
 
     [Fact]

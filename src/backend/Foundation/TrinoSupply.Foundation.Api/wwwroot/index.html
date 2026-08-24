@@ -745,10 +745,24 @@
               <div><label for="ci-unit">Unidade</label><input id="ci-unit" placeholder="UN" /></div>
               <div><label for="ci-price">Preço ref. (R$)</label><input id="ci-price" type="number" min="0" step="0.01" placeholder="opcional" /></div>
             </div>
-            <div class="grid2">
-              <div><label><input type="checkbox" id="ci-stock" /> Item de almoxarifado <span class="sub">(saldo controlado em estoque)</span></label></div>
-              <div><label for="ci-min">Estoque mínimo</label><input id="ci-min" type="number" min="0" step="0.01" placeholder="dispara a reposição" /></div>
+            <label for="ci-type">Tipo de produto</label>
+            <select id="ci-type"></select>
+            <div id="ci-ca-wrap" hidden>
+              <label for="ci-ca">Número do C.A. <span class="sub">(Certificado de Aprovação — obrigatório em EPI e EPC)</span></label>
+              <input id="ci-ca" placeholder="ex.: 12345" />
             </div>
+            <div id="ci-fispq-wrap" hidden>
+              <label for="ci-fispq">FISPQ <span class="sub">(obrigatória em produto químico — PDF ou imagem)</span></label>
+              <input id="ci-fispq" type="file" accept=".pdf,.png,.jpg,.jpeg,.docx" />
+              <p class="hello" id="ci-fispq-current" style="margin:4px 0 0"></p>
+            </div>
+            <label>Uso do produto <span class="sub">(pode ser os dois)</span></label>
+            <div class="checks">
+              <label><input type="checkbox" id="ci-stock" /> Item de almoxarifado <span class="sub">(saldo controlado)</span></label>
+              <label><input type="checkbox" id="ci-purchasable" checked /> Disponível para compra <span class="sub">(SC e cotação)</span></label>
+            </div>
+            <label for="ci-min">Estoque mínimo <span class="sub">(itens de almoxarifado)</span></label>
+            <input id="ci-min" type="number" min="0" step="0.01" placeholder="dispara a reposição" />
             <label>Fornecedores deste produto <span class="sub">(não precisam estar cadastrados na plataforma)</span></label>
             <div id="ci-suppliers"></div>
             <button type="button" class="secondary" id="ci-add-sup" style="margin-top:6px">+ Adicionar fornecedor</button>
@@ -1907,6 +1921,28 @@
     });
 
     // ============ CADASTROS: PRODUTOS ============
+    let productTypes = [];
+    async function loadProductTypes(selected) {
+      if (!productTypes.length) {
+        try { productTypes = (await api('/api/v1/product-types')).items; } catch { return; }
+      }
+      const sel = $('ci-type');
+      if (!sel) return;
+      sel.innerHTML = '<option value="">Selecione o tipo…</option>' +
+        productTypes.map(t => `<option value="${t.key}">${escapeHtml(t.label)}</option>`).join('');
+      if (selected) sel.value = selected;
+      applyTypeRules();
+    }
+    /// mostra C.A. (EPI/EPC) ou FISPQ (químico) conforme o tipo escolhido
+    function applyTypeRules() {
+      const key = $('ci-type') ? $('ci-type').value : '';
+      const t = productTypes.find(x => x.key === key);
+      const needsCa = !!(t && t.requiresCa), needsFispq = !!(t && t.requiresFispq);
+      $('ci-ca-wrap').hidden = !needsCa;
+      $('ci-ca').required = needsCa;
+      $('ci-fispq-wrap').hidden = !needsFispq;
+    }
+
     function itemSupplierRow(sup) {
       const div = document.createElement('div');
       div.className = 'ci-sup-row';
@@ -1939,6 +1975,19 @@
       div.querySelector('.cs-remove').addEventListener('click', () => div.remove());
       return div;
     }
+    async function uploadFispq(itemId, file) {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`/api/v1/items/${itemId}/fispq`, {
+        method: 'POST', headers: { Authorization: 'Bearer ' + store.access }, body: fd,
+      });
+      if (!res.ok) {
+        let msg = 'Falha ao anexar a FISPQ.';
+        try { const j = await res.json(); msg = (j.error && j.error.message) || msg; } catch {}
+        throw new Error(msg);
+      }
+      return res.json();
+    }
     function renderItemSuppliers(list) {
       $('ci-suppliers').innerHTML = '';
       (list || []).forEach(sup => $('ci-suppliers').appendChild(itemSupplierRow(sup)));
@@ -1966,13 +2015,24 @@
         $('ci-desc').value = i.description; $('ci-unit').value = i.unitOfMeasure || '';
         $('ci-price').value = i.referencePrice != null ? i.referencePrice : '';
         $('ci-stock').checked = !!i.stockControlled;
+        $('ci-purchasable').checked = i.purchasable !== false;
         $('ci-min').value = i.minimumQty != null ? i.minimumQty : '';
+        loadProductTypes(i.productType || '');
+        $('ci-ca').value = i.caNumber || '';
+        $('ci-fispq-current').innerHTML = i.fispqDocumentId
+          ? `FISPQ anexada: <a href="#" data-doc="${i.fispqDocumentId}" data-act="download-doc">${escapeHtml(i.fispqFileName || 'arquivo')}</a> — envie outra para substituir.`
+          : 'Nenhuma FISPQ anexada ainda.';
         renderItemSuppliers(i.suppliers);
-      } else { $('cat-form').reset(); renderItemSuppliers([]); }
+      } else {
+        $('cat-form').reset(); renderItemSuppliers([]);
+        $('ci-purchasable').checked = true;
+        $('ci-fispq-current').textContent = '';
+        loadProductTypes('');
+      }
     }
     LOADERS['products'] = async () => {
       $('cat-admin').hidden = !canMaintainCatalog();
-      await loadFamilyOptions();
+      await Promise.all([loadFamilyOptions(), loadProductTypes()]);
       try {
         const family = $('cat-filter-family').value;
         const { items } = await api('/api/v1/items/?all=true' + (family ? '&family=' + encodeURIComponent(family) : ''));
@@ -1983,15 +2043,19 @@
           families.map(f => `<option value="${escapeHtml(f)}" ${f === current ? 'selected' : ''}>${escapeHtml(f)}</option>`).join('');
         $('cat-families').innerHTML = families.map(f => `<option value="${escapeHtml(f)}">`).join('');
         $('cat-list').innerHTML = items.length
-          ? '<table><thead><tr><th>Código</th><th>Produto</th><th>Família</th><th>Almoxarifado</th><th>Fornecedores</th><th>Preço ref.</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+          ? '<table><thead><tr><th>Código</th><th>Produto</th><th>Família</th><th>Uso</th><th>Tipo / conformidade</th><th>Fornecedores</th><th>Preço ref.</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
             items.map(i => `
               <tr data-id="${i.id}">
                 <td>${escapeHtml(i.code)}</td>
                 <td>${escapeHtml(i.description)}<div class="sub">${escapeHtml(i.unitOfMeasure)}</div></td>
                 <td>${escapeHtml(i.family)}</td>
-                <td>${i.stockControlled
-                    ? `<span class="badge on">ESTOQUE</span>${i.minimumQty != null ? `<div class="sub">mín. ${i.minimumQty}</div>` : ''}`
-                    : '<span class="sub">compra direta</span>'}</td>
+                <td>${[i.stockControlled ? '<span class="badge on">ESTOQUE</span>' : '',
+                       i.purchasable !== false ? '<span class="badge">COMPRA</span>' : ''].join(' ')}
+                    ${i.stockControlled && i.minimumQty != null ? `<div class="sub">mín. ${i.minimumQty}</div>` : ''}</td>
+                <td><div class="sub">${escapeHtml(i.productTypeLabel || '—')}</div>
+                    ${i.caNumber ? `<div class="sub">C.A. ${escapeHtml(i.caNumber)}</div>` : ''}
+                    ${i.fispqDocumentId ? `<div class="sub">📎 <a href="#" data-doc="${i.fispqDocumentId}" data-act="download-doc">FISPQ</a></div>` : ''}
+                    ${i.compliancePending ? '<div class="sub" style="color:var(--s5)">⚠ pendência de conformidade</div>' : ''}</td>
                 <td><div class="sub">${(i.suppliers || []).map(x => escapeHtml(x.supplierName)).join(' · ') || '—'}</div></td>
                 <td>${i.referencePrice != null ? money(i.referencePrice) : '—'}</td>
                 <td><span class="badge ${i.active ? 'on' : 'off'}">${i.active ? 'ATIVO' : 'INATIVO'}</span></td>
@@ -2003,6 +2067,17 @@
     };
     $('cat-filter-family').addEventListener('change', () => LOADERS['products']());
     $('ci-add-sup').addEventListener('click', () => $('ci-suppliers').appendChild(itemSupplierRow()));
+    $('ci-type').addEventListener('change', applyTypeRules);
+    $('cat-list').addEventListener('click', async (ev) => {
+      const link = ev.target.closest('a[data-act="download-doc"]');
+      if (!link) return;
+      ev.preventDefault();
+      try {
+        const res = await fetch('/api/v1/documents/' + link.dataset.doc, { headers: { Authorization: 'Bearer ' + store.access } });
+        if (!res.ok) throw new Error('Falha ao baixar o documento.');
+        window.open(URL.createObjectURL(await res.blob()), '_blank');
+      } catch (err) { toast(err.message, 'error'); }
+    });
     $('cat-form-cancel').addEventListener('click', () => setCatFormMode(null));
     $('cat-list').addEventListener('click', async (ev) => {
       const btn = ev.target.closest('button[data-act]');
@@ -2023,15 +2098,26 @@
       ev.preventDefault();
       try {
         const stockControlled = $('ci-stock').checked;
+        const purchasable = $('ci-purchasable').checked;
         const minimumQty = $('ci-min').value ? parseFloat($('ci-min').value) : null;
         const suppliers = collectItemSuppliers();
+        const productType = $('ci-type').value || null;
+        const caNumber = $('ci-ca').value || null;
+        const fispqFile = $('ci-fispq').files[0];
+        const typeInfo = productTypes.find(x => x.key === productType);
+        if (typeInfo && typeInfo.requiresFispq && !fispqFile && !(editingCatId && catCache[editingCatId] && catCache[editingCatId].fispqDocumentId)) {
+          toast('Produto químico exige a FISPQ anexada.', 'error');
+          return;
+        }
         if (editingCatId) {
           await api('/api/v1/items/' + editingCatId, { method: 'PATCH', body: {
             description: $('ci-desc').value, family: $('ci-family').value,
             unitOfMeasure: $('ci-unit').value || null,
             referencePrice: $('ci-price').value ? parseFloat($('ci-price').value) : null,
-            stockControlled, minimumQty, clearMinimum: minimumQty === null, suppliers,
+            stockControlled, purchasable, minimumQty, clearMinimum: minimumQty === null, suppliers,
+            productType, caNumber,
           }});
+          if (fispqFile) await uploadFispq(editingCatId, fispqFile);
           toast('Produto atualizado.', 'ok');
           setCatFormMode(null);
         } else {
@@ -2039,8 +2125,9 @@
             code: $('ci-code').value || null, description: $('ci-desc').value, family: $('ci-family').value,
             unitOfMeasure: $('ci-unit').value || null,
             referencePrice: $('ci-price').value ? parseFloat($('ci-price').value) : null,
-            stockControlled, minimumQty, suppliers,
+            stockControlled, purchasable, minimumQty, suppliers, productType, caNumber,
           }});
+          if (fispqFile) await uploadFispq(created.id, fispqFile);
           toast(`Produto ${created.code} adicionado ao catálogo.`, 'ok');
           const keepFamily = $('ci-family').value;
           ev.target.reset();

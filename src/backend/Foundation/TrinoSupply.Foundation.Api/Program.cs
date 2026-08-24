@@ -279,7 +279,7 @@ static Actor? BuildActor(ClaimsPrincipal p)
     return actor.CanAccessModule ? actor : null;
 }
 
-static object PrView(PurchaseRequisition r) => new
+static object PrView(PurchaseRequisition r, ApproverHint? approver = null) => new
 {
     id = r.Id,
     number = r.Number,
@@ -307,6 +307,9 @@ static object PrView(PurchaseRequisition r) => new
     totalEstimatedValue = r.TotalEstimatedValue,
     decisionReason = r.DecisionReason,
     decidedByLabel = r.DecidedByLabel,
+    approverLabel = approver?.ApproverLabel,
+    approvalIssue = approver?.Issue,
+    assignedToLabel = r.AssignedToLabel,
     decidedAt = r.DecidedAt,
     submittedAt = r.SubmittedAt,
     items = r.Items.OrderBy(i => i.Sequence).Select(i => new
@@ -349,7 +352,9 @@ prs.MapGet("/", async (RequisitionService svc, ClaimsPrincipal p, HttpContext ct
         "CANCELLED" => RequisitionStatus.Cancelled,
         _ => null,
     };
-    return Ok(new { items = (await svc.ListAsync(actor, filter)).Select(PrView) }, ctx);
+    var items = await svc.ListAsync(actor, filter);
+    var hints = await svc.ApproverHintsAsync(items);
+    return Ok(new { items = items.Select(r => PrView(r, svc.HintFor(hints, r))) }, ctx);
 });
 
 prs.MapGet("/{id:guid}", async (Guid id, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
@@ -442,11 +447,13 @@ app.MapGet("/api/v1/approvals/pending", async (RequisitionService svc, ClaimsPri
 {
     if (BuildActor(p) is not { CanDecide: true } actor)
         return Error(ctx, 403, "PR-ERR-001", "Seu papel não possui fila de aprovação.");
-    return Ok(new { items = (await svc.PendingApprovalsAsync(actor)).Select(PrView) }, ctx);
+    var pending = await svc.PendingApprovalsAsync(actor);
+    var hints = await svc.ApproverHintsAsync(pending);
+    return Ok(new { items = pending.Select(r => PrView(r, svc.HintFor(hints, r))) }, ctx);
 }).RequireAuthorization().AddEndpointFilter(RequireModules(AppModules.Aprovacao));
 
 // ---- Dashboard — central de avisos (atrasos, aprovações, fila, demandas) -----
-app.MapGet("/api/v1/dashboard", async (AppDbContext db, ClaimsPrincipal p, HttpContext ctx, TimeProvider clock) =>
+app.MapGet("/api/v1/dashboard", async (AppDbContext db, RequisitionService prSvc, ClaimsPrincipal p, HttpContext ctx, TimeProvider clock) =>
 {
     var role = RoleOf(p);
     var uid = ActorId(p);
@@ -470,16 +477,29 @@ app.MapGet("/api/v1/dashboard", async (AppDbContext db, ClaimsPrincipal p, HttpC
         });
     }
 
-    // Fila de aprovação (para quem decide)
+    // Fila de aprovação (para quem decide) — mesma alçada por CC da Central de Aprovação
     if (mods.Contains(AppModules.Aprovacao) && actor.CanDecide)
     {
-        var pending = await db.Requisitions.CountAsync(r =>
-            r.Status == RequisitionStatus.InApproval && r.RequesterId != uid);
+        var pending = (await prSvc.PendingApprovalsAsync(actor)).Count;
         if (pending > 0) alerts.Add(new
         {
             kind = "APROVACAO", severity = "media", count = pending, view = "pr-approvals",
             text = $"{pending} pedido(s) aguardando a sua aprovação.",
         });
+
+        // SCs represadas em centros de custo sem gerente vinculado (ninguém recebe a tarefa)
+        if (role is Roles.SupplyManager or Roles.SystemAdministrator)
+        {
+            var ccWithManager = await db.CostCenters.Where(c => c.Active && c.ManagerUserId != null)
+                .Select(c => c.Code.ToUpper()).ToListAsync();
+            var orphan = await db.Requisitions.CountAsync(r => r.DeletedAt == null
+                && r.Status == RequisitionStatus.InApproval && !ccWithManager.Contains(r.CostCenter.ToUpper()));
+            if (orphan > 0) alerts.Add(new
+            {
+                kind = "SEM_APROVADOR", severity = "alta", count = orphan, view = "pr-approvals",
+                text = $"{orphan} solicitação(ões) em centro de custo sem gerente vinculado — defina o responsável em Cadastros → Centros de Custo.",
+            });
+        }
     }
 
     // Meus pedidos aguardando aprovação / devolvidos para ajuste

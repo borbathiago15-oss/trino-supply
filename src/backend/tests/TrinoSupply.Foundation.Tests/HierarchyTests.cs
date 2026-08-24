@@ -236,6 +236,57 @@ public class HierarchyTests
         Assert.Equal("CC-ERR-014", badCompany!.Code);
     }
 
+    // ---- continuidade do fluxo: nenhuma SC fica órfã de aprovador -------------
+
+    [Fact]
+    public async Task Sc_de_cc_sem_gerente_aparece_para_qualquer_aprovador()
+    {
+        var w = await BuildAsync();
+        // CC novo, sem gerente vinculado
+        w.Db.CostCenters.Add(new CostCenter { Code = "BAH-002", Name = "Contrato sem gerente", Region = "BAHIA", CreatedBy = w.Gustavo.Id });
+        await w.Db.SaveChangesAsync();
+
+        var livre = new Actor(Guid.NewGuid(), "Livre", Roles.Requester);
+        w.Db.Users.Add(MakeUser(livre));
+        await w.Db.SaveChangesAsync();
+
+        var (pr, _) = await w.Prs.CreateAsync(livre, "Viagem de acompanhamento contratual", "BAH-002", "NORMAL", null,
+            [new ItemInput("Passagem aérea", 1, "UN", 1200, null)]);
+        await w.Prs.SubmitAsync(livre, pr!.Id);
+
+        // Thiago gerencia PBA-001, mas o CC órfão não pode sumir da fila dele
+        var fila = await w.Prs.PendingApprovalsAsync(w.Pleno);
+        Assert.Contains(fila, r => r.Id == pr.Id);
+
+        var (approved, error) = await w.Prs.ApproveAsync(w.Pleno, pr.Id, null);
+        Assert.Null(error);
+        Assert.Equal(RequisitionStatus.Approved, approved!.Status);
+    }
+
+    [Fact]
+    public async Task Pedido_informa_quem_precisa_aprovar_e_o_impedimento()
+    {
+        var w = await BuildAsync();
+        w.Db.CostCenters.Add(new CostCenter { Code = "BAH-002", Name = "Contrato sem gerente", Region = "BAHIA", CreatedBy = w.Gustavo.Id });
+        await w.Db.SaveChangesAsync();
+
+        var (comGerente, _) = await CreatePrAsync(w, w.Junior, "PBA-001");
+        var livre = new Actor(Guid.NewGuid(), "Livre", Roles.Requester);
+        w.Db.Users.Add(MakeUser(livre));
+        await w.Db.SaveChangesAsync();
+        var (semGerente, _) = await w.Prs.CreateAsync(livre, "Viagem", "BAH-002", "NORMAL", null,
+            [new ItemInput("Passagem aérea", 1, "UN", 1200, null)]);
+
+        var hints = await w.Prs.ApproverHintsAsync([comGerente!, semGerente!]);
+        var comHint = w.Prs.HintFor(hints, comGerente!);
+        Assert.Equal(w.Pleno.Label, comHint.ApproverLabel);
+        Assert.Null(comHint.Issue);
+
+        var semHint = w.Prs.HintFor(hints, semGerente!);
+        Assert.Null(semHint.ApproverLabel);
+        Assert.Contains("gerente", semHint.Issue!, StringComparison.OrdinalIgnoreCase);
+    }
+
     [Fact]
     public async Task Edicao_de_empresa_atualiza_dados_mantendo_cnpj()
     {

@@ -19,6 +19,9 @@ public record Actor(Guid Id, string Label, string Role)
     public bool CanAccessModule => CanCreate || CanDecide || Role is Roles.Auditor or Roles.PurchasingOfficer;
 }
 
+/// <summary>Quem aprova a SC (gerente do CC) e o impedimento, quando houver.</summary>
+public record ApproverHint(Guid? ApproverId, string? ApproverLabel, string? Issue);
+
 public record ItemInput(string Description, decimal Quantity, string? UnitOfMeasure, decimal? EstimatedUnitPrice, string? Notes, Guid? CatalogItemId = null);
 
 /// <summary>
@@ -54,7 +57,15 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         await db.CostCenters.Where(c => c.ManagerUserId == userId && c.Active)
             .Select(c => c.Code).ToListAsync(ct);
 
-    /// <summary>Fila de aprovação: IN_APPROVAL, exceto as próprias (SoD); gerente com CCs vinculados vê só os seus.</summary>
+    /// <summary>Centros de custo que já têm um gerente responsável ativo (código em caixa alta).</summary>
+    private async Task<List<string>> CostCentersWithManagerAsync(CancellationToken ct = default) =>
+        await db.CostCenters.Where(c => c.Active && c.ManagerUserId != null)
+            .Select(c => c.Code.ToUpper()).ToListAsync(ct);
+
+    /// <summary>
+    /// Fila de aprovação: IN_APPROVAL, exceto as próprias (SoD); gerente com CCs vinculados vê os seus
+    /// e também os centros de custo sem gerente responsável — nenhuma SC pode ficar órfã de aprovador.
+    /// </summary>
     public async Task<List<PurchaseRequisition>> PendingApprovalsAsync(Actor actor, CancellationToken ct = default)
     {
         var query = db.Requisitions.Include(r => r.Items)
@@ -62,19 +73,58 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         if (actor.Role == Roles.Approver)
         {
             var managed = await ManagedCostCentersAsync(actor.Id, ct);
-            if (managed.Count > 0) query = query.Where(r => managed.Contains(r.CostCenter.ToUpper()));
+            if (managed.Count > 0)
+            {
+                var withManager = await CostCentersWithManagerAsync(ct);
+                query = query.Where(r => managed.Contains(r.CostCenter.ToUpper())
+                                         || !withManager.Contains(r.CostCenter.ToUpper()));
+            }
         }
         return await query.OrderBy(r => r.SubmittedAt).Take(100).ToListAsync(ct);
     }
 
-    /// <summary>Gerente (Approver) com CCs vinculados só decide SCs desses CCs.</summary>
+    /// <summary>
+    /// Quem deve aprovar cada SC e o que está travando: usado para mostrar "aguardando aprovação de X"
+    /// e para avisar quando o centro de custo não tem gerente vinculado (SC sem aprovador definido).
+    /// </summary>
+    public async Task<Dictionary<string, ApproverHint>> ApproverHintsAsync(
+        IEnumerable<PurchaseRequisition> requisitions, CancellationToken ct = default)
+    {
+        var codes = requisitions.Select(r => r.CostCenter.Trim().ToUpperInvariant()).Distinct().ToList();
+        if (codes.Count == 0) return [];
+        var managers = await db.CostCenters
+            .Where(c => c.Active && codes.Contains(c.Code.ToUpper()))
+            .Select(c => new { c.Code, c.ManagerUserId, c.ManagerName })
+            .ToListAsync(ct);
+        return codes.ToDictionary(code => code, code =>
+        {
+            var cc = managers.FirstOrDefault(m => m.Code.ToUpperInvariant() == code);
+            if (cc is null)
+                return new ApproverHint(null, null, "Centro de custo não cadastrado: a aprovação fica com o Gestor de Suprimentos.");
+            if (cc.ManagerUserId is null)
+                return new ApproverHint(null, null, "Nenhum gerente vinculado a este centro de custo — vincule em Cadastros → Centros de Custo.");
+            return new ApproverHint(cc.ManagerUserId, cc.ManagerName, null);
+        });
+    }
+
+    public ApproverHint HintFor(Dictionary<string, ApproverHint> hints, PurchaseRequisition pr) =>
+        hints.TryGetValue(pr.CostCenter.Trim().ToUpperInvariant(), out var hint) ? hint : new(null, null, null);
+
+    /// <summary>
+    /// Gerente (Approver) com CCs vinculados só decide SCs desses CCs — exceto centros de custo
+    /// sem gerente responsável, que qualquer aprovador pode decidir (senão a SC fica órfã).
+    /// </summary>
     private async Task<UserError?> CheckApprovalScopeAsync(Actor actor, PurchaseRequisition pr, CancellationToken ct)
     {
         if (actor.Role != Roles.Approver) return null;
         var managed = await ManagedCostCentersAsync(actor.Id, ct);
-        if (managed.Count > 0 && !managed.Contains(pr.CostCenter.ToUpperInvariant()))
-            return new("PR-ERR-002", "Este centro de custo não está vinculado à sua alçada de aprovação.");
-        return null;
+        if (managed.Count == 0 || managed.Contains(pr.CostCenter.ToUpperInvariant())) return null;
+
+        var hasManager = await db.CostCenters.AnyAsync(
+            c => c.Active && c.ManagerUserId != null && c.Code.ToUpper() == pr.CostCenter.ToUpper(), ct);
+        return hasManager
+            ? new("PR-ERR-002", "Este centro de custo não está vinculado à sua alçada de aprovação.")
+            : null;
     }
 
     // ---- ciclo de vida ------------------------------------------------------

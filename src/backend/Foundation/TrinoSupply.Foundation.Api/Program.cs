@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using TrinoSupply.Foundation.Api.Auth;
+using TrinoSupply.Foundation.Api.Catalog;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Infrastructure;
 using TrinoSupply.Foundation.Api.Procurement;
@@ -38,6 +39,7 @@ builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<IPrNumberGenerator, PostgresPrNumberGenerator>();
+builder.Services.AddScoped<CatalogService>();
 builder.Services.AddScoped<RequisitionService>();
 
 builder.Services.AddDbContext<AppDbContext>(o =>
@@ -181,6 +183,51 @@ users.MapPost("/{id:guid}/reset-password", async (Guid id, ResetPasswordRequest 
         : Ok(new { message = "Senha redefinida. As sessões do usuário foram encerradas." }, ctx);
 });
 
+// ---- MMS-002 — Catálogo de Itens (MVP: famílias + itens) ---------------------
+static object CatalogView(CatalogItem i) => new
+{
+    id = i.Id, code = i.Code, description = i.Description, family = i.Family,
+    unitOfMeasure = i.UnitOfMeasure, referencePrice = i.ReferencePrice, active = i.Active,
+};
+
+var catalogGroup = app.MapGroup("/api/v1/items").RequireAuthorization();
+
+catalogGroup.MapGet("/families", async (CatalogService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = p.FindFirstValue(ClaimTypes.Role) ?? "";
+    return Ok(new { families = await svc.FamiliesAsync(onlyActive: !CatalogService.CanMaintain(role)) }, ctx);
+});
+
+catalogGroup.MapGet("/", async (CatalogService svc, ClaimsPrincipal p, HttpContext ctx, string? family, string? q, bool? all) =>
+{
+    var role = p.FindFirstValue(ClaimTypes.Role) ?? "";
+    var includeInactive = all == true && CatalogService.CanMaintain(role);
+    var items = await svc.ListAsync(family, q, includeInactive);
+    return Ok(new { items = items.Select(CatalogView) }, ctx);
+});
+
+catalogGroup.MapPost("/", async (CreateCatalogItemRequest body, CatalogService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = p.FindFirstValue(ClaimTypes.Role) ?? "";
+    if (!CatalogService.CanMaintain(role))
+        return Error(ctx, 403, "IC-ERR-001", "Somente o gestor de suprimentos ou o administrador mantêm o catálogo.");
+    var (item, error) = await svc.CreateAsync(ActorId(p), body.Code, body.Description, body.Family, body.UnitOfMeasure, body.ReferencePrice);
+    return error is not null
+        ? Error(ctx, error.Code == "IC-ERR-010" ? 409 : 400, error.Code, error.Message)
+        : Results.Json(new { data = CatalogView(item!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+catalogGroup.MapPatch("/{id:guid}", async (Guid id, UpdateCatalogItemRequest body, CatalogService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = p.FindFirstValue(ClaimTypes.Role) ?? "";
+    if (!CatalogService.CanMaintain(role))
+        return Error(ctx, 403, "IC-ERR-001", "Somente o gestor de suprimentos ou o administrador mantêm o catálogo.");
+    var (item, error) = await svc.UpdateAsync(id, body.Description, body.Family, body.UnitOfMeasure, body.ReferencePrice, body.Active);
+    return error is not null
+        ? Error(ctx, error.Code == "IC-ERR-404" ? 404 : 400, error.Code, error.Message)
+        : Ok(CatalogView(item!), ctx);
+});
+
 // ---- PR-001 — Requisição de Compra (MVP conforme PR-001-03/13) --------------
 static Actor? BuildActor(ClaimsPrincipal p)
 {
@@ -196,6 +243,7 @@ static object PrView(PurchaseRequisition r) => new
 {
     id = r.Id,
     number = r.Number,
+    kind = r.Kind,
     status = r.Status switch
     {
         RequisitionStatus.Draft => "DRAFT",
@@ -222,6 +270,7 @@ static object PrView(PurchaseRequisition r) => new
     items = r.Items.OrderBy(i => i.Sequence).Select(i => new
     {
         itemId = i.Id, sequence = i.Sequence, description = i.Description,
+        catalogCode = i.CatalogCode,
         quantity = i.Quantity, unitOfMeasure = i.UnitOfMeasure,
         estimatedUnitPrice = i.EstimatedUnitPrice,
         estimatedTotal = i.Quantity * (i.EstimatedUnitPrice ?? 0),
@@ -271,8 +320,8 @@ prs.MapPost("/", async (CreateRequisitionRequest body, RequisitionService svc, C
 {
     if (BuildActor(p) is not { CanCreate: true } actor)
         return Error(ctx, 403, "PR-ERR-001", "Seu papel não cria requisições.");
-    var items = (body.Items ?? []).Select(i => new ItemInput(i.Description, i.Quantity, i.UnitOfMeasure, i.EstimatedUnitPrice, i.Notes)).ToList();
-    var (pr, error) = await svc.CreateAsync(actor, body.Justification, body.CostCenter, body.Priority, body.NeededBy, items);
+    var items = (body.Items ?? []).Select(i => new ItemInput(i.Description ?? "", i.Quantity, i.UnitOfMeasure, i.EstimatedUnitPrice, i.Notes, i.CatalogItemId)).ToList();
+    var (pr, error) = await svc.CreateAsync(actor, body.Justification, body.CostCenter, body.Priority, body.NeededBy, items, body.Kind);
     return error is not null ? PrError(ctx, error)
         : Results.Json(new { data = PrView(pr!), correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
@@ -308,7 +357,7 @@ prs.MapPost("/{id:guid}/cancel", async (Guid id, ReasonRequest body, Requisition
 prs.MapPost("/{id:guid}/items", async (Guid id, ItemRequest body, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
 {
     if (BuildActor(p) is not { } actor) return Error(ctx, 403, "PR-ERR-001", "Seu papel não acessa o módulo de requisições.");
-    var (pr, error) = await svc.AddItemAsync(actor, id, new ItemInput(body.Description, body.Quantity, body.UnitOfMeasure, body.EstimatedUnitPrice, body.Notes));
+    var (pr, error) = await svc.AddItemAsync(actor, id, new ItemInput(body.Description ?? "", body.Quantity, body.UnitOfMeasure, body.EstimatedUnitPrice, body.Notes, body.CatalogItemId));
     return error is not null ? PrError(ctx, error)
         : Results.Json(new { data = PrView(pr!), correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
@@ -370,8 +419,10 @@ public record RefreshRequest(string RefreshToken);
 public record CreateUserRequest(string Email, string Name, string Role, string Password);
 public record UpdateUserRequest(string? Name, string? Role, bool? Active);
 public record ResetPasswordRequest(string NewPassword);
-public record ItemRequest(string Description, decimal Quantity, string? UnitOfMeasure, decimal? EstimatedUnitPrice, string? Notes);
-public record CreateRequisitionRequest(string Justification, string CostCenter, string? Priority, DateOnly? NeededBy, List<ItemRequest>? Items);
+public record ItemRequest(string? Description, decimal Quantity, string? UnitOfMeasure, decimal? EstimatedUnitPrice, string? Notes, Guid? CatalogItemId);
+public record CreateRequisitionRequest(string Justification, string CostCenter, string? Priority, DateOnly? NeededBy, List<ItemRequest>? Items, string? Kind);
+public record CreateCatalogItemRequest(string Code, string Description, string Family, string? UnitOfMeasure, decimal? ReferencePrice);
+public record UpdateCatalogItemRequest(string? Description, string? Family, string? UnitOfMeasure, decimal? ReferencePrice, bool? Active);
 public record UpdateRequisitionRequest(string? Justification, string? CostCenter, string? Priority, DateOnly? NeededBy, bool? ClearNeededBy);
 public record ReasonRequest(string? Reason);
 public record DecisionRequest(string? Reason, string? Comments);

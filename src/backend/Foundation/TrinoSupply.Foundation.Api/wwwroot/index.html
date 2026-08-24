@@ -134,6 +134,13 @@
 
         <form id="pr-form" hidden>
           <h2 id="pr-form-title">Nova requisição</h2>
+
+          <label>Tipo de requisição</label>
+          <div class="modules" style="margin-bottom:6px">
+            <label class="module" style="cursor:pointer"><span><input type="radio" name="pr-kind" value="AVULSA" checked /> <strong>Avulsa</strong> — digito os itens livremente</span></label>
+            <label class="module" style="cursor:pointer"><span><input type="radio" name="pr-kind" value="CATALOGO" /> <strong>Por família (catálogo)</strong> — escolho vários itens de uma lista (ex.: Material de Limpeza)</span></label>
+          </div>
+
           <div class="grid2">
             <div><label for="pr-cc">Centro de custo</label><input id="pr-cc" required placeholder="ex.: CC-TI-001" /></div>
             <div>
@@ -151,11 +158,49 @@
           <label for="pr-just">Justificativa</label>
           <input id="pr-just" required placeholder="Por que esta compra é necessária?" />
 
-          <h2>Itens</h2>
-          <div id="pr-items"></div>
-          <button id="pr-add-item" class="secondary" type="button">+ Adicionar item</button>
+          <div id="pr-free-block">
+            <h2>Itens</h2>
+            <div id="pr-items"></div>
+            <button id="pr-add-item" class="secondary" type="button">+ Adicionar item</button>
+          </div>
+
+          <div id="pr-cat-block" hidden>
+            <h2>Itens da família</h2>
+            <label for="pr-family">Família</label>
+            <select id="pr-family"></select>
+            <div id="pr-cat-list" style="margin-top:10px"></div>
+          </div>
+
           <button type="submit" class="full">Salvar rascunho</button>
           <button id="pr-form-cancel" class="secondary full" type="button" style="margin-top:8px">Voltar</button>
+        </form>
+      </section>
+
+      <section id="catalog-view" hidden>
+        <h2>Catálogo de Itens</h2>
+        <div id="cat-msg" class="msg" role="alert" aria-live="polite"></div>
+        <div class="toolbar">
+          <select id="cat-filter-family"><option value="">Todas as famílias</option></select>
+          <button id="cat-refresh" class="secondary" type="button">Atualizar</button>
+        </div>
+        <table aria-label="Itens do catálogo">
+          <thead><tr><th>Código</th><th>Descrição</th><th>Família</th><th>Preço ref.</th><th>Situação</th><th>Ações</th></tr></thead>
+          <tbody id="cat-body"></tbody>
+        </table>
+
+        <h2>Novo item do catálogo</h2>
+        <form id="cat-form">
+          <div class="grid2">
+            <div><label for="ci-code">Código</label><input id="ci-code" required minlength="2" placeholder="ex.: LMP-001" /></div>
+            <div><label for="ci-family">Família</label><input id="ci-family" required minlength="3" list="cat-families" placeholder="ex.: MATERIAL DE LIMPEZA" /></div>
+            <div><label for="ci-desc">Descrição</label><input id="ci-desc" required minlength="3" placeholder="ex.: Detergente neutro 500ml" /></div>
+            <div class="grid2">
+              <div><label for="ci-unit">Unidade</label><input id="ci-unit" placeholder="UN" /></div>
+              <div><label for="ci-price">Preço ref. (R$)</label><input id="ci-price" type="number" min="0" step="0.01" placeholder="opcional" /></div>
+            </div>
+          </div>
+          <datalist id="cat-families"></datalist>
+          <button type="submit" class="full">Adicionar ao catálogo</button>
         </form>
       </section>
 
@@ -234,11 +279,14 @@
       $('user-name').textContent = user.name || user.email;
       $('user-role').textContent = '(' + (ROLE_LABELS[user.role] || user.role) + ')';
       const isAdmin = user.role === 'SystemAdministrator';
+      const canMaintainCatalog = ['SupplyManager', 'SystemAdministrator'].includes(user.role);
       $('admin-view').hidden = !isAdmin;
+      $('catalog-view').hidden = !canMaintainCatalog;
       const hasPr = canAccessPr(user.role);
       $('pr-view').hidden = !hasPr;
-      $('card').classList.toggle('wide', isAdmin || hasPr);
+      $('card').classList.toggle('wide', isAdmin || hasPr || canMaintainCatalog);
       if (isAdmin) loadUsers();
+      if (canMaintainCatalog) loadCatalog();
       if (hasPr) {
         $('pr-new').hidden = !canCreatePr(user.role);
         $('pr-tab-appr').hidden = !canDecidePr(user.role);
@@ -380,9 +428,10 @@
         items.map(r => {
           const [label, cls] = STATUS_PR[r.status] || [r.status, ''];
           const reason = r.decisionReason ? `<div class="sub">Motivo: ${escapeHtml(r.decisionReason)} (${escapeHtml(r.decidedByLabel || '')})</div>` : '';
-          const itemsTxt = r.items.map(i => `${i.quantity}× ${escapeHtml(i.description)}`).join(' · ');
+          const itemsTxt = r.items.map(i => `${i.quantity}× ${i.catalogCode ? '[' + escapeHtml(i.catalogCode) + '] ' : ''}${escapeHtml(i.description)}`).join(' · ');
+          const kindTag = r.kind === 'CATALOGO' ? ' · catálogo' : '';
           return `<tr data-id="${r.id}">
-            <td>${escapeHtml(r.number)}<div class="sub">${prTab === 'appr' ? escapeHtml(r.requesterLabel) : 'ciclo ' + r.cycle}</div></td>
+            <td>${escapeHtml(r.number)}<div class="sub">${(prTab === 'appr' ? escapeHtml(r.requesterLabel) : 'ciclo ' + r.cycle) + kindTag}</div></td>
             <td>${escapeHtml(r.justification)}<div class="sub">${itemsTxt}</div><div class="sub">CC: ${escapeHtml(r.costCenter)}${r.neededBy ? ' · até ' + r.neededBy : ''}</div>${reason}</td>
             <td>${money(r.totalEstimatedValue)}</td>
             <td><span class="badge ${cls}">${label}</span></td>
@@ -440,26 +489,122 @@
       $('pr-items').innerHTML = '';
       $('pr-items').appendChild(itemRow());
       $('pr-form').reset && $('pr-form').reset();
+      applyKind();
     });
     $('pr-add-item').addEventListener('click', () => $('pr-items').appendChild(itemRow()));
     $('pr-form-cancel').addEventListener('click', () => { $('pr-form').hidden = true; $('pr-list').hidden = false; });
 
+    // ---- modo por família (catálogo) ----
+    const prKind = () => document.querySelector('input[name="pr-kind"]:checked')?.value || 'AVULSA';
+    document.querySelectorAll('input[name="pr-kind"]').forEach(r => r.addEventListener('change', applyKind));
+
+    async function applyKind() {
+      const catalogMode = prKind() === 'CATALOGO';
+      $('pr-free-block').hidden = catalogMode;
+      $('pr-cat-block').hidden = !catalogMode;
+      if (catalogMode) {
+        const { families } = await api('/api/v1/items/families');
+        $('pr-family').innerHTML = families.length
+          ? families.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('')
+          : '<option value="">(catálogo vazio — peça ao gestor para cadastrar itens)</option>';
+        loadFamilyItems();
+      }
+    }
+
+    $('pr-family').addEventListener('change', loadFamilyItems);
+
+    async function loadFamilyItems() {
+      const family = $('pr-family').value;
+      if (!family) { $('pr-cat-list').innerHTML = ''; return; }
+      const { items } = await api('/api/v1/items/?family=' + encodeURIComponent(family));
+      $('pr-cat-list').innerHTML = '<table aria-label="Itens da família"><thead><tr><th></th><th>Item</th><th>Unid.</th><th>Preço ref.</th><th>Qtd</th></tr></thead><tbody>' +
+        items.map(i => `
+          <tr class="cat-pick" data-id="${i.id}">
+            <td><input type="checkbox" class="cp-check" aria-label="Selecionar ${escapeHtml(i.description)}" /></td>
+            <td>${escapeHtml(i.description)}<div class="sub">${escapeHtml(i.code)}</div></td>
+            <td>${escapeHtml(i.unitOfMeasure)}</td>
+            <td>${i.referencePrice != null ? money(i.referencePrice) : '—'}</td>
+            <td><input type="number" class="cp-qty" min="0.01" step="0.01" value="1" style="width:80px" /></td>
+          </tr>`).join('') + '</tbody></table>';
+    }
+
     $('pr-form').addEventListener('submit', async (ev) => {
       ev.preventDefault();
-      const items = [...document.querySelectorAll('.pr-item-row')].map(row => ({
-        description: row.querySelector('.it-desc').value,
-        quantity: parseFloat(row.querySelector('.it-qty').value),
-        estimatedUnitPrice: row.querySelector('.it-price').value ? parseFloat(row.querySelector('.it-price').value) : null,
-      })).filter(i => i.description);
+      const kind = prKind();
+      let items;
+      if (kind === 'CATALOGO') {
+        items = [...document.querySelectorAll('.cat-pick')]
+          .filter(row => row.querySelector('.cp-check').checked)
+          .map(row => ({ catalogItemId: row.dataset.id, quantity: parseFloat(row.querySelector('.cp-qty').value) || 1 }));
+        if (!items.length) { flash($('pr-msg'), 'Marque ao menos um item da lista da família.', 'error'); return; }
+      } else {
+        items = [...document.querySelectorAll('.pr-item-row')].map(row => ({
+          description: row.querySelector('.it-desc').value,
+          quantity: parseFloat(row.querySelector('.it-qty').value),
+          estimatedUnitPrice: row.querySelector('.it-price').value ? parseFloat(row.querySelector('.it-price').value) : null,
+        })).filter(i => i.description);
+      }
       try {
         await api('/api/v1/purchase-requisitions/', { method: 'POST', body: {
           justification: $('pr-just').value, costCenter: $('pr-cc').value,
-          priority: $('pr-priority').value, neededBy: $('pr-needed').value || null, items,
+          priority: $('pr-priority').value, neededBy: $('pr-needed').value || null, items, kind,
         }});
         flash($('pr-msg'), 'Rascunho criado. Revise e clique em "Enviar p/ aprovação".', 'ok');
         $('pr-form').hidden = true; $('pr-list').hidden = false;
         prTab = 'mine'; loadRequisitions();
       } catch (err) { flash($('pr-msg'), err.message || 'Não foi possível criar a requisição.', 'error'); }
+    });
+
+    // ---- manutenção do catálogo (Gestor/Admin) ----
+    async function loadCatalog() {
+      try {
+        const family = $('cat-filter-family').value;
+        const { items } = await api('/api/v1/items/?all=true' + (family ? '&family=' + encodeURIComponent(family) : ''));
+        const { families } = await api('/api/v1/items/families');
+        const current = $('cat-filter-family').value;
+        $('cat-filter-family').innerHTML = '<option value="">Todas as famílias</option>' +
+          families.map(f => `<option value="${escapeHtml(f)}" ${f === current ? 'selected' : ''}>${escapeHtml(f)}</option>`).join('');
+        $('cat-families').innerHTML = families.map(f => `<option value="${escapeHtml(f)}">`).join('');
+        $('cat-body').innerHTML = items.map(i => `
+          <tr data-id="${i.id}">
+            <td>${escapeHtml(i.code)}</td>
+            <td>${escapeHtml(i.description)}<div class="sub">${escapeHtml(i.unitOfMeasure)}</div></td>
+            <td>${escapeHtml(i.family)}</td>
+            <td>${i.referencePrice != null ? money(i.referencePrice) : '—'}</td>
+            <td><span class="badge ${i.active ? 'on' : 'off'}">${i.active ? 'ATIVO' : 'INATIVO'}</span></td>
+            <td class="row-actions"><button class="${i.active ? 'danger' : 'secondary'}" data-act="toggle">${i.active ? 'Inativar' : 'Reativar'}</button></td>
+          </tr>`).join('');
+      } catch (err) { flash($('cat-msg'), err.message || 'Falha ao carregar o catálogo.', 'error'); }
+    }
+
+    $('cat-refresh').addEventListener('click', loadCatalog);
+    $('cat-filter-family').addEventListener('change', loadCatalog);
+
+    $('cat-body').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act]');
+      if (!btn) return;
+      const row = btn.closest('tr');
+      try {
+        await api('/api/v1/items/' + row.dataset.id, { method: 'PATCH', body: { active: btn.textContent === 'Reativar' } });
+        flash($('cat-msg'), 'Item atualizado.', 'ok');
+        loadCatalog();
+      } catch (err) { flash($('cat-msg'), err.message || 'Operação não permitida.', 'error'); }
+    });
+
+    $('cat-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try {
+        await api('/api/v1/items/', { method: 'POST', body: {
+          code: $('ci-code').value, description: $('ci-desc').value, family: $('ci-family').value,
+          unitOfMeasure: $('ci-unit').value || null,
+          referencePrice: $('ci-price').value ? parseFloat($('ci-price').value) : null,
+        }});
+        flash($('cat-msg'), 'Item adicionado ao catálogo.', 'ok');
+        const keepFamily = $('ci-family').value;
+        ev.target.reset();
+        $('ci-family').value = keepFamily; // facilita cadastrar vários da mesma família
+        loadCatalog();
+      } catch (err) { flash($('cat-msg'), err.message || 'Não foi possível adicionar o item.', 'error'); }
     });
 
     // sessão existente? valida contra /me

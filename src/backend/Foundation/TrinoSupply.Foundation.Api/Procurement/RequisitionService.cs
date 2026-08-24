@@ -19,14 +19,14 @@ public record Actor(Guid Id, string Label, string Role)
     public bool CanAccessModule => CanCreate || CanDecide || Role == Roles.Auditor;
 }
 
-public record ItemInput(string Description, decimal Quantity, string? UnitOfMeasure, decimal? EstimatedUnitPrice, string? Notes);
+public record ItemInput(string Description, decimal Quantity, string? UnitOfMeasure, decimal? EstimatedUnitPrice, string? Notes, Guid? CatalogItemId = null);
 
 /// <summary>
 /// Serviço de domínio do PR-001 (MVP): transições exclusivamente pela máquina de estados
 /// PR-001-03; erros do catálogo PR-ERR (PR-001-13 §5). Aprovação em nível único até o
 /// Workflow Engine (FD-001-04) existir; validação da submissão é síncrona (ST-002/003 transientes).
 /// </summary>
-public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, TimeProvider clock)
+public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Catalog.CatalogService catalog, TimeProvider clock)
 {
     // ---- consulta -----------------------------------------------------------
     public async Task<List<PurchaseRequisition>> ListAsync(Actor actor, RequisitionStatus? status, CancellationToken ct = default)
@@ -56,7 +56,7 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Tim
     // ---- ciclo de vida ------------------------------------------------------
     public async Task<(PurchaseRequisition? pr, UserError? error)> CreateAsync(
         Actor actor, string justification, string costCenter, string? priority, DateOnly? neededBy,
-        IReadOnlyList<ItemInput> items, CancellationToken ct = default)
+        IReadOnlyList<ItemInput> items, string? kind = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(justification))
             return (null, new("PR-ERR-030", "Informe a justificativa da solicitação."));
@@ -65,11 +65,21 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Tim
         priority ??= "NORMAL";
         if (!RequisitionPriorities.All.Contains(priority))
             return (null, new("PR-ERR-030", "Prioridade inválida."));
+        kind = (kind ?? "AVULSA").ToUpperInvariant();
+        if (kind is not ("AVULSA" or "CATALOGO"))
+            return (null, new("PR-ERR-030", "Tipo de requisição inválido (AVULSA ou CATALOGO)."));
+        if (kind == "CATALOGO" && items.Any(i => i.CatalogItemId is null))
+            return (null, new("PR-ERR-030", "Em requisição por catálogo, todos os itens devem vir do catálogo."));
+
+        var (catalogItems, catalogError) = await catalog.ResolveForRequisitionAsync(
+            items.Where(i => i.CatalogItemId is not null).Select(i => i.CatalogItemId!.Value).ToList(), ct);
+        if (catalogError is not null) return (null, catalogError);
 
         var now = clock.GetUtcNow();
         var pr = new PurchaseRequisition
         {
             Number = await numbers.NextAsync(ct),
+            Kind = kind,
             Justification = justification.Trim(),
             CostCenter = costCenter.Trim(),
             Priority = priority,
@@ -82,7 +92,7 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Tim
         var seq = 0;
         foreach (var input in items)
         {
-            var (item, error) = BuildItem(input, ++seq, now);
+            var (item, error) = BuildItem(input, ++seq, now, catalogItems!);
             if (error is not null) return (null, error);
             pr.Items.Add(item!);
         }
@@ -200,7 +210,12 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Tim
     {
         var (pr, error) = await GetEditableAsync(actor, id, ct);
         if (error is not null) return (null, error);
-        var (item, itemError) = BuildItem(input, pr!.Items.Count == 0 ? 1 : pr.Items.Max(i => i.Sequence) + 1, clock.GetUtcNow());
+        if (pr!.Kind == "CATALOGO" && input.CatalogItemId is null)
+            return (null, new("PR-ERR-030", "Esta requisição é por catálogo: adicione itens do catálogo."));
+        var (catalogItems, catalogError) = await catalog.ResolveForRequisitionAsync(
+            input.CatalogItemId is null ? [] : [input.CatalogItemId.Value], ct);
+        if (catalogError is not null) return (null, catalogError);
+        var (item, itemError) = BuildItem(input, pr.Items.Count == 0 ? 1 : pr.Items.Max(i => i.Sequence) + 1, clock.GetUtcNow(), catalogItems!);
         if (itemError is not null) return (null, itemError);
         item!.RequisitionId = pr.Id;
         pr.Items.Add(item);
@@ -253,12 +268,32 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Tim
         return (pr, null);
     }
 
-    private static (RequisitionItem? item, UserError? error) BuildItem(ItemInput input, int sequence, DateTimeOffset now)
+    private static (RequisitionItem? item, UserError? error) BuildItem(
+        ItemInput input, int sequence, DateTimeOffset now, IReadOnlyDictionary<Guid, Catalog.CatalogItem> catalogItems)
     {
-        if (string.IsNullOrWhiteSpace(input.Description) || input.Description.Trim().Length < 3)
-            return (null, new("PR-ERR-030", "Descreva o item (mínimo 3 caracteres)."));
         if (input.Quantity <= 0)
             return (null, new("PR-ERR-010", "A quantidade deve ser maior que zero."));
+
+        // Item do catálogo: snapshot de descrição/unidade/preço na data da solicitação (MMS-002)
+        if (input.CatalogItemId is { } catalogId)
+        {
+            var c = catalogItems[catalogId];
+            return (new RequisitionItem
+            {
+                CatalogItemId = c.Id,
+                CatalogCode = c.Code,
+                Sequence = sequence,
+                Description = c.Description,
+                Quantity = input.Quantity,
+                UnitOfMeasure = c.UnitOfMeasure,
+                EstimatedUnitPrice = input.EstimatedUnitPrice ?? c.ReferencePrice,
+                Notes = input.Notes,
+                CreatedAt = now,
+            }, null);
+        }
+
+        if (string.IsNullOrWhiteSpace(input.Description) || input.Description.Trim().Length < 3)
+            return (null, new("PR-ERR-030", "Descreva o item (mínimo 3 caracteres)."));
         if (input.EstimatedUnitPrice is < 0)
             return (null, new("PR-ERR-030", "O preço estimado não pode ser negativo."));
         return (new RequisitionItem

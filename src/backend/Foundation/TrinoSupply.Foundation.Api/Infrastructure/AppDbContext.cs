@@ -18,6 +18,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Materials.MaterialRequisitionItem> MaterialRequisitionItems => Set<Materials.MaterialRequisitionItem>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<CostCenter> CostCenters => Set<CostCenter>();
+    public DbSet<Company> Companies => Set<Company>();
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
     public DbSet<PurchaseOrderItem> PurchaseOrderItems => Set<PurchaseOrderItem>();
     public DbSet<Quotation> Quotations => Set<Quotation>();
@@ -49,6 +50,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(u => u.PasswordHash).HasColumnName("password_hash").IsRequired();
             e.Property(u => u.Role).HasColumnName("role").HasMaxLength(50).IsRequired();
             e.Property(u => u.Modules).HasColumnName("modules").HasMaxLength(300);
+            e.Property(u => u.CostCenters).HasColumnName("cost_centers").HasMaxLength(2000);
+            e.Property(u => u.DirectorId).HasColumnName("director_id");
             e.Property(u => u.Active).HasColumnName("active");
             e.Property(u => u.CreatedAt).HasColumnName("created_at");
             e.Property(u => u.UpdatedAt).HasColumnName("updated_at");
@@ -235,6 +238,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(c => c.Code).HasColumnName("code").HasMaxLength(60).IsRequired();
             e.Property(c => c.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
             e.Property(c => c.Region).HasColumnName("region").HasMaxLength(120);
+            e.Property(c => c.CompanyId).HasColumnName("company_id");
             e.Property(c => c.ManagerUserId).HasColumnName("manager_user_id");
             e.Property(c => c.ManagerName).HasColumnName("manager_name").HasMaxLength(200);
             e.Property(c => c.ClientName).HasColumnName("client_name").HasMaxLength(200);
@@ -460,6 +464,28 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(d => d.UploadedByLabel).HasColumnName("uploaded_by_label").HasMaxLength(200);
             e.Property(d => d.UploadedAt).HasColumnName("uploaded_at");
             e.HasIndex(d => new { d.EntityType, d.EntityId });
+        });
+
+        modelBuilder.Entity<Company>(e =>
+        {
+            e.ToTable("company"); // schema foundation — CNPJs do grupo
+            e.HasKey(c => c.Id);
+            e.Property(c => c.Id).HasColumnName("id");
+            e.Property(c => c.LegalName).HasColumnName("legal_name").HasMaxLength(300).IsRequired();
+            e.Property(c => c.TaxId).HasColumnName("tax_id").HasMaxLength(14).IsRequired();
+            e.Property(c => c.StateRegistration).HasColumnName("state_registration").HasMaxLength(30);
+            e.Property(c => c.Address).HasColumnName("address").HasMaxLength(300);
+            e.Property(c => c.District).HasColumnName("district").HasMaxLength(200);
+            e.Property(c => c.City).HasColumnName("city").HasMaxLength(120);
+            e.Property(c => c.State).HasColumnName("state").HasMaxLength(2);
+            e.Property(c => c.Zip).HasColumnName("zip").HasMaxLength(10);
+            e.Property(c => c.Phone).HasColumnName("phone").HasMaxLength(40);
+            e.Property(c => c.Email).HasColumnName("email").HasMaxLength(320);
+            e.Property(c => c.Active).HasColumnName("active");
+            e.Property(c => c.CreatedAt).HasColumnName("created_at");
+            e.Property(c => c.UpdatedAt).HasColumnName("updated_at");
+            e.Property(c => c.Version).HasColumnName("version");
+            e.HasIndex(c => c.TaxId).IsUnique();
         });
 
         modelBuilder.Entity<CompanyProfile>(e =>

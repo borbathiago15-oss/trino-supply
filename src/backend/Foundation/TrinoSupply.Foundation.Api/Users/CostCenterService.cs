@@ -19,7 +19,7 @@ public class CostCenterService(AppDbContext db, TimeProvider clock)
 
     public async Task<(CostCenter? cc, UserError? error)> CreateAsync(
         Guid actorId, string? code, string name, string? region, Guid? managerUserId, string? client,
-        CancellationToken ct = default)
+        Guid? companyId = null, CancellationToken ct = default)
     {
         if (name.Trim().Length < 3) return (null, new("CC-ERR-012", "Informe o nome do centro de custo."));
         var regionClean = Clean(region)?.ToUpperInvariant();
@@ -37,6 +37,8 @@ public class CostCenterService(AppDbContext db, TimeProvider clock)
             if (manager is null) return (null, new("CC-ERR-013", "Gerente responsável inválido: escolha um usuário ativo."));
             managerName = manager.Name;
         }
+        if (companyId is not null && !await db.Companies.AnyAsync(c => c.Id == companyId && c.Active, ct))
+            return (null, new("CC-ERR-014", "CNPJ (empresa) inválido: escolha uma empresa ativa do grupo."));
 
         var now = clock.GetUtcNow();
         var cc = new CostCenter
@@ -44,6 +46,7 @@ public class CostCenterService(AppDbContext db, TimeProvider clock)
             Code = code,
             Name = name.Trim(),
             Region = regionClean,
+            CompanyId = companyId,
             ManagerUserId = managerUserId,
             ManagerName = managerName,
             ClientName = Clean(client),
@@ -75,12 +78,18 @@ public class CostCenterService(AppDbContext db, TimeProvider clock)
 
     public async Task<(CostCenter? cc, UserError? error)> UpdateAsync(
         Guid id, string? name, string? region, Guid? managerUserId, string? client, bool? active,
-        CancellationToken ct = default)
+        Guid? companyId = null, CancellationToken ct = default)
     {
         var cc = await db.CostCenters.SingleOrDefaultAsync(c => c.Id == id, ct);
         if (cc is null) return (null, new("CC-ERR-404", "Centro de custo não encontrado."));
         if (name is not null && name.Trim().Length >= 3) cc.Name = name.Trim();
         if (region is not null) cc.Region = Clean(region)?.ToUpperInvariant();
+        if (companyId is not null)
+        {
+            if (!await db.Companies.AnyAsync(c => c.Id == companyId && c.Active, ct))
+                return (null, new("CC-ERR-014", "CNPJ (empresa) inválido: escolha uma empresa ativa do grupo."));
+            cc.CompanyId = companyId;
+        }
         if (managerUserId is not null)
         {
             var manager = await db.Users.SingleOrDefaultAsync(u => u.Id == managerUserId && u.Active, ct);

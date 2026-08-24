@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TrinoSupply.Foundation.Api.Domain;
+using TrinoSupply.Foundation.Api.Procurement;
 
 namespace TrinoSupply.Foundation.Api.Infrastructure;
 
@@ -7,10 +8,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<PurchaseRequisition> Requisitions => Set<PurchaseRequisition>();
+    public DbSet<RequisitionItem> RequisitionItems => Set<RequisitionItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("foundation");
+        modelBuilder.HasSequence<long>("pr_number_seq", "procurement").StartsAt(1); // PR-001-11 (numeração)
 
         modelBuilder.Entity<User>(e =>
         {
@@ -25,6 +29,55 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(u => u.CreatedAt).HasColumnName("created_at");
             e.Property(u => u.UpdatedAt).HasColumnName("updated_at");
             e.HasIndex(u => u.Email).IsUnique();
+        });
+
+        modelBuilder.Entity<PurchaseRequisition>(e =>
+        {
+            e.ToTable("purchase_requisition", "procurement");
+            e.HasKey(r => r.Id);
+            e.Property(r => r.Id).HasColumnName("id");
+            e.Property(r => r.Number).HasColumnName("number").HasMaxLength(30).IsRequired();
+            e.Property(r => r.Status).HasColumnName("status").HasConversion<short>();
+            e.Property(r => r.Cycle).HasColumnName("cycle");
+            e.Property(r => r.Priority).HasColumnName("priority").HasMaxLength(10);
+            e.Property(r => r.NeededBy).HasColumnName("needed_by");
+            e.Property(r => r.Justification).HasColumnName("justification").HasMaxLength(2000).IsRequired();
+            e.Property(r => r.CostCenter).HasColumnName("cost_center").HasMaxLength(120).IsRequired();
+            e.Property(r => r.Currency).HasColumnName("currency").HasMaxLength(3);
+            e.Property(r => r.RequesterId).HasColumnName("requester_id");
+            e.Property(r => r.RequesterLabel).HasColumnName("requester_label").HasMaxLength(200);
+            e.Property(r => r.DecisionReason).HasColumnName("decision_reason").HasMaxLength(1000);
+            e.Property(r => r.DecidedById).HasColumnName("decided_by_id");
+            e.Property(r => r.DecidedByLabel).HasColumnName("decided_by_label").HasMaxLength(200);
+            e.Property(r => r.SubmittedAt).HasColumnName("submitted_at");
+            e.Property(r => r.DecidedAt).HasColumnName("decided_at");
+            e.Property(r => r.CreatedAt).HasColumnName("created_at");
+            e.Property(r => r.UpdatedAt).HasColumnName("updated_at");
+            e.Property(r => r.DeletedAt).HasColumnName("deleted_at");
+            e.Property(r => r.DeletedBy).HasColumnName("deleted_by");
+            e.Property(r => r.Version).HasColumnName("version").IsConcurrencyToken();
+            e.Ignore(r => r.TotalEstimatedValue);
+            e.HasIndex(r => r.Number).IsUnique();
+            e.HasIndex(r => new { r.Status, r.SubmittedAt });
+            e.HasIndex(r => new { r.RequesterId, r.CreatedAt });
+            e.HasMany(r => r.Items).WithOne().HasForeignKey(i => i.RequisitionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RequisitionItem>(e =>
+        {
+            e.ToTable("purchase_requisition_item", "procurement");
+            e.HasKey(i => i.Id);
+            e.Property(i => i.Id).HasColumnName("id");
+            e.Property(i => i.RequisitionId).HasColumnName("requisition_id");
+            e.Property(i => i.Sequence).HasColumnName("sequence");
+            e.Property(i => i.Description).HasColumnName("description").HasMaxLength(500).IsRequired();
+            e.Property(i => i.Quantity).HasColumnName("quantity").HasPrecision(18, 4);
+            e.Property(i => i.UnitOfMeasure).HasColumnName("unit_of_measure").HasMaxLength(10);
+            e.Property(i => i.EstimatedUnitPrice).HasColumnName("estimated_unit_price").HasPrecision(18, 4);
+            e.Property(i => i.Notes).HasColumnName("notes").HasMaxLength(500);
+            e.Property(i => i.CreatedAt).HasColumnName("created_at");
+            e.HasIndex(i => i.RequisitionId);
         });
 
         modelBuilder.Entity<RefreshToken>(e =>

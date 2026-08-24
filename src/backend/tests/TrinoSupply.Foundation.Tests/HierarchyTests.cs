@@ -75,6 +75,14 @@ public class HierarchyTests
             junior, pleno, outroPleno, carla, gustavo, diana, otto, alfa!);
     }
 
+    /// <summary>Coloca a SC no estado do fluxo anterior (autorização prévia, sem preço).</summary>
+    private static async Task PutInLegacyApprovalAsync(World w, PurchaseRequisition pr)
+    {
+        var tracked = await w.Db.Requisitions.SingleAsync(r => r.Id == pr.Id);
+        tracked.Status = RequisitionStatus.InApproval;
+        await w.Db.SaveChangesAsync();
+    }
+
     private static Task<(PurchaseRequisition? pr, UserError? error)> CreatePrAsync(World w, Actor actor, string cc) =>
         w.Prs.CreateAsync(actor, "Material de manutenção", cc, "NORMAL", null,
             [new ItemInput("Detergente neutro", 2, "UN", 10, null)]);
@@ -119,11 +127,12 @@ public class HierarchyTests
     // ---- aprovação da SC: escopo do Pleno ------------------------------------
 
     [Fact]
-    public async Task Pleno_so_aprova_scs_dos_ccs_que_gerencia()
+    public async Task Pleno_so_aprova_scs_legadas_dos_ccs_que_gerencia()
     {
         var w = await BuildAsync();
         var (pr, _) = await CreatePrAsync(w, w.Junior, "PBA-001");
         await w.Prs.SubmitAsync(w.Junior, pr!.Id);
+        await PutInLegacyApprovalAsync(w, pr);   // SC anterior à mudança de fluxo
 
         var pending = await w.Prs.PendingApprovalsAsync(w.Pleno);
         Assert.Contains(pending, r => r.Id == pr.Id);
@@ -148,9 +157,7 @@ public class HierarchyTests
     {
         var (pr, e0) = await CreatePrAsync(w, w.Junior, "PBA-001");
         Assert.Null(e0);
-        await w.Prs.SubmitAsync(w.Junior, pr!.Id);
-        var (_, eApr) = await w.Prs.ApproveAsync(w.Pleno, pr.Id, null);
-        Assert.Null(eApr);
+        await w.Prs.SubmitAsync(w.Junior, pr!.Id);   // enviada vai direto para cotação
         var (q, e1) = await w.Rfq.CreateFromPrAsync(w.Carla, pr.Id, QuotationKind.Purchase, null, null);
         Assert.Null(e1);
         await w.Rfq.InviteSuppliersAsync(w.Carla, q!.Id, [w.Alfa.Id]);
@@ -193,21 +200,54 @@ public class HierarchyTests
     }
 
     [Fact]
-    public async Task Fila_de_cotacao_mostra_sc_retida_na_aprovacao_com_o_motivo()
+    public async Task Sc_enviada_entra_direto_na_fila_de_cotacao()
     {
         var w = await BuildAsync();
         var (pr, _) = await CreatePrAsync(w, w.Junior, "PBA-001");
         await w.Prs.SubmitAsync(w.Junior, pr!.Id);
 
         var (ready, blocked) = await w.Rfq.QueueAsync();
-        Assert.DoesNotContain(ready, r => r.Id == pr.Id);          // não se cota o que não foi aprovado
+        Assert.Contains(ready, r => r.Id == pr.Id);   // sem autorização prévia: já dá para cotar
+        Assert.Empty(blocked);
+
+        var (q, error) = await w.Rfq.CreateFromPrAsync(w.Carla, pr.Id, QuotationKind.Purchase, null, null);
+        Assert.Null(error);
+        Assert.NotNull(q);
+    }
+
+    [Fact]
+    public async Task Sc_legada_retida_na_aprovacao_aparece_na_fila_com_o_motivo()
+    {
+        var w = await BuildAsync();
+        var (pr, _) = await CreatePrAsync(w, w.Junior, "PBA-001");
+        await w.Prs.SubmitAsync(w.Junior, pr!.Id);
+        await PutInLegacyApprovalAsync(w, pr);
+
+        var (ready, blocked) = await w.Rfq.QueueAsync();
+        Assert.DoesNotContain(ready, r => r.Id == pr.Id);
         var retida = Assert.Single(blocked, b => b.Pr.Id == pr.Id);
-        Assert.Contains(w.Pleno.Label, retida.Reason);             // diz de quem é a aprovação
+        Assert.Contains(w.Pleno.Label, retida.Reason);
 
         await w.Prs.ApproveAsync(w.Pleno, pr.Id, null);
         (ready, blocked) = await w.Rfq.QueueAsync();
-        Assert.Contains(ready, r => r.Id == pr.Id);                // aprovada → pronta para cotar
+        Assert.Contains(ready, r => r.Id == pr.Id);
         Assert.DoesNotContain(blocked, b => b.Pr.Id == pr.Id);
+    }
+
+    [Fact]
+    public async Task Compra_aprovada_pela_diretoria_marca_a_sc_de_origem_como_aprovada()
+    {
+        var w = await BuildAsync();
+        var q = await UpToAwaitingManagerAsync(w);
+        await w.Rfq.ManagerDecisionAsync(w.Pleno, q.Id, "APROVAR", null);
+
+        var antes = await w.Db.Requisitions.SingleAsync(r => r.Id == q.SourcePrId);
+        Assert.Equal(RequisitionStatus.Submitted, antes.Status);   // ainda em processo
+
+        await w.Rfq.DirectorDecisionAsync(w.Diana, q.Id, "APROVAR", null);
+        var depois = await w.Db.Requisitions.SingleAsync(r => r.Id == q.SourcePrId);
+        Assert.Equal(RequisitionStatus.Approved, depois.Status);   // compra autorizada, com preço
+        Assert.Contains(q.Number, depois.DecisionReason!);
     }
 
     // ---- cadastro: usuários com vínculos e empresas (CNPJs) -------------------
@@ -271,6 +311,7 @@ public class HierarchyTests
         var (pr, _) = await w.Prs.CreateAsync(livre, "Viagem de acompanhamento contratual", "BAH-002", "NORMAL", null,
             [new ItemInput("Passagem aérea", 1, "UN", 1200, null)]);
         await w.Prs.SubmitAsync(livre, pr!.Id);
+        await PutInLegacyApprovalAsync(w, pr);
 
         // Thiago gerencia PBA-001, mas o CC órfão não pode sumir da fila dele
         var fila = await w.Prs.PendingApprovalsAsync(w.Pleno);

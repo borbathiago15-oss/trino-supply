@@ -102,9 +102,10 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
             prTotalValue = prs.Sum(r => r.TotalEstimatedValue),
             approvedCount = approved.Count,
             approvedValue = approved.Sum(r => r.TotalEstimatedValue),
-            pendingApproval = prs.Count(r => r.Status == RequisitionStatus.InApproval),
+            pendingApproval = prs.Count(r => r.Status is RequisitionStatus.Submitted or RequisitionStatus.InApproval),
             overdue = prs.Count(r => r.NeededBy is not null && r.NeededBy < today &&
-                                     r.Status is RequisitionStatus.InApproval or RequisitionStatus.Approved),
+                                     r.Status is RequisitionStatus.Submitted or RequisitionStatus.InApproval
+                                                 or RequisitionStatus.Approved),
             avgApprovalDays = approvalDurations.Count > 0 ? Math.Round(approvalDurations.Average(), 1) : (double?)null,
             poCount = pos.Count,
             poTotalValue = pos.Where(o => o.Status != PurchaseOrderStatus.Cancelled).Sum(o => o.TotalValue),
@@ -128,10 +129,10 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
                 month = cursor.ToString("yyyy-MM"),
                 created = inMonth.Count,
                 approved = inMonth.Count(r => r.Status == RequisitionStatus.Approved),
-                inApproval = inMonth.Count(r => r.Status == RequisitionStatus.InApproval),
+                inApproval = inMonth.Count(r => r.Status is RequisitionStatus.Submitted or RequisitionStatus.InApproval),
                 returned = inMonth.Count(r => r.Status == RequisitionStatus.Returned),
                 rejectedOrCancelled = inMonth.Count(r => r.Status is RequisitionStatus.Rejected or RequisitionStatus.Cancelled),
-                draft = inMonth.Count(r => r.Status is RequisitionStatus.Draft or RequisitionStatus.Submitted),
+                draft = inMonth.Count(r => r.Status == RequisitionStatus.Draft),
                 poValue = pos.Where(o => o.CreatedAt >= m0 && o.CreatedAt < m1 && o.Status != PurchaseOrderStatus.Cancelled)
                              .Sum(o => o.TotalValue),
             });

@@ -92,7 +92,7 @@ public class RequisitionServiceTests
     }
 
     [Fact]
-    public async Task Submissao_valida_leva_a_IN_APPROVAL()
+    public async Task Submissao_valida_leva_a_SUBMITTED_para_cotacao()
     {
         var (svc, _, _) = Build();
         var pr = await DraftAsync(svc, Ana, Notebook);
@@ -100,7 +100,7 @@ public class RequisitionServiceTests
         var (submitted, error) = await svc.SubmitAsync(Ana, pr.Id);
 
         Assert.Null(error);
-        Assert.Equal(RequisitionStatus.InApproval, submitted!.Status);
+        Assert.Equal(RequisitionStatus.Submitted, submitted!.Status);   // vai direto para Suprimentos cotar
         Assert.NotNull(submitted.SubmittedAt);
     }
 
@@ -158,7 +158,7 @@ public class RequisitionServiceTests
 
         Assert.Null(editError);
         Assert.Null(submitError);
-        Assert.Equal(RequisitionStatus.InApproval, resubmitted!.Status);
+        Assert.Equal(RequisitionStatus.Submitted, resubmitted!.Status);
         Assert.Equal(2, resubmitted.Cycle);
         Assert.Null(resubmitted.DecisionReason);
     }

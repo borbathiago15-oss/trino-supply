@@ -467,7 +467,8 @@ app.MapGet("/api/v1/dashboard", async (AppDbContext db, RequisitionService prSvc
     {
         var overdueQ = db.Requisitions.Where(r =>
             r.NeededBy != null && r.NeededBy < today &&
-            (r.Status == RequisitionStatus.InApproval || r.Status == RequisitionStatus.Approved));
+            (r.Status == RequisitionStatus.Submitted || r.Status == RequisitionStatus.InApproval
+             || r.Status == RequisitionStatus.Approved));
         if (!actor.SeesAll) overdueQ = overdueQ.Where(r => r.RequesterId == uid);
         var overdue = await overdueQ.CountAsync();
         if (overdue > 0) alerts.Add(new
@@ -477,39 +478,26 @@ app.MapGet("/api/v1/dashboard", async (AppDbContext db, RequisitionService prSvc
         });
     }
 
-    // Fila de aprovação (para quem decide) — mesma alçada por CC da Central de Aprovação
+    // Fila de aprovação: solicitações legadas em aprovação (fluxo antigo, sem preço)
     if (mods.Contains(AppModules.Aprovacao) && actor.CanDecide)
     {
         var pending = (await prSvc.PendingApprovalsAsync(actor)).Count;
         if (pending > 0) alerts.Add(new
         {
             kind = "APROVACAO", severity = "media", count = pending, view = "pr-approvals",
-            text = $"{pending} pedido(s) aguardando a sua aprovação.",
+            text = $"{pending} solicitação(ões) do fluxo anterior aguardando a sua autorização.",
         });
-
-        // SCs represadas em centros de custo sem gerente vinculado (ninguém recebe a tarefa)
-        if (role is Roles.SupplyManager or Roles.SystemAdministrator)
-        {
-            var ccWithManager = await db.CostCenters.Where(c => c.Active && c.ManagerUserId != null)
-                .Select(c => c.Code.ToUpper()).ToListAsync();
-            var orphan = await db.Requisitions.CountAsync(r => r.DeletedAt == null
-                && r.Status == RequisitionStatus.InApproval && !ccWithManager.Contains(r.CostCenter.ToUpper()));
-            if (orphan > 0) alerts.Add(new
-            {
-                kind = "SEM_APROVADOR", severity = "alta", count = orphan, view = "pr-approvals",
-                text = $"{orphan} solicitação(ões) em centro de custo sem gerente vinculado — defina o responsável em Cadastros → Centros de Custo.",
-            });
-        }
     }
 
     // Meus pedidos aguardando aprovação / devolvidos para ajuste
     if (mods.Contains(AppModules.Solicitacoes) && actor.CanCreate)
     {
-        var waiting = await db.Requisitions.CountAsync(r => r.RequesterId == uid && r.Status == RequisitionStatus.InApproval);
+        var waiting = await db.Requisitions.CountAsync(r => r.RequesterId == uid
+            && (r.Status == RequisitionStatus.Submitted || r.Status == RequisitionStatus.InApproval));
         if (waiting > 0) alerts.Add(new
         {
             kind = "AGUARDANDO", severity = "info", count = waiting, view = "pr-mine",
-            text = $"{waiting} pedido(s) seu(s) aguardando aprovação.",
+            text = $"{waiting} pedido(s) seu(s) em andamento com Suprimentos.",
         });
         var returned = await db.Requisitions.CountAsync(r => r.RequesterId == uid && r.Status == RequisitionStatus.Returned);
         if (returned > 0) alerts.Add(new
@@ -534,7 +522,8 @@ app.MapGet("/api/v1/dashboard", async (AppDbContext db, RequisitionService prSvc
     {
         var linkedPos = db.PurchaseOrders.Where(o => o.SourcePrId != null && o.Status != PurchaseOrderStatus.Cancelled).Select(o => o.SourcePrId!.Value);
         var mine = await db.Requisitions.CountAsync(r => r.DeletedAt == null && r.AssignedToId == uid
-            && r.Status == RequisitionStatus.Approved && !linkedPos.Contains(r.Id));
+            && (r.Status == RequisitionStatus.Submitted || r.Status == RequisitionStatus.Approved)
+            && !linkedPos.Contains(r.Id));
         mine += await db.MaterialRequisitions.CountAsync(r => r.AssignedToId == uid
             && (r.Status == MaterialRequisitionStatus.Submitted || r.Status == MaterialRequisitionStatus.PurchaseRoute));
         if (mine > 0) alerts.Add(new
@@ -548,7 +537,8 @@ app.MapGet("/api/v1/dashboard", async (AppDbContext db, RequisitionService prSvc
     if (mods.Contains(AppModules.Compras) && PurchaseOrderService.CanManage(role))
     {
         var linked = db.PurchaseOrders.Where(o => o.SourcePrId != null && o.Status != PurchaseOrderStatus.Cancelled).Select(o => o.SourcePrId!.Value);
-        var demands = await db.Requisitions.CountAsync(r => r.Status == RequisitionStatus.Approved && !linked.Contains(r.Id));
+        var demands = await db.Requisitions.CountAsync(r =>
+            (r.Status == RequisitionStatus.Submitted || r.Status == RequisitionStatus.Approved) && !linked.Contains(r.Id));
         var routeItems = await db.MaterialRequisitionItems.CountAsync(i => i.Status == MaterialItemStatus.PurchaseRoute);
         if (demands + routeItems > 0) alerts.Add(new
         {
@@ -558,7 +548,8 @@ app.MapGet("/api/v1/dashboard", async (AppDbContext db, RequisitionService prSvc
         if (TriageService.CanTriage(role))
         {
             var untriaged = await db.Requisitions.CountAsync(r => r.DeletedAt == null
-                && r.Status == RequisitionStatus.Approved && r.AssignedToId == null && !linked.Contains(r.Id));
+                && (r.Status == RequisitionStatus.Submitted || r.Status == RequisitionStatus.Approved)
+                && r.AssignedToId == null && !linked.Contains(r.Id));
             untriaged += await db.MaterialRequisitions.CountAsync(r => r.AssignedToId == null
                 && (r.Status == MaterialRequisitionStatus.Submitted || r.Status == MaterialRequisitionStatus.PurchaseRoute));
             if (untriaged > 0) alerts.Add(new
@@ -1195,6 +1186,35 @@ rfq.MapGet("/", async (QuotationService svc, ClaimsPrincipal p, HttpContext ctx)
 {
     if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");
     return Ok(new { items = (await svc.ListAsync()).Select(QuotationView) }, ctx);
+});
+
+// Central de Aprovação: processos de compra aguardando a MINHA alçada, já com preços
+rfq.MapGet("/my-approvals", async (QuotationService svc, AppDbContext db, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    var uid = ActorId(p);
+    if (!QuotationService.CanApproveAsManager(role) && !QuotationService.CanApproveAsDirector(role))
+        return Ok(new { items = Array.Empty<object>() }, ctx);
+
+    var all = await svc.ListAsync();
+    var mine = new List<Quotation>();
+
+    if (QuotationService.CanApproveAsManager(role))
+    {
+        var awaiting = all.Where(q => q.Status == QuotationStatus.AwaitingManager && q.SelectedBy != uid).ToList();
+        if (role == Roles.Approver)
+        {
+            var managed = await db.CostCenters.Where(c => c.Active && c.ManagerUserId == uid)
+                .Select(c => c.Code.ToUpper()).ToListAsync();
+            awaiting = awaiting.Where(q => managed.Contains(q.CostCenter.ToUpperInvariant())).ToList();
+        }
+        mine.AddRange(awaiting);
+    }
+    if (QuotationService.CanApproveAsDirector(role))
+        mine.AddRange(all.Where(q => q.Status == QuotationStatus.AwaitingDirector
+                                     && q.SelectedBy != uid && q.ManagerApprovedBy != uid));
+
+    return Ok(new { items = mine.DistinctBy(q => q.Id).Select(QuotationView) }, ctx);
 });
 
 // fila de Suprimentos: PRs aprovadas aguardando cotação

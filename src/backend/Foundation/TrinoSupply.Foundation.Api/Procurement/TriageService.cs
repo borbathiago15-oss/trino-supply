@@ -52,7 +52,8 @@ public class TriageService(AppDbContext db, TimeProvider clock)
         // o que está por vir e já pode designar quem dará continuidade quando a alçada liberar.
         var prs = await db.Requisitions.Include(r => r.Items)
             .Where(r => r.DeletedAt == null && !closedPrIds.Contains(r.Id)
-                        && (r.Status == RequisitionStatus.Approved || r.Status == RequisitionStatus.InApproval))
+                        && (r.Status == RequisitionStatus.Submitted || r.Status == RequisitionStatus.Approved
+                            || r.Status == RequisitionStatus.InApproval))
             .OrderBy(r => r.SubmittedAt).Take(200).ToListAsync(ct);
 
         // gerente responsável de cada CC, para dizer de quem a SC está esperando aprovação
@@ -127,8 +128,9 @@ public class TriageService(AppDbContext db, TimeProvider clock)
                 var pr = await db.Requisitions.Include(r => r.Items)
                     .SingleOrDefaultAsync(r => r.Id == id && r.DeletedAt == null, ct);
                 if (pr is null) return (null, new("TRI-ERR-404", "Demanda não encontrada."));
-                if (pr.Status is not (RequisitionStatus.Approved or RequisitionStatus.InApproval))
-                    return (null, new("TRI-ERR-020", "Só solicitações enviadas para aprovação ou já aprovadas entram na triagem."));
+                if (pr.Status is not (RequisitionStatus.Submitted or RequisitionStatus.Approved
+                                      or RequisitionStatus.InApproval))
+                    return (null, new("TRI-ERR-020", "Só solicitações enviadas (ou já aprovadas) entram na triagem."));
                 pr.AssignedToId = responsible?.Id;
                 pr.AssignedToLabel = responsible?.Name;
                 pr.AssignedById = responsible is null ? null : actor.Id;

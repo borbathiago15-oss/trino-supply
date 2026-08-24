@@ -943,7 +943,8 @@
 
     // ============ SOLICITAÇÕES DE COMPRA ============
     const STATUS_PR = {
-      DRAFT: ['Rascunho', 'dev'], IN_APPROVAL: ['Em aprovação', ''], APPROVED: ['Aprovado', 'on'],
+      DRAFT: ['Rascunho', 'dev'], SUBMITTED: ['Em cotação', ''], IN_APPROVAL: ['Em aprovação', ''],
+      APPROVED: ['Compra aprovada', 'on'],
       REJECTED: ['Rejeitado', 'off'], RETURNED: ['Devolvido p/ ajuste', 'dev'], CANCELLED: ['Cancelado', 'off'],
     };
 
@@ -1112,14 +1113,18 @@
       const reason = r.decisionReason ? `<div class="sub">Motivo: ${escapeHtml(r.decisionReason)} (${escapeHtml(r.decidedByLabel || '')})</div>` : '';
       // quem precisa aprovar (ou o que está travando a alçada)
       let flow = '';
-      if (r.status === 'IN_APPROVAL') {
+      if (r.status === 'SUBMITTED') {
+        flow = r.assignedToLabel
+          ? `<div class="sub">Em cotação com <strong>${escapeHtml(r.assignedToLabel)}</strong> — a aprovação vem depois, com os preços.</div>`
+          : '<div class="sub">Com Suprimentos — aguardando a designação do comprador que fará a cotação.</div>';
+      } else if (r.status === 'IN_APPROVAL') {
         flow = r.approvalIssue
           ? `<div class="sub" style="color:var(--s5)">⚠ ${escapeHtml(r.approvalIssue)}</div>`
           : `<div class="sub">Aguardando aprovação de: <strong>${escapeHtml(r.approverLabel || 'Gestor de Suprimentos')}</strong></div>`;
       } else if (r.status === 'APPROVED') {
         flow = r.assignedToLabel
-          ? `<div class="sub">Comprador responsável: <strong>${escapeHtml(r.assignedToLabel)}</strong></div>`
-          : '<div class="sub">Aprovado — aguardando Suprimentos designar o comprador responsável.</div>';
+          ? `<div class="sub">Compra aprovada · comprador: <strong>${escapeHtml(r.assignedToLabel)}</strong></div>`
+          : '<div class="sub">Compra aprovada na alçada.</div>';
       }
       const itemsTxt = r.items.map(i => `${i.quantity}× ${i.catalogCode ? '[' + escapeHtml(i.catalogCode) + '] ' : ''}${escapeHtml(i.description)}`).join(' · ');
       const acts = [];
@@ -1183,10 +1188,33 @@
     });
     LOADERS['pr-approvals'] = async () => {
       try {
-        const { items } = await api('/api/v1/approvals/pending');
-        $('appr-list').innerHTML = items.length
-          ? PR_TABLE_HEAD + items.map(r => prRow(r, true)).join('') + '</tbody></table>'
-          : '<p class="hello">Nenhum pedido aguardando a sua aprovação.</p>';
+        // 1) compras cotadas aguardando a minha alçada (com preços do mapa de propostas)
+        let processes = [];
+        try { processes = (await api('/api/v1/quotations/my-approvals')).items; } catch {}
+        const procHtml = processes.length
+          ? '<table><thead><tr><th>Processo</th><th>Origem</th><th>Fornecedor escolhido</th><th>Valor</th><th>Etapa</th><th>Ações</th></tr></thead><tbody>' +
+            processes.map(q => {
+              const [label, cls] = RFQ_STATUS[q.status] || [q.status, ''];
+              const winner = q.selection ? (q.proposals.find(pp => pp.id === q.selection.winnerProposalId) || {}) : {};
+              return `<tr data-q="${q.id}">
+                <td>${escapeHtml(q.number)}<div class="sub">CC: ${escapeHtml(q.costCenter)}</div></td>
+                <td>${escapeHtml(q.sourcePrNumber || '—')}<div class="sub">${escapeHtml(q.justification || '')}</div></td>
+                <td>${escapeHtml(winner.supplierName || '—')}${q.selection && q.selection.justification ? `<div class="sub">${escapeHtml(q.selection.justification)}</div>` : ''}</td>
+                <td>${winner.totalValue != null ? money(winner.totalValue) : '—'}</td>
+                <td><span class="badge ${cls}">${label}</span></td>
+                <td class="row-actions"><button data-act="review-rfq">Analisar e decidir</button></td>
+              </tr>`;
+            }).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhuma compra aguardando a sua aprovação. ✔</p>';
+
+        // 2) solicitações do fluxo anterior (autorização sem preço), se ainda houver
+        let legacy = [];
+        try { legacy = (await api('/api/v1/approvals/pending')).items; } catch {}
+        const legacyHtml = legacy.length
+          ? '<h2 style="margin:18px 0 6px">Solicitações do fluxo anterior</h2>' +
+            PR_TABLE_HEAD + legacy.map(r => prRow(r, true)).join('') + '</tbody></table>'
+          : '';
+        $('appr-list').innerHTML = procHtml + legacyHtml;
       } catch (err) { $('appr-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
 
@@ -1221,6 +1249,12 @@
     $('appr-list').addEventListener('click', async (ev) => {
       const btn = ev.target.closest('button[data-act]');
       if (!btn) return;
+      if (btn.dataset.act === 'review-rfq') {
+        const id = btn.closest('tr').dataset.q;
+        goTo('quotations');
+        setTimeout(() => openRfq(id), 400);
+        return;
+      }
       try {
         if (await prAction(btn.closest('tr').dataset.id, btn.dataset.act)) { toast('Operação realizada.', 'ok'); LOADERS['pr-approvals'](); }
       } catch (err) { toast(err.message, 'error'); }
@@ -2173,6 +2207,15 @@
     const RFQ_CRITERIA = ['Preço', 'Prazo de entrega', 'Condição de pagamento', 'Atendimento aos requisitos', 'Qualidade', 'Condição comercial', 'Histórico do fornecedor'];
     let rfqCache = {};
     let rfqOpenId = null;
+    /// abre o detalhe de um processo específico (usado pela Central de Aprovação)
+    async function openRfq(id) {
+      try {
+        const q = await api('/api/v1/quotations/' + id);
+        rfqCache[q.id] = q;
+        rfqOpenId = q.id;
+        renderRfqDetail(q);
+      } catch (err) { toast(err.message, 'error'); }
+    }
 
     async function openPoPdf(id) {
       try {

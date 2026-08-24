@@ -218,6 +218,7 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         var (item, itemError) = BuildItem(input, pr.Items.Count == 0 ? 1 : pr.Items.Max(i => i.Sequence) + 1, clock.GetUtcNow(), catalogItems!);
         if (itemError is not null) return (null, itemError);
         item!.RequisitionId = pr.Id;
+        db.RequisitionItems.Add(item); // Add explícito: chave pré-gerada em pai já rastreado ficaria Modified
         pr.Items.Add(item);
         await TouchAndSaveAsync(pr, ct);
         return (pr, null); // EVT-003 ItemAdded

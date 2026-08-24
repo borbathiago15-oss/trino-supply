@@ -17,7 +17,7 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
 
     public static bool CanViewSupply(string role) =>
         role is Roles.Approver or Roles.PurchasingOfficer or Roles.SupplyManager
-             or Roles.Auditor or Roles.SystemAdministrator;
+             or Roles.Director or Roles.Auditor or Roles.SystemAdministrator;
 
     public async Task<object> SupplyAsync(
         DateOnly from, DateOnly to, Guid? supplierId, Guid? buyerId, Guid? requesterId,

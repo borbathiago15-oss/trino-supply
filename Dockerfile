@@ -9,6 +9,8 @@ COPY src/backend/ .
 RUN dotnet publish Foundation/TrinoSupply.Foundation.Api -c Release -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
+# fontconfig é exigido pelo QuestPDF (PDF da Ordem de Compra)
+RUN apt-get update && apt-get install -y --no-install-recommends libfontconfig1 && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/publish .
 ENV DOTNET_EnableDiagnostics=0

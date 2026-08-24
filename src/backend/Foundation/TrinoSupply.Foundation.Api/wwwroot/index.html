@@ -250,10 +250,10 @@
       <!-- Solicitações: pedido unitário -->
       <section class="view" id="view-pr-new-unit">
         <div class="panel">
-          <h2>Pedido Unitário (itens digitados)</h2>
+          <h2>Inclusão de SC — Solicitação de Compra unitária</h2>
           <form id="pru-form">
             <div class="grid2">
-              <div><label for="pru-cc">Centro de custo</label><input id="pru-cc" list="cc-datalist" required placeholder="ex.: CC-TI-001" /></div>
+              <div><label for="pru-cc">Centro de custo</label><select id="pru-cc" class="cc-select" required></select></div>
               <div><label for="pru-priority">Prioridade</label>
                 <select id="pru-priority">
                   <option value="LOW">Baixa</option>
@@ -278,10 +278,10 @@
       <!-- Solicitações: pedido múltiplo -->
       <section class="view" id="view-pr-new-multi">
         <div class="panel">
-          <h2>Pedido Múltiplo (lista de produtos por família)</h2>
+          <h2>Solicitação em Lote — lista de produtos por família</h2>
           <form id="prm-form">
             <div class="grid2">
-              <div><label for="prm-cc">Centro de custo</label><input id="prm-cc" list="cc-datalist" required placeholder="ex.: CC-ADM-001" /></div>
+              <div><label for="prm-cc">Centro de custo</label><select id="prm-cc" class="cc-select" required></select></div>
               <div><label for="prm-priority">Prioridade</label>
                 <select id="prm-priority">
                   <option value="LOW">Baixa</option>
@@ -324,7 +324,7 @@
           <p class="hello">Itens do catálogo por família. Sem saldo em estoque, o item segue para rota de compra.</p>
           <form id="mr-form">
             <div class="grid2">
-              <div><label for="mr-cc">Centro de custo</label><input id="mr-cc" list="cc-datalist" required placeholder="ex.: CC-ADM-001" /></div>
+              <div><label for="mr-cc">Centro de custo</label><select id="mr-cc" class="cc-select" required></select></div>
               <div><label for="mr-notes">Observações</label><input id="mr-notes" placeholder="opcional" /></div>
             </div>
             <label for="mr-family">Família de produtos</label>
@@ -442,14 +442,39 @@
         </div>
       </section>
 
-      <!-- Compras: demandas -->
+      <!-- Compras: cotações / processos -->
+      <section class="view" id="view-quotations">
+        <div id="rfq-lists">
+          <div class="panel">
+            <h2>Fila de Suprimentos — solicitações aprovadas aguardando cotação</h2>
+            <div id="rfq-queue" class="tablewrap"></div>
+          </div>
+          <div class="panel">
+            <div class="topbar" style="margin-bottom:8px">
+              <h2 style="margin:0">Processos de cotação</h2>
+              <select id="rfq-filter" style="width:auto">
+                <option value="">Todos</option>
+                <option value="COTACAO_ABERTA">Cotações em aberto / aguardando propostas</option>
+                <option value="EM_ANALISE">Propostas recebidas / em análise</option>
+                <option value="AGUARDANDO_GERENTE">Aguardando Gerente</option>
+                <option value="AGUARDANDO_DIRETOR">Aguardando Diretor</option>
+                <option value="APROVADO_PARA_EMISSAO">Aguardando emissão de OC</option>
+                <option value="OC_EMITIDA">OCs emitidas</option>
+                <option value="REJEITADO">Rejeitados</option>
+                <option value="CANCELADA">Cancelados</option>
+              </select>
+            </div>
+            <div id="rfq-list" class="tablewrap"></div>
+          </div>
+        </div>
+        <div id="rfq-detail" hidden></div>
+      </section>
+
+      <!-- Compras: demandas do almoxarifado -->
       <section class="view" id="view-buy-demands">
         <div class="panel">
-          <h2>Requisições aprovadas aguardando pedido</h2>
-          <div id="buy-dem-prs" class="tablewrap"></div>
-        </div>
-        <div class="panel">
           <h2>Itens em rota de compra (almoxarifado)</h2>
+          <p class="hello">Requisições de compra aprovadas entram pela fila de <strong>Cotações / Processos</strong> — a emissão direta de OC a partir de requisição foi desativada (RFQ-BR-010).</p>
           <div id="buy-dem-route" class="tablewrap"></div>
         </div>
       </section>
@@ -534,6 +559,45 @@
         </div>
       </section>
 
+      <!-- Cadastros: empresa (cabeçalho da OC) -->
+      <section class="view" id="view-company">
+        <div class="panel">
+          <h2>Empresa compradora — cabeçalho e política da Ordem de Compra</h2>
+          <form id="company-form">
+            <div class="grid2">
+              <div><label for="co-legal">Razão social</label><input id="co-legal" required /></div>
+              <div><label for="co-tax">CNPJ</label><input id="co-tax" required /></div>
+            </div>
+            <div class="grid2">
+              <div><label for="co-addr">Endereço</label><input id="co-addr" required /></div>
+              <div><label for="co-district">Bairro/Distrito</label><input id="co-district" /></div>
+            </div>
+            <div class="grid2">
+              <div><label for="co-city">Cidade</label><input id="co-city" required /></div>
+              <div class="grid2">
+                <div><label for="co-state">UF</label><input id="co-state" required maxlength="2" /></div>
+                <div><label for="co-zip">CEP</label><input id="co-zip" required /></div>
+              </div>
+            </div>
+            <div class="grid2">
+              <div><label for="co-ie">Inscrição Estadual</label><input id="co-ie" /></div>
+              <div><label for="co-phone">Fone/Fax</label><input id="co-phone" /></div>
+            </div>
+            <label for="co-email">E-mail de compras</label>
+            <input id="co-email" type="email" />
+            <div class="grid2">
+              <div><label for="co-deladdr">Endereço de entrega (linha completa)</label><input id="co-deladdr" placeholder="se vazio, usa o endereço acima" /></div>
+              <div><label for="co-deltax">CNPJ da entrega</label><input id="co-deltax" placeholder="se vazio, usa o CNPJ acima" /></div>
+            </div>
+            <label for="co-clauses">Cláusulas padrão da OC</label>
+            <textarea id="co-clauses" rows="4" style="width:100%;padding:10px 12px;font-size:13.5px;border:1px solid var(--border);border-radius:8px"></textarea>
+            <label for="co-policy">Política de pagamento a fornecedores (página 2 do PDF)</label>
+            <textarea id="co-policy" rows="8" style="width:100%;padding:10px 12px;font-size:13.5px;border:1px solid var(--border);border-radius:8px"></textarea>
+            <button type="submit" class="full">Salvar dados da empresa</button>
+          </form>
+        </div>
+      </section>
+
       <!-- Cadastros: produtos -->
       <section class="view" id="view-products">
         <div class="panel">
@@ -571,7 +635,7 @@
     const ROLE_LABELS = {
       SystemAdministrator: 'Administrador', Requester: 'Solicitante', Approver: 'Aprovador',
       PurchasingOfficer: 'Comprador', WarehouseOperator: 'Almoxarife', WarehouseSupervisor: 'Supervisor de Almoxarifado',
-      SupplyManager: 'Gestor de Suprimentos', Auditor: 'Auditor',
+      SupplyManager: 'Gestor de Suprimentos', Director: 'Diretor', Auditor: 'Auditor',
     };
     const MODULE_LABELS = {
       SOLICITACOES: 'Solicitações de Compra', APROVACAO: 'Central de Aprovação',
@@ -588,6 +652,7 @@
       WarehouseOperator: ['ESTOQUE'],
       WarehouseSupervisor: ['ESTOQUE', 'PRODUTOS'],
       SupplyManager: ['SOLICITACOES', 'APROVACAO', 'MATERIAL', 'ESTOQUE', 'COMPRAS', 'PRODUTOS', 'FORNECEDORES', 'CENTROS_CUSTO'],
+      Director: ['SOLICITACOES', 'APROVACAO', 'COMPRAS'],
       Auditor: ['SOLICITACOES', 'ESTOQUE', 'COMPRAS'],
     };
     const store = {
@@ -626,6 +691,10 @@
     const canWarehouse = () => ['WarehouseOperator', 'WarehouseSupervisor', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
     const canBuy = () => ['PurchasingOfficer', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
     const canMaintainCatalog = () => ['SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
+    const canConductRfq = () => ['PurchasingOfficer', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
+    const canMgrApprove = () => ['SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
+    const canDirApprove = () => ['Director', 'SystemAdministrator'].includes(currentUser.role);
+    const canViewRfq = () => canConductRfq() || canMgrApprove() || canDirApprove() || currentUser.role === 'Auditor';
     const canManageLocations = () => ['WarehouseSupervisor', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
     const hasModule = (m) => isAdmin() || (currentUser.modules || []).includes(m);
 
@@ -635,8 +704,8 @@
         { id: 'supply-dash', label: 'Dashboard de Suprimentos', show: () => true },
       ]},
       { title: 'Solicitações de Compra', module: 'SOLICITACOES', items: [
-        { id: 'pr-new-unit', label: 'Pedido Unitário', show: canCreatePr },
-        { id: 'pr-new-multi', label: 'Pedido Múltiplo', show: canCreatePr },
+        { id: 'pr-new-unit', label: 'Inclusão de SC', show: canCreatePr },
+        { id: 'pr-new-multi', label: 'Solicitação em Lote', show: canCreatePr },
         { id: 'pr-mine', label: 'Meus Pedidos', show: () => true },
         { id: 'pr-approvals', label: 'Central de Aprovação', module: 'APROVACAO', show: canDecidePr },
       ]},
@@ -651,7 +720,8 @@
         { id: 'stock-issue', label: 'Saída de Estoque', show: canWarehouse },
       ]},
       { title: 'Compras', module: 'COMPRAS', items: [
-        { id: 'buy-demands', label: 'Demandas', show: canBuy },
+        { id: 'quotations', label: 'Cotações / Processos', show: () => canViewRfq() },
+        { id: 'buy-demands', label: 'Demandas do Almoxarifado', show: canBuy },
         { id: 'buy-orders', label: 'Pedidos de Compra', show: () => true },
       ]},
       { title: 'Cadastros', items: [
@@ -659,10 +729,11 @@
         { id: 'suppliers', label: 'Fornecedores', module: 'FORNECEDORES', show: canBuy },
         { id: 'products', label: 'Produtos', module: 'PRODUTOS', show: () => true },
         { id: 'cost-centers', label: 'Centros de Custo', module: 'CENTROS_CUSTO', show: canMaintainCatalog },
+        { id: 'company', label: 'Empresa', show: isAdmin },
       ]},
     ];
     const TITLES = {
-      'pr-new-unit': 'Pedido Unitário', 'pr-new-multi': 'Pedido Múltiplo',
+      'pr-new-unit': 'Inclusão de SC', 'pr-new-multi': 'Solicitação em Lote',
       'pr-mine': 'Meus Pedidos', 'pr-approvals': 'Central de Aprovação',
       'mr-new': 'Solicitar Material', 'mr-mine': 'Minhas Solicitações',
       'stock-dash': 'Dashboard de Estoque', 'wh-queue': 'Fila de Atendimento',
@@ -670,6 +741,7 @@
       'buy-demands': 'Demandas de Compra', 'buy-orders': 'Pedidos de Compra',
       users: 'Cadastro de Usuários', suppliers: 'Cadastro de Fornecedores', products: 'Cadastro de Produtos',
       'supply-dash': 'Dashboard de Suprimentos', 'cost-centers': 'Centros de Custo',
+      quotations: 'Cotações / Processos de Compra', company: 'Cadastro da Empresa',
     };
     const LOADERS = {};
     let currentView = 'supply-dash';
@@ -853,7 +925,7 @@
         if (['DRAFT', 'RETURNED', 'IN_APPROVAL'].includes(r.status)) acts.push('<button class="danger" data-act="cancel">Cancelar</button>');
       }
       return `<tr data-id="${r.id}">
-        <td>${escapeHtml(r.number)}<div class="sub">${forApproval ? escapeHtml(r.requesterLabel) : 'ciclo ' + r.cycle}${r.kind === 'CATALOGO' ? ' · múltiplo' : ' · unitário'}</div></td>
+        <td>${escapeHtml(r.number)}<div class="sub">${forApproval ? escapeHtml(r.requesterLabel) : 'ciclo ' + r.cycle}${r.kind === 'CATALOGO' ? ' · lote' : ' · SC'}</div></td>
         <td>${escapeHtml(r.justification)}<div class="sub">${itemsTxt}</div><div class="sub">CC: ${escapeHtml(r.costCenter)}${r.neededBy ? ' · até ' + r.neededBy : ''}</div>${reason}</td>
         <td>${money(r.totalEstimatedValue)}</td>
         <td><span class="badge ${cls}">${label}</span></td>
@@ -1163,20 +1235,7 @@
     LOADERS['buy-demands'] = async () => {
       try {
         await loadSuppliers();
-        const { approvedRequisitions, purchaseRouteItems } = await api('/api/v1/purchase-orders/demands');
-        $('buy-dem-prs').innerHTML = approvedRequisitions.length
-          ? '<table><thead><tr><th>Número</th><th>Itens</th><th>Valor est.</th><th>Emitir</th></tr></thead><tbody>' +
-            approvedRequisitions.map(r => `
-              <tr data-pr="${r.id}">
-                <td>${escapeHtml(r.number)}<div class="sub">${escapeHtml(r.requesterLabel)} · CC: ${escapeHtml(r.costCenter)}</div></td>
-                <td>${r.items.map(i => `${i.quantity}× ${i.catalogCode ? '[' + escapeHtml(i.catalogCode) + '] ' : ''}${escapeHtml(i.description)}`).join(' · ')}</td>
-                <td>${money(r.totalEstimatedValue)}</td>
-                <td class="row-actions">
-                  <select class="buy-sup-sel">${supOpts()}</select>
-                  <button data-act="convert" ${buySuppliers.length ? '' : 'disabled'}>Emitir pedido</button>
-                </td>
-              </tr>`).join('') + '</tbody></table>'
-          : '<p class="hello">Nenhuma requisição aprovada aguardando pedido.</p>';
+        const { purchaseRouteItems } = await api('/api/v1/purchase-orders/demands');
         $('buy-dem-route').innerHTML = purchaseRouteItems.length
           ? '<table><thead><tr><th>Origem</th><th>Produto</th><th>Qtd</th><th>Emitir</th></tr></thead><tbody>' +
             purchaseRouteItems.map(i => `
@@ -1190,25 +1249,20 @@
                 </td>
               </tr>`).join('') + '</tbody></table>'
           : '<p class="hello">Nenhum item aguardando compra vindo do almoxarifado.</p>';
-        if (!buySuppliers.length) $('buy-dem-prs').innerHTML += '<p class="hello">Cadastre um fornecedor em Cadastros → Fornecedores para emitir pedidos.</p>';
-      } catch (err) { $('buy-dem-prs').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+        if (!buySuppliers.length) $('buy-dem-route').innerHTML += '<p class="hello">Cadastre um fornecedor em Cadastros → Fornecedores para emitir pedidos.</p>';
+      } catch (err) { $('buy-dem-route').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
     document.getElementById('view-buy-demands').addEventListener('click', async (ev) => {
-      const btn = ev.target.closest('button[data-act]');
+      const btn = ev.target.closest('button[data-act="route-po"]');
       if (!btn) return;
       const row = btn.closest('tr');
       try {
         const supplierId = row.querySelector('.buy-sup-sel').value;
-        if (btn.dataset.act === 'convert') {
-          if (!confirm('Emitir pedido de compra para esta requisição aprovada?')) return;
-          await api('/api/v1/purchase-orders/', { method: 'POST', body: { supplierId, sourcePrId: row.dataset.pr, items: [] } });
-        } else {
-          if (!confirm('Emitir pedido de compra para este item?')) return;
-          await api('/api/v1/purchase-orders/', { method: 'POST', body: { supplierId, items: [{
-            description: row.dataset.desc, quantity: parseFloat(row.dataset.qty),
-            unitOfMeasure: row.dataset.unit, catalogItemId: row.dataset.cat,
-          }]}});
-        }
+        if (!confirm('Emitir pedido de compra para este item?')) return;
+        await api('/api/v1/purchase-orders/', { method: 'POST', body: { supplierId, items: [{
+          description: row.dataset.desc, quantity: parseFloat(row.dataset.qty),
+          unitOfMeasure: row.dataset.unit, catalogItemId: row.dataset.cat,
+        }]}});
         toast('Pedido de compra emitido.', 'ok');
         goTo('buy-orders');
       } catch (err) { toast(err.message, 'error'); }
@@ -1222,10 +1276,11 @@
           ? '<table><thead><tr><th>Número</th><th>Fornecedor</th><th>Itens</th><th>Total</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
             items.map(o => {
               const [label, cls] = STATUS_PO[o.status] || [o.status, ''];
-              const acts = o.status === 'EMITIDO' && canBuy()
+              const acts = (o.status === 'EMITIDO' && canBuy()
                 ? `<select class="buy-rec-loc">${whLocations.length ? whLocations.map(l => `<option value="${l.id}">${escapeHtml(l.code)}</option>`).join('') : '<option value="">(sem local)</option>'}</select>
                    <button data-act="receive">Receber</button>
-                   <button class="danger" data-act="cancel-po">Cancelar</button>` : '';
+                   <button class="danger" data-act="cancel-po">Cancelar</button>` : '')
+                + '<button class="secondary" data-act="pdf-po">PDF</button>';
               const src = o.sourcePrNumber ? `<div class="sub">de ${escapeHtml(o.sourcePrNumber)}</div>` : '';
               const rec = o.receivedByLabel ? `<div class="sub">Recebido por ${escapeHtml(o.receivedByLabel)}</div>` : '';
               return `<tr data-id="${o.id}">
@@ -1245,6 +1300,7 @@
       if (!btn) return;
       const row = btn.closest('tr');
       try {
+        if (btn.dataset.act === 'pdf-po') { await openPoPdf(row.dataset.id); return; }
         if (btn.dataset.act === 'receive') {
           const locationId = row.querySelector('.buy-rec-loc').value;
           if (!locationId) { toast('Crie um local de estoque em Estoque → Entrada primeiro.', 'error'); return; }
@@ -1366,16 +1422,26 @@
                 <td>${escapeHtml(s.taxId)}</td>
                 <td>${escapeHtml(s.email || '')}${s.phone ? `<div class="sub">${escapeHtml(s.phone)}</div>` : ''}</td>
                 <td><span class="badge ${s.active ? 'on' : 'off'}">${s.active ? 'ATIVO' : 'INATIVO'}</span></td>
-                <td class="row-actions"><button class="${s.active ? 'danger' : 'secondary'}" data-act="toggle-sup">${s.active ? 'Inativar' : 'Reativar'}</button></td>
+                <td class="row-actions">
+                  <button class="secondary" data-act="portal-key">Chave do portal</button>
+                  <button class="${s.active ? 'danger' : 'secondary'}" data-act="toggle-sup">${s.active ? 'Inativar' : 'Reativar'}</button>
+                </td>
               </tr>`).join('') + '</tbody></table>'
           : '<p class="hello">Nenhum fornecedor cadastrado ainda.</p>';
       } catch (err) { $('sup-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
     $('sup-list').addEventListener('click', async (ev) => {
-      const btn = ev.target.closest('button[data-act="toggle-sup"]');
+      const btn = ev.target.closest('button[data-act]');
       if (!btn) return;
+      const id = btn.closest('tr').dataset.id;
       try {
-        await api('/api/v1/suppliers/' + btn.closest('tr').dataset.id, { method: 'PATCH', body: { active: btn.textContent === 'Reativar' } });
+        if (btn.dataset.act === 'portal-key') {
+          if (!confirm('Gerar nova chave do Portal do Fornecedor? A chave anterior deixa de funcionar.')) return;
+          const { accessKey } = await api('/api/v1/suppliers/' + id + '/portal-key', { method: 'POST', body: {} });
+          prompt('Chave de acesso do portal (envie ao fornecedor — não será exibida novamente):', accessKey);
+          return;
+        }
+        await api('/api/v1/suppliers/' + id, { method: 'PATCH', body: { active: btn.textContent === 'Reativar' } });
         toast('Fornecedor atualizado.', 'ok');
         LOADERS['suppliers']();
       } catch (err) { toast(err.message, 'error'); }
@@ -1617,8 +1683,11 @@
     async function loadCcDatalist() {
       try {
         const { items } = await api('/api/v1/cost-centers/');
-        $('cc-datalist').innerHTML = items.map(c =>
-          `<option value="${escapeHtml(c.code)}">${escapeHtml(c.name)}${c.region ? ' · ' + escapeHtml(c.region) : ''}</option>`).join('');
+        const options = items.length
+          ? '<option value="">Selecione o centro de custo…</option>' + items.map(c =>
+              `<option value="${escapeHtml(c.code)}">${escapeHtml(c.code)} — ${escapeHtml(c.name)}${c.region ? ' · ' + escapeHtml(c.region) : ''}</option>`).join('')
+          : '<option value="">(cadastre centros de custo em Cadastros → Centros de Custo)</option>';
+        document.querySelectorAll('.cc-select').forEach(el => { const keep = el.value; el.innerHTML = options; if (keep) el.value = keep; });
       } catch {}
     }
     LOADERS['cost-centers'] = async () => {
@@ -1658,6 +1727,351 @@
         ev.target.reset();
         LOADERS['cost-centers']();
         loadCcDatalist();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    // ============ RFQ-001 — Cotações / Processos de Compra ============
+    const RFQ_STATUS = {
+      COTACAO_ABERTA: ['Aguardando propostas', ''],
+      EM_ANALISE: ['Em análise', 'dev'],
+      AGUARDANDO_GERENTE: ['Aguardando Gerente', 'dev'],
+      AGUARDANDO_DIRETOR: ['Aguardando Diretor', 'dev'],
+      APROVADO_PARA_EMISSAO: ['Aprovado p/ emissão da OC', 'on'],
+      OC_EMITIDA: ['OC emitida', 'on'],
+      REJEITADO: ['Rejeitado', 'off'],
+      CANCELADA: ['Cancelada', 'off'],
+    };
+    const RFQ_CRITERIA = ['Preço', 'Prazo de entrega', 'Condição de pagamento', 'Atendimento aos requisitos', 'Qualidade', 'Condição comercial', 'Histórico do fornecedor'];
+    let rfqCache = {};
+    let rfqOpenId = null;
+
+    async function openPoPdf(id) {
+      try {
+        toast('Gerando o PDF da OC…', 'ok');
+        const res = await fetch(`/api/v1/purchase-orders/${id}/pdf`, { headers: { Authorization: 'Bearer ' + store.access } });
+        if (!res.ok) throw new Error('Falha ao gerar o PDF da OC.');
+        window.open(URL.createObjectURL(await res.blob()), '_blank');
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
+    LOADERS['quotations'] = async () => {
+      $('rfq-detail').hidden = true;
+      $('rfq-lists').hidden = false;
+      $('rfq-queue-wrap')?.remove;
+      try {
+        const conduct = canConductRfq();
+        const queue = (await api('/api/v1/quotations/queue')).items;
+        $('rfq-queue').innerHTML = queue.length
+          ? '<table><thead><tr><th>Solicitação</th><th>Itens</th><th>Valor est.</th><th>Abrir cotação</th></tr></thead><tbody>' +
+            queue.map(r => `
+              <tr data-pr="${r.id}">
+                <td>${escapeHtml(r.number)}<div class="sub">${escapeHtml(r.requesterLabel)} · CC: ${escapeHtml(r.costCenter)}</div></td>
+                <td>${escapeHtml(r.justification)}<div class="sub">${r.items.map(i => `${i.quantity}× ${escapeHtml(i.description)}`).join(' · ')}</div></td>
+                <td>${money(r.totalEstimatedValue)}</td>
+                <td class="row-actions">${conduct ? `
+                  <select class="rfq-kind"><option value="COMPRA">Cotação de compra</option><option value="SERVICO">Cotação de serviço</option><option value="BID">BID</option></select>
+                  <input type="date" class="rfq-deadline" title="Prazo para respostas" style="width:auto;padding:5px 8px;font-size:12px" />
+                  <button data-act="open-rfq">Abrir</button>` : '—'}</td>
+              </tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhuma solicitação aprovada aguardando cotação. ✔</p>';
+
+        const { items } = await api('/api/v1/quotations/');
+        rfqCache = Object.fromEntries(items.map(q => [q.id, q]));
+        const filter = $('rfq-filter').value;
+        const list = filter ? items.filter(q => q.status === filter) : items;
+        $('rfq-list').innerHTML = list.length
+          ? '<table><thead><tr><th>Número</th><th>Origem</th><th>Fornecedores</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+            list.map(q => {
+              const [label, cls] = RFQ_STATUS[q.status] || [q.status, ''];
+              const winner = q.selection ? `<div class="sub">Vencedor: ${escapeHtml((q.proposals.find(p => p.id === q.selection.winnerProposalId) || {}).supplierName || '')}</div>` : '';
+              return `<tr data-id="${q.id}">
+                <td>${escapeHtml(q.number)}<div class="sub">${q.kind}</div></td>
+                <td>${escapeHtml(q.sourcePrNumber)}<div class="sub">CC: ${escapeHtml(q.costCenter)}</div></td>
+                <td>${q.suppliers.length} convidado(s) · ${q.proposals.filter(p => p.isLatest).length} proposta(s)${winner}</td>
+                <td><span class="badge ${cls}">${label}</span></td>
+                <td class="row-actions"><button data-act="open-detail">Abrir processo</button></td>
+              </tr>`;
+            }).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhum processo de cotação neste filtro.</p>';
+      } catch (err) { $('rfq-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
+    $('rfq-filter').addEventListener('change', () => LOADERS['quotations']());
+
+    function inviteText(q) {
+      return `Prezado fornecedor,\n\nA ${escapeHtml('empresa').toUpperCase()} convida sua empresa a participar da cotação ${q.number} (${q.kind}).\n` +
+        `Prazo para resposta: ${q.deadline || 'a combinar'}.\n` +
+        `Acesse o Portal do Fornecedor em ${location.origin}/portal , informe seu CNPJ e a chave de acesso fornecida pelo nosso time de Suprimentos e localize a cotação pelo número ${q.number}.\n\n` +
+        `Atenciosamente,\nSuprimentos — Trino Supply`;
+    }
+
+    function proposalMatrix(q) {
+      const latest = q.proposals.filter(p => p.isLatest);
+      if (!latest.length) return '<p class="hello">Nenhuma proposta recebida ainda.</p>';
+      const head = '<tr><th>Item</th>' + latest.map(p => `<th>${escapeHtml(p.supplierName)}${p.isWinner ? ' 🏆' : ''}</th>`).join('') + '</tr>';
+      const rows = q.items.map(i => '<tr><td>' + escapeHtml(i.description) + `<div class="sub">${i.quantity} ${escapeHtml(i.unitOfMeasure)}</div></td>` +
+        latest.map(p => {
+          const pi = p.items.find(x => x.quotationItemId === i.id);
+          return `<td>${pi ? money(pi.unitPrice) : '—'}</td>`;
+        }).join('') + '</tr>').join('');
+      const totals = '<tr><td><strong>Total (c/ frete)</strong></td>' + latest.map(p => `<td><strong>${money(p.totalValue)}</strong></td>`).join('') + '</tr>';
+      const conds = '<tr><td class="sub">Prazo · Pagamento</td>' + latest.map(p =>
+        `<td class="sub">${p.deliveryDays ?? '—'} dias · ${escapeHtml(p.paymentTerms || '—')}</td>`).join('') + '</tr>';
+      return `<table>${head}${rows}${totals}${conds}</table>`;
+    }
+
+    function renderRfqDetail(q) {
+      rfqOpenId = q.id;
+      const [label, cls] = RFQ_STATUS[q.status] || [q.status, ''];
+      const conduct = canConductRfq();
+      const latest = q.proposals.filter(p => p.isLatest);
+      let html = `<div class="panel">
+        <div class="topbar" style="margin-bottom:8px">
+          <div><span style="font-size:17px;font-weight:800">${escapeHtml(q.number)}</span>
+            <span class="badge ${cls}" style="margin-left:8px">${label}</span>
+            <div class="sub" style="color:var(--text-muted);font-size:12px">${q.kind} · origem ${escapeHtml(q.sourcePrNumber)} · CC ${escapeHtml(q.costCenter)} · aberta por ${escapeHtml(q.createdByLabel)}${q.deadline ? ' · prazo ' + q.deadline : ''}</div>
+          </div>
+          <button class="secondary" data-act="back">← Voltar</button>
+        </div>
+        ${q.decisionReason ? `<p class="hello">Último motivo registrado: <strong>${escapeHtml(q.decisionReason)}</strong></p>` : ''}
+        <h2>Itens da cotação</h2>
+        <div class="tablewrap"><table><thead><tr><th>#</th><th>Descrição</th><th>Qtd</th><th>Unid.</th></tr></thead><tbody>` +
+        q.items.map(i => `<tr><td>${i.sequence}</td><td>${escapeHtml(i.description)}${i.catalogCode ? `<div class="sub">${escapeHtml(i.catalogCode)}</div>` : ''}</td><td>${i.quantity}</td><td>${escapeHtml(i.unitOfMeasure)}</td></tr>`).join('') +
+        `</tbody></table></div></div>`;
+
+      // fornecedores convidados
+      html += `<div class="panel"><h2>Fornecedores convidados</h2>`;
+      html += q.suppliers.length
+        ? '<div class="tablewrap"><table><thead><tr><th>Fornecedor</th><th>CNPJ</th><th>Convite</th><th>Proposta</th><th></th></tr></thead><tbody>' +
+          q.suppliers.map(s => `
+            <tr><td>${escapeHtml(s.supplierName)}</td><td>${escapeHtml(s.taxId)}</td>
+            <td class="sub">${new Date(s.invitedAt).toLocaleDateString('pt-BR')} por ${escapeHtml(s.invitedByLabel)}</td>
+            <td>${s.hasProposal ? '<span class="badge on">RECEBIDA</span>' : '<span class="badge dev">AGUARDANDO</span>'}</td>
+            <td class="row-actions"><button class="secondary" data-act="copy-invite">Copiar convite</button></td></tr>`).join('') + '</tbody></table></div>'
+        : '<p class="hello">Nenhum fornecedor convidado ainda.</p>';
+      if (conduct && q.status === 'COTACAO_ABERTA')
+        html += `<div class="row-actions" style="margin-top:8px">
+          <select id="rfq-add-sup">${supOpts()}</select>
+          <button data-act="invite" ${buySuppliers.length ? '' : 'disabled'}>Convidar fornecedor</button>
+        </div><p class="hello" style="margin-top:6px">O fornecedor responde pelo Portal (${location.origin}/portal) com CNPJ + chave de acesso — gere a chave em Cadastros → Fornecedores. O convite fica registrado na auditoria do processo.</p>`;
+      html += '</div>';
+
+      // propostas + comparação
+      html += `<div class="panel"><h2>Propostas recebidas — comparação</h2><div class="tablewrap">${proposalMatrix(q)}</div>`;
+      const withAttachment = q.proposals.filter(p => p.attachmentDocumentId);
+      if (withAttachment.length)
+        html += '<div style="margin-top:8px">' + withAttachment.map(p =>
+          `<div class="sub">📎 ${escapeHtml(p.supplierName)} v${p.version}: <a href="#" data-doc="${p.attachmentDocumentId}" data-act="download-doc">${escapeHtml(p.attachmentFileName || 'anexo')}</a></div>`).join('') + '</div>';
+      if (conduct && q.status === 'COTACAO_ABERTA' && q.suppliers.length) {
+        html += `<h2>Registrar proposta recebida fora do portal</h2>
+          <div class="grid2">
+            <div><label>Fornecedor</label><select id="ip-supplier">${q.suppliers.map(s => `<option value="${s.supplierId}">${escapeHtml(s.supplierName)}</option>`).join('')}</select></div>
+            <div class="grid2">
+              <div><label>Prazo entrega (dias)</label><input id="ip-delivery" type="number" min="0" /></div>
+              <div><label>Cond. pagamento</label><input id="ip-payment" placeholder="ex.: 28 dias" /></div>
+            </div>
+          </div>
+          <div class="grid2">
+            <div><label>Frete (R$)</label><input id="ip-freight" type="number" min="0" step="0.01" /></div>
+            <div><label>Validade da proposta</label><input id="ip-valid" type="date" /></div>
+          </div>
+          <label>Preços unitários</label>
+          <div class="tablewrap"><table><tbody>` +
+          q.items.map(i => `<tr><td>${escapeHtml(i.description)} <span class="sub">(${i.quantity} ${escapeHtml(i.unitOfMeasure)})</span></td>
+            <td><input class="ip-price" data-item="${i.id}" type="number" min="0" step="0.01" style="width:110px" placeholder="R$ unit." /></td></tr>`).join('') +
+          `</tbody></table></div>
+          <button data-act="internal-proposal" style="margin-top:8px">Registrar proposta</button>`;
+      }
+      html += '</div>';
+
+      // ações do processo
+      const actions = [];
+      if (conduct && q.status === 'COTACAO_ABERTA')
+        actions.push('<button data-act="close-rfq">Encerrar para análise</button>');
+      if (conduct && q.status === 'EM_ANALISE' && latest.length) {
+        actions.push('winner-form');
+      }
+      if (canMgrApprove() && q.status === 'AGUARDANDO_GERENTE') actions.push('decision:manager');
+      if (canDirApprove() && q.status === 'AGUARDANDO_DIRETOR') actions.push('decision:director');
+      if (conduct && q.status === 'APROVADO_PARA_EMISSAO')
+        actions.push('<button data-act="issue-po">Emitir Ordem de Compra</button>');
+      if (q.status === 'OC_EMITIDA' && q.purchaseOrderId)
+        actions.push(`<button data-act="po-pdf">Gerar / Baixar PDF da OC ${escapeHtml(q.purchaseOrderNumber)}</button>`);
+      if (conduct && !['OC_EMITIDA', 'REJEITADO', 'CANCELADA'].includes(q.status))
+        actions.push('<button class="danger" data-act="cancel-rfq">Cancelar processo</button>');
+
+      html += '<div class="panel"><h2>Ações da etapa atual</h2>';
+      if (q.selection) html += `<p class="hello">Fornecedor selecionado por <strong>${escapeHtml(q.selection.byLabel)}</strong> — critérios: ${escapeHtml(q.selection.criteria || '—')} · justificativa: “${escapeHtml(q.selection.justification)}”</p>`;
+      if (q.managerApproval) html += `<p class="hello">Aprovação gerencial: <strong>${escapeHtml(q.managerApproval.byLabel)}</strong></p>`;
+      if (q.directorApproval) html += `<p class="hello">Aprovação da diretoria: <strong>${escapeHtml(q.directorApproval.byLabel)}</strong></p>`;
+      for (const a of actions) {
+        if (a === 'winner-form') {
+          html += `<h2>Escolher fornecedor vencedor</h2>
+            <div class="tablewrap"><table><tbody>` +
+            latest.map(p => `<tr><td><input type="radio" name="winner" value="${p.id}" /></td>
+              <td>${escapeHtml(p.supplierName)} <span class="sub">v${p.version} · ${p.submittedVia}</span></td>
+              <td><strong>${money(p.totalValue)}</strong></td>
+              <td class="sub">${p.deliveryDays ?? '—'} dias · ${escapeHtml(p.paymentTerms || '—')}</td></tr>`).join('') +
+            `</tbody></table></div>
+            <label>Critérios utilizados</label>
+            <div class="checks">` + RFQ_CRITERIA.map(c => `<label><input type="checkbox" class="rfq-crit" value="${c}" /> ${c}</label>`).join('') + `</div>
+            <label for="rfq-just">Justificativa da escolha (obrigatória)</label>
+            <input id="rfq-just" placeholder="Por que este fornecedor vence?" />
+            <button data-act="select-winner" style="margin-top:10px">Confirmar escolha e enviar ao Gerente</button>`;
+        } else if (a.startsWith('decision:')) {
+          const stage = a.split(':')[1];
+          html += `<div class="row-actions" style="margin-top:8px">
+            <button data-act="decide" data-stage="${stage}" data-decision="APROVAR">Aprovar</button>
+            <button class="secondary" data-act="decide" data-stage="${stage}" data-decision="AJUSTES">Solicitar ajustes</button>
+            <button class="danger" data-act="decide" data-stage="${stage}" data-decision="REJEITAR">Rejeitar</button>
+          </div>`;
+        } else html += `<div class="row-actions" style="margin-top:8px">${a}</div>`;
+      }
+      if (!actions.length) html += '<p class="hello">Nenhuma ação disponível para o seu papel nesta etapa.</p>';
+      html += '</div>';
+
+      html += '<div class="panel"><h2>Histórico do processo (timeline)</h2><div id="rfq-timeline"><p class="hello">Carregando…</p></div></div>';
+
+      $('rfq-lists').hidden = true;
+      $('rfq-detail').hidden = false;
+      $('rfq-detail').innerHTML = html;
+      api(`/api/v1/quotations/${q.id}/timeline`).then(({ items }) => {
+        $('rfq-timeline').innerHTML = items.length
+          ? items.map(e => `
+              <div class="alert-card info" style="cursor:default">
+                <span><strong>${escapeHtml(e.description)}</strong>
+                  <div class="sub">${new Date(e.occurredAt).toLocaleString('pt-BR')} · ${escapeHtml(e.actorLabel)}${e.note ? ' · “' + escapeHtml(e.note) + '”' : ''}</div>
+                </span>
+              </div>`).join('')
+          : '<p class="hello">Sem eventos.</p>';
+      }).catch(() => {});
+    }
+
+    async function refreshRfqDetail() {
+      const q = await api('/api/v1/quotations/' + rfqOpenId);
+      rfqCache[q.id] = q;
+      renderRfqDetail(q);
+    }
+
+    document.getElementById('view-quotations').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('[data-act]');
+      if (!btn) return;
+      const act = btn.dataset.act;
+      try {
+        if (act === 'open-rfq') {
+          const row = btn.closest('tr');
+          const kind = row.querySelector('.rfq-kind').value;
+          const deadline = row.querySelector('.rfq-deadline').value || null;
+          const q = await api('/api/v1/quotations/', { method: 'POST', body: { prId: row.dataset.pr, kind, deadline } });
+          toast(`Cotação ${q.number} aberta.`, 'ok');
+          rfqCache[q.id] = q;
+          await loadSuppliers();
+          renderRfqDetail(q);
+        } else if (act === 'open-detail') {
+          await loadSuppliers().catch(() => {});
+          rfqOpenId = btn.closest('tr').dataset.id;
+          renderRfqDetail(rfqCache[rfqOpenId]);
+        } else if (act === 'back') {
+          LOADERS['quotations']();
+        } else if (act === 'invite') {
+          const q = await api(`/api/v1/quotations/${rfqOpenId}/suppliers`, { method: 'POST', body: { supplierIds: [$('rfq-add-sup').value] } });
+          toast('Fornecedor convidado — convite registrado na auditoria.', 'ok');
+          rfqCache[q.id] = q; renderRfqDetail(q);
+        } else if (act === 'copy-invite') {
+          const text = inviteText(rfqCache[rfqOpenId]);
+          try { await navigator.clipboard.writeText(text); toast('Convite copiado — cole no e-mail do fornecedor.', 'ok'); }
+          catch { prompt('Copie o convite:', text); }
+        } else if (act === 'internal-proposal') {
+          const items = [...document.querySelectorAll('.ip-price')]
+            .filter(i => i.value).map(i => ({ quotationItemId: i.dataset.item, unitPrice: parseFloat(i.value), quantity: null }));
+          const q = await api(`/api/v1/quotations/${rfqOpenId}/proposals`, { method: 'POST', body: {
+            supplierId: $('ip-supplier').value,
+            deliveryDays: $('ip-delivery').value ? parseInt($('ip-delivery').value) : null,
+            paymentTerms: $('ip-payment').value || null,
+            freightValue: $('ip-freight').value ? parseFloat($('ip-freight').value) : null,
+            validUntil: $('ip-valid').value || null, items,
+          }});
+          toast('Proposta registrada.', 'ok');
+          rfqCache[q.id] = q; renderRfqDetail(q);
+        } else if (act === 'close-rfq') {
+          if (!confirm('Encerrar a cotação para análise? Novas propostas não serão aceitas.')) return;
+          const q = await api(`/api/v1/quotations/${rfqOpenId}/close`, { method: 'POST', body: {} });
+          toast('Cotação encerrada — analise as propostas e escolha o vencedor.', 'ok');
+          rfqCache[q.id] = q; renderRfqDetail(q);
+        } else if (act === 'select-winner') {
+          const winner = document.querySelector('input[name="winner"]:checked');
+          if (!winner) { toast('Selecione a proposta vencedora.', 'error'); return; }
+          const criteria = [...document.querySelectorAll('.rfq-crit:checked')].map(c => c.value);
+          const q = await api(`/api/v1/quotations/${rfqOpenId}/select-winner`, { method: 'POST', body: {
+            proposalId: winner.value, criteria, justification: $('rfq-just').value,
+          }});
+          toast('Fornecedor selecionado — processo enviado à aprovação gerencial.', 'ok');
+          rfqCache[q.id] = q; renderRfqDetail(q);
+        } else if (act === 'decide') {
+          const decision = btn.dataset.decision;
+          let reason = null;
+          if (decision !== 'APROVAR') {
+            reason = prompt(decision === 'REJEITAR' ? 'Justificativa da rejeição (obrigatória):' : 'O que deve ser ajustado? (obrigatório)');
+            if (!reason) return;
+          } else reason = prompt('Observação da aprovação (opcional):') || null;
+          const path = btn.dataset.stage === 'manager' ? 'manager-decision' : 'director-decision';
+          const q = await api(`/api/v1/quotations/${rfqOpenId}/${path}`, { method: 'POST', body: { decision, reason } });
+          toast('Decisão registrada.', 'ok');
+          rfqCache[q.id] = q; renderRfqDetail(q);
+        } else if (act === 'issue-po') {
+          const notes = prompt('Observações da Ordem de Compra (opcional):') || null;
+          if (!confirm('Emitir a Ordem de Compra com os dados da proposta vencedora?')) return;
+          const order = await api(`/api/v1/quotations/${rfqOpenId}/issue-po`, { method: 'POST', body: { notes } });
+          toast(`Ordem de compra ${order.number} emitida.`, 'ok');
+          await refreshRfqDetail();
+        } else if (act === 'po-pdf') {
+          await openPoPdf(rfqCache[rfqOpenId].purchaseOrderId);
+        } else if (act === 'download-doc') {
+          ev.preventDefault();
+          const res = await fetch('/api/v1/documents/' + btn.dataset.doc, { headers: { Authorization: 'Bearer ' + store.access } });
+          if (!res.ok) throw new Error('Falha ao baixar o documento.');
+          window.open(URL.createObjectURL(await res.blob()), '_blank');
+        } else if (act === 'cancel-rfq') {
+          const reason = prompt('Motivo do cancelamento (obrigatório):');
+          if (!reason) return;
+          await api(`/api/v1/quotations/${rfqOpenId}/cancel`, { method: 'POST', body: { reason } });
+          toast('Processo cancelado.', 'ok');
+          LOADERS['quotations']();
+        }
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    // ============ CADASTROS: EMPRESA ============
+    LOADERS['company'] = async () => {
+      try {
+        const c = await api('/api/v1/company');
+        $('co-legal').value = c.legalName || '';
+        $('co-tax').value = c.taxId || '';
+        $('co-addr').value = c.address || '';
+        $('co-district').value = c.district || '';
+        $('co-city').value = c.city || '';
+        $('co-state').value = c.state || '';
+        $('co-zip').value = c.zip || '';
+        $('co-ie').value = c.stateRegistration || '';
+        $('co-phone').value = c.phone || '';
+        $('co-email').value = c.email || '';
+        $('co-deladdr').value = c.deliveryAddress || '';
+        $('co-deltax').value = c.deliveryTaxId || '';
+        $('co-clauses').value = c.standardClauses || '';
+        $('co-policy').value = c.paymentPolicy || '';
+      } catch (err) { toast(err.message, 'error'); }
+    };
+    $('company-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try {
+        await api('/api/v1/company', { method: 'PUT', body: {
+          legalName: $('co-legal').value, taxId: $('co-tax').value, address: $('co-addr').value,
+          district: $('co-district').value || null, city: $('co-city').value, state: $('co-state').value,
+          zip: $('co-zip').value, stateRegistration: $('co-ie').value || null, phone: $('co-phone').value || null,
+          email: $('co-email').value || null, deliveryAddress: $('co-deladdr').value || null,
+          deliveryTaxId: $('co-deltax').value || null, standardClauses: $('co-clauses').value || null,
+          paymentPolicy: $('co-policy').value || null,
+        }});
+        toast('Dados da empresa salvos — usados no cabeçalho e na política do PDF da OC.', 'ok');
       } catch (err) { toast(err.message, 'error'); }
     });
 

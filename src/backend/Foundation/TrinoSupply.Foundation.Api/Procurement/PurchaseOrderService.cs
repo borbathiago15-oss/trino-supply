@@ -32,8 +32,12 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
         var linkedPrIds = await db.PurchaseOrders
             .Where(o => o.SourcePrId != null && o.Status != PurchaseOrderStatus.Cancelled)
             .Select(o => o.SourcePrId!.Value).ToListAsync(ct);
+        var quotedPrIds = await db.Quotations
+            .Where(q => q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected)
+            .Select(q => q.SourcePrId).ToListAsync(ct);
         var prs = await db.Requisitions.Include(r => r.Items)
-            .Where(r => r.Status == RequisitionStatus.Approved && !linkedPrIds.Contains(r.Id))
+            .Where(r => r.Status == RequisitionStatus.Approved
+                        && !linkedPrIds.Contains(r.Id) && !quotedPrIds.Contains(r.Id))
             .OrderBy(r => r.DecidedAt).Take(100).ToListAsync(ct);
 
         var mrs = await db.MaterialRequisitions.Include(r => r.Items)
@@ -56,21 +60,11 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
         if (supplier is null) return (null, new("PO-ERR-020", "Fornecedor inexistente ou inativo."));
 
         var inputs = items.ToList();
-        PurchaseRequisition? sourcePr = null;
+        // RFQ-BR-010: PR aprovada segue exclusivamente pelo processo de cotação —
+        // a conversão direta requisição → OC foi desativada.
         if (sourcePrId is not null)
-        {
-            sourcePr = await db.Requisitions.Include(r => r.Items)
-                .SingleOrDefaultAsync(r => r.Id == sourcePrId, ct);
-            if (sourcePr is null || sourcePr.Status != RequisitionStatus.Approved)
-                return (null, new("PO-ERR-021", "A requisição de origem não está aprovada."));
-            if (await db.PurchaseOrders.AnyAsync(
-                    o => o.SourcePrId == sourcePrId && o.Status != PurchaseOrderStatus.Cancelled, ct))
-                return (null, new("PO-ERR-022", "A requisição já possui um pedido de compra vinculado."));
-            if (inputs.Count == 0)
-                inputs = sourcePr.Items
-                    .Select(i => new PoItemInput(i.Description, i.Quantity, i.UnitOfMeasure, i.EstimatedUnitPrice, i.CatalogItemId))
-                    .ToList();
-        }
+            return (null, new("PO-ERR-023",
+                "Emissão a partir de requisição exige o processo de cotação (RFQ-001): abra a cotação, conclua as aprovações e emita a OC pelo processo."));
 
         if (inputs.Count == 0) return (null, new("PO-ERR-030", "Inclua ao menos um item no pedido."));
         if (inputs.Any(i => i.Quantity <= 0 || i.UnitPrice is < 0))
@@ -88,8 +82,8 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
             Number = $"PO-{now.Year}-{await NextSeqAsync(ct):000000}",
             SupplierId = supplier.Id,
             SupplierName = supplier.TradeName ?? supplier.LegalName,
-            SourcePrId = sourcePr?.Id,
-            SourcePrNumber = sourcePr?.Number,
+            SourcePrId = null,
+            SourcePrNumber = null,
             Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
             IssuedBy = actor.Id,
             IssuedByLabel = actor.Label,

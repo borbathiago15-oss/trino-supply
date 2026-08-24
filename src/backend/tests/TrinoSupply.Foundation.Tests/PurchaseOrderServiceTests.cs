@@ -103,31 +103,14 @@ public class PurchaseOrderServiceTests
     }
 
     [Fact]
-    public async Task Converter_requisicao_aprovada_copia_itens_e_impede_segundo_pedido()
+    public async Task Conversao_direta_de_requisicao_em_pedido_esta_desativada_RFQ_BR_010()
     {
         var w = await BuildAsync();
         var pr = await ApprovedPrAsync(w);
 
-        var (order, error) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null, [], pr.Id);
-        Assert.Null(error);
-        Assert.Equal(pr.Number, order!.SourcePrNumber);
-        Assert.Single(order.Items);
-        Assert.Equal(w.Detergente.Id, order.Items.Single().CatalogItemId);
+        var (_, error) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null, [], pr.Id);
 
-        var (_, second) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null, [], pr.Id);
-        Assert.Equal("PO-ERR-022", second!.Code);
-    }
-
-    [Fact]
-    public async Task Requisicao_nao_aprovada_nao_vira_pedido()
-    {
-        var w = await BuildAsync();
-        var (pr, _) = await w.Prs.CreateAsync(Ana, "Justificativa", "CC-01", "NORMAL", null,
-            [new ItemInput("Cabo", 1, "UN", 10, null)]);
-
-        var (_, error) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null, [], pr!.Id);
-
-        Assert.Equal("PO-ERR-021", error!.Code);
+        Assert.Equal("PO-ERR-023", error!.Code); // PR aprovada só vira OC pelo processo de cotação
     }
 
     [Fact]
@@ -195,7 +178,7 @@ public class PurchaseOrderServiceTests
 
     // ---- demandas -----------------------------------------------------------
     [Fact]
-    public async Task Demandas_listam_pr_aprovada_sem_pedido_e_somem_apos_conversao()
+    public async Task Demandas_listam_pr_aprovada_e_somem_quando_a_cotacao_e_aberta()
     {
         var w = await BuildAsync();
         var pr = await ApprovedPrAsync(w);
@@ -204,7 +187,10 @@ public class PurchaseOrderServiceTests
         Assert.Single(before);
         Assert.Equal(pr.Id, before.Single().Id);
 
-        await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null, [], pr.Id);
+        var qsvc = new QuotationService(w.Db, new FixedTimeProvider(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero)));
+        var (_, qErr) = await qsvc.CreateFromPrAsync(Carla, pr.Id, QuotationKind.Purchase, null, null);
+        Assert.Null(qErr);
+
         var (after, _) = await w.Pos.DemandsAsync();
         Assert.Empty(after);
     }

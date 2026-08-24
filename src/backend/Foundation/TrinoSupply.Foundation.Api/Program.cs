@@ -48,6 +48,7 @@ builder.Services.AddScoped<MaterialRequisitionService>();
 builder.Services.AddScoped<SupplierService>();
 builder.Services.AddScoped<PurchaseOrderService>();
 builder.Services.AddScoped<CostCenterService>();
+builder.Services.AddScoped<QuotationService>();
 builder.Services.AddScoped<TrinoSupply.Foundation.Api.Analytics.AnalyticsService>();
 
 builder.Services.AddDbContext<AppDbContext>(o =>
@@ -201,6 +202,7 @@ static object CatalogView(CatalogItem i) => new
 };
 
 var catalogGroup = app.MapGroup("/api/v1/items").RequireAuthorization();
+catalogGroup.AddEndpointFilter(RejectSupplierRole());
 
 catalogGroup.MapGet("/families", async (CatalogService svc, ClaimsPrincipal p, HttpContext ctx) =>
 {
@@ -501,6 +503,51 @@ app.MapGet("/api/v1/dashboard", async (AppDbContext db, ClaimsPrincipal p, HttpC
         });
     }
 
+    // Processo de cotação (RFQ-001): cada etapa avisa o responsável da vez
+    if (mods.Contains(AppModules.Compras) || mods.Contains(AppModules.Aprovacao))
+    {
+        if (QuotationService.CanConduct(role))
+        {
+            var open = await db.Quotations.CountAsync(q => q.Status == QuotationStatus.Open);
+            if (open > 0) alerts.Add(new
+            {
+                kind = "COTACAO_ABERTA", severity = "info", count = open, view = "quotations",
+                text = $"{open} cotação(ões) aberta(s) aguardando propostas.",
+            });
+            var analysis = await db.Quotations.CountAsync(q => q.Status == QuotationStatus.Analysis);
+            if (analysis > 0) alerts.Add(new
+            {
+                kind = "COTACAO_ANALISE", severity = "media", count = analysis, view = "quotations",
+                text = $"{analysis} cotação(ões) em análise aguardando a escolha do fornecedor.",
+            });
+            var toIssue = await db.Quotations.CountAsync(q => q.Status == QuotationStatus.ApprovedForIssue);
+            if (toIssue > 0) alerts.Add(new
+            {
+                kind = "OC_EMITIR", severity = "alta", count = toIssue, view = "quotations",
+                text = $"{toIssue} processo(s) aprovado(s) aguardando a emissão da ordem de compra.",
+            });
+        }
+        if (QuotationService.CanApproveAsManager(role))
+        {
+            var mgr = await db.Quotations.CountAsync(q => q.Status == QuotationStatus.AwaitingManager && q.SelectedBy != uid);
+            if (mgr > 0) alerts.Add(new
+            {
+                kind = "APROVACAO_GERENTE", severity = "media", count = mgr, view = "quotations",
+                text = $"{mgr} processo(s) de compra aguardando a sua aprovação gerencial.",
+            });
+        }
+        if (QuotationService.CanApproveAsDirector(role))
+        {
+            var dir = await db.Quotations.CountAsync(q => q.Status == QuotationStatus.AwaitingDirector
+                && q.SelectedBy != uid && q.ManagerApprovedBy != uid);
+            if (dir > 0) alerts.Add(new
+            {
+                kind = "APROVACAO_DIRETOR", severity = "media", count = dir, view = "quotations",
+                text = $"{dir} processo(s) de compra aguardando a aprovação da diretoria.",
+            });
+        }
+    }
+
     return Ok(new { alerts, generatedAt = clock.GetUtcNow() }, ctx);
 }).RequireAuthorization();
 
@@ -700,6 +747,16 @@ sup.MapPost("/", async (CreateSupplierRequest body, SupplierService svc, ClaimsP
         : Results.Json(new { data = SupplierView(supplier!), correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
 
+// gera a chave do Portal do Fornecedor (mostrada uma única vez; persiste só o hash)
+sup.MapPost("/{id:guid}/portal-key", async (Guid id, SupplierService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!SupplierService.CanMaintain(RoleOf(p)))
+        return Error(ctx, 403, "SUP-ERR-900", "Seu papel não gera chaves do portal.");
+    var (key, error) = await svc.GeneratePortalKeyAsync(id);
+    return error is not null ? Error(ctx, 404, error.Code, error.Message)
+        : Ok(new { accessKey = key, message = "Guarde a chave: ela não será exibida novamente." }, ctx);
+});
+
 sup.MapPatch("/{id:guid}", async (Guid id, UpdateSupplierRequest body, SupplierService svc, ClaimsPrincipal p, HttpContext ctx) =>
 {
     if (!SupplierService.CanMaintain(RoleOf(p)))
@@ -720,7 +777,9 @@ static object PoView(PurchaseOrder o) => new
         _ => "CANCELADO",
     },
     supplierId = o.SupplierId, supplierName = o.SupplierName,
-    sourcePrNumber = o.SourcePrNumber, notes = o.Notes, totalValue = o.TotalValue,
+    sourcePrNumber = o.SourcePrNumber, quotationNumber = o.QuotationNumber,
+    paymentTerms = o.PaymentTerms, deliveryDays = o.DeliveryDays, freightValue = o.FreightValue,
+    notes = o.Notes, totalValue = o.TotalValue,
     issuedByLabel = o.IssuedByLabel, receivedByLabel = o.ReceivedByLabel, receivedAt = o.ReceivedAt,
     cancelReason = o.CancelReason, createdAt = o.CreatedAt,
     items = o.Items.Select(i => new
@@ -815,6 +874,7 @@ static object CcView(CostCenter c) => new
 };
 
 var ccs = app.MapGroup("/api/v1/cost-centers").RequireAuthorization();
+ccs.AddEndpointFilter(RejectSupplierRole());
 
 // listagem aberta a autenticados: os formulários de requisição/solicitação usam o picker
 ccs.MapGet("/", async (CostCenterService svc, ClaimsPrincipal p, HttpContext ctx, bool? all) =>
@@ -872,6 +932,398 @@ analytics.MapGet("/stock", async (TrinoSupply.Foundation.Api.Analytics.Analytics
     return Ok(await svc.StockAsync(locationId, family, months ?? 6), ctx);
 });
 
+// ==== RFQ-001 — Processo fechado de compras (cotação → aprovações → OC) ======
+static string QKindLabel(QuotationKind k) => k switch
+{
+    QuotationKind.Bid => "BID", QuotationKind.Service => "SERVICO", _ => "COMPRA",
+};
+static string QStatusLabel(QuotationStatus s) => s switch
+{
+    QuotationStatus.Open => "COTACAO_ABERTA",
+    QuotationStatus.Analysis => "EM_ANALISE",
+    QuotationStatus.AwaitingManager => "AGUARDANDO_GERENTE",
+    QuotationStatus.AwaitingDirector => "AGUARDANDO_DIRETOR",
+    QuotationStatus.ApprovedForIssue => "APROVADO_PARA_EMISSAO",
+    QuotationStatus.PoIssued => "OC_EMITIDA",
+    QuotationStatus.Rejected => "REJEITADO",
+    _ => "CANCELADA",
+};
+
+static object ProposalView(Proposal p, Quotation q) => new
+{
+    id = p.Id, supplierId = p.SupplierId, supplierName = p.SupplierName,
+    version = p.VersionNumber, totalValue = p.TotalValue, deliveryDays = p.DeliveryDays,
+    paymentTerms = p.PaymentTerms, freightValue = p.FreightValue, validUntil = p.ValidUntil,
+    notes = p.Notes, submittedVia = p.SubmittedVia, submittedByLabel = p.SubmittedByLabel,
+    submittedAt = p.SubmittedAt, attachmentDocumentId = p.AttachmentDocumentId,
+    attachmentFileName = p.AttachmentFileName,
+    isLatest = q.Proposals.Where(x => x.SupplierId == p.SupplierId).Max(x => x.VersionNumber) == p.VersionNumber,
+    isWinner = q.WinnerProposalId == p.Id,
+    items = p.Items.Select(i => new { quotationItemId = i.QuotationItemId, unitPrice = i.UnitPrice, quantity = i.Quantity }),
+};
+
+static object QuotationView(Quotation q) => new
+{
+    id = q.Id, number = q.Number, kind = QKindLabel(q.Kind), status = QStatusLabel(q.Status),
+    sourcePrId = q.SourcePrId, sourcePrNumber = q.SourcePrNumber, costCenter = q.CostCenter,
+    justification = q.Justification, deadline = q.Deadline, notes = q.Notes,
+    createdByLabel = q.CreatedByLabel, createdAt = q.CreatedAt, decisionReason = q.DecisionReason,
+    items = q.Items.OrderBy(i => i.Sequence).Select(i => new
+    {
+        id = i.Id, sequence = i.Sequence, catalogCode = i.CatalogCode,
+        description = i.Description, quantity = i.Quantity, unitOfMeasure = i.UnitOfMeasure,
+    }),
+    suppliers = q.Suppliers.Select(s => new
+    {
+        supplierId = s.SupplierId, supplierName = s.SupplierName, taxId = s.TaxId,
+        invitedAt = s.InvitedAt, invitedByLabel = s.InvitedByLabel,
+        hasProposal = q.Proposals.Any(p => p.SupplierId == s.SupplierId),
+    }),
+    proposals = q.Proposals.OrderBy(p => p.SupplierName).ThenByDescending(p => p.VersionNumber)
+        .Select(p => ProposalView(p, q)),
+    selection = q.SelectedAt is null ? null : new
+    {
+        winnerSupplierId = q.WinnerSupplierId, winnerProposalId = q.WinnerProposalId,
+        criteria = q.SelectionCriteria, justification = q.SelectionJustification,
+        byLabel = q.SelectedByLabel, at = q.SelectedAt,
+    },
+    managerApproval = q.ManagerApprovedAt is null ? null : new { byLabel = q.ManagerApprovedByLabel, at = q.ManagerApprovedAt },
+    directorApproval = q.DirectorApprovedAt is null ? null : new { byLabel = q.DirectorApprovedByLabel, at = q.DirectorApprovedAt },
+    purchaseOrderId = q.PurchaseOrderId, purchaseOrderNumber = q.PurchaseOrderNumber,
+};
+
+var rfq = app.MapGroup("/api/v1/quotations").RequireAuthorization();
+rfq.AddEndpointFilter(RejectSupplierRole());
+rfq.AddEndpointFilter(RequireModules(AppModules.Compras, AppModules.Aprovacao));
+
+rfq.MapGet("/", async (QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");
+    return Ok(new { items = (await svc.ListAsync()).Select(QuotationView) }, ctx);
+});
+
+// fila de Suprimentos: PRs aprovadas aguardando cotação
+rfq.MapGet("/queue", async (QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa a fila de suprimentos.");
+    var prs = await svc.AwaitingQuotationAsync();
+    return Ok(new
+    {
+        items = prs.Select(r => new
+        {
+            id = r.Id, number = r.Number, requesterLabel = r.RequesterLabel, costCenter = r.CostCenter,
+            justification = r.Justification, totalEstimatedValue = r.TotalEstimatedValue,
+            neededBy = r.NeededBy, decidedAt = r.DecidedAt,
+            items = r.Items.Select(i => new { description = i.Description, quantity = i.Quantity, unitOfMeasure = i.UnitOfMeasure }),
+        }),
+    }, ctx);
+});
+
+rfq.MapGet("/{id:guid}", async (Guid id, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");
+    var q = await svc.GetAsync(id);
+    return q is null ? Error(ctx, 404, "RFQ-ERR-404", "Cotação não encontrada.") : Ok(QuotationView(q), ctx);
+});
+
+rfq.MapGet("/{id:guid}/timeline", async (Guid id, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");
+    var events = await svc.TimelineAsync(id);
+    return Ok(new
+    {
+        items = events.Select(e => new
+        {
+            eventType = e.EventType, description = e.Description,
+            fromStatus = e.FromStatus is null ? null : QStatusLabel(e.FromStatus.Value),
+            toStatus = e.ToStatus is null ? null : QStatusLabel(e.ToStatus.Value),
+            actorLabel = e.ActorLabel, note = e.Note, documentId = e.DocumentId, occurredAt = e.OccurredAt,
+        }),
+    }, ctx);
+});
+
+rfq.MapPost("/", async (CreateQuotationRequest body, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não abre cotações.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var kind = body.Kind?.ToUpperInvariant() switch
+    {
+        "BID" => QuotationKind.Bid, "SERVICO" => QuotationKind.Service, _ => QuotationKind.Purchase,
+    };
+    var (q, error) = await svc.CreateFromPrAsync(actor, body.PrId, kind, body.Deadline, body.Notes);
+    return error is not null ? Error(ctx, 422, error.Code, error.Message)
+        : Results.Json(new { data = QuotationView(q!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+rfq.MapPost("/{id:guid}/suppliers", async (Guid id, InviteSuppliersRequest body, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não convida fornecedores.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var (q, error) = await svc.InviteSuppliersAsync(actor, id, body.SupplierIds ?? []);
+    return error is not null ? Error(ctx, error.Code == "RFQ-ERR-010" ? 400 : 409, error.Code, error.Message) : Ok(QuotationView(q!), ctx);
+});
+
+// registro interno de proposta recebida fora do portal (e-mail/telefone)
+rfq.MapPost("/{id:guid}/proposals", async (Guid id, InternalProposalRequest body, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não registra propostas.");
+    var input = new ProposalInput(body.DeliveryDays, body.PaymentTerms, body.FreightValue, body.ValidUntil, body.Notes,
+        (body.Items ?? []).Select(i => new ProposalItemInput(i.QuotationItemId, i.UnitPrice, i.Quantity)).ToList());
+    var (proposal, error) = await svc.SubmitProposalAsync(id, body.SupplierId, input, "INTERNO", p.FindFirstValue("name") ?? "Usuário");
+    if (error is not null) return Error(ctx, error.Code == "RFQ-ERR-020" ? 409 : 400, error.Code, error.Message);
+    var q = await svc.GetAsync(id);
+    return Ok(QuotationView(q!), ctx);
+});
+
+rfq.MapPost("/{id:guid}/close", async (Guid id, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não encerra cotações.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var (q, error) = await svc.CloseForAnalysisAsync(actor, id);
+    return error is not null ? Error(ctx, error.Code == "RFQ-ERR-021" ? 422 : 409, error.Code, error.Message) : Ok(QuotationView(q!), ctx);
+});
+
+rfq.MapPost("/{id:guid}/select-winner", async (Guid id, SelectWinnerRequest body, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não seleciona fornecedores.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var criteria = body.Criteria is { Count: > 0 } ? string.Join(", ", body.Criteria) : null;
+    var (q, error) = await svc.SelectWinnerAsync(actor, id, body.ProposalId, criteria, body.Justification);
+    return error is not null ? Error(ctx, error.Code == "RFQ-ERR-020" ? 409 : 422, error.Code, error.Message) : Ok(QuotationView(q!), ctx);
+});
+
+rfq.MapPost("/{id:guid}/manager-decision", async (Guid id, QuotationDecisionRequest body, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!QuotationService.CanApproveAsManager(role))
+        return Error(ctx, 403, "RFQ-ERR-900", "A aprovação gerencial cabe ao gestor de suprimentos ou administrador.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var (q, error) = await svc.ManagerDecisionAsync(actor, id, body.Decision, body.Reason);
+    return error is not null
+        ? Error(ctx, error.Code switch { "RFQ-ERR-020" => 409, "RFQ-ERR-030" => 422, _ => 400 }, error.Code, error.Message)
+        : Ok(QuotationView(q!), ctx);
+});
+
+rfq.MapPost("/{id:guid}/director-decision", async (Guid id, QuotationDecisionRequest body, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!QuotationService.CanApproveAsDirector(role))
+        return Error(ctx, 403, "RFQ-ERR-900", "A aprovação da diretoria cabe ao diretor ou administrador.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var (q, error) = await svc.DirectorDecisionAsync(actor, id, body.Decision, body.Reason);
+    return error is not null
+        ? Error(ctx, error.Code switch { "RFQ-ERR-020" => 409, "RFQ-ERR-030" => 422, _ => 400 }, error.Code, error.Message)
+        : Ok(QuotationView(q!), ctx);
+});
+
+rfq.MapPost("/{id:guid}/issue-po", async (Guid id, IssuePoRequest body, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não emite ordens de compra.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var (order, error) = await svc.IssuePurchaseOrderAsync(actor, id, body.Notes);
+    return error is not null ? Error(ctx, 409, error.Code, error.Message)
+        : Results.Json(new { data = PoView(order!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+rfq.MapPost("/{id:guid}/cancel", async (Guid id, ReasonRequest body, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não cancela cotações.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var (q, error) = await svc.CancelAsync(actor, id, body.Reason);
+    return error is not null ? Error(ctx, error.Code == "RFQ-ERR-020" ? 409 : 400, error.Code, error.Message) : Ok(QuotationView(q!), ctx);
+});
+
+// ==== Portal do Fornecedor (RFQ-001 §5) ======================================
+var portal = app.MapGroup("/api/v1/portal");
+
+portal.MapPost("/login", async (PortalLoginRequest body, SupplierService svc, TokenService tokens, TimeProvider clock, HttpContext ctx) =>
+{
+    var supplier = await svc.PortalLoginAsync(body.TaxId, body.AccessKey);
+    if (supplier is null)
+        return Error(ctx, 401, "RFQ-ERR-051", "CNPJ/CPF ou chave de acesso inválidos, ou fornecedor sem acesso ao portal.");
+    var token = tokens.CreateSupplierToken(supplier.Id, supplier.TradeName ?? supplier.LegalName, clock.GetUtcNow());
+    return Ok(new
+    {
+        accessToken = token, tokenType = "Bearer", expiresIn = 3600,
+        supplier = new { id = supplier.Id, name = supplier.TradeName ?? supplier.LegalName, taxId = supplier.TaxId },
+    }, ctx);
+}).RequireRateLimiting("auth");
+
+static Guid? PortalSupplierId(ClaimsPrincipal p) =>
+    p.FindFirstValue(ClaimTypes.Role) == "Supplier" && Guid.TryParse(p.FindFirstValue("supplierId"), out var id) ? id : null;
+
+// o fornecedor só enxerga as próprias cotações — nunca dados de outros fornecedores
+static object PortalQuotationView(Quotation q, Guid supplierId) => new
+{
+    id = q.Id, number = q.Number, kind = QKindLabel(q.Kind),
+    open = q.Status == QuotationStatus.Open,
+    status = q.Status == QuotationStatus.Open ? "ABERTA" : "ENCERRADA",
+    deadline = q.Deadline, notes = q.Notes, createdAt = q.CreatedAt,
+    items = q.Items.OrderBy(i => i.Sequence).Select(i => new
+    {
+        id = i.Id, sequence = i.Sequence, description = i.Description,
+        quantity = i.Quantity, unitOfMeasure = i.UnitOfMeasure,
+    }),
+    myProposals = q.Proposals.Where(p => p.SupplierId == supplierId)
+        .OrderByDescending(p => p.VersionNumber)
+        .Select(p => new
+        {
+            id = p.Id, version = p.VersionNumber, totalValue = p.TotalValue,
+            deliveryDays = p.DeliveryDays, paymentTerms = p.PaymentTerms, freightValue = p.FreightValue,
+            validUntil = p.ValidUntil, notes = p.Notes, submittedAt = p.SubmittedAt,
+            attachmentDocumentId = p.AttachmentDocumentId, attachmentFileName = p.AttachmentFileName,
+            items = p.Items.Select(i => new { quotationItemId = i.QuotationItemId, unitPrice = i.UnitPrice, quantity = i.Quantity }),
+        }),
+};
+
+portal.MapGet("/quotations", async (AppDbContext db, ClaimsPrincipal p, HttpContext ctx, string? number) =>
+{
+    if (PortalSupplierId(p) is not { } sid) return Error(ctx, 403, "RFQ-ERR-050", "Acesso exclusivo do Portal do Fornecedor.");
+    var ids = await db.QuotationSuppliers.Where(s => s.SupplierId == sid).Select(s => s.QuotationId).ToListAsync();
+    var query = db.Quotations.Include(q => q.Items).Include(q => q.Proposals).ThenInclude(x => x.Items)
+        .Where(q => ids.Contains(q.Id));
+    if (!string.IsNullOrWhiteSpace(number)) query = query.Where(q => q.Number.Contains(number.Trim().ToUpperInvariant()));
+    var list = await query.OrderByDescending(q => q.CreatedAt).Take(100).ToListAsync();
+    return Ok(new { items = list.Select(q => PortalQuotationView(q, sid)) }, ctx);
+}).RequireAuthorization();
+
+portal.MapGet("/quotations/{id:guid}", async (Guid id, AppDbContext db, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (PortalSupplierId(p) is not { } sid) return Error(ctx, 403, "RFQ-ERR-050", "Acesso exclusivo do Portal do Fornecedor.");
+    if (!await db.QuotationSuppliers.AnyAsync(s => s.QuotationId == id && s.SupplierId == sid))
+        return Error(ctx, 404, "RFQ-ERR-404", "Cotação não encontrada."); // isolamento: 404, nunca vaza existência
+    var q = await db.Quotations.Include(x => x.Items).Include(x => x.Proposals).ThenInclude(x => x.Items)
+        .SingleAsync(x => x.Id == id);
+    return Ok(PortalQuotationView(q, sid), ctx);
+}).RequireAuthorization();
+
+portal.MapPost("/quotations/{id:guid}/proposal", async (Guid id, PortalProposalRequest body, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (PortalSupplierId(p) is not { } sid) return Error(ctx, 403, "RFQ-ERR-050", "Acesso exclusivo do Portal do Fornecedor.");
+    var input = new ProposalInput(body.DeliveryDays, body.PaymentTerms, body.FreightValue, body.ValidUntil, body.Notes,
+        (body.Items ?? []).Select(i => new ProposalItemInput(i.QuotationItemId, i.UnitPrice, i.Quantity)).ToList());
+    var (proposal, error) = await svc.SubmitProposalAsync(id, sid, input, "PORTAL", p.FindFirstValue("name") ?? "Fornecedor");
+    return error is not null
+        ? Error(ctx, error.Code switch { "RFQ-ERR-050" => 403, "RFQ-ERR-020" => 409, _ => 400 }, error.Code, error.Message)
+        : Results.Json(new
+        {
+            data = new { id = proposal!.Id, version = proposal.VersionNumber, totalValue = proposal.TotalValue },
+            correlationId = CorrelationId(ctx),
+        }, statusCode: 201);
+}).RequireAuthorization();
+
+portal.MapPost("/proposals/{proposalId:guid}/attachment", async (Guid proposalId, HttpRequest request, AppDbContext db, TimeProvider clock, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (PortalSupplierId(p) is not { } sid) return Error(ctx, 403, "RFQ-ERR-050", "Acesso exclusivo do Portal do Fornecedor.");
+    var proposal = await db.Proposals.SingleOrDefaultAsync(x => x.Id == proposalId && x.SupplierId == sid);
+    if (proposal is null) return Error(ctx, 404, "RFQ-ERR-404", "Proposta não encontrada.");
+    if (!request.HasFormContentType) return Error(ctx, 400, "DOC-ERR-001", "Envie o arquivo como multipart/form-data.");
+    var form = await request.ReadFormAsync();
+    var file = form.Files.FirstOrDefault();
+    if (file is null || file.Length == 0) return Error(ctx, 400, "DOC-ERR-001", "Nenhum arquivo enviado.");
+    if (file.Length > StoredDocument.MaxSizeBytes) return Error(ctx, 400, "DOC-ERR-002", "Arquivo acima de 10 MB.");
+    if (!StoredDocument.AllowedContentTypes.Contains(file.ContentType))
+        return Error(ctx, 400, "DOC-ERR-003", "Formato não permitido: envie PDF, imagem (PNG/JPG) ou Office (XLSX/DOCX).");
+    using var ms = new MemoryStream();
+    await file.CopyToAsync(ms);
+    var doc = new StoredDocument
+    {
+        FileName = Path.GetFileName(file.FileName), ContentType = file.ContentType, SizeBytes = file.Length,
+        Content = ms.ToArray(), EntityType = "PROPOSAL", EntityId = proposal.Id, SupplierId = sid,
+        UploadedByLabel = p.FindFirstValue("name") ?? "Fornecedor", UploadedAt = clock.GetUtcNow(),
+    };
+    db.StoredDocuments.Add(doc);
+    proposal.AttachmentDocumentId = doc.Id;
+    proposal.AttachmentFileName = doc.FileName;
+    await db.SaveChangesAsync();
+    return Ok(new { documentId = doc.Id, fileName = doc.FileName }, ctx);
+}).RequireAuthorization();
+
+// ==== Documentos (download autorizado por papel/vínculo) =====================
+app.MapGet("/api/v1/documents/{id:guid}", async (Guid id, AppDbContext db, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var doc = await db.StoredDocuments.SingleOrDefaultAsync(d => d.Id == id);
+    if (doc is null) return Error(ctx, 404, "DOC-ERR-404", "Documento não encontrado.");
+    var role = RoleOf(p);
+    if (role == "Supplier")
+    {
+        if (PortalSupplierId(p) != doc.SupplierId) return Error(ctx, 404, "DOC-ERR-404", "Documento não encontrado.");
+    }
+    else if (!QuotationService.CanView(role) && role != Roles.Auditor)
+        return Error(ctx, 403, "DOC-ERR-900", "Seu papel não acessa documentos do processo.");
+    return Results.File(doc.Content, doc.ContentType, doc.FileName);
+}).RequireAuthorization();
+
+// ==== Cadastro da Empresa (cabeçalho da OC) ==================================
+app.MapGet("/api/v1/company", async (AppDbContext db, HttpContext ctx) =>
+{
+    var c = await db.CompanyProfiles.FirstOrDefaultAsync();
+    return Ok(c is null ? new { } : (object)c, ctx);
+}).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+
+app.MapPut("/api/v1/company", async (CompanyProfileRequest body, AppDbContext db, TimeProvider clock, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (RoleOf(p) != Roles.SystemAdministrator)
+        return Error(ctx, 403, "IAM-ERR-018", "Somente o administrador mantém o cadastro da empresa.");
+    var c = await db.CompanyProfiles.FirstOrDefaultAsync();
+    if (c is null) { c = new CompanyProfile(); db.CompanyProfiles.Add(c); }
+    c.LegalName = body.LegalName.Trim();
+    c.Address = body.Address.Trim();
+    c.District = body.District?.Trim();
+    c.City = body.City.Trim();
+    c.State = body.State.Trim().ToUpperInvariant();
+    c.Zip = body.Zip.Trim();
+    c.TaxId = body.TaxId.Trim();
+    c.StateRegistration = body.StateRegistration?.Trim();
+    c.Phone = body.Phone?.Trim();
+    c.Email = body.Email?.Trim();
+    c.DeliveryAddress = body.DeliveryAddress?.Trim();
+    c.DeliveryTaxId = body.DeliveryTaxId?.Trim();
+    c.StandardClauses = body.StandardClauses?.Trim();
+    c.PaymentPolicy = body.PaymentPolicy?.Trim();
+    c.UpdatedAt = clock.GetUtcNow();
+    c.UpdatedByLabel = p.FindFirstValue("name") ?? "Administrador";
+    await db.SaveChangesAsync();
+    return Ok(c, ctx);
+}).RequireAuthorization();
+
+// ==== PDF da Ordem de Compra (modelo oficial) ================================
+app.MapGet("/api/v1/purchase-orders/{id:guid}/pdf", async (Guid id, AppDbContext db, QuotationService qsvc, TimeProvider clock, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!PurchaseOrderService.CanView(role) && !QuotationService.CanView(role))
+        return Error(ctx, 403, "PO-ERR-900", "Seu papel não acessa a OC.");
+    var order = await db.PurchaseOrders.Include(o => o.Items).SingleOrDefaultAsync(o => o.Id == id);
+    if (order is null) return Error(ctx, 404, "PO-ERR-404", "Pedido não encontrado.");
+    var supplier = await db.Suppliers.SingleAsync(s => s.Id == order.SupplierId);
+    var company = await db.CompanyProfiles.FirstOrDefaultAsync();
+    var quotation = order.QuotationId is null ? null : await qsvc.GetAsync(order.QuotationId.Value);
+
+    var pdf = PurchaseOrderPdf.Generate(order, supplier, company, quotation);
+    var doc = new StoredDocument
+    {
+        FileName = $"{order.Number}.pdf", ContentType = "application/pdf", SizeBytes = pdf.Length,
+        Content = pdf, EntityType = "PURCHASE_ORDER_PDF", EntityId = order.Id,
+        UploadedByLabel = p.FindFirstValue("name") ?? "Sistema", UploadedAt = clock.GetUtcNow(),
+    };
+    db.StoredDocuments.Add(doc);
+    order.PdfDocumentId = doc.Id;
+    if (quotation is not null)
+        qsvc.RecordPdfEvent(quotation, new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role), doc.Id, order.Number);
+    await db.SaveChangesAsync();
+    return Results.File(pdf, "application/pdf", $"{order.Number}.pdf");
+}).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+
+app.MapGet("/portal", (IWebHostEnvironment env) =>
+    Results.File(Path.Combine(env.WebRootPath, "portal.html"), "text/html")).AllowAnonymous();
+
 app.MapFallbackToFile("index.html");
 
 app.Run();
@@ -884,6 +1336,15 @@ static string[] ModulesOf(ClaimsPrincipal p)
         return AppModules.DefaultsFor(p.FindFirstValue(ClaimTypes.Role) ?? "");
     return claim.Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }
+
+// O token do Portal do Fornecedor (papel "Supplier") nunca acessa módulos internos (RFQ-001 §5)
+static Func<EndpointFilterInvocationContext, EndpointFilterDelegate, ValueTask<object?>> RejectSupplierRole() =>
+    async (ic, next) =>
+    {
+        if (ic.HttpContext.User.FindFirstValue(ClaimTypes.Role) == "Supplier")
+            return Error(ic.HttpContext, 403, "RFQ-ERR-050", "Acesso restrito ao Portal do Fornecedor.");
+        return await next(ic);
+    };
 
 static Func<EndpointFilterInvocationContext, EndpointFilterDelegate, ValueTask<object?>> RequireModules(params string[] modules) =>
     async (ic, next) =>
@@ -924,6 +1385,16 @@ public record CreatePurchaseOrderRequest(Guid SupplierId, string? Notes, List<Po
 public record ReceiveOrderRequest(Guid LocationId);
 public record CreateCostCenterRequest(string Code, string Name, string? Region, string? ManagerName, string? ClientName);
 public record UpdateCostCenterRequest(string? Name, string? Region, string? ManagerName, string? ClientName, bool? Active);
+public record CreateQuotationRequest(Guid PrId, string? Kind, DateOnly? Deadline, string? Notes);
+public record InviteSuppliersRequest(List<Guid>? SupplierIds);
+public record ProposalItemRequest(Guid QuotationItemId, decimal UnitPrice, decimal? Quantity);
+public record InternalProposalRequest(Guid SupplierId, int? DeliveryDays, string? PaymentTerms, decimal? FreightValue, DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items);
+public record SelectWinnerRequest(Guid ProposalId, List<string>? Criteria, string Justification);
+public record QuotationDecisionRequest(string Decision, string? Reason);
+public record IssuePoRequest(string? Notes);
+public record PortalLoginRequest(string TaxId, string AccessKey);
+public record PortalProposalRequest(int? DeliveryDays, string? PaymentTerms, decimal? FreightValue, DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items);
+public record CompanyProfileRequest(string LegalName, string Address, string? District, string City, string State, string Zip, string TaxId, string? StateRegistration, string? Phone, string? Email, string? DeliveryAddress, string? DeliveryTaxId, string? StandardClauses, string? PaymentPolicy);
 public record UpdateRequisitionRequest(string? Justification, string? CostCenter, string? Priority, DateOnly? NeededBy, bool? ClearNeededBy);
 public record ReasonRequest(string? Reason);
 public record DecisionRequest(string? Reason, string? Comments);

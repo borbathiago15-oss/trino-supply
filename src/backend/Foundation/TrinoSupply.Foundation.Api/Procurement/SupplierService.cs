@@ -64,4 +64,29 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
         await db.SaveChangesAsync(ct);
         return (supplier, null);
     }
+
+    // ---- Portal do Fornecedor (RFQ-001 §5) ----------------------------------
+    /// <summary>Gera nova chave de acesso ao portal; retorna a chave em claro UMA vez (persistido só o hash).</summary>
+    public async Task<(string? key, UserError? error)> GeneratePortalKeyAsync(Guid id, CancellationToken ct = default)
+    {
+        var supplier = await db.Suppliers.SingleOrDefaultAsync(s => s.Id == id, ct);
+        if (supplier is null) return (null, new("SUP-ERR-404", "Fornecedor não encontrado."));
+        var key = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
+        supplier.PortalKeyHash = Auth.TokenService.HashRefreshToken(key);
+        supplier.UpdatedAt = clock.GetUtcNow();
+        supplier.Version += 1;
+        await db.SaveChangesAsync(ct);
+        return (key, null);
+    }
+
+    /// <summary>Login do portal: CNPJ/CPF + chave. Só fornecedores ativos com chave gerada.</summary>
+    public async Task<Supplier?> PortalLoginAsync(string taxId, string accessKey, CancellationToken ct = default)
+    {
+        var digits = new string((taxId ?? "").Where(char.IsDigit).ToArray());
+        if (digits.Length is not (11 or 14) || string.IsNullOrWhiteSpace(accessKey)) return null;
+        var supplier = await db.Suppliers.SingleOrDefaultAsync(s => s.TaxId == digits && s.Active, ct);
+        if (supplier?.PortalKeyHash is null) return null;
+        var hash = Auth.TokenService.HashRefreshToken(accessKey.Trim().ToUpperInvariant());
+        return string.Equals(hash, supplier.PortalKeyHash, StringComparison.OrdinalIgnoreCase) ? supplier : null;
+    }
 }

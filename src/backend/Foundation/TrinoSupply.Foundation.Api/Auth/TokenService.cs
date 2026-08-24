@@ -47,6 +47,25 @@ public class TokenService(JwtOptions options)
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
+    /// <summary>Token do Portal do Fornecedor: papel "Supplier" + supplierId; nenhum acesso interno.</summary>
+    public string CreateSupplierToken(Guid supplierId, string supplierName, DateTimeOffset now)
+    {
+        var claims = new List<Claim>
+        {
+            new(JwtRegisteredClaimNames.Sub, supplierId.ToString()),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new("name", supplierName),
+            new("supplierId", supplierId.ToString()),
+            new(ClaimTypes.Role, "Supplier"),
+        };
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Secret));
+        var token = new JwtSecurityToken(
+            issuer: options.Issuer, audience: options.Audience, claims: claims,
+            notBefore: now.UtcDateTime, expires: now.UtcDateTime.AddMinutes(60),
+            signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
     public static string GenerateRefreshTokenValue()
         => Convert.ToBase64String(RandomNumberGenerator.GetBytes(48));
 

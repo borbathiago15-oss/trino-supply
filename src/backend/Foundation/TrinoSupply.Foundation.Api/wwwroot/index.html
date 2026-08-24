@@ -115,7 +115,9 @@
         <div class="module"><span>Foundation · Identidade e Usuários</span><span class="badge">ATIVO</span></div>
         <div class="module"><span>PR-001 · Requisição de Compra</span><span class="badge dev">EM DESENVOLVIMENTO</span></div>
         <div class="module"><span>MMS-002 · Catálogo de Itens</span><span class="badge dev">EM DESENVOLVIMENTO</span></div>
+        <div class="module"><span>MMS-003 · Solicitação de Material</span><span class="badge dev">EM DESENVOLVIMENTO</span></div>
         <div class="module"><span>MMS-004 · Estoque</span><span class="badge dev">EM DESENVOLVIMENTO</span></div>
+        <div class="module"><span>MMS-005 · Recebimento (entrada)</span><span class="badge dev">EM DESENVOLVIMENTO</span></div>
       </div>
 
       <section id="pr-view" hidden>
@@ -174,6 +176,78 @@
           <button type="submit" class="full">Salvar rascunho</button>
           <button id="pr-form-cancel" class="secondary full" type="button" style="margin-top:8px">Voltar</button>
         </form>
+      </section>
+
+      <section id="mr-view" hidden>
+        <h2>Solicitações de Material</h2>
+        <div id="mr-msg" class="msg" role="alert" aria-live="polite"></div>
+
+        <div class="toolbar">
+          <p class="hello sub">Peça ao almoxarifado itens do catálogo. Sem saldo em estoque, o item segue para rota de compra.</p>
+          <button id="mr-new" type="button" hidden>+ Nova solicitação</button>
+        </div>
+
+        <div id="mr-list"></div>
+
+        <form id="mr-form" hidden>
+          <h2>Nova solicitação de material</h2>
+          <div class="grid2">
+            <div><label for="mr-cc">Centro de custo</label><input id="mr-cc" required placeholder="ex.: CC-ADM-001" /></div>
+            <div><label for="mr-notes">Observações</label><input id="mr-notes" placeholder="opcional" /></div>
+          </div>
+          <label for="mr-family">Família do catálogo</label>
+          <select id="mr-family"></select>
+          <div id="mr-cat-list" style="margin-top:10px"></div>
+          <button type="submit" class="full" style="margin-top:10px">Enviar ao almoxarifado</button>
+          <button id="mr-form-cancel" class="secondary full" type="button" style="margin-top:8px">Voltar</button>
+        </form>
+      </section>
+
+      <section id="wh-view" hidden>
+        <h2>Almoxarifado</h2>
+        <div id="wh-msg" class="msg" role="alert" aria-live="polite"></div>
+
+        <div class="toolbar">
+          <div>
+            <button id="wh-tab-queue" class="secondary" type="button">Fila de atendimento <span id="wh-queue-count"></span></button>
+            <button id="wh-tab-stock" class="secondary" type="button">Posição de estoque</button>
+            <button id="wh-tab-mov" class="secondary" type="button">Movimentações</button>
+          </div>
+          <button id="wh-refresh" class="secondary" type="button">Atualizar</button>
+        </div>
+        <div id="wh-panel"></div>
+
+        <h2>Entrada de material (recebimento)</h2>
+        <form id="wh-entry-form">
+          <div class="grid2">
+            <div><label for="we-item">Item do catálogo</label><select id="we-item" required></select></div>
+            <div><label for="we-loc">Local de estoque</label><select id="we-loc" required></select></div>
+          </div>
+          <div class="grid2">
+            <div><label for="we-qty">Quantidade</label><input id="we-qty" type="number" min="0.01" step="0.01" required /></div>
+            <div><label for="we-origin">Origem</label>
+              <select id="we-origin">
+                <option value="RECEBIMENTO">Recebimento (NF conferida)</option>
+                <option value="DEVOLUCAO">Devolução</option>
+                <option value="CARGA_INICIAL">Carga inicial</option>
+              </select>
+            </div>
+          </div>
+          <label for="we-ref">Documento de origem</label>
+          <input id="we-ref" required placeholder="ex.: NF 12345" />
+          <button type="submit" class="full" style="margin-top:10px">Registrar entrada</button>
+        </form>
+
+        <div id="wh-loc-admin" hidden>
+          <h2>Novo local de estoque</h2>
+          <form id="wh-loc-form">
+            <div class="grid2">
+              <div><label for="wl-code">Código</label><input id="wl-code" required minlength="2" placeholder="ex.: ALM-01" /></div>
+              <div><label for="wl-name">Nome</label><input id="wl-name" required minlength="3" placeholder="ex.: Almoxarifado Central" /></div>
+            </div>
+            <button type="submit" class="full" style="margin-top:10px">Criar local</button>
+          </form>
+        </div>
       </section>
 
       <section id="catalog-view" hidden>
@@ -271,6 +345,9 @@
     const canCreatePr = (r) => ['Requester', 'SupplyManager', 'SystemAdministrator'].includes(r);
     const canDecidePr = (r) => ['Approver', 'SupplyManager', 'SystemAdministrator'].includes(r);
     const canAccessPr = (r) => canCreatePr(r) || canDecidePr(r) || r === 'Auditor';
+    const canRequestMr = (r) => ['Requester', 'SupplyManager', 'SystemAdministrator'].includes(r);
+    const canWarehouse = (r) => ['WarehouseOperator', 'WarehouseSupervisor', 'SupplyManager', 'SystemAdministrator'].includes(r);
+    const canSeeMr = (r) => canRequestMr(r) || canWarehouse(r) || r === 'Auditor';
 
     function showApp(user) {
       currentUser = user;
@@ -284,7 +361,11 @@
       $('catalog-view').hidden = !canMaintainCatalog;
       const hasPr = canAccessPr(user.role);
       $('pr-view').hidden = !hasPr;
-      $('card').classList.toggle('wide', isAdmin || hasPr || canMaintainCatalog);
+      const hasMr = canSeeMr(user.role);
+      $('mr-view').hidden = !hasMr;
+      const isWh = canWarehouse(user.role);
+      $('wh-view').hidden = !isWh;
+      $('card').classList.toggle('wide', isAdmin || hasPr || canMaintainCatalog || hasMr || isWh);
       if (isAdmin) loadUsers();
       if (canMaintainCatalog) loadCatalog();
       if (hasPr) {
@@ -292,6 +373,15 @@
         $('pr-tab-appr').hidden = !canDecidePr(user.role);
         prTab = 'mine';
         loadRequisitions();
+      }
+      if (hasMr) {
+        $('mr-new').hidden = !canRequestMr(user.role);
+        loadMrs();
+      }
+      if (isWh) {
+        $('wh-loc-admin').hidden = !['WarehouseSupervisor', 'SupplyManager', 'SystemAdministrator'].includes(user.role);
+        whTab = 'queue';
+        initWarehouse();
       }
     }
 
@@ -605,6 +695,213 @@
         $('ci-family').value = keepFamily; // facilita cadastrar vários da mesma família
         loadCatalog();
       } catch (err) { flash($('cat-msg'), err.message || 'Não foi possível adicionar o item.', 'error'); }
+    });
+
+    // ---- MMS-003 — Solicitações de Material ----
+    const STATUS_MR = {
+      AGUARDANDO_ALMOXARIFADO: ['Aguardando almoxarifado', ''],
+      ATENDIDA: ['Atendida', 'on'],
+      ATENDIDA_PARCIAL: ['Atendida parcialmente', 'dev'],
+      ROTA_DE_COMPRA: ['Rota de compra', 'dev'],
+      CANCELADA: ['Cancelada', 'off'],
+    };
+    const MR_ITEM_ST = { ENTREGUE: 'entregue ✓', ROTA_DE_COMPRA: 'rota de compra', PENDENTE: 'pendente' };
+
+    function mrItemsTxt(r) {
+      return r.items.map(i =>
+        `${i.quantity}× [${escapeHtml(i.catalogCode)}] ${escapeHtml(i.description)} <em>(${MR_ITEM_ST[i.status] || i.status})</em>`
+      ).join(' · ');
+    }
+
+    async function loadMrs() {
+      try {
+        const { items } = await api('/api/v1/material-requisitions/');
+        if (!items.length) {
+          $('mr-list').innerHTML = '<p class="hello">Nenhuma solicitação de material ainda.</p>';
+          return;
+        }
+        $('mr-list').innerHTML = '<table aria-label="Solicitações de material"><thead><tr><th>Número</th><th>Itens</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+          items.map(r => {
+            const [label, cls] = STATUS_MR[r.status] || [r.status, ''];
+            const cancel = r.status === 'AGUARDANDO_ALMOXARIFADO' && r.requesterId === currentUser.id
+              ? '<button class="danger" data-act="cancel">Cancelar</button>' : '';
+            const who = r.fulfilledByLabel ? `<div class="sub">Atendida por ${escapeHtml(r.fulfilledByLabel)}</div>` : '';
+            return `<tr data-id="${r.id}">
+              <td>${escapeHtml(r.number)}<div class="sub">CC: ${escapeHtml(r.costCenter)}</div></td>
+              <td>${mrItemsTxt(r)}${who}</td>
+              <td><span class="badge ${cls}">${label}</span></td>
+              <td class="row-actions">${cancel}</td>
+            </tr>`;
+          }).join('') + '</tbody></table>';
+      } catch (err) { flash($('mr-msg'), err.message || 'Falha ao carregar solicitações.', 'error'); }
+    }
+
+    $('mr-list').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act="cancel"]');
+      if (!btn) return;
+      const reason = prompt('Motivo do cancelamento (obrigatório):');
+      if (!reason) return;
+      try {
+        await api(`/api/v1/material-requisitions/${btn.closest('tr').dataset.id}/cancel`, { method: 'POST', body: { reason } });
+        flash($('mr-msg'), 'Solicitação cancelada.', 'ok');
+        loadMrs();
+      } catch (err) { flash($('mr-msg'), err.message || 'Operação não permitida.', 'error'); }
+    });
+
+    $('mr-new').addEventListener('click', async () => {
+      $('mr-list').hidden = true;
+      $('mr-form').hidden = false;
+      $('mr-form').reset();
+      const { families } = await api('/api/v1/items/families');
+      $('mr-family').innerHTML = families.length
+        ? families.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('')
+        : '<option value="">(catálogo vazio — peça ao gestor para cadastrar itens)</option>';
+      loadMrFamilyItems();
+    });
+    $('mr-form-cancel').addEventListener('click', () => { $('mr-form').hidden = true; $('mr-list').hidden = false; });
+    $('mr-family').addEventListener('change', loadMrFamilyItems);
+
+    async function loadMrFamilyItems() {
+      const family = $('mr-family').value;
+      if (!family) { $('mr-cat-list').innerHTML = ''; return; }
+      const { items } = await api('/api/v1/items/?family=' + encodeURIComponent(family));
+      $('mr-cat-list').innerHTML = '<table aria-label="Itens da família"><thead><tr><th></th><th>Item</th><th>Unid.</th><th>Qtd</th></tr></thead><tbody>' +
+        items.map(i => `
+          <tr class="mr-pick" data-id="${i.id}">
+            <td><input type="checkbox" class="mp-check" aria-label="Selecionar ${escapeHtml(i.description)}" /></td>
+            <td>${escapeHtml(i.description)}<div class="sub">${escapeHtml(i.code)}</div></td>
+            <td>${escapeHtml(i.unitOfMeasure)}</td>
+            <td><input type="number" class="mp-qty" min="0.01" step="0.01" value="1" style="width:80px" /></td>
+          </tr>`).join('') + '</tbody></table>';
+    }
+
+    $('mr-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const items = [...document.querySelectorAll('.mr-pick')]
+        .filter(row => row.querySelector('.mp-check').checked)
+        .map(row => ({ catalogItemId: row.dataset.id, quantity: parseFloat(row.querySelector('.mp-qty').value) || 1 }));
+      if (!items.length) { flash($('mr-msg'), 'Marque ao menos um item da lista.', 'error'); return; }
+      try {
+        await api('/api/v1/material-requisitions/', { method: 'POST', body: {
+          costCenter: $('mr-cc').value, notes: $('mr-notes').value || null, items,
+        }});
+        flash($('mr-msg'), 'Solicitação enviada ao almoxarifado.', 'ok');
+        $('mr-form').hidden = true; $('mr-list').hidden = false;
+        loadMrs();
+      } catch (err) { flash($('mr-msg'), err.message || 'Não foi possível criar a solicitação.', 'error'); }
+    });
+
+    // ---- MMS-004/005 — Almoxarifado (fila, estoque, movimentações, entrada) ----
+    let whTab = 'queue';
+    let whLocations = [];
+
+    async function initWarehouse() {
+      try {
+        whLocations = (await api('/api/v1/inventory/locations')).items;
+        $('we-loc').innerHTML = whLocations.length
+          ? whLocations.map(l => `<option value="${l.id}">${escapeHtml(l.code)} — ${escapeHtml(l.name)}</option>`).join('')
+          : '<option value="">(crie um local de estoque primeiro)</option>';
+        const { items } = await api('/api/v1/items/');
+        $('we-item').innerHTML = items.length
+          ? items.map(i => `<option value="${i.id}">[${escapeHtml(i.code)}] ${escapeHtml(i.description)}</option>`).join('')
+          : '<option value="">(catálogo vazio)</option>';
+        loadWarehouse();
+      } catch (err) { flash($('wh-msg'), err.message || 'Falha ao carregar o almoxarifado.', 'error'); }
+    }
+
+    const locCode = (id) => { const l = whLocations.find(x => x.id === id); return l ? l.code : '—'; };
+
+    async function loadWarehouse() {
+      try {
+        if (whTab === 'queue') {
+          const { items } = await api('/api/v1/material-requisitions/?queue=true');
+          $('wh-queue-count').textContent = '(' + items.length + ')';
+          if (!items.length) { $('wh-panel').innerHTML = '<p class="hello">Nenhuma solicitação aguardando atendimento.</p>'; return; }
+          const locOpts = whLocations.map(l => `<option value="${l.id}">${escapeHtml(l.code)}</option>`).join('');
+          $('wh-panel').innerHTML = '<table aria-label="Fila de atendimento"><thead><tr><th>Número</th><th>Solicitante</th><th>Itens</th><th>Atender</th></tr></thead><tbody>' +
+            items.map(r => `
+              <tr data-id="${r.id}">
+                <td>${escapeHtml(r.number)}<div class="sub">CC: ${escapeHtml(r.costCenter)}</div></td>
+                <td>${escapeHtml(r.requesterLabel)}${r.notes ? `<div class="sub">${escapeHtml(r.notes)}</div>` : ''}</td>
+                <td>${mrItemsTxt(r)}</td>
+                <td class="row-actions">
+                  <select class="wh-fulfill-loc" aria-label="Local de atendimento">${locOpts}</select>
+                  <button data-act="fulfill" ${whLocations.length ? '' : 'disabled'}>Atender</button>
+                </td>
+              </tr>`).join('') + '</tbody></table>';
+        } else if (whTab === 'stock') {
+          const { items } = await api('/api/v1/inventory/balances');
+          $('wh-panel').innerHTML = items.length
+            ? '<table aria-label="Posição de estoque"><thead><tr><th>Item</th><th>Família</th><th>Local</th><th>Total</th><th>Disponível</th></tr></thead><tbody>' +
+              items.map(b => `
+                <tr>
+                  <td>${escapeHtml(b.itemDescription)}<div class="sub">${escapeHtml(b.itemCode)} · ${escapeHtml(b.unitOfMeasure)}</div></td>
+                  <td>${escapeHtml(b.family)}</td>
+                  <td>${escapeHtml(b.locationCode)}</td>
+                  <td>${b.totalQty}</td>
+                  <td><strong>${b.availableQty}</strong></td>
+                </tr>`).join('') + '</tbody></table>'
+            : '<p class="hello">Sem saldos ainda — registre a primeira entrada.</p>';
+        } else {
+          const { items } = await api('/api/v1/inventory/movements');
+          $('wh-panel').innerHTML = items.length
+            ? '<table aria-label="Movimentações"><thead><tr><th>Número</th><th>Tipo</th><th>Item</th><th>Qtd</th><th>Saldo</th><th>Por</th></tr></thead><tbody>' +
+              items.map(m => `
+                <tr>
+                  <td>${escapeHtml(m.number)}<div class="sub">${escapeHtml(m.origin)} · ${escapeHtml(m.originReference)}</div></td>
+                  <td><span class="badge ${m.type === 'ENTRADA' ? 'on' : 'off'}">${m.type}</span></td>
+                  <td>${escapeHtml(m.itemDescription)}<div class="sub">${escapeHtml(m.itemCode)} · ${locCode(m.locationId)}</div></td>
+                  <td>${m.quantity}</td>
+                  <td>${m.balanceBefore} → ${m.balanceAfter}</td>
+                  <td>${escapeHtml(m.performedByLabel)}</td>
+                </tr>`).join('') + '</tbody></table>'
+            : '<p class="hello">Nenhuma movimentação registrada.</p>';
+        }
+      } catch (err) { flash($('wh-msg'), err.message || 'Falha ao carregar dados do estoque.', 'error'); }
+    }
+
+    $('wh-tab-queue').addEventListener('click', () => { whTab = 'queue'; loadWarehouse(); });
+    $('wh-tab-stock').addEventListener('click', () => { whTab = 'stock'; loadWarehouse(); });
+    $('wh-tab-mov').addEventListener('click', () => { whTab = 'mov'; loadWarehouse(); });
+    $('wh-refresh').addEventListener('click', () => initWarehouse());
+
+    $('wh-panel').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act="fulfill"]');
+      if (!btn) return;
+      const row = btn.closest('tr');
+      const locationId = row.querySelector('.wh-fulfill-loc').value;
+      if (!locationId) { flash($('wh-msg'), 'Crie um local de estoque primeiro.', 'error'); return; }
+      if (!confirm('Atender esta solicitação? Itens com saldo serão baixados; itens sem saldo seguem para rota de compra.')) return;
+      try {
+        await api(`/api/v1/material-requisitions/${row.dataset.id}/fulfill`, { method: 'POST', body: { locationId } });
+        flash($('wh-msg'), 'Solicitação atendida.', 'ok');
+        loadWarehouse();
+      } catch (err) { flash($('wh-msg'), err.message || 'Não foi possível atender.', 'error'); }
+    });
+
+    $('wh-entry-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try {
+        await api('/api/v1/inventory/entries', { method: 'POST', body: {
+          catalogItemId: $('we-item').value, locationId: $('we-loc').value,
+          quantity: parseFloat($('we-qty').value), origin: $('we-origin').value,
+          originReference: $('we-ref').value,
+        }});
+        flash($('wh-msg'), 'Entrada registrada com sucesso.', 'ok');
+        ev.target.reset();
+        whTab = 'stock';
+        loadWarehouse();
+      } catch (err) { flash($('wh-msg'), err.message || 'Não foi possível registrar a entrada.', 'error'); }
+    });
+
+    $('wh-loc-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try {
+        await api('/api/v1/inventory/locations', { method: 'POST', body: { code: $('wl-code').value, name: $('wl-name').value } });
+        flash($('wh-msg'), 'Local criado.', 'ok');
+        ev.target.reset();
+        initWarehouse();
+      } catch (err) { flash($('wh-msg'), err.message || 'Não foi possível criar o local.', 'error'); }
     });
 
     // sessão existente? valida contra /me

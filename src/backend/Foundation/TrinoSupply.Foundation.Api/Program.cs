@@ -8,6 +8,8 @@ using TrinoSupply.Foundation.Api.Auth;
 using TrinoSupply.Foundation.Api.Catalog;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Infrastructure;
+using TrinoSupply.Foundation.Api.Inventory;
+using TrinoSupply.Foundation.Api.Materials;
 using TrinoSupply.Foundation.Api.Procurement;
 using TrinoSupply.Foundation.Api.Users;
 
@@ -41,6 +43,8 @@ builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<IPrNumberGenerator, PostgresPrNumberGenerator>();
 builder.Services.AddScoped<CatalogService>();
 builder.Services.AddScoped<RequisitionService>();
+builder.Services.AddScoped<InventoryService>();
+builder.Services.AddScoped<MaterialRequisitionService>();
 
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseNpgsql(ConnectionStringFactory.Resolve(builder.Configuration)));
@@ -401,6 +405,162 @@ app.MapGet("/api/v1/approvals/pending", async (RequisitionService svc, ClaimsPri
     return Ok(new { items = (await svc.PendingApprovalsAsync(actor)).Select(PrView) }, ctx);
 }).RequireAuthorization();
 
+// ---- MMS-004 — Estoque (MVP) + MMS-005 — entrada por recebimento -------------
+static string RoleOf(ClaimsPrincipal p) => p.FindFirstValue(ClaimTypes.Role) ?? "";
+
+static object MovementView(StockMovement m) => new
+{
+    id = m.Id, number = m.Number,
+    type = m.Type == MovementType.Entry ? "ENTRADA" : "SAIDA",
+    origin = m.Origin switch
+    {
+        MovementOrigin.Receiving => "RECEBIMENTO",
+        MovementOrigin.Return => "DEVOLUCAO",
+        MovementOrigin.InitialLoad => "CARGA_INICIAL",
+        MovementOrigin.Fulfillment => "ATENDIMENTO",
+        _ => "CONSUMO",
+    },
+    originReference = m.OriginReference,
+    itemCode = m.ItemCode, itemDescription = m.ItemDescription, unitOfMeasure = m.UnitOfMeasure,
+    locationId = m.LocationId, quantity = m.Quantity,
+    balanceBefore = m.BalanceBefore, balanceAfter = m.BalanceAfter,
+    performedByLabel = m.PerformedByLabel, performedAt = m.PerformedAt,
+    materialRequisitionId = m.MaterialRequisitionId,
+};
+
+var inv = app.MapGroup("/api/v1/inventory").RequireAuthorization();
+
+inv.MapGet("/locations", async (InventoryService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!InventoryService.CanView(RoleOf(p))) return Error(ctx, 403, "IV-ERR-900", "Seu papel não acessa o estoque.");
+    return Ok(new { items = (await svc.LocationsAsync()).Select(l => new { id = l.Id, code = l.Code, name = l.Name }) }, ctx);
+});
+
+inv.MapPost("/locations", async (CreateLocationRequest body, InventoryService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (role is not (Roles.WarehouseSupervisor or Roles.SupplyManager or Roles.SystemAdministrator))
+        return Error(ctx, 403, "IV-ERR-900", "Somente supervisor, gestor ou administrador gerenciam locais.");
+    var (location, error) = await svc.CreateLocationAsync(ActorId(p), body.Code, body.Name);
+    return error is not null ? Error(ctx, 400, error.Code, error.Message)
+        : Results.Json(new { data = new { id = location!.Id, code = location.Code, name = location.Name }, correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+inv.MapGet("/balances", async (InventoryService svc, ClaimsPrincipal p, HttpContext ctx, Guid? itemId, Guid? locationId) =>
+{
+    if (!InventoryService.CanView(RoleOf(p))) return Error(ctx, 403, "IV-ERR-900", "Seu papel não acessa o estoque.");
+    var rows = await svc.BalancesAsync(itemId, locationId);
+    return Ok(new
+    {
+        items = rows.Select(r => new
+        {
+            itemId = r.item.Id, itemCode = r.item.Code, itemDescription = r.item.Description,
+            family = r.item.Family, unitOfMeasure = r.item.UnitOfMeasure,
+            locationId = r.location.Id, locationCode = r.location.Code,
+            totalQty = r.balance.TotalQty, reservedQty = r.balance.ReservedQty, availableQty = r.balance.AvailableQty,
+            lastMovementAt = r.balance.LastMovementAt,
+        }),
+    }, ctx);
+});
+
+inv.MapGet("/movements", async (InventoryService svc, ClaimsPrincipal p, HttpContext ctx, Guid? itemId, Guid? locationId) =>
+{
+    if (!InventoryService.CanView(RoleOf(p))) return Error(ctx, 403, "IV-ERR-900", "Seu papel não acessa o estoque.");
+    return Ok(new { items = (await svc.MovementsAsync(itemId, locationId)).Select(MovementView) }, ctx);
+});
+
+// Entrada de material (MMS-005 MVP: recebimento conferido / devolução / carga inicial)
+inv.MapPost("/entries", async (EntryRequest body, InventoryService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!InventoryService.CanOperate(role)) return Error(ctx, 403, "IV-ERR-900", "Seu papel não registra entradas.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var origin = body.Origin?.ToUpperInvariant() switch
+    {
+        "DEVOLUCAO" => MovementOrigin.Return,
+        "CARGA_INICIAL" => MovementOrigin.InitialLoad,
+        _ => MovementOrigin.Receiving,
+    };
+    var (movement, error) = await svc.RegisterEntryAsync(actor, body.CatalogItemId, body.LocationId, body.Quantity, origin, body.OriginReference);
+    return error is not null ? Error(ctx, error.Code == "IV-ERR-020" ? 422 : 400, error.Code, error.Message)
+        : Results.Json(new { data = MovementView(movement!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+// ---- MMS-003 — Solicitação de Material (MVP) ---------------------------------
+static object MrView(MaterialRequisition r) => new
+{
+    id = r.Id, number = r.Number,
+    status = r.Status switch
+    {
+        MaterialRequisitionStatus.Submitted => "AGUARDANDO_ALMOXARIFADO",
+        MaterialRequisitionStatus.Fulfilled => "ATENDIDA",
+        MaterialRequisitionStatus.PartiallyFulfilled => "ATENDIDA_PARCIAL",
+        MaterialRequisitionStatus.PurchaseRoute => "ROTA_DE_COMPRA",
+        _ => "CANCELADA",
+    },
+    costCenter = r.CostCenter, notes = r.Notes,
+    requesterId = r.RequesterId, requesterLabel = r.RequesterLabel,
+    fulfilledByLabel = r.FulfilledByLabel, fulfilledAt = r.FulfilledAt, cancelReason = r.CancelReason,
+    items = r.Items.Select(i => new
+    {
+        itemId = i.Id, catalogCode = i.CatalogCode, description = i.Description,
+        unitOfMeasure = i.UnitOfMeasure, quantity = i.Quantity,
+        status = i.Status switch
+        {
+            MaterialItemStatus.Fulfilled => "ENTREGUE",
+            MaterialItemStatus.PurchaseRoute => "ROTA_DE_COMPRA",
+            _ => "PENDENTE",
+        },
+    }),
+    createdAt = r.CreatedAt,
+};
+
+var mrs = app.MapGroup("/api/v1/material-requisitions").RequireAuthorization();
+
+mrs.MapGet("/", async (MaterialRequisitionService svc, ClaimsPrincipal p, HttpContext ctx, bool? queue) =>
+{
+    var role = RoleOf(p);
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    if (queue == true && !MaterialRequisitionService.CanFulfill(role))
+        return Error(ctx, 403, "MR-ERR-001", "Seu papel não acessa a fila do almoxarifado.");
+    if (queue != true && !(MaterialRequisitionService.CanRequest(role) || MaterialRequisitionService.CanSeeAll(role)))
+        return Error(ctx, 403, "MR-ERR-001", "Seu papel não acessa solicitações de material.");
+    return Ok(new { items = (await svc.ListAsync(actor, queue == true)).Select(MrView) }, ctx);
+});
+
+mrs.MapPost("/", async (CreateMaterialRequisitionRequest body, MaterialRequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!MaterialRequisitionService.CanRequest(role))
+        return Error(ctx, 403, "MR-ERR-001", "Seu papel não cria solicitações de material.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var items = (body.Items ?? []).Select(i => new MaterialItemInput(i.CatalogItemId, i.Quantity)).ToList();
+    var (mr, error) = await svc.CreateAsync(actor, body.CostCenter, body.Notes, items);
+    return error is not null ? Error(ctx, 400, error.Code, error.Message)
+        : Results.Json(new { data = MrView(mr!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+mrs.MapPost("/{id:guid}/fulfill", async (Guid id, FulfillRequest body, MaterialRequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!MaterialRequisitionService.CanFulfill(role))
+        return Error(ctx, 403, "MR-ERR-001", "Seu papel não atende solicitações.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var (mr, error) = await svc.FulfillAsync(actor, id, body.LocationId);
+    return error is not null
+        ? Error(ctx, error.Code switch { "MR-ERR-404" => 404, "MR-ERR-040" => 409, _ => 422 }, error.Code, error.Message)
+        : Ok(MrView(mr!), ctx);
+});
+
+mrs.MapPost("/{id:guid}/cancel", async (Guid id, ReasonRequest body, MaterialRequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", RoleOf(p));
+    var (mr, error) = await svc.CancelAsync(actor, id, body.Reason);
+    return error is not null
+        ? Error(ctx, error.Code switch { "MR-ERR-404" => 404, "MR-ERR-040" => 409, "MR-ERR-001" => 403, _ => 400 }, error.Code, error.Message)
+        : Ok(MrView(mr!), ctx);
+});
+
 app.MapFallbackToFile("index.html");
 
 app.Run();
@@ -423,6 +583,11 @@ public record ItemRequest(string? Description, decimal Quantity, string? UnitOfM
 public record CreateRequisitionRequest(string Justification, string CostCenter, string? Priority, DateOnly? NeededBy, List<ItemRequest>? Items, string? Kind);
 public record CreateCatalogItemRequest(string Code, string Description, string Family, string? UnitOfMeasure, decimal? ReferencePrice);
 public record UpdateCatalogItemRequest(string? Description, string? Family, string? UnitOfMeasure, decimal? ReferencePrice, bool? Active);
+public record CreateLocationRequest(string Code, string Name);
+public record EntryRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity, string OriginReference, string? Origin);
+public record MaterialItemRequest(Guid CatalogItemId, decimal Quantity);
+public record CreateMaterialRequisitionRequest(string CostCenter, string? Notes, List<MaterialItemRequest>? Items);
+public record FulfillRequest(Guid LocationId);
 public record UpdateRequisitionRequest(string? Justification, string? CostCenter, string? Priority, DateOnly? NeededBy, bool? ClearNeededBy);
 public record ReasonRequest(string? Reason);
 public record DecisionRequest(string? Reason, string? Comments);

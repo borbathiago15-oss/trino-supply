@@ -147,6 +147,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(r => r.FulfilledByLabel).HasColumnName("fulfilled_by_label").HasMaxLength(200);
             e.Property(r => r.FulfilledAt).HasColumnName("fulfilled_at");
             e.Property(r => r.CancelReason).HasColumnName("cancel_reason").HasMaxLength(500);
+            e.Property(r => r.AssignedToId).HasColumnName("assigned_to_id");
+            e.Property(r => r.AssignedToLabel).HasColumnName("assigned_to_label").HasMaxLength(200);
+            e.Property(r => r.AssignedById).HasColumnName("assigned_by_id");
+            e.Property(r => r.AssignedByLabel).HasColumnName("assigned_by_label").HasMaxLength(200);
+            e.Property(r => r.AssignedAt).HasColumnName("assigned_at");
             e.Property(r => r.CreatedAt).HasColumnName("created_at");
             e.Property(r => r.UpdatedAt).HasColumnName("updated_at");
             e.Property(r => r.Version).HasColumnName("version").IsConcurrencyToken();
@@ -197,6 +202,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(r => r.DecisionReason).HasColumnName("decision_reason").HasMaxLength(1000);
             e.Property(r => r.DecidedById).HasColumnName("decided_by_id");
             e.Property(r => r.DecidedByLabel).HasColumnName("decided_by_label").HasMaxLength(200);
+            e.Property(r => r.AssignedToId).HasColumnName("assigned_to_id");
+            e.Property(r => r.AssignedToLabel).HasColumnName("assigned_to_label").HasMaxLength(200);
+            e.Property(r => r.AssignedById).HasColumnName("assigned_by_id");
+            e.Property(r => r.AssignedByLabel).HasColumnName("assigned_by_label").HasMaxLength(200);
+            e.Property(r => r.AssignedAt).HasColumnName("assigned_at");
             e.Property(r => r.SubmittedAt).HasColumnName("submitted_at");
             e.Property(r => r.DecidedAt).HasColumnName("decided_at");
             e.Property(r => r.CreatedAt).HasColumnName("created_at");

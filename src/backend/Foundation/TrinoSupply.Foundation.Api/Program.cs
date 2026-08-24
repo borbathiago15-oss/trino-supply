@@ -1465,6 +1465,44 @@ portal.MapPost("/proposals/{proposalId:guid}/attachment", async (Guid proposalId
     return Ok(new { documentId = doc.Id, fileName = doc.FileName }, ctx);
 }).RequireAuthorization();
 
+// anexo da proposta registrada internamente: o PDF/planilha que o fornecedor enviou por fora
+app.MapPost("/api/v1/quotations/{id:guid}/proposals/{proposalId:guid}/attachment",
+    async (Guid id, Guid proposalId, HttpRequest request, AppDbContext db, QuotationService svc,
+           TimeProvider clock, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!QuotationService.CanConduct(RoleOf(p)))
+        return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não conduz o processo de cotação.");
+    var proposal = await db.Proposals.SingleOrDefaultAsync(x => x.Id == proposalId && x.QuotationId == id);
+    if (proposal is null) return Error(ctx, 404, "RFQ-ERR-404", "Proposta não encontrada neste processo.");
+    if (!request.HasFormContentType) return Error(ctx, 400, "DOC-ERR-001", "Envie o arquivo como multipart/form-data.");
+    var form = await request.ReadFormAsync();
+    var file = form.Files.FirstOrDefault();
+    if (file is null || file.Length == 0) return Error(ctx, 400, "DOC-ERR-001", "Nenhum arquivo enviado.");
+    if (file.Length > StoredDocument.MaxSizeBytes) return Error(ctx, 400, "DOC-ERR-002", "Arquivo acima de 10 MB.");
+    if (!StoredDocument.AllowedContentTypes.Contains(file.ContentType))
+        return Error(ctx, 400, "DOC-ERR-003", "Formato não permitido: envie PDF, planilha (XLSX/XLS/CSV), imagem ou DOCX.");
+
+    using var ms = new MemoryStream();
+    await file.CopyToAsync(ms);
+    var doc = new StoredDocument
+    {
+        FileName = Path.GetFileName(file.FileName), ContentType = file.ContentType, SizeBytes = file.Length,
+        Content = ms.ToArray(), EntityType = "PROPOSAL", EntityId = proposal.Id, SupplierId = proposal.SupplierId,
+        UploadedByLabel = p.FindFirstValue("name") ?? "Suprimentos", UploadedAt = clock.GetUtcNow(),
+    };
+    db.StoredDocuments.Add(doc);
+    proposal.AttachmentDocumentId = doc.Id;
+    proposal.AttachmentFileName = doc.FileName;
+
+    // registra no histórico do processo: a cotação recebida ficou arquivada
+    var q = await svc.GetAsync(id);
+    if (q is not null)
+        svc.RecordAttachmentEvent(q, new Actor(ActorId(p), p.FindFirstValue("name") ?? "Suprimentos", RoleOf(p)),
+            proposal.SupplierName, doc.FileName);
+    await db.SaveChangesAsync();
+    return Ok(new { documentId = doc.Id, fileName = doc.FileName }, ctx);
+}).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+
 // ==== Documentos (download autorizado por papel/vínculo) =====================
 app.MapGet("/api/v1/documents/{id:guid}", async (Guid id, AppDbContext db, ClaimsPrincipal p, HttpContext ctx) =>
 {

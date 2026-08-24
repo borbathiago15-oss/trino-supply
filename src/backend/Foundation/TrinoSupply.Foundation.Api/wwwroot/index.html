@@ -2207,6 +2207,21 @@
     const RFQ_CRITERIA = ['Preço', 'Prazo de entrega', 'Condição de pagamento', 'Atendimento aos requisitos', 'Qualidade', 'Condição comercial', 'Histórico do fornecedor'];
     let rfqCache = {};
     let rfqOpenId = null;
+    /// envia o arquivo da cotação recebida (PDF/planilha) para a proposta registrada
+    async function uploadProposalFile(quotationId, proposalId, file) {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`/api/v1/quotations/${quotationId}/proposals/${proposalId}/attachment`, {
+        method: 'POST', headers: { Authorization: 'Bearer ' + store.access }, body: fd,
+      });
+      if (!res.ok) {
+        let msg = 'Falha ao anexar o arquivo.';
+        try { const j = await res.json(); msg = (j.error && j.error.message) || msg; } catch {}
+        throw new Error(msg);
+      }
+      return res.json();
+    }
+
     /// abre o detalhe de um processo específico (usado pela Central de Aprovação)
     async function openRfq(id) {
       try {
@@ -2361,6 +2376,9 @@
           q.items.map(i => `<tr><td>${escapeHtml(i.description)} <span class="sub">(${i.quantity} ${escapeHtml(i.unitOfMeasure)})</span></td>
             <td><input class="ip-price" data-item="${i.id}" type="number" min="0" step="0.01" style="width:110px" placeholder="R$ unit." /></td></tr>`).join('') +
           `</tbody></table></div>
+          <label for="ip-file" style="margin-top:10px">Cotação recebida (PDF, planilha ou imagem)</label>
+          <input id="ip-file" type="file" accept=".pdf,.xlsx,.xls,.csv,.docx,.png,.jpg,.jpeg" />
+          <p class="hello" style="margin:4px 0 0">Anexe o orçamento que o fornecedor enviou por e-mail — fica arquivado no processo, disponível na comparação e na aprovação. Até 10 MB.</p>
           <button data-act="internal-proposal" style="margin-top:8px">Registrar proposta</button>`;
       }
       html += '</div>';
@@ -2465,14 +2483,27 @@
         } else if (act === 'internal-proposal') {
           const items = [...document.querySelectorAll('.ip-price')]
             .filter(i => i.value).map(i => ({ quotationItemId: i.dataset.item, unitPrice: parseFloat(i.value), quantity: null }));
-          const q = await api(`/api/v1/quotations/${rfqOpenId}/proposals`, { method: 'POST', body: {
-            supplierId: $('ip-supplier').value,
+          const supplierId = $('ip-supplier').value;
+          const file = $('ip-file') && $('ip-file').files[0];
+          let q = await api(`/api/v1/quotations/${rfqOpenId}/proposals`, { method: 'POST', body: {
+            supplierId,
             deliveryDays: $('ip-delivery').value ? parseInt($('ip-delivery').value) : null,
             paymentTerms: $('ip-payment').value || null,
             freightValue: $('ip-freight').value ? parseFloat($('ip-freight').value) : null,
             validUntil: $('ip-valid').value || null, items,
           }});
-          toast('Proposta registrada.', 'ok');
+          if (file) {
+            // anexa o orçamento à proposta recém-registrada (última versão do fornecedor)
+            const proposal = q.proposals.filter(pp => pp.supplierId === supplierId)
+              .sort((a, b) => b.version - a.version)[0];
+            try {
+              await uploadProposalFile(q.id, proposal.id, file);
+              q = await api('/api/v1/quotations/' + q.id);
+              toast('Proposta registrada com a cotação anexada.', 'ok');
+            } catch (e) { toast('Proposta registrada, mas o anexo falhou: ' + e.message, 'error'); }
+          } else {
+            toast('Proposta registrada.', 'ok');
+          }
           rfqCache[q.id] = q; renderRfqDetail(q);
         } else if (act === 'close-rfq') {
           if (!confirm('Encerrar a cotação para análise? Novas propostas não serão aceitas.')) return;

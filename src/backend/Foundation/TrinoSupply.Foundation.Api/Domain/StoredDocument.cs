@@ -10,7 +10,9 @@ public class StoredDocument
     public static readonly string[] AllowedContentTypes =
     [
         "application/pdf", "image/png", "image/jpeg",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",   // .xlsx
+        "application/vnd.ms-excel",                                            // .xls
+        "text/csv", "application/csv",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ];
 

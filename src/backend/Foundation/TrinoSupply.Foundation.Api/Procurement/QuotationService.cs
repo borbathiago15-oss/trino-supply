@@ -455,6 +455,10 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
     public void RecordPdfEvent(Quotation q, Actor actor, Guid documentId, string poNumber)
         => AddEvent(q, "PDF_GERADO", $"PDF da OC {poNumber} gerado.", actor, null, null, null, documentId);
 
+    /// <summary>Arquiva no histórico a cotação recebida fora do portal (PDF/planilha do fornecedor).</summary>
+    public void RecordAttachmentEvent(Quotation q, Actor actor, string supplierName, string fileName)
+        => AddEvent(q, "COTACAO_ANEXADA", $"Cotação de {supplierName} anexada ao processo ({fileName}).", actor);
+
     // ---- infra --------------------------------------------------------------
     private async Task<(Quotation? q, UserError? error)> TransitionAsync(
         Actor actor, Guid id, QuotationStatus? requiredFrom, QuotationStatus to, string eventType,

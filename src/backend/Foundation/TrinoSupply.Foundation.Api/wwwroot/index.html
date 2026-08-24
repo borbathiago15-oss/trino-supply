@@ -506,7 +506,8 @@
       <section class="view" id="view-quotations">
         <div id="rfq-lists">
           <div class="panel">
-            <h2>Fila de Suprimentos — solicitações aprovadas aguardando cotação</h2>
+            <h2>Fila de Suprimentos — solicitações aguardando cotação</h2>
+            <p class="hello">As aprovadas podem ser cotadas agora; as retidas mostram de quem está a aprovação pendente. O comprador responsável vem da Triagem de Demandas.</p>
             <div id="rfq-queue" class="tablewrap"></div>
           </div>
           <div class="panel">
@@ -2190,18 +2191,28 @@
         const conduct = canConductRfq();
         const queue = (await api('/api/v1/quotations/queue')).items;
         $('rfq-queue').innerHTML = queue.length
-          ? '<table><thead><tr><th>Solicitação</th><th>Itens</th><th>Valor est.</th><th>Abrir cotação</th></tr></thead><tbody>' +
-            queue.map(r => `
+          ? '<table><thead><tr><th>Solicitação</th><th>Itens</th><th>Valor est.</th><th>Comprador responsável</th><th>Abrir cotação</th></tr></thead><tbody>' +
+            queue.map(r => {
+              const mine = r.assignedToId && currentUser && r.assignedToId === currentUser.id;
+              const responsible = r.assignedToLabel
+                ? `<strong>${escapeHtml(r.assignedToLabel)}</strong>${mine ? '<div class="sub">designada a você</div>' : ''}`
+                : '<span class="sub">designe em Compras → Triagem de Demandas</span>';
+              const action = r.blockReason
+                ? `<span class="badge dev">RETIDA NA APROVAÇÃO</span><div class="sub">${escapeHtml(r.blockReason)}</div>`
+                : conduct ? `
+                  <select class="rfq-kind"><option value="COMPRA">Cotação de compra</option><option value="SERVICO">Cotação de serviço</option><option value="BID">BID</option></select>
+                  <input type="date" class="rfq-deadline" title="Prazo para respostas" style="width:auto;padding:5px 8px;font-size:12px" />
+                  <button data-act="open-rfq">Abrir</button>` : '—';
+              return `
               <tr data-pr="${r.id}">
                 <td>${escapeHtml(r.number)}<div class="sub">${escapeHtml(r.requesterLabel)} · CC: ${escapeHtml(r.costCenter)}</div></td>
                 <td>${escapeHtml(r.justification)}<div class="sub">${r.items.map(i => `${i.quantity}× ${escapeHtml(i.description)}`).join(' · ')}</div></td>
                 <td>${money(r.totalEstimatedValue)}</td>
-                <td class="row-actions">${conduct ? `
-                  <select class="rfq-kind"><option value="COMPRA">Cotação de compra</option><option value="SERVICO">Cotação de serviço</option><option value="BID">BID</option></select>
-                  <input type="date" class="rfq-deadline" title="Prazo para respostas" style="width:auto;padding:5px 8px;font-size:12px" />
-                  <button data-act="open-rfq">Abrir</button>` : '—'}</td>
-              </tr>`).join('') + '</tbody></table>'
-          : '<p class="hello">Nenhuma solicitação aprovada aguardando cotação. ✔</p>';
+                <td>${responsible}</td>
+                <td class="row-actions">${action}</td>
+              </tr>`;
+            }).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhuma solicitação aguardando cotação. ✔</p>';
 
         const { items } = await api('/api/v1/quotations/');
         rfqCache = Object.fromEntries(items.map(q => [q.id, q]));

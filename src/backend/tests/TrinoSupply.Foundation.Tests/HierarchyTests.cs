@@ -192,6 +192,24 @@ public class HierarchyTests
         Assert.Equal(QuotationStatus.ApprovedForIssue, ok!.Status);
     }
 
+    [Fact]
+    public async Task Fila_de_cotacao_mostra_sc_retida_na_aprovacao_com_o_motivo()
+    {
+        var w = await BuildAsync();
+        var (pr, _) = await CreatePrAsync(w, w.Junior, "PBA-001");
+        await w.Prs.SubmitAsync(w.Junior, pr!.Id);
+
+        var (ready, blocked) = await w.Rfq.QueueAsync();
+        Assert.DoesNotContain(ready, r => r.Id == pr.Id);          // não se cota o que não foi aprovado
+        var retida = Assert.Single(blocked, b => b.Pr.Id == pr.Id);
+        Assert.Contains(w.Pleno.Label, retida.Reason);             // diz de quem é a aprovação
+
+        await w.Prs.ApproveAsync(w.Pleno, pr.Id, null);
+        (ready, blocked) = await w.Rfq.QueueAsync();
+        Assert.Contains(ready, r => r.Id == pr.Id);                // aprovada → pronta para cotar
+        Assert.DoesNotContain(blocked, b => b.Pr.Id == pr.Id);
+    }
+
     // ---- cadastro: usuários com vínculos e empresas (CNPJs) -------------------
 
     [Fact]

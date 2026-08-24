@@ -1201,16 +1201,20 @@ rfq.MapGet("/", async (QuotationService svc, ClaimsPrincipal p, HttpContext ctx)
 rfq.MapGet("/queue", async (QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
 {
     if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa a fila de suprimentos.");
-    var prs = await svc.AwaitingQuotationAsync();
+    var (ready, blocked) = await svc.QueueAsync();
+    static object QueueItem(PurchaseRequisition r, string? blockReason) => new
+    {
+        id = r.Id, number = r.Number, requesterLabel = r.RequesterLabel, costCenter = r.CostCenter,
+        justification = r.Justification, totalEstimatedValue = r.TotalEstimatedValue,
+        neededBy = r.NeededBy, decidedAt = r.DecidedAt,
+        assignedToId = r.AssignedToId, assignedToLabel = r.AssignedToLabel,
+        blockReason,
+        items = r.Items.Select(i => new { description = i.Description, quantity = i.Quantity, unitOfMeasure = i.UnitOfMeasure }),
+    };
     return Ok(new
     {
-        items = prs.Select(r => new
-        {
-            id = r.Id, number = r.Number, requesterLabel = r.RequesterLabel, costCenter = r.CostCenter,
-            justification = r.Justification, totalEstimatedValue = r.TotalEstimatedValue,
-            neededBy = r.NeededBy, decidedAt = r.DecidedAt,
-            items = r.Items.Select(i => new { description = i.Description, quantity = i.Quantity, unitOfMeasure = i.UnitOfMeasure }),
-        }),
+        items = ready.Select(r => QueueItem(r, null))
+            .Concat(blocked.Select(b => QueueItem(b.Pr, b.Reason))),
     }, ctx);
 });
 

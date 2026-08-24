@@ -71,7 +71,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.UnitOfMeasure).HasColumnName("unit_of_measure").HasMaxLength(10);
             e.Property(i => i.ReferencePrice).HasColumnName("reference_price").HasPrecision(18, 4);
             e.Property(i => i.StockControlled).HasColumnName("stock_controlled");
+            e.Property(i => i.Purchasable).HasColumnName("purchasable");
             e.Property(i => i.MinimumQty).HasColumnName("minimum_qty").HasPrecision(18, 4);
+            e.Property(i => i.ProductType).HasColumnName("product_type").HasMaxLength(30);
+            e.Property(i => i.CaNumber).HasColumnName("ca_number").HasMaxLength(30);
+            e.Property(i => i.FispqDocumentId).HasColumnName("fispq_document_id");
+            e.Property(i => i.FispqFileName).HasColumnName("fispq_file_name").HasMaxLength(300);
             e.Property(i => i.Active).HasColumnName("active");
             e.Property(i => i.CreatedAt).HasColumnName("created_at");
             e.Property(i => i.UpdatedAt).HasColumnName("updated_at");

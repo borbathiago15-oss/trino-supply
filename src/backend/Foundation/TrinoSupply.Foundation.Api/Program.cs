@@ -45,6 +45,8 @@ builder.Services.AddScoped<CatalogService>();
 builder.Services.AddScoped<RequisitionService>();
 builder.Services.AddScoped<InventoryService>();
 builder.Services.AddScoped<MaterialRequisitionService>();
+builder.Services.AddScoped<SupplierService>();
+builder.Services.AddScoped<PurchaseOrderService>();
 
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseNpgsql(ConnectionStringFactory.Resolve(builder.Configuration)));
@@ -561,6 +563,138 @@ mrs.MapPost("/{id:guid}/cancel", async (Guid id, ReasonRequest body, MaterialReq
         : Ok(MrView(mr!), ctx);
 });
 
+// ---- SUP-001 — Fornecedores (MVP) --------------------------------------------
+static object SupplierView(Supplier s) => new
+{
+    id = s.Id, legalName = s.LegalName, tradeName = s.TradeName, taxId = s.TaxId,
+    email = s.Email, phone = s.Phone, active = s.Active,
+};
+
+var sup = app.MapGroup("/api/v1/suppliers").RequireAuthorization();
+
+sup.MapGet("/", async (SupplierService svc, ClaimsPrincipal p, HttpContext ctx, bool? all) =>
+{
+    var role = RoleOf(p);
+    if (!SupplierService.CanView(role)) return Error(ctx, 403, "SUP-ERR-900", "Seu papel não acessa fornecedores.");
+    var includeInactive = all == true && SupplierService.CanMaintain(role);
+    return Ok(new { items = (await svc.ListAsync(includeInactive)).Select(SupplierView) }, ctx);
+});
+
+sup.MapPost("/", async (CreateSupplierRequest body, SupplierService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!SupplierService.CanMaintain(RoleOf(p)))
+        return Error(ctx, 403, "SUP-ERR-900", "Seu papel não mantém o cadastro de fornecedores.");
+    var (supplier, error) = await svc.CreateAsync(ActorId(p), body.LegalName, body.TradeName, body.TaxId, body.Email, body.Phone);
+    return error is not null ? Error(ctx, 400, error.Code, error.Message)
+        : Results.Json(new { data = SupplierView(supplier!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+sup.MapPatch("/{id:guid}", async (Guid id, UpdateSupplierRequest body, SupplierService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!SupplierService.CanMaintain(RoleOf(p)))
+        return Error(ctx, 403, "SUP-ERR-900", "Seu papel não mantém o cadastro de fornecedores.");
+    var (supplier, error) = await svc.UpdateAsync(id, body.TradeName, body.Email, body.Phone, body.Active);
+    return error is not null ? Error(ctx, error.Code == "SUP-ERR-404" ? 404 : 400, error.Code, error.Message)
+        : Ok(SupplierView(supplier!), ctx);
+});
+
+// ---- PO-001 — Pedido de Compra (MVP) -----------------------------------------
+static object PoView(PurchaseOrder o) => new
+{
+    id = o.Id, number = o.Number,
+    status = o.Status switch
+    {
+        PurchaseOrderStatus.Issued => "EMITIDO",
+        PurchaseOrderStatus.Received => "RECEBIDO",
+        _ => "CANCELADO",
+    },
+    supplierId = o.SupplierId, supplierName = o.SupplierName,
+    sourcePrNumber = o.SourcePrNumber, notes = o.Notes, totalValue = o.TotalValue,
+    issuedByLabel = o.IssuedByLabel, receivedByLabel = o.ReceivedByLabel, receivedAt = o.ReceivedAt,
+    cancelReason = o.CancelReason, createdAt = o.CreatedAt,
+    items = o.Items.Select(i => new
+    {
+        description = i.Description, unitOfMeasure = i.UnitOfMeasure, quantity = i.Quantity,
+        unitPrice = i.UnitPrice, catalogCode = i.CatalogCode, catalogItemId = i.CatalogItemId,
+    }),
+};
+
+var pos = app.MapGroup("/api/v1/purchase-orders").RequireAuthorization();
+
+pos.MapGet("/", async (PurchaseOrderService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!PurchaseOrderService.CanView(RoleOf(p)))
+        return Error(ctx, 403, "PO-ERR-900", "Seu papel não acessa pedidos de compra.");
+    return Ok(new { items = (await svc.ListAsync()).Select(PoView) }, ctx);
+});
+
+pos.MapGet("/demands", async (PurchaseOrderService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!PurchaseOrderService.CanManage(RoleOf(p)))
+        return Error(ctx, 403, "PO-ERR-900", "Seu papel não acessa as demandas de compra.");
+    var (prs, mrItems) = await svc.DemandsAsync();
+    return Ok(new
+    {
+        approvedRequisitions = prs.Select(r => new
+        {
+            id = r.Id, number = r.Number, requesterLabel = r.RequesterLabel,
+            costCenter = r.CostCenter, justification = r.Justification,
+            totalEstimatedValue = r.TotalEstimatedValue, decidedAt = r.DecidedAt,
+            items = r.Items.Select(i => new
+            {
+                description = i.Description, quantity = i.Quantity,
+                unitOfMeasure = i.UnitOfMeasure, estimatedUnitPrice = i.EstimatedUnitPrice,
+                catalogCode = i.CatalogCode, catalogItemId = i.CatalogItemId,
+            }),
+        }),
+        purchaseRouteItems = mrItems.Select(x => new
+        {
+            materialRequisitionNumber = x.mr.Number, requesterLabel = x.mr.RequesterLabel,
+            costCenter = x.mr.CostCenter, catalogItemId = x.item.CatalogItemId,
+            catalogCode = x.item.CatalogCode, description = x.item.Description,
+            unitOfMeasure = x.item.UnitOfMeasure, quantity = x.item.Quantity,
+        }),
+    }, ctx);
+});
+
+pos.MapPost("/", async (CreatePurchaseOrderRequest body, PurchaseOrderService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!PurchaseOrderService.CanManage(role))
+        return Error(ctx, 403, "PO-ERR-900", "Seu papel não emite pedidos de compra.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var items = (body.Items ?? []).Select(i =>
+        new PoItemInput(i.Description, i.Quantity, i.UnitOfMeasure, i.UnitPrice, i.CatalogItemId)).ToList();
+    var (order, error) = await svc.CreateAsync(actor, body.SupplierId, body.Notes, items, body.SourcePrId);
+    return error is not null
+        ? Error(ctx, error.Code switch { "PO-ERR-021" => 422, "PO-ERR-022" => 409, _ => 400 }, error.Code, error.Message)
+        : Results.Json(new { data = PoView(order!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+pos.MapPost("/{id:guid}/receive", async (Guid id, ReceiveOrderRequest body, PurchaseOrderService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!PurchaseOrderService.CanManage(role))
+        return Error(ctx, 403, "PO-ERR-900", "Seu papel não registra recebimentos de pedido.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var (order, error) = await svc.ReceiveAsync(actor, id, body.LocationId);
+    return error is not null
+        ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, _ => 400 }, error.Code, error.Message)
+        : Ok(PoView(order!), ctx);
+});
+
+pos.MapPost("/{id:guid}/cancel", async (Guid id, ReasonRequest body, PurchaseOrderService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!PurchaseOrderService.CanManage(role))
+        return Error(ctx, 403, "PO-ERR-900", "Seu papel não cancela pedidos de compra.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var (order, error) = await svc.CancelAsync(actor, id, body.Reason);
+    return error is not null
+        ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, _ => 400 }, error.Code, error.Message)
+        : Ok(PoView(order!), ctx);
+});
+
 app.MapFallbackToFile("index.html");
 
 app.Run();
@@ -588,6 +722,11 @@ public record EntryRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity
 public record MaterialItemRequest(Guid CatalogItemId, decimal Quantity);
 public record CreateMaterialRequisitionRequest(string CostCenter, string? Notes, List<MaterialItemRequest>? Items);
 public record FulfillRequest(Guid LocationId);
+public record CreateSupplierRequest(string LegalName, string? TradeName, string TaxId, string? Email, string? Phone);
+public record UpdateSupplierRequest(string? TradeName, string? Email, string? Phone, bool? Active);
+public record PoItemRequest(string Description, decimal Quantity, string? UnitOfMeasure, decimal? UnitPrice, Guid? CatalogItemId);
+public record CreatePurchaseOrderRequest(Guid SupplierId, string? Notes, List<PoItemRequest>? Items, Guid? SourcePrId);
+public record ReceiveOrderRequest(Guid LocationId);
 public record UpdateRequisitionRequest(string? Justification, string? CostCenter, string? Priority, DateOnly? NeededBy, bool? ClearNeededBy);
 public record ReasonRequest(string? Reason);
 public record DecisionRequest(string? Reason, string? Comments);

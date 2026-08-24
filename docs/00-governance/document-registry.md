@@ -51,6 +51,8 @@
 | PR-001-15 | Wireframes | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/15-wireframes.md` |
 | PR-001-16 | Acceptance Criteria | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/16-acceptance-criteria.md` |
 | PR-001-17 | Test Scenarios | 1.0.0 | 🟢 Approved | `docs/03-business/procurement/PR-001/17-test-scenarios.md` |
+| SUP-001 | Gestão de Fornecedores — Spec MVP consolidada | 0.1.0 | 🟡 MVP | `docs/03-business/procurement/SUP-001/README.md` |
+| PO-001 | Pedido de Compra — Spec MVP consolidada | 0.1.0 | 🟡 MVP | `docs/03-business/procurement/PO-001/README.md` |
 
 ---
 
@@ -167,6 +169,8 @@
 | Períodos de orçamento com teto por ciclo (requisições de compra dentro de ciclo orçamentário com limite por período — inspiração validada em análise de ERPs open source, 2026-08-23) | Análise de continuidade (sessão 2026-08-23); PR-001-01 (centro de custo) | Em análise — módulo/extensão fora da ordem oficial de roadmap: exigirá ADR própria (ADR-012, consequência 4) antes de qualquer documento |
 | Divergência de numeração das regras IV-BR: o catálogo MMS-004-02 e os documentos MMS-004-07/08/09 (e, por consequência, 10–17) usam esquemas de códigos IV-BR/IV-ERR/TC-IV distintos para as mesmas regras | Detectada na produção do pacote MMS-004 (2026-08-23) | Em análise — exigirá revisão de reconciliação (1.1.0) do MMS-004-02 ou dos MMS-004-07/08/09 para restabelecer a rastreabilidade única |
 | DS-001 e DS-ASSET-001 (Brand & Logo) registrados como Approved, mas os arquivos `docs/05-design-system/*` nunca existiram no repositório git — a tela de login usa marca tipográfica provisória | Detectada na implementação do Foundation (2026-08-23) | Em análise — recuperar/recriar os artefatos do design system e comitá-los, ou revisar o registry; enquanto isso os registros DS-001/DS-ASSET-001 não têm lastro |
+| SUP-001 e PO-001 implementados a partir de specs MVP consolidadas (documento único 0.1.0) — desdobramento no pacote padrão de 17 documentos pendente | Conclusão do ciclo de compras (2026-08-24) | Em aberto — produzir pacotes completos na fase de refinamento |
+| Módulo de cotação (RFQ) fora do MVP do PO-001 — pedido é emitido diretamente ao fornecedor | PO-001 §1 (2026-08-24) | Em aberto — documentar RFQ antes de implementar, conforme roadmap ADR-012 |
 
 ---
 
@@ -232,3 +236,4 @@
 | 2026-08-23 | MMS-004-15 — Wireframes do Inventory Management criados e aprovados (versão 1.0.0): WF-IV-01..08 (fila do almoxarifado por vencimento, posição/extrato com saldos antes→depois, documento com diálogo de efeito e estorno, ajustes com SoD visível, inventário com contagem cega e fechamento condicionado, locais, alertas com ruptura priorizada, configurações) com zonas, variantes responsivas, estados, matriz de rastreabilidade e critérios CA-WF-IV — padrão MMS-002-15 | MMS-004-15 |
 | 2026-08-23 | MMS-004-16 — Acceptance Criteria do Inventory Management criados e aprovados (versão 1.0.0): 89 critérios AC-IV em Given/When/Then (P0/P1/P2) cobrindo UC-IV-001..011, regras transversais (incluindo a prova de integridade AC-IV-061 — nenhum caminho altera saldo sem documento), ciclo de vida das 4 entidades, eventos com saldos por linha, notificações, API, UX e NFRs, com matriz de rastreabilidade e alinhamento ao DoD — padrão MMS-002-16 | MMS-004-16 |
 | 2026-08-23 | MMS-004-17 — Test Scenarios do Inventory Management criados e aprovados (versão 1.0.0): catálogo completo de cenários (62 TC-IV por caso de uso + transversais, ciclo de vida, eventos, notificações, API, UX, wireframes, UI×API, segurança, performance, banco e jobs com relógio controlado), prova de integridade em três frentes (funcional, triggers, privilégios) + reconstrução da projeção, estratégia por camada, matriz de rastreabilidade 100% (89/89 ACs, 16/16 eventos) e alinhamento ao DoD — **fecha o pacote MMS-004 (17/17 documentos), apto a implementação** — padrão MMS-002-17 | MMS-004-17 |
+| 2026-08-24 | SUP-001 (Gestão de Fornecedores) e PO-001 (Pedido de Compra) criados como specs MVP consolidadas (versão 0.1.0, documento único cada): fornecedores com tax_id único e situação; pedido EMITIDO→RECEBIDO/CANCELADO com conversão de requisição aprovada, painel de demandas (PRs aprovadas + itens MR em rota de compra) e recebimento gerando entrada de estoque (PO-BR-005, INV-IV-01 preservada) — desdobramento em pacotes de 17 documentos e RFQ registrados como decisões abertas (§10) | SUP-001, PO-001 |

@@ -15,8 +15,8 @@ public record Actor(Guid Id, string Label, string Role)
     public bool IsAdmin => Role == Roles.SystemAdministrator;
     public bool CanCreate => Role is Roles.Requester or Roles.SupplyManager || IsAdmin;
     public bool CanDecide => Role is Roles.Approver or Roles.SupplyManager || IsAdmin;
-    public bool SeesAll => Role is Roles.Approver or Roles.SupplyManager or Roles.Auditor || IsAdmin;
-    public bool CanAccessModule => CanCreate || CanDecide || Role == Roles.Auditor;
+    public bool SeesAll => Role is Roles.Approver or Roles.SupplyManager or Roles.Auditor or Roles.PurchasingOfficer || IsAdmin;
+    public bool CanAccessModule => CanCreate || CanDecide || Role is Roles.Auditor or Roles.PurchasingOfficer;
 }
 
 public record ItemInput(string Description, decimal Quantity, string? UnitOfMeasure, decimal? EstimatedUnitPrice, string? Notes, Guid? CatalogItemId = null);

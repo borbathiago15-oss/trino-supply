@@ -11,6 +11,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<PurchaseRequisition> Requisitions => Set<PurchaseRequisition>();
     public DbSet<RequisitionItem> RequisitionItems => Set<RequisitionItem>();
     public DbSet<Catalog.CatalogItem> CatalogItems => Set<Catalog.CatalogItem>();
+    public DbSet<Catalog.CatalogItemSupplier> CatalogItemSuppliers => Set<Catalog.CatalogItemSupplier>();
     public DbSet<Inventory.StorageLocation> StorageLocations => Set<Inventory.StorageLocation>();
     public DbSet<Inventory.StockBalance> StockBalances => Set<Inventory.StockBalance>();
     public DbSet<Inventory.StockMovement> StockMovements => Set<Inventory.StockMovement>();
@@ -68,6 +69,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.Family).HasColumnName("family").HasMaxLength(120).IsRequired();
             e.Property(i => i.UnitOfMeasure).HasColumnName("unit_of_measure").HasMaxLength(10);
             e.Property(i => i.ReferencePrice).HasColumnName("reference_price").HasPrecision(18, 4);
+            e.Property(i => i.StockControlled).HasColumnName("stock_controlled");
+            e.Property(i => i.MinimumQty).HasColumnName("minimum_qty").HasPrecision(18, 4);
             e.Property(i => i.Active).HasColumnName("active");
             e.Property(i => i.CreatedAt).HasColumnName("created_at");
             e.Property(i => i.UpdatedAt).HasColumnName("updated_at");
@@ -75,6 +78,25 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.Version).HasColumnName("version");
             e.HasIndex(i => i.Code).IsUnique();
             e.HasIndex(i => new { i.Family, i.Active });
+            e.HasMany(i => i.Suppliers).WithOne().HasForeignKey(s => s.CatalogItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Catalog.CatalogItemSupplier>(e =>
+        {
+            e.ToTable("catalog_item_supplier", "materials");
+            e.HasKey(s => s.Id);
+            e.Property(s => s.Id).HasColumnName("id");
+            e.Property(s => s.CatalogItemId).HasColumnName("catalog_item_id");
+            e.Property(s => s.SupplierName).HasColumnName("supplier_name").HasMaxLength(300).IsRequired();
+            e.Property(s => s.TaxId).HasColumnName("tax_id").HasMaxLength(14);
+            e.Property(s => s.Contact).HasColumnName("contact").HasMaxLength(200);
+            e.Property(s => s.SupplierItemCode).HasColumnName("supplier_item_code").HasMaxLength(60);
+            e.Property(s => s.LastPrice).HasColumnName("last_price").HasPrecision(18, 4);
+            e.Property(s => s.Notes).HasColumnName("notes").HasMaxLength(500);
+            e.Property(s => s.SupplierId).HasColumnName("supplier_id");
+            e.Property(s => s.CreatedAt).HasColumnName("created_at");
+            e.HasIndex(s => s.CatalogItemId);
         });
 
         modelBuilder.Entity<Inventory.StorageLocation>(e =>

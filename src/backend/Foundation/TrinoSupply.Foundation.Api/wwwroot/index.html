@@ -715,15 +715,23 @@
           <h2 id="cat-form-title">Novo produto</h2>
           <form id="cat-form">
             <div class="grid2">
-              <div><label for="ci-code">Código</label><input id="ci-code" required minlength="2" placeholder="ex.: LMP-001" /></div>
+              <div><label for="ci-code">Código <span class="sub">(opcional)</span></label><input id="ci-code" placeholder="deixe vazio para gerar automático" /></div>
               <div><label for="ci-family">Família</label><input id="ci-family" required minlength="3" list="cat-families" placeholder="ex.: MATERIAL DE LIMPEZA" /></div>
             </div>
+            <p class="hello" style="margin:4px 0 0">Sem código informado, o sistema gera pela família (ex.: MAT-001). Se você já usa um código próprio, informe-o aqui.</p>
             <label for="ci-desc">Descrição</label>
             <input id="ci-desc" required minlength="3" placeholder="ex.: Detergente neutro 500ml" />
             <div class="grid2">
               <div><label for="ci-unit">Unidade</label><input id="ci-unit" placeholder="UN" /></div>
               <div><label for="ci-price">Preço ref. (R$)</label><input id="ci-price" type="number" min="0" step="0.01" placeholder="opcional" /></div>
             </div>
+            <div class="grid2">
+              <div><label><input type="checkbox" id="ci-stock" /> Item de almoxarifado <span class="sub">(saldo controlado em estoque)</span></label></div>
+              <div><label for="ci-min">Estoque mínimo</label><input id="ci-min" type="number" min="0" step="0.01" placeholder="dispara a reposição" /></div>
+            </div>
+            <label>Fornecedores deste produto <span class="sub">(não precisam estar cadastrados na plataforma)</span></label>
+            <div id="ci-suppliers"></div>
+            <button type="button" class="secondary" id="ci-add-sup" style="margin-top:6px">+ Adicionar fornecedor</button>
             <datalist id="cat-families"></datalist>
             <button type="submit" class="full" id="cat-form-submit">Adicionar produto</button>
             <button type="button" class="secondary full" id="cat-form-cancel" style="margin-top:8px" hidden>Cancelar edição</button>
@@ -1273,8 +1281,10 @@
     async function loadMrCatItems() {
       const family = $('mr-family').value;
       if (!family) { $('mr-cat-list').innerHTML = ''; return; }
-      const { items } = await api('/api/v1/items/?family=' + encodeURIComponent(family));
-      $('mr-cat-list').innerHTML = familyTable(items, 'mr-pick', 'mp-check', 'mp-qty');
+      const { items } = await api('/api/v1/items/?stock=true&family=' + encodeURIComponent(family));
+      $('mr-cat-list').innerHTML = items.length
+        ? familyTable(items, 'mr-pick', 'mp-check', 'mp-qty')
+        : '<p class="hello">Nenhum item de almoxarifado nesta família. Marque o produto como <strong>Item de almoxarifado</strong> em Cadastros → Produtos.</p>';
     }
     LOADERS['mr-new'] = async () => { await fillFamilies('mr-family'); loadMrCatItems(); };
     $('mr-family').addEventListener('change', loadMrCatItems);
@@ -1337,10 +1347,11 @@
       ['we-loc', 'wi-loc'].forEach(id => { if ($(id)) $(id).innerHTML = opts; });
     }
     async function loadItemOptions() {
-      const { items } = await api('/api/v1/items/');
+      // entrada/saída movimentam apenas itens de almoxarifado
+      const { items } = await api('/api/v1/items/?stock=true');
       const opts = items.length
         ? items.map(i => `<option value="${i.id}">[${escapeHtml(i.code)}] ${escapeHtml(i.description)}</option>`).join('')
-        : '<option value="">(catálogo vazio)</option>';
+        : '<option value="">(marque produtos como "Item de almoxarifado" em Cadastros → Produtos)</option>';
       ['we-item', 'wi-item'].forEach(id => { if ($(id)) $(id).innerHTML = opts; });
     }
     const locCode = (id) => { const l = whLocations.find(x => x.id === id); return l ? l.code : '—'; };
@@ -1792,6 +1803,52 @@
     });
 
     // ============ CADASTROS: PRODUTOS ============
+    function itemSupplierRow(sup) {
+      const div = document.createElement('div');
+      div.className = 'ci-sup-row';
+      div.style = 'border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:6px';
+      div.innerHTML = `
+        <div class="grid2">
+          <div><label>Fornecedor</label><input class="cs-name" placeholder="razão social ou nome de mercado" /></div>
+          <div class="grid2">
+            <div><label>CNPJ/CPF <span class="sub">(opcional)</span></label><input class="cs-tax" placeholder="só números" /></div>
+            <div><label>Contato</label><input class="cs-contact" placeholder="telefone, e-mail ou vendedor" /></div>
+          </div>
+        </div>
+        <div class="grid2">
+          <div><label>Código no fornecedor</label><input class="cs-code" placeholder="opcional" /></div>
+          <div class="grid2">
+            <div><label>Último preço (R$)</label><input class="cs-price" type="number" min="0" step="0.01" placeholder="opcional" /></div>
+            <div><label>&nbsp;</label><button type="button" class="danger cs-remove" style="width:100%">Remover</button></div>
+          </div>
+        </div>
+        <label>Observação</label>
+        <input class="cs-notes" placeholder="opcional — condição, prazo, embalagem…" />`;
+      if (sup) {
+        div.querySelector('.cs-name').value = sup.supplierName || '';
+        div.querySelector('.cs-tax').value = sup.taxId || '';
+        div.querySelector('.cs-contact').value = sup.contact || '';
+        div.querySelector('.cs-code').value = sup.supplierItemCode || '';
+        div.querySelector('.cs-price').value = sup.lastPrice != null ? sup.lastPrice : '';
+        div.querySelector('.cs-notes').value = sup.notes || '';
+      }
+      div.querySelector('.cs-remove').addEventListener('click', () => div.remove());
+      return div;
+    }
+    function renderItemSuppliers(list) {
+      $('ci-suppliers').innerHTML = '';
+      (list || []).forEach(sup => $('ci-suppliers').appendChild(itemSupplierRow(sup)));
+    }
+    function collectItemSuppliers() {
+      return [...document.querySelectorAll('.ci-sup-row')].map(row => ({
+        supplierName: row.querySelector('.cs-name').value.trim(),
+        taxId: row.querySelector('.cs-tax').value || null,
+        contact: row.querySelector('.cs-contact').value || null,
+        supplierItemCode: row.querySelector('.cs-code').value || null,
+        lastPrice: row.querySelector('.cs-price').value ? parseFloat(row.querySelector('.cs-price').value) : null,
+        notes: row.querySelector('.cs-notes').value || null,
+      })).filter(x => x.supplierName);
+    }
     let catCache = {};
     let editingCatId = null;
     function setCatFormMode(i) {
@@ -1804,7 +1861,10 @@
         $('ci-code').value = i.code; $('ci-family').value = i.family;
         $('ci-desc').value = i.description; $('ci-unit').value = i.unitOfMeasure || '';
         $('ci-price').value = i.referencePrice != null ? i.referencePrice : '';
-      } else { $('cat-form').reset(); }
+        $('ci-stock').checked = !!i.stockControlled;
+        $('ci-min').value = i.minimumQty != null ? i.minimumQty : '';
+        renderItemSuppliers(i.suppliers);
+      } else { $('cat-form').reset(); renderItemSuppliers([]); }
     }
     LOADERS['products'] = async () => {
       $('cat-admin').hidden = !canMaintainCatalog();
@@ -1818,12 +1878,16 @@
           families.map(f => `<option value="${escapeHtml(f)}" ${f === current ? 'selected' : ''}>${escapeHtml(f)}</option>`).join('');
         $('cat-families').innerHTML = families.map(f => `<option value="${escapeHtml(f)}">`).join('');
         $('cat-list').innerHTML = items.length
-          ? '<table><thead><tr><th>Código</th><th>Produto</th><th>Família</th><th>Preço ref.</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+          ? '<table><thead><tr><th>Código</th><th>Produto</th><th>Família</th><th>Almoxarifado</th><th>Fornecedores</th><th>Preço ref.</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
             items.map(i => `
               <tr data-id="${i.id}">
                 <td>${escapeHtml(i.code)}</td>
                 <td>${escapeHtml(i.description)}<div class="sub">${escapeHtml(i.unitOfMeasure)}</div></td>
                 <td>${escapeHtml(i.family)}</td>
+                <td>${i.stockControlled
+                    ? `<span class="badge on">ESTOQUE</span>${i.minimumQty != null ? `<div class="sub">mín. ${i.minimumQty}</div>` : ''}`
+                    : '<span class="sub">compra direta</span>'}</td>
+                <td><div class="sub">${(i.suppliers || []).map(x => escapeHtml(x.supplierName)).join(' · ') || '—'}</div></td>
                 <td>${i.referencePrice != null ? money(i.referencePrice) : '—'}</td>
                 <td><span class="badge ${i.active ? 'on' : 'off'}">${i.active ? 'ATIVO' : 'INATIVO'}</span></td>
                 <td class="row-actions">${canMaintainCatalog() ? `<button class="secondary" data-act="edit">Editar</button><button class="${i.active ? 'danger' : 'secondary'}" data-act="toggle">${i.active ? 'Inativar' : 'Reativar'}</button>` : ''}</td>
@@ -1833,6 +1897,7 @@
       } catch (err) { $('cat-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
     $('cat-filter-family').addEventListener('change', () => LOADERS['products']());
+    $('ci-add-sup').addEventListener('click', () => $('ci-suppliers').appendChild(itemSupplierRow()));
     $('cat-form-cancel').addEventListener('click', () => setCatFormMode(null));
     $('cat-list').addEventListener('click', async (ev) => {
       const btn = ev.target.closest('button[data-act]');
@@ -1852,23 +1917,29 @@
     $('cat-form').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       try {
+        const stockControlled = $('ci-stock').checked;
+        const minimumQty = $('ci-min').value ? parseFloat($('ci-min').value) : null;
+        const suppliers = collectItemSuppliers();
         if (editingCatId) {
           await api('/api/v1/items/' + editingCatId, { method: 'PATCH', body: {
             description: $('ci-desc').value, family: $('ci-family').value,
             unitOfMeasure: $('ci-unit').value || null,
             referencePrice: $('ci-price').value ? parseFloat($('ci-price').value) : null,
+            stockControlled, minimumQty, clearMinimum: minimumQty === null, suppliers,
           }});
           toast('Produto atualizado.', 'ok');
           setCatFormMode(null);
         } else {
-          await api('/api/v1/items/', { method: 'POST', body: {
-            code: $('ci-code').value, description: $('ci-desc').value, family: $('ci-family').value,
+          const created = await api('/api/v1/items/', { method: 'POST', body: {
+            code: $('ci-code').value || null, description: $('ci-desc').value, family: $('ci-family').value,
             unitOfMeasure: $('ci-unit').value || null,
             referencePrice: $('ci-price').value ? parseFloat($('ci-price').value) : null,
+            stockControlled, minimumQty, suppliers,
           }});
-          toast('Produto adicionado ao catálogo.', 'ok');
+          toast(`Produto ${created.code} adicionado ao catálogo.`, 'ok');
           const keepFamily = $('ci-family').value;
           ev.target.reset();
+          renderItemSuppliers([]);
           $('ci-family').value = keepFamily;
         }
         LOADERS['products']();

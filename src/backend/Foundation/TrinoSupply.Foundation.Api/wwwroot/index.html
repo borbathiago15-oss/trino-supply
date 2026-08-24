@@ -486,6 +486,22 @@
         </div>
       </section>
 
+      <!-- Compras: triagem de demandas (tickets) -->
+      <section class="view" id="view-triage">
+        <div class="panel">
+          <div class="topbar" style="margin-bottom:8px">
+            <h2 style="margin:0">Painel de demandas</h2>
+            <select id="tri-filter" style="width:auto">
+              <option value="TODAS">Todas as demandas</option>
+              <option value="NAO_ATRIBUIDAS">Sem responsável</option>
+              <option value="MINHAS">Designadas a mim</option>
+            </select>
+          </div>
+          <p class="hello">Toda solicitação de compra aprovada e toda solicitação de material entra aqui como um ticket: designe o responsável pela continuidade (comprador ou almoxarife).</p>
+          <div id="tri-list" class="tablewrap"></div>
+        </div>
+      </section>
+
       <!-- Compras: cotações / processos -->
       <section class="view" id="view-quotations">
         <div id="rfq-lists">
@@ -781,6 +797,7 @@
     const canWarehouse = () => ['WarehouseOperator', 'WarehouseSupervisor', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
     const canBuy = () => ['PurchasingOfficer', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
     const canMaintainCatalog = () => ['SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
+    const canTriage = () => ['PurchasingOfficer', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
     const canConductRfq = () => ['PurchasingOfficer', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
     const canMgrApprove = () => ['SupplyManager', 'SystemAdministrator', 'Approver'].includes(currentUser.role);
     const canDirApprove = () => ['Director', 'SystemAdministrator'].includes(currentUser.role);
@@ -810,6 +827,7 @@
         { id: 'stock-issue', label: 'Saída de Estoque', show: canWarehouse },
       ]},
       { title: 'Compras', module: 'COMPRAS', items: [
+        { id: 'triage', label: 'Triagem de Demandas', show: () => canTriage() || canBuy() || canWarehouse() },
         { id: 'quotations', label: 'Cotações / Processos', show: () => canViewRfq() },
         { id: 'buy-demands', label: 'Demandas do Almoxarifado', show: canBuy },
         { id: 'buy-orders', label: 'Pedidos de Compra', show: () => true },
@@ -829,6 +847,7 @@
       'stock-dash': 'Dashboard de Estoque', 'wh-queue': 'Fila de Atendimento',
       'stock-entry': 'Entrada de Estoque', 'stock-issue': 'Saída de Estoque',
       'buy-demands': 'Demandas de Compra', 'buy-orders': 'Pedidos de Compra',
+      triage: 'Triagem de Demandas',
       users: 'Cadastro de Usuários', suppliers: 'Cadastro de Fornecedores', products: 'Cadastro de Produtos',
       'supply-dash': 'Dashboard de Suprimentos', 'cost-centers': 'Centros de Custo',
       quotations: 'Cotações / Processos de Compra', company: 'Empresas do Grupo (CNPJs)',
@@ -2085,6 +2104,47 @@
         LOADERS['cost-centers']();
         loadCcDatalist();
       } catch (err) { toast(err.message, 'error'); }
+    });
+
+    // ============ TRIAGEM DE DEMANDAS (tickets) ============
+    let triResponsibles = [];
+    LOADERS['triage'] = async () => {
+      const filter = $('tri-filter').value || 'TODAS';
+      const mayAssign = canTriage();
+      if (mayAssign && !triResponsibles.length) {
+        try { triResponsibles = (await api('/api/v1/triage/responsibles')).items; } catch {}
+      }
+      try {
+        const { items } = await api('/api/v1/triage/?filter=' + filter);
+        const options = (selected) => '<option value="">— sem responsável —</option>' +
+          triResponsibles.map(r => `<option value="${r.id}" ${r.id === selected ? 'selected' : ''}>${escapeHtml(r.name)} (${ROLE_LABELS[r.role] || r.role})</option>`).join('');
+        $('tri-list').innerHTML = items.length
+          ? '<table><thead><tr><th>Demanda</th><th>Resumo</th><th>Valor est.</th><th>Situação</th><th>Responsável</th></tr></thead><tbody>' +
+            items.map(t => `
+              <tr data-id="${t.id}" data-kind="${t.kind}">
+                <td>${escapeHtml(t.number)}<div class="sub">${t.kind === 'SC' ? 'Solicitação de compra' : 'Material'} · ${escapeHtml(t.requesterLabel)}</div></td>
+                <td>${escapeHtml(t.summary || '—')}<div class="sub">CC: ${escapeHtml(t.costCenter)}${t.openedAt ? ' · desde ' + new Date(t.openedAt).toLocaleDateString('pt-BR') : ''}</div></td>
+                <td>${t.estimatedValue != null ? money(t.estimatedValue) : '—'}</td>
+                <td><span class="badge ${t.assignedToId ? 'on' : 'dev'}">${escapeHtml(t.status)}</span></td>
+                <td>${mayAssign
+                    ? `<select class="tri-assign" style="width:100%">${options(t.assignedToId)}</select>${t.assignedByLabel ? `<div class="sub">designado por ${escapeHtml(t.assignedByLabel)}</div>` : ''}`
+                    : `${escapeHtml(t.assignedToLabel || '—')}${t.assignedByLabel ? `<div class="sub">por ${escapeHtml(t.assignedByLabel)}</div>` : ''}`}</td>
+              </tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhuma demanda neste filtro. ✔</p>';
+      } catch (err) { $('tri-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
+    $('tri-filter').addEventListener('change', () => LOADERS['triage']());
+    $('tri-list').addEventListener('change', async (ev) => {
+      const sel = ev.target.closest('.tri-assign');
+      if (!sel) return;
+      const row = sel.closest('tr');
+      try {
+        await api('/api/v1/triage/assign', { method: 'POST', body: {
+          kind: row.dataset.kind, id: row.dataset.id, responsibleId: sel.value || null,
+        }});
+        toast(sel.value ? 'Demanda designada ao responsável.' : 'Designação removida.', 'ok');
+        LOADERS['triage']();
+      } catch (err) { toast(err.message, 'error'); LOADERS['triage'](); }
     });
 
     // ============ RFQ-001 — Cotações / Processos de Compra ============

@@ -50,6 +50,7 @@ builder.Services.AddScoped<PurchaseOrderService>();
 builder.Services.AddScoped<CostCenterService>();
 builder.Services.AddScoped<CompanyService>();
 builder.Services.AddScoped<QuotationService>();
+builder.Services.AddScoped<TriageService>();
 builder.Services.AddScoped<TrinoSupply.Foundation.Api.Analytics.AnalyticsService>();
 
 builder.Services.AddDbContext<AppDbContext>(o =>
@@ -509,6 +510,20 @@ app.MapGet("/api/v1/dashboard", async (AppDbContext db, ClaimsPrincipal p, HttpC
         });
     }
 
+    // Minhas demandas (tickets designados na triagem)
+    {
+        var linkedPos = db.PurchaseOrders.Where(o => o.SourcePrId != null && o.Status != PurchaseOrderStatus.Cancelled).Select(o => o.SourcePrId!.Value);
+        var mine = await db.Requisitions.CountAsync(r => r.DeletedAt == null && r.AssignedToId == uid
+            && r.Status == RequisitionStatus.Approved && !linkedPos.Contains(r.Id));
+        mine += await db.MaterialRequisitions.CountAsync(r => r.AssignedToId == uid
+            && (r.Status == MaterialRequisitionStatus.Submitted || r.Status == MaterialRequisitionStatus.PurchaseRoute));
+        if (mine > 0) alerts.Add(new
+        {
+            kind = "MINHAS_DEMANDAS", severity = "alta", count = mine, view = "triage",
+            text = $"{mine} demanda(s) designada(s) a você aguardando continuidade.",
+        });
+    }
+
     // Demandas de compra + pedidos emitidos há mais de 7 dias sem recebimento
     if (mods.Contains(AppModules.Compras) && PurchaseOrderService.CanManage(role))
     {
@@ -520,6 +535,18 @@ app.MapGet("/api/v1/dashboard", async (AppDbContext db, ClaimsPrincipal p, HttpC
             kind = "DEMANDA", severity = "media", count = demands + routeItems, view = "buy-demands",
             text = $"{demands} requisição(ões) aprovada(s) e {routeItems} item(ns) em rota de compra aguardando pedido.",
         });
+        if (TriageService.CanTriage(role))
+        {
+            var untriaged = await db.Requisitions.CountAsync(r => r.DeletedAt == null
+                && r.Status == RequisitionStatus.Approved && r.AssignedToId == null && !linked.Contains(r.Id));
+            untriaged += await db.MaterialRequisitions.CountAsync(r => r.AssignedToId == null
+                && (r.Status == MaterialRequisitionStatus.Submitted || r.Status == MaterialRequisitionStatus.PurchaseRoute));
+            if (untriaged > 0) alerts.Add(new
+            {
+                kind = "TRIAGEM", severity = "media", count = untriaged, view = "triage",
+                text = $"{untriaged} demanda(s) sem responsável designado na triagem.",
+            });
+        }
         var lateLimit = clock.GetUtcNow().AddDays(-7);
         var latePos = await db.PurchaseOrders.CountAsync(o => o.Status == PurchaseOrderStatus.Issued && o.CreatedAt < lateLimit);
         if (latePos > 0) alerts.Add(new
@@ -970,6 +997,45 @@ ccs.MapPatch("/{id:guid}", async (Guid id, UpdateCostCenterRequest body, CostCen
     var (cc, error) = await svc.UpdateAsync(id, body.Name, body.Region, body.ManagerUserId, body.ClientName, body.Active, body.CompanyId);
     return error is not null ? Error(ctx, error.Code == "CC-ERR-404" ? 404 : 400, error.Code, error.Message)
         : Ok(CcView(cc!), ctx);
+});
+
+// ---- Triagem de demandas (tickets) ------------------------------------------
+static object TicketView(TriageTicket t) => new
+{
+    kind = t.Kind, id = t.Id, number = t.Number, costCenter = t.CostCenter,
+    requesterLabel = t.RequesterLabel, summary = t.Summary, estimatedValue = t.EstimatedValue,
+    openedAt = t.OpenedAt, status = t.Status,
+    assignedToId = t.AssignedToId, assignedToLabel = t.AssignedToLabel,
+    assignedByLabel = t.AssignedByLabel, assignedAt = t.AssignedAt,
+};
+
+var triage = app.MapGroup("/api/v1/triage").RequireAuthorization();
+triage.AddEndpointFilter(RejectSupplierRole());
+
+triage.MapGet("/", async (TriageService svc, ClaimsPrincipal p, HttpContext ctx, string? filter) =>
+{
+    if (BuildActor(p) is not { } actor) return Error(ctx, 403, "TRI-ERR-900", "Seu papel não acessa a triagem.");
+    var scope = (filter ?? "TODAS").Trim().ToUpperInvariant();
+    if (scope != "MINHAS" && !TriageService.CanTriage(RoleOf(p)) && !PurchaseOrderService.CanManage(RoleOf(p)))
+        return Error(ctx, 403, "TRI-ERR-900", "Seu papel não acessa o painel de demandas.");
+    return Ok(new { items = (await svc.ListAsync(actor, scope)).Select(TicketView) }, ctx);
+});
+
+triage.MapGet("/responsibles", async (TriageService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!TriageService.CanTriage(RoleOf(p)))
+        return Error(ctx, 403, "TRI-ERR-900", "Seu papel não distribui demandas.");
+    return Ok(new { items = await svc.ResponsiblesAsync() }, ctx);
+});
+
+triage.MapPost("/assign", async (AssignTicketRequest body, TriageService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (BuildActor(p) is not { } actor) return Error(ctx, 403, "TRI-ERR-900", "Seu papel não acessa a triagem.");
+    var (ticket, error) = await svc.AssignAsync(actor, body.Kind ?? "", body.Id, body.ResponsibleId);
+    return error is not null
+        ? Error(ctx, error.Code switch { "TRI-ERR-404" => 404, "TRI-ERR-900" => 403, "TRI-ERR-020" => 409, _ => 400 },
+                error.Code, error.Message)
+        : Ok(TicketView(ticket!), ctx);
 });
 
 // ---- Empresas do grupo (CNPJs) — cada CC pode apontar para um CNPJ -----------
@@ -1524,6 +1590,7 @@ public record CreatePurchaseOrderRequest(Guid SupplierId, string? Notes, List<Po
 public record ReceiveOrderRequest(Guid LocationId);
 public record CreateCostCenterRequest(string? Code, string Name, string? Region, Guid? ManagerUserId, string? ClientName, Guid? CompanyId);
 public record UpdateCostCenterRequest(string? Name, string? Region, Guid? ManagerUserId, string? ClientName, bool? Active, Guid? CompanyId);
+public record AssignTicketRequest(string? Kind, Guid Id, Guid? ResponsibleId);
 public record CreateCompanyRequest(string LegalName, string TaxId, string? StateRegistration, string Address,
     string? District, string City, string State, string Zip, string? Phone, string? Email);
 public record UpdateCompanyRequest(string? LegalName, string? StateRegistration, string? Address, string? District,

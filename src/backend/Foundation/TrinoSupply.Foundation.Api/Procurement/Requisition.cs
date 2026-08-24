@@ -42,6 +42,12 @@ public class PurchaseRequisition
     public string? DecisionReason { get; set; }                  // motivo de rejeição/devolução/cancelamento
     public Guid? DecidedById { get; set; }
     public string? DecidedByLabel { get; set; }
+    // Triagem de demandas (tickets): responsável designado pela continuidade após a aprovação
+    public Guid? AssignedToId { get; set; }
+    public string? AssignedToLabel { get; set; }
+    public Guid? AssignedById { get; set; }
+    public string? AssignedByLabel { get; set; }
+    public DateTimeOffset? AssignedAt { get; set; }
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset? DecidedAt { get; set; }
     public List<RequisitionItem> Items { get; set; } = [];

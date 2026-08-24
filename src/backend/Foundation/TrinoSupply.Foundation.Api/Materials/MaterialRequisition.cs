@@ -33,6 +33,12 @@ public class MaterialRequisition
     public Guid? FulfilledBy { get; set; }
     public string? FulfilledByLabel { get; set; }
     public DateTimeOffset? FulfilledAt { get; set; }
+    // Triagem de demandas (tickets): responsável designado pelo atendimento
+    public Guid? AssignedToId { get; set; }
+    public string? AssignedToLabel { get; set; }
+    public Guid? AssignedById { get; set; }
+    public string? AssignedByLabel { get; set; }
+    public DateTimeOffset? AssignedAt { get; set; }
     public string? CancelReason { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

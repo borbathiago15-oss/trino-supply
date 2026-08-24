@@ -145,6 +145,7 @@ auth.MapGet("/me", (ClaimsPrincipal principal, HttpContext ctx) =>
         email = principal.FindFirstValue(ClaimTypes.Email) ?? principal.FindFirstValue("email"),
         name = principal.FindFirstValue("name"),
         role = principal.FindFirstValue(ClaimTypes.Role),
+        modules = (principal.FindFirstValue("modules") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries),
     }, ctx);
 }).RequireAuthorization();
 
@@ -155,6 +156,7 @@ var users = app.MapGroup("/api/v1/users")
 static object UserView(User u) => new
 {
     id = u.Id, email = u.Email, name = u.Name, role = u.Role, active = u.Active,
+    modules = AppModules.EffectiveFor(u), customModules = u.Modules is not null,
     createdAt = u.CreatedAt, updatedAt = u.UpdatedAt,
 };
 
@@ -163,11 +165,11 @@ static Guid ActorId(ClaimsPrincipal p) =>
         ? id : Guid.Empty;
 
 users.MapGet("/", async (UserService svc, HttpContext ctx) =>
-    Ok(new { items = (await svc.ListAsync()).Select(UserView), roles = UserService.ValidRoles }, ctx));
+    Ok(new { items = (await svc.ListAsync()).Select(UserView), roles = UserService.ValidRoles, availableModules = AppModules.All }, ctx));
 
 users.MapPost("/", async (CreateUserRequest body, UserService svc, HttpContext ctx) =>
 {
-    var (user, error) = await svc.CreateAsync(body.Email, body.Name, body.Role, body.Password);
+    var (user, error) = await svc.CreateAsync(body.Email, body.Name, body.Role, body.Password, body.Modules);
     return error is not null
         ? Error(ctx, error.Code == "IAM-ERR-014" ? 409 : 400, error.Code, error.Message)
         : Results.Json(new { data = UserView(user!), correlationId = CorrelationId(ctx) }, statusCode: 201);
@@ -175,7 +177,7 @@ users.MapPost("/", async (CreateUserRequest body, UserService svc, HttpContext c
 
 users.MapPatch("/{id:guid}", async (Guid id, UpdateUserRequest body, UserService svc, ClaimsPrincipal principal, HttpContext ctx) =>
 {
-    var (user, error) = await svc.UpdateAsync(id, ActorId(principal), body.Name, body.Role, body.Active);
+    var (user, error) = await svc.UpdateAsync(id, ActorId(principal), body.Name, body.Role, body.Active, body.Modules);
     return error is not null
         ? Error(ctx, error.Code == "IAM-ERR-404" ? 404 : 422, error.Code, error.Message)
         : Ok(UserView(user!), ctx);
@@ -217,6 +219,8 @@ catalogGroup.MapPost("/", async (CreateCatalogItemRequest body, CatalogService s
     var role = p.FindFirstValue(ClaimTypes.Role) ?? "";
     if (!CatalogService.CanMaintain(role))
         return Error(ctx, 403, "IC-ERR-001", "Somente o gestor de suprimentos ou o administrador mantêm o catálogo.");
+    if (!ModulesOf(p).Contains(AppModules.Produtos))
+        return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para o cadastro de produtos.");
     var (item, error) = await svc.CreateAsync(ActorId(p), body.Code, body.Description, body.Family, body.UnitOfMeasure, body.ReferencePrice);
     return error is not null
         ? Error(ctx, error.Code == "IC-ERR-010" ? 409 : 400, error.Code, error.Message)
@@ -228,6 +232,8 @@ catalogGroup.MapPatch("/{id:guid}", async (Guid id, UpdateCatalogItemRequest bod
     var role = p.FindFirstValue(ClaimTypes.Role) ?? "";
     if (!CatalogService.CanMaintain(role))
         return Error(ctx, 403, "IC-ERR-001", "Somente o gestor de suprimentos ou o administrador mantêm o catálogo.");
+    if (!ModulesOf(p).Contains(AppModules.Produtos))
+        return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para o cadastro de produtos.");
     var (item, error) = await svc.UpdateAsync(id, body.Description, body.Family, body.UnitOfMeasure, body.ReferencePrice, body.Active);
     return error is not null
         ? Error(ctx, error.Code == "IC-ERR-404" ? 404 : 400, error.Code, error.Message)
@@ -297,6 +303,7 @@ static IResult PrError(HttpContext ctx, UserError e) => Error(ctx, e.Code switch
 }, e.Code, e.Message);
 
 var prs = app.MapGroup("/api/v1/purchase-requisitions").RequireAuthorization();
+prs.AddEndpointFilter(RequireModules(AppModules.Solicitacoes, AppModules.Aprovacao));
 
 prs.MapGet("/", async (RequisitionService svc, ClaimsPrincipal p, HttpContext ctx, string? status) =>
 {
@@ -405,6 +412,94 @@ app.MapGet("/api/v1/approvals/pending", async (RequisitionService svc, ClaimsPri
     if (BuildActor(p) is not { CanDecide: true } actor)
         return Error(ctx, 403, "PR-ERR-001", "Seu papel não possui fila de aprovação.");
     return Ok(new { items = (await svc.PendingApprovalsAsync(actor)).Select(PrView) }, ctx);
+}).RequireAuthorization().AddEndpointFilter(RequireModules(AppModules.Aprovacao));
+
+// ---- Dashboard — central de avisos (atrasos, aprovações, fila, demandas) -----
+app.MapGet("/api/v1/dashboard", async (AppDbContext db, ClaimsPrincipal p, HttpContext ctx, TimeProvider clock) =>
+{
+    var role = RoleOf(p);
+    var uid = ActorId(p);
+    var mods = ModulesOf(p);
+    var actor = new Actor(uid, p.FindFirstValue("name") ?? "Usuário", role);
+    var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+    var alerts = new List<object>();
+
+    // Requisições com data de necessidade vencida e ainda não concluídas (escopo do papel)
+    if (mods.Contains(AppModules.Solicitacoes) || mods.Contains(AppModules.Aprovacao))
+    {
+        var overdueQ = db.Requisitions.Where(r =>
+            r.NeededBy != null && r.NeededBy < today &&
+            (r.Status == RequisitionStatus.InApproval || r.Status == RequisitionStatus.Approved));
+        if (!actor.SeesAll) overdueQ = overdueQ.Where(r => r.RequesterId == uid);
+        var overdue = await overdueQ.CountAsync();
+        if (overdue > 0) alerts.Add(new
+        {
+            kind = "ATRASO", severity = "alta", count = overdue, view = "pr-mine",
+            text = $"{overdue} pedido(s) com data de necessidade vencida e ainda não concluído(s).",
+        });
+    }
+
+    // Fila de aprovação (para quem decide)
+    if (mods.Contains(AppModules.Aprovacao) && actor.CanDecide)
+    {
+        var pending = await db.Requisitions.CountAsync(r =>
+            r.Status == RequisitionStatus.InApproval && r.RequesterId != uid);
+        if (pending > 0) alerts.Add(new
+        {
+            kind = "APROVACAO", severity = "media", count = pending, view = "pr-approvals",
+            text = $"{pending} pedido(s) aguardando a sua aprovação.",
+        });
+    }
+
+    // Meus pedidos aguardando aprovação / devolvidos para ajuste
+    if (mods.Contains(AppModules.Solicitacoes) && actor.CanCreate)
+    {
+        var waiting = await db.Requisitions.CountAsync(r => r.RequesterId == uid && r.Status == RequisitionStatus.InApproval);
+        if (waiting > 0) alerts.Add(new
+        {
+            kind = "AGUARDANDO", severity = "info", count = waiting, view = "pr-mine",
+            text = $"{waiting} pedido(s) seu(s) aguardando aprovação.",
+        });
+        var returned = await db.Requisitions.CountAsync(r => r.RequesterId == uid && r.Status == RequisitionStatus.Returned);
+        if (returned > 0) alerts.Add(new
+        {
+            kind = "DEVOLVIDO", severity = "alta", count = returned, view = "pr-mine",
+            text = $"{returned} pedido(s) devolvido(s) para ajuste — revise e reenvie.",
+        });
+    }
+
+    // Fila do almoxarifado
+    if (mods.Contains(AppModules.Estoque) && InventoryService.CanOperate(role))
+    {
+        var queue = await db.MaterialRequisitions.CountAsync(r => r.Status == MaterialRequisitionStatus.Submitted);
+        if (queue > 0) alerts.Add(new
+        {
+            kind = "ALMOXARIFADO", severity = "media", count = queue, view = "wh-queue",
+            text = $"{queue} solicitação(ões) de material aguardando atendimento.",
+        });
+    }
+
+    // Demandas de compra + pedidos emitidos há mais de 7 dias sem recebimento
+    if (mods.Contains(AppModules.Compras) && PurchaseOrderService.CanManage(role))
+    {
+        var linked = db.PurchaseOrders.Where(o => o.SourcePrId != null && o.Status != PurchaseOrderStatus.Cancelled).Select(o => o.SourcePrId!.Value);
+        var demands = await db.Requisitions.CountAsync(r => r.Status == RequisitionStatus.Approved && !linked.Contains(r.Id));
+        var routeItems = await db.MaterialRequisitionItems.CountAsync(i => i.Status == MaterialItemStatus.PurchaseRoute);
+        if (demands + routeItems > 0) alerts.Add(new
+        {
+            kind = "DEMANDA", severity = "media", count = demands + routeItems, view = "buy-demands",
+            text = $"{demands} requisição(ões) aprovada(s) e {routeItems} item(ns) em rota de compra aguardando pedido.",
+        });
+        var lateLimit = clock.GetUtcNow().AddDays(-7);
+        var latePos = await db.PurchaseOrders.CountAsync(o => o.Status == PurchaseOrderStatus.Issued && o.CreatedAt < lateLimit);
+        if (latePos > 0) alerts.Add(new
+        {
+            kind = "PO_ATRASO", severity = "alta", count = latePos, view = "buy-orders",
+            text = $"{latePos} pedido(s) de compra emitido(s) há mais de 7 dias sem recebimento.",
+        });
+    }
+
+    return Ok(new { alerts, generatedAt = clock.GetUtcNow() }, ctx);
 }).RequireAuthorization();
 
 // ---- MMS-004 — Estoque (MVP) + MMS-005 — entrada por recebimento -------------
@@ -431,6 +526,7 @@ static object MovementView(StockMovement m) => new
 };
 
 var inv = app.MapGroup("/api/v1/inventory").RequireAuthorization();
+inv.AddEndpointFilter(RequireModules(AppModules.Estoque, AppModules.Compras));
 
 inv.MapGet("/locations", async (InventoryService svc, ClaimsPrincipal p, HttpContext ctx) =>
 {
@@ -488,6 +584,17 @@ inv.MapPost("/entries", async (EntryRequest body, InventoryService svc, ClaimsPr
         : Results.Json(new { data = MovementView(movement!), correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
 
+// Saída manual de material (consumo) — nunca deixa o saldo negativo (MMS-RG-04)
+inv.MapPost("/issues", async (IssueRequest body, InventoryService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!InventoryService.CanOperate(role)) return Error(ctx, 403, "IV-ERR-900", "Seu papel não registra saídas.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var (movement, error) = await svc.RegisterIssueAsync(actor, body.CatalogItemId, body.LocationId, body.Quantity, MovementOrigin.Consumption, body.OriginReference);
+    return error is not null ? Error(ctx, error.Code == "IV-ERR-020" ? 422 : 400, error.Code, error.Message)
+        : Results.Json(new { data = MovementView(movement!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
 // ---- MMS-003 — Solicitação de Material (MVP) ---------------------------------
 static object MrView(MaterialRequisition r) => new
 {
@@ -518,6 +625,7 @@ static object MrView(MaterialRequisition r) => new
 };
 
 var mrs = app.MapGroup("/api/v1/material-requisitions").RequireAuthorization();
+mrs.AddEndpointFilter(RequireModules(AppModules.Material, AppModules.Estoque));
 
 mrs.MapGet("/", async (MaterialRequisitionService svc, ClaimsPrincipal p, HttpContext ctx, bool? queue) =>
 {
@@ -571,6 +679,7 @@ static object SupplierView(Supplier s) => new
 };
 
 var sup = app.MapGroup("/api/v1/suppliers").RequireAuthorization();
+sup.AddEndpointFilter(RequireModules(AppModules.Fornecedores, AppModules.Compras));
 
 sup.MapGet("/", async (SupplierService svc, ClaimsPrincipal p, HttpContext ctx, bool? all) =>
 {
@@ -620,6 +729,7 @@ static object PoView(PurchaseOrder o) => new
 };
 
 var pos = app.MapGroup("/api/v1/purchase-orders").RequireAuthorization();
+pos.AddEndpointFilter(RequireModules(AppModules.Compras));
 
 pos.MapGet("/", async (PurchaseOrderService svc, ClaimsPrincipal p, HttpContext ctx) =>
 {
@@ -699,19 +809,36 @@ app.MapFallbackToFile("index.html");
 
 app.Run();
 
+// ---- Autorização por módulo (cadastro do usuário) ----------------------------
+static string[] ModulesOf(ClaimsPrincipal p)
+{
+    var claim = p.FindFirst("modules");
+    if (claim is null) // token antigo sem o claim: cai no padrão do papel
+        return AppModules.DefaultsFor(p.FindFirstValue(ClaimTypes.Role) ?? "");
+    return claim.Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+}
+
+static Func<EndpointFilterInvocationContext, EndpointFilterDelegate, ValueTask<object?>> RequireModules(params string[] modules) =>
+    async (ic, next) =>
+    {
+        var granted = ModulesOf(ic.HttpContext.User);
+        if (modules.Any(granted.Contains)) return await next(ic);
+        return Error(ic.HttpContext, 403, "IAM-ERR-018", "Seu usuário não tem autorização para este módulo. Fale com o administrador.");
+    };
+
 static object ToResponse(AuthTokens t) => new
 {
     accessToken = t.AccessToken,
     tokenType = "Bearer",
     expiresIn = t.ExpiresInSeconds,
     refreshToken = t.RefreshToken,
-    user = new { id = t.User.Id, email = t.User.Email, name = t.User.Name, role = t.User.Role },
+    user = new { id = t.User.Id, email = t.User.Email, name = t.User.Name, role = t.User.Role, modules = AppModules.EffectiveFor(t.User) },
 };
 
 public record LoginRequest(string Email, string Password);
 public record RefreshRequest(string RefreshToken);
-public record CreateUserRequest(string Email, string Name, string Role, string Password);
-public record UpdateUserRequest(string? Name, string? Role, bool? Active);
+public record CreateUserRequest(string Email, string Name, string Role, string Password, List<string>? Modules);
+public record UpdateUserRequest(string? Name, string? Role, bool? Active, List<string>? Modules);
 public record ResetPasswordRequest(string NewPassword);
 public record ItemRequest(string? Description, decimal Quantity, string? UnitOfMeasure, decimal? EstimatedUnitPrice, string? Notes, Guid? CatalogItemId);
 public record CreateRequisitionRequest(string Justification, string CostCenter, string? Priority, DateOnly? NeededBy, List<ItemRequest>? Items, string? Kind);
@@ -719,6 +846,7 @@ public record CreateCatalogItemRequest(string Code, string Description, string F
 public record UpdateCatalogItemRequest(string? Description, string? Family, string? UnitOfMeasure, decimal? ReferencePrice, bool? Active);
 public record CreateLocationRequest(string Code, string Name);
 public record EntryRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity, string OriginReference, string? Origin);
+public record IssueRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity, string OriginReference);
 public record MaterialItemRequest(Guid CatalogItemId, decimal Quantity);
 public record CreateMaterialRequisitionRequest(string CostCenter, string? Notes, List<MaterialItemRequest>? Items);
 public record FulfillRequest(Guid LocationId);

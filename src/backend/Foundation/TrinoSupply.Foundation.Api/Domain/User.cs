@@ -11,6 +11,8 @@ public class User
     public string Name { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
     public string Role { get; set; } = Roles.SystemAdministrator;
+    /// <summary>Módulos autorizados (CSV de chaves de AppModules); null = padrão do papel.</summary>
+    public string? Modules { get; set; }
     public bool Active { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
@@ -26,4 +28,45 @@ public static class Roles
     public const string WarehouseSupervisor = "WarehouseSupervisor";
     public const string SupplyManager = "SupplyManager";
     public const string Auditor = "Auditor";
+}
+
+/// <summary>
+/// Módulos autorizáveis por usuário (autorização granular do cadastro):
+/// o acesso efetivo é papel E módulo autorizado. Admin sempre tem todos.
+/// </summary>
+public static class AppModules
+{
+    public const string Solicitacoes = "SOLICITACOES";   // requisições de compra (unitária/múltipla)
+    public const string Aprovacao = "APROVACAO";         // central de aprovação
+    public const string Material = "MATERIAL";           // solicitação de material ao almoxarifado
+    public const string Estoque = "ESTOQUE";             // dashboard, entrada/saída, fila de atendimento
+    public const string Compras = "COMPRAS";             // demandas e pedidos de compra
+    public const string Produtos = "PRODUTOS";           // cadastro de produtos (catálogo)
+    public const string Fornecedores = "FORNECEDORES";   // cadastro de fornecedores
+    public const string Usuarios = "USUARIOS";           // cadastro de usuários (somente admin)
+
+    public static readonly string[] All =
+        [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, Usuarios];
+
+    /// <summary>Padrão por papel, aplicado quando o cadastro não define módulos.</summary>
+    public static string[] DefaultsFor(string role) => role switch
+    {
+        Roles.SystemAdministrator => All,
+        Roles.Requester => [Solicitacoes, Material],
+        Roles.Approver => [Solicitacoes, Aprovacao],
+        Roles.PurchasingOfficer => [Compras, Fornecedores, Estoque],
+        Roles.WarehouseOperator => [Estoque],
+        Roles.WarehouseSupervisor => [Estoque, Produtos],
+        Roles.SupplyManager => [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores],
+        Roles.Auditor => [Solicitacoes, Estoque, Compras],
+        _ => [],
+    };
+
+    public static string[] EffectiveFor(User user)
+    {
+        if (user.Role == Roles.SystemAdministrator) return All; // admin sempre completo
+        if (string.IsNullOrWhiteSpace(user.Modules)) return DefaultsFor(user.Role);
+        return user.Modules.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(All.Contains).Distinct().ToArray();
+    }
 }

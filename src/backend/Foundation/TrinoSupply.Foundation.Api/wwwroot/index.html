@@ -16,6 +16,7 @@
       --danger: #b91c1c;
       --danger-bg: #fef2f2;
       --ok: #15803d;
+      --ok-bg: #f0fdf4;
       --border: #e2e8f0;
       --radius: 12px;
     }
@@ -23,63 +24,69 @@
     body {
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       background: linear-gradient(160deg, #0f172a 0%, #1e293b 60%, #1d4ed8 140%);
-      min-height: 100vh; display: flex; align-items: center; justify-content: center;
-      color: var(--text); padding: 24px;
+      min-height: 100vh; display: flex; align-items: flex-start; justify-content: center;
+      color: var(--text); padding: 32px 16px;
     }
     .card {
       background: var(--surface); border-radius: var(--radius);
       box-shadow: 0 20px 60px rgba(2, 6, 23, .45);
-      width: 100%; max-width: 420px; padding: 40px 36px;
+      width: 100%; max-width: 440px; padding: 36px 32px;
+      transition: max-width .2s ease;
     }
-    .brand { text-align: center; margin-bottom: 28px; }
-    .brand .mark {
-      font-size: 28px; font-weight: 800; letter-spacing: -.5px;
-    }
+    .card.wide { max-width: 760px; }
+    .brand { text-align: center; margin-bottom: 26px; }
+    .brand .mark { font-size: 26px; font-weight: 800; letter-spacing: -.5px; }
     .brand .mark span { color: var(--brand); }
     .brand .tag { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
-    h1 { font-size: 18px; margin-bottom: 20px; font-weight: 600; }
-    label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 6px; }
-    input {
-      width: 100%; padding: 11px 12px; font-size: 15px;
+    h1 { font-size: 17px; margin-bottom: 18px; font-weight: 600; }
+    h2 { font-size: 14px; margin: 26px 0 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
+    label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 5px; }
+    input, select {
+      width: 100%; padding: 10px 12px; font-size: 14.5px; background: #fff;
       border: 1px solid var(--border); border-radius: 8px; outline: none;
     }
-    input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(29, 78, 216, .15); }
+    input:focus, select:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(29, 78, 216, .15); }
     button {
-      width: 100%; margin-top: 22px; padding: 12px; font-size: 15px; font-weight: 600;
+      padding: 10px 16px; font-size: 14px; font-weight: 600;
       color: #fff; background: var(--brand); border: 0; border-radius: 8px; cursor: pointer;
     }
     button:hover { background: var(--brand-dark); }
     button:disabled { opacity: .6; cursor: wait; }
-    .error {
-      display: none; margin-top: 16px; padding: 12px; font-size: 13.5px;
-      background: var(--danger-bg); color: var(--danger);
-      border: 1px solid #fecaca; border-radius: 8px;
-    }
-    .error[data-show="true"] { display: block; }
-    .footer { margin-top: 24px; text-align: center; font-size: 12px; color: var(--text-muted); }
-    /* --- área autenticada --- */
-    .hello { font-size: 15px; color: var(--text-muted); margin-bottom: 20px; }
+    button.secondary { background: transparent; color: var(--brand); border: 1px solid var(--border); }
+    button.secondary:hover { background: var(--surface-muted); }
+    button.danger { background: transparent; color: var(--danger); border: 1px solid #fecaca; }
+    button.danger:hover { background: var(--danger-bg); }
+    .full { width: 100%; margin-top: 18px; padding: 12px; font-size: 15px; }
+    .msg { display: none; margin-top: 14px; padding: 11px 12px; font-size: 13.5px; border-radius: 8px; }
+    .msg[data-show="true"] { display: block; }
+    .msg.error { background: var(--danger-bg); color: var(--danger); border: 1px solid #fecaca; }
+    .msg.ok { background: var(--ok-bg); color: var(--ok); border: 1px solid #bbf7d0; }
+    .footer { margin-top: 22px; text-align: center; font-size: 12px; color: var(--text-muted); }
+    .hello { font-size: 14.5px; color: var(--text-muted); margin-bottom: 16px; }
     .hello strong { color: var(--text); }
-    .modules { display: grid; gap: 10px; }
+    .modules { display: grid; gap: 8px; }
     .module {
-      display: flex; justify-content: space-between; align-items: center;
+      display: flex; justify-content: space-between; align-items: center; gap: 10px;
       background: var(--surface-muted); border: 1px solid var(--border);
-      border-radius: 8px; padding: 12px 14px; font-size: 14px;
+      border-radius: 8px; padding: 11px 13px; font-size: 13.5px;
     }
-    .badge {
-      font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 99px;
-      background: #e0e7ff; color: var(--brand-dark);
-    }
+    .badge { font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 99px; white-space: nowrap; background: #e0e7ff; color: var(--brand-dark); }
     .badge.dev { background: #fef9c3; color: #854d0e; }
-    .logout {
-      margin-top: 22px; background: transparent; color: var(--danger);
-      border: 1px solid #fecaca;
-    }
-    .logout:hover { background: var(--danger-bg); }
+    .badge.off { background: #fee2e2; color: var(--danger); }
+    .badge.on { background: #dcfce7; color: var(--ok); }
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); padding: 8px 8px; border-bottom: 1px solid var(--border); }
+    td { padding: 9px 8px; border-bottom: 1px solid var(--surface-muted); vertical-align: middle; }
+    td .sub { color: var(--text-muted); font-size: 12px; }
+    .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .row-actions button { padding: 5px 10px; font-size: 12px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+    @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 4px; }
   </style>
 </head>
 <body>
-  <main class="card">
+  <main class="card" id="card">
     <div class="brand">
       <div class="mark">TRINO <span>SUPPLY</span></div>
       <div class="tag">Enterprise Supply Management</div>
@@ -91,22 +98,48 @@
         <label for="email">E-mail</label>
         <input id="email" type="email" name="email" required autocomplete="username" />
         <label for="password">Senha</label>
-        <input id="password" type="password" name="password" required autocomplete="current-password" minlength="1" />
-        <button id="submit" type="submit">Entrar</button>
+        <input id="password" type="password" name="password" required autocomplete="current-password" />
+        <button id="submit" type="submit" class="full">Entrar</button>
       </form>
-      <div id="error" class="error" role="alert" aria-live="polite"></div>
+      <div id="login-msg" class="msg error" role="alert" aria-live="polite"></div>
     </section>
 
     <section id="app-view" hidden>
-      <h1>Bem-vindo</h1>
-      <p class="hello">Sessão ativa como <strong id="user-name"></strong> (<span id="user-role"></span>)</p>
-      <div class="modules">
-        <div class="module"><span>Foundation — Identidade</span><span class="badge">ATIVO</span></div>
-        <div class="module"><span>PR-001 — Requisição de Compra</span><span class="badge dev">EM DESENVOLVIMENTO</span></div>
-        <div class="module"><span>MMS-002 — Catálogo de Itens</span><span class="badge dev">EM DESENVOLVIMENTO</span></div>
-        <div class="module"><span>MMS-004 — Estoque</span><span class="badge dev">EM DESENVOLVIMENTO</span></div>
+      <div class="toolbar">
+        <p class="hello">Sessão ativa como <strong id="user-name"></strong> <span id="user-role" class="sub"></span></p>
+        <button id="logout" class="danger" type="button">Sair</button>
       </div>
-      <button id="logout" class="logout" type="button">Sair</button>
+
+      <h2>Módulos</h2>
+      <div class="modules">
+        <div class="module"><span>Foundation · Identidade e Usuários</span><span class="badge">ATIVO</span></div>
+        <div class="module"><span>PR-001 · Requisição de Compra</span><span class="badge dev">EM DESENVOLVIMENTO</span></div>
+        <div class="module"><span>MMS-002 · Catálogo de Itens</span><span class="badge dev">EM DESENVOLVIMENTO</span></div>
+        <div class="module"><span>MMS-004 · Estoque</span><span class="badge dev">EM DESENVOLVIMENTO</span></div>
+      </div>
+
+      <section id="admin-view" hidden>
+        <h2>Usuários</h2>
+        <div id="users-msg" class="msg" role="alert" aria-live="polite"></div>
+        <table aria-label="Usuários cadastrados">
+          <thead><tr><th>Usuário</th><th>Papel</th><th>Situação</th><th>Ações</th></tr></thead>
+          <tbody id="users-body"></tbody>
+        </table>
+
+        <h2>Novo usuário</h2>
+        <form id="create-form">
+          <div class="grid2">
+            <div><label for="nu-name">Nome</label><input id="nu-name" required minlength="2" /></div>
+            <div><label for="nu-email">E-mail</label><input id="nu-email" type="email" required /></div>
+            <div>
+              <label for="nu-role">Papel</label>
+              <select id="nu-role" required></select>
+            </div>
+            <div><label for="nu-pass">Senha inicial (mín. 12)</label><input id="nu-pass" type="password" required minlength="12" autocomplete="new-password" /></div>
+          </div>
+          <button type="submit" class="full">Criar usuário</button>
+        </form>
+      </section>
     </section>
 
     <div class="footer">Trino Supply · acesso restrito e auditado</div>
@@ -114,35 +147,32 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
+    const ROLE_LABELS = {
+      SystemAdministrator: 'Administrador do Sistema',
+      Requester: 'Solicitante',
+      Approver: 'Aprovador',
+      PurchasingOfficer: 'Comprador',
+      WarehouseOperator: 'Almoxarife',
+      WarehouseSupervisor: 'Supervisor de Almoxarifado',
+      SupplyManager: 'Gestor de Suprimentos',
+      Auditor: 'Auditor',
+    };
     const store = {
       get access() { try { return sessionStorage.getItem('ts.access'); } catch { return null; } },
-      set(tokens) {
-        try {
-          sessionStorage.setItem('ts.access', tokens.accessToken);
-          sessionStorage.setItem('ts.refresh', tokens.refreshToken);
-        } catch { /* modo privado: sessão só em memória */ }
-      },
       get refresh() { try { return sessionStorage.getItem('ts.refresh'); } catch { return null; } },
+      set(t) { try { sessionStorage.setItem('ts.access', t.accessToken); sessionStorage.setItem('ts.refresh', t.refreshToken); } catch {} },
       clear() { try { sessionStorage.clear(); } catch {} },
     };
 
-    function showError(msg) { const e = $('error'); e.textContent = msg; e.dataset.show = 'true'; }
-    function clearError() { $('error').dataset.show = 'false'; }
-
-    function showApp(user) {
-      $('login-view').hidden = true;
-      $('app-view').hidden = false;
-      $('user-name').textContent = user.name || user.email;
-      $('user-role').textContent = user.role || '';
+    function flash(el, text, kind) {
+      el.className = 'msg ' + kind; el.textContent = text; el.dataset.show = 'true';
+      if (kind === 'ok') setTimeout(() => { el.dataset.show = 'false'; }, 4000);
     }
 
     async function api(path, options = {}) {
       const res = await fetch(path, {
         method: options.method || 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(options.auth && store.access ? { Authorization: 'Bearer ' + store.access } : {}),
-        },
+        headers: { 'Content-Type': 'application/json', ...(store.access ? { Authorization: 'Bearer ' + store.access } : {}) },
         body: options.body ? JSON.stringify(options.body) : undefined,
       });
       const json = await res.json().catch(() => ({}));
@@ -150,36 +180,109 @@
       return json.data;
     }
 
+    let currentUser = null;
+
+    function showApp(user) {
+      currentUser = user;
+      $('login-view').hidden = true;
+      $('app-view').hidden = false;
+      $('user-name').textContent = user.name || user.email;
+      $('user-role').textContent = '(' + (ROLE_LABELS[user.role] || user.role) + ')';
+      const isAdmin = user.role === 'SystemAdministrator';
+      $('admin-view').hidden = !isAdmin;
+      $('card').classList.toggle('wide', isAdmin);
+      if (isAdmin) loadUsers();
+    }
+
+    function showLogin() {
+      store.clear(); currentUser = null;
+      $('app-view').hidden = true;
+      $('login-view').hidden = false;
+      $('card').classList.remove('wide');
+    }
+
+    // ---- login/logout ----
     $('login-form').addEventListener('submit', async (ev) => {
       ev.preventDefault();
-      clearError();
-      const btn = $('submit');
-      btn.disabled = true; btn.textContent = 'Entrando…';
+      $('login-msg').dataset.show = 'false';
+      const btn = $('submit'); btn.disabled = true; btn.textContent = 'Entrando…';
       try {
-        const data = await api('/api/v1/auth/login', {
-          method: 'POST',
-          body: { email: $('email').value, password: $('password').value },
-        });
-        store.set(data);
-        showApp(data.user);
-      } catch (err) {
-        showError(err.message || 'E-mail ou senha inválidos.');
-      } finally {
-        btn.disabled = false; btn.textContent = 'Entrar';
-      }
+        const data = await api('/api/v1/auth/login', { method: 'POST', body: { email: $('email').value, password: $('password').value } });
+        store.set(data); showApp(data.user);
+      } catch (err) { flash($('login-msg'), err.message || 'E-mail ou senha inválidos.', 'error'); }
+      finally { btn.disabled = false; btn.textContent = 'Entrar'; }
     });
 
     $('logout').addEventListener('click', async () => {
       try { await api('/api/v1/auth/logout', { method: 'POST', body: { refreshToken: store.refresh } }); } catch {}
-      store.clear();
-      $('app-view').hidden = true;
-      $('login-view').hidden = false;
+      showLogin();
     });
 
-    // sessão existente? valida o token contra /me
+    // ---- gestão de usuários (admin) ----
+    async function loadUsers() {
+      try {
+        const data = await api('/api/v1/users/');
+        renderRoles(data.roles);
+        renderUsers(data.items);
+      } catch (err) { flash($('users-msg'), err.message || 'Falha ao carregar usuários.', 'error'); }
+    }
+
+    function renderRoles(roles) {
+      $('nu-role').innerHTML = roles.map(r => `<option value="${r}">${ROLE_LABELS[r] || r}</option>`).join('');
+    }
+
+    function renderUsers(items) {
+      $('users-body').innerHTML = items.map(u => `
+        <tr data-id="${u.id}">
+          <td>${escapeHtml(u.name)}<div class="sub">${escapeHtml(u.email)}</div></td>
+          <td>${ROLE_LABELS[u.role] || u.role}</td>
+          <td><span class="badge ${u.active ? 'on' : 'off'}">${u.active ? 'ATIVO' : 'INATIVO'}</span></td>
+          <td class="row-actions">
+            <button class="secondary" data-act="reset">Nova senha</button>
+            <button class="${u.active ? 'danger' : 'secondary'}" data-act="toggle">${u.active ? 'Inativar' : 'Reativar'}</button>
+          </td>
+        </tr>`).join('');
+    }
+
+    function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+
+    $('users-body').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act]');
+      if (!btn) return;
+      const id = btn.closest('tr').dataset.id;
+      try {
+        if (btn.dataset.act === 'toggle') {
+          const activate = btn.textContent === 'Reativar';
+          if (!activate && !confirm('Inativar este usuário? As sessões dele serão encerradas.')) return;
+          await api('/api/v1/users/' + id, { method: 'PATCH', body: { active: activate } });
+          flash($('users-msg'), activate ? 'Usuário reativado.' : 'Usuário inativado.', 'ok');
+        } else {
+          const pass = prompt('Nova senha para este usuário (mínimo 12 caracteres):');
+          if (!pass) return;
+          await api('/api/v1/users/' + id + '/reset-password', { method: 'POST', body: { newPassword: pass } });
+          flash($('users-msg'), 'Senha redefinida. As sessões do usuário foram encerradas.', 'ok');
+        }
+        loadUsers();
+      } catch (err) { flash($('users-msg'), err.message || 'Operação não permitida.', 'error'); }
+    });
+
+    $('create-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try {
+        await api('/api/v1/users/', { method: 'POST', body: {
+          name: $('nu-name').value, email: $('nu-email').value,
+          role: $('nu-role').value, password: $('nu-pass').value,
+        }});
+        flash($('users-msg'), 'Usuário criado com sucesso.', 'ok');
+        ev.target.reset();
+        loadUsers();
+      } catch (err) { flash($('users-msg'), err.message || 'Não foi possível criar o usuário.', 'error'); }
+    });
+
+    // sessão existente? valida contra /me
     (async () => {
       if (!store.access) return;
-      try { showApp(await api('/api/v1/auth/me', { auth: true })); } catch { store.clear(); }
+      try { showApp(await api('/api/v1/auth/me')); } catch { store.clear(); }
     })();
   </script>
 </body>

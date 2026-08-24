@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using TrinoSupply.Foundation.Api.Infrastructure;
@@ -11,9 +12,11 @@ using TrinoSupply.Foundation.Api.Infrastructure;
 namespace TrinoSupply.Foundation.Api.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260824135504_AddScFormFields")]
+    partial class AddScFormFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -233,10 +236,6 @@ namespace TrinoSupply.Foundation.Api.Infrastructure.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("manager_name");
-
-                    b.Property<Guid?>("ManagerUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("manager_user_id");
 
                     b.Property<string>("Name")
                         .IsRequired()

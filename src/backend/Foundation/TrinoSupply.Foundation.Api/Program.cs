@@ -218,6 +218,19 @@ catalogGroup.MapGet("/", async (CatalogService svc, ClaimsPrincipal p, HttpConte
     return Ok(new { items = items.Select(CatalogView) }, ctx);
 });
 
+// locais de entrega para os formulários de SC (sem dados de estoque; aberto a papéis internos)
+app.MapGet("/api/v1/delivery-locations", async (AppDbContext db, HttpContext ctx) =>
+    Ok(new
+    {
+        items = await db.StorageLocations.Where(l => l.Active).OrderBy(l => l.Code)
+            .Select(l => new { id = l.Id, code = l.Code, name = l.Name }).ToListAsync(),
+    }, ctx)).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+
+// grade da Solicitação em Lote: saldo, previsão de entrada, consumo médio e cobertura por produto
+catalogGroup.MapGet("/batch-view", async (TrinoSupply.Foundation.Api.Analytics.AnalyticsService svc,
+    HttpContext ctx, string? family, string? q, Guid? locationId) =>
+    Ok(await svc.BatchViewAsync(family, q, locationId), ctx));
+
 catalogGroup.MapPost("/", async (CreateCatalogItemRequest body, CatalogService svc, ClaimsPrincipal p, HttpContext ctx) =>
 {
     var role = p.FindFirstValue(ClaimTypes.Role) ?? "";
@@ -274,6 +287,8 @@ static object PrView(PurchaseRequisition r) => new
     priority = r.Priority,
     neededBy = r.NeededBy,
     justification = r.Justification,
+    needType = r.NeedType, deliveryLocation = r.DeliveryLocation,
+    company = r.Company, internalNotes = r.InternalNotes,
     costCenter = r.CostCenter,
     currency = r.Currency,
     requesterId = r.RequesterId,
@@ -338,7 +353,8 @@ prs.MapPost("/", async (CreateRequisitionRequest body, RequisitionService svc, C
     if (BuildActor(p) is not { CanCreate: true } actor)
         return Error(ctx, 403, "PR-ERR-001", "Seu papel não cria requisições.");
     var items = (body.Items ?? []).Select(i => new ItemInput(i.Description ?? "", i.Quantity, i.UnitOfMeasure, i.EstimatedUnitPrice, i.Notes, i.CatalogItemId)).ToList();
-    var (pr, error) = await svc.CreateAsync(actor, body.Justification, body.CostCenter, body.Priority, body.NeededBy, items, body.Kind);
+    var (pr, error) = await svc.CreateAsync(actor, body.Justification, body.CostCenter, body.Priority, body.NeededBy, items, body.Kind,
+        new RequisitionService.ScHeaderInput(body.NeedType, body.DeliveryLocation, body.Company, body.InternalNotes));
     return error is not null ? PrError(ctx, error)
         : Results.Json(new { data = PrView(pr!), correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
@@ -870,8 +886,21 @@ pos.MapPost("/{id:guid}/cancel", async (Guid id, ReasonRequest body, PurchaseOrd
 static object CcView(CostCenter c) => new
 {
     id = c.Id, code = c.Code, name = c.Name, region = c.Region,
-    managerName = c.ManagerName, clientName = c.ClientName, active = c.Active,
+    managerUserId = c.ManagerUserId, managerName = c.ManagerName,
+    clientName = c.ClientName, active = c.Active,
 };
+
+// usuários ativos (id + nome + papel) para pickers de vínculo — sem dados sensíveis
+app.MapGet("/api/v1/users/pickers", async (AppDbContext db, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!CostCenterService.CanMaintain(RoleOf(p)) && RoleOf(p) != Roles.SystemAdministrator)
+        return Error(ctx, 403, "IAM-ERR-018", "Seu papel não acessa a lista de usuários.");
+    return Ok(new
+    {
+        items = await db.Users.Where(u => u.Active).OrderBy(u => u.Name)
+            .Select(u => new { id = u.Id, name = u.Name, role = u.Role }).ToListAsync(),
+    }, ctx);
+}).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
 
 var ccs = app.MapGroup("/api/v1/cost-centers").RequireAuthorization();
 ccs.AddEndpointFilter(RejectSupplierRole());
@@ -887,7 +916,7 @@ ccs.MapPost("/", async (CreateCostCenterRequest body, CostCenterService svc, Cla
 {
     if (!CostCenterService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.CentrosCusto))
         return Error(ctx, 403, "CC-ERR-900", "Seu usuário não mantém centros de custo.");
-    var (cc, error) = await svc.CreateAsync(ActorId(p), body.Code, body.Name, body.Region, body.ManagerName, body.ClientName);
+    var (cc, error) = await svc.CreateAsync(ActorId(p), body.Code, body.Name, body.Region, body.ManagerUserId, body.ClientName);
     return error is not null ? Error(ctx, 400, error.Code, error.Message)
         : Results.Json(new { data = CcView(cc!), correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
@@ -896,7 +925,7 @@ ccs.MapPatch("/{id:guid}", async (Guid id, UpdateCostCenterRequest body, CostCen
 {
     if (!CostCenterService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.CentrosCusto))
         return Error(ctx, 403, "CC-ERR-900", "Seu usuário não mantém centros de custo.");
-    var (cc, error) = await svc.UpdateAsync(id, body.Name, body.Region, body.ManagerName, body.ClientName, body.Active);
+    var (cc, error) = await svc.UpdateAsync(id, body.Name, body.Region, body.ManagerUserId, body.ClientName, body.Active);
     return error is not null ? Error(ctx, error.Code == "CC-ERR-404" ? 404 : 400, error.Code, error.Message)
         : Ok(CcView(cc!), ctx);
 });
@@ -1369,7 +1398,8 @@ public record CreateUserRequest(string Email, string Name, string Role, string P
 public record UpdateUserRequest(string? Name, string? Role, bool? Active, List<string>? Modules);
 public record ResetPasswordRequest(string NewPassword);
 public record ItemRequest(string? Description, decimal Quantity, string? UnitOfMeasure, decimal? EstimatedUnitPrice, string? Notes, Guid? CatalogItemId);
-public record CreateRequisitionRequest(string Justification, string CostCenter, string? Priority, DateOnly? NeededBy, List<ItemRequest>? Items, string? Kind);
+public record CreateRequisitionRequest(string Justification, string CostCenter, string? Priority, DateOnly? NeededBy, List<ItemRequest>? Items, string? Kind,
+    string? NeedType, string? DeliveryLocation, string? Company, string? InternalNotes);
 public record CreateCatalogItemRequest(string Code, string Description, string Family, string? UnitOfMeasure, decimal? ReferencePrice);
 public record UpdateCatalogItemRequest(string? Description, string? Family, string? UnitOfMeasure, decimal? ReferencePrice, bool? Active);
 public record CreateLocationRequest(string Code, string Name);
@@ -1383,8 +1413,8 @@ public record UpdateSupplierRequest(string? TradeName, string? Email, string? Ph
 public record PoItemRequest(string Description, decimal Quantity, string? UnitOfMeasure, decimal? UnitPrice, Guid? CatalogItemId);
 public record CreatePurchaseOrderRequest(Guid SupplierId, string? Notes, List<PoItemRequest>? Items, Guid? SourcePrId);
 public record ReceiveOrderRequest(Guid LocationId);
-public record CreateCostCenterRequest(string Code, string Name, string? Region, string? ManagerName, string? ClientName);
-public record UpdateCostCenterRequest(string? Name, string? Region, string? ManagerName, string? ClientName, bool? Active);
+public record CreateCostCenterRequest(string? Code, string Name, string? Region, Guid? ManagerUserId, string? ClientName);
+public record UpdateCostCenterRequest(string? Name, string? Region, Guid? ManagerUserId, string? ClientName, bool? Active);
 public record CreateQuotationRequest(Guid PrId, string? Kind, DateOnly? Deadline, string? Notes);
 public record InviteSuppliersRequest(List<Guid>? SupplierIds);
 public record ProposalItemRequest(Guid QuotationItemId, decimal UnitPrice, decimal? Quantity);

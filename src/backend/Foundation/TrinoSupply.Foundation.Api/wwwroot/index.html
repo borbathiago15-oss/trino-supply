@@ -247,41 +247,69 @@
         </div>
       </section>
 
-      <!-- Solicitações: pedido unitário -->
+      <!-- Solicitações: Inclusão de SC -->
       <section class="view" id="view-pr-new-unit">
         <div class="panel">
-          <h2>Inclusão de SC — Solicitação de Compra unitária</h2>
+          <h2>Inclusão de SC — Solicitação de Compra</h2>
           <form id="pru-form">
-            <div class="grid2">
-              <div><label for="pru-cc">Centro de custo</label><select id="pru-cc" class="cc-select" required></select></div>
-              <div><label for="pru-priority">Prioridade</label>
-                <select id="pru-priority">
-                  <option value="LOW">Baixa</option>
-                  <option value="NORMAL" selected>Normal</option>
-                  <option value="HIGH">Alta</option>
-                  <option value="URGENT">Urgente</option>
-                </select>
-              </div>
-            </div>
-            <label for="pru-needed">Necessário até (opcional)</label>
-            <input id="pru-needed" type="date" />
-            <label for="pru-just">Justificativa</label>
-            <input id="pru-just" required placeholder="Por que esta compra é necessária?" />
             <h2>Itens</h2>
             <div id="pru-items"></div>
             <button id="pru-add-item" class="secondary" type="button">+ Adicionar item</button>
-            <button type="submit" class="full">Criar rascunho do pedido</button>
+
+            <label for="pru-just">Justificativa da solicitação</label>
+            <input id="pru-just" required placeholder="Por que esta compra é necessária?" />
+
+            <div class="grid2">
+              <div><label for="pru-delivery">Local de Entrega</label><select id="pru-delivery" class="loc-select"></select></div>
+              <div class="grid2">
+                <div><label for="pru-priority">Prioridade</label>
+                  <select id="pru-priority">
+                    <option value="LOW">Baixa</option>
+                    <option value="NORMAL" selected>Normal</option>
+                    <option value="HIGH">Alta</option>
+                    <option value="URGENT">Urgente</option>
+                  </select>
+                </div>
+                <div><label for="pru-needed">Necessidade</label><input id="pru-needed" type="date" /></div>
+              </div>
+            </div>
+            <div class="grid2">
+              <div><label for="pru-type">Tipo SC</label>
+                <select id="pru-type">
+                  <option value="">Selecione…</option>
+                  <option>MATERIAL</option>
+                  <option>SERVIÇO</option>
+                  <option>MANUTENÇÃO</option>
+                  <option>INVESTIMENTO</option>
+                  <option>CONSUMO INTERNO</option>
+                </select>
+              </div>
+              <div><label for="pru-cc">Centro de Custo</label><select id="pru-cc" class="cc-select" required></select></div>
+            </div>
+            <div class="grid2">
+              <div><label for="pru-company">Empresa</label><input id="pru-company" list="company-datalist" placeholder="empresa solicitante" /></div>
+              <div></div>
+            </div>
+            <label for="pru-notes">Observação Interna</label>
+            <textarea id="pru-notes" rows="3" style="width:100%;padding:10px 12px;font-size:13.5px;border:1px solid var(--border);border-radius:8px"></textarea>
+            <button type="submit" class="full">Criar rascunho da SC</button>
           </form>
         </div>
       </section>
 
-      <!-- Solicitações: pedido múltiplo -->
+      <!-- Solicitações: Solicitação em Lote -->
       <section class="view" id="view-pr-new-multi">
         <div class="panel">
-          <h2>Solicitação em Lote — lista de produtos por família</h2>
-          <form id="prm-form">
+          <h2>Solicitação em Lote — Gerar SC</h2>
+          <div class="filters">
+            <div><label for="lot-delivery">Local de Entrega</label><select id="lot-delivery" class="loc-select"></select></div>
+            <div><label for="lot-family">Grupo de Produto</label><select id="lot-family"></select></div>
+            <div><label for="lot-search">Buscar</label><input id="lot-search" placeholder="código ou descrição" /></div>
+            <div><button id="lot-search-btn" type="button">🔍 Buscar</button></div>
+          </div>
+          <div class="grid2" style="margin-top:8px">
+            <div><label for="prm-cc">Centro de Custo</label><select id="prm-cc" class="cc-select" required></select></div>
             <div class="grid2">
-              <div><label for="prm-cc">Centro de custo</label><select id="prm-cc" class="cc-select" required></select></div>
               <div><label for="prm-priority">Prioridade</label>
                 <select id="prm-priority">
                   <option value="LOW">Baixa</option>
@@ -290,14 +318,14 @@
                   <option value="URGENT">Urgente</option>
                 </select>
               </div>
+              <div><label for="prm-needed">Necessidade</label><input id="prm-needed" type="date" /></div>
             </div>
-            <label for="prm-just">Justificativa</label>
-            <input id="prm-just" required placeholder="ex.: Reposição mensal de material de limpeza" />
-            <label for="prm-family">Família de produtos</label>
-            <select id="prm-family"></select>
-            <div id="prm-cat-list" class="tablewrap" style="margin-top:10px"></div>
-            <button type="submit" class="full">Criar rascunho do pedido</button>
-          </form>
+          </div>
+          <label for="prm-just">Justificativa</label>
+          <input id="prm-just" required placeholder="ex.: Reposição mensal — cobertura de estoque" />
+          <h2>Geração de Solicitações de Compra</h2>
+          <div id="lot-grid" class="tablewrap"><p class="hello">Escolha o grupo de produto ou busque para carregar a grade.</p></div>
+          <button id="lot-submit" type="button" class="full">Gerar SC com as quantidades informadas</button>
         </div>
       </section>
 
@@ -545,12 +573,13 @@
           <h2>Novo centro de custo</h2>
           <form id="cc-form">
             <div class="grid2">
-              <div><label for="ncc-code">Código</label><input id="ncc-code" required minlength="2" placeholder="ex.: CC-NE-01" /></div>
-              <div><label for="ncc-name">Nome</label><input id="ncc-name" required minlength="3" placeholder="ex.: Filial Recife" /></div>
+              <div><label for="ncc-name">Nome</label><input id="ncc-name" required minlength="3" placeholder="ex.: PepsiCo Simões Filho" /></div>
+              <div><label for="ncc-region">Regional</label><input id="ncc-region" placeholder="ex.: BAHIA" /></div>
             </div>
+            <p class="hello" style="margin:4px 0 0">O <strong>código é gerado automaticamente</strong> a partir da regional (ex.: BAH-001).</p>
             <div class="grid2">
-              <div><label for="ncc-region">Regional</label><input id="ncc-region" placeholder="ex.: NORDESTE" /></div>
-              <div><label for="ncc-manager">Gerente</label><input id="ncc-manager" placeholder="ex.: Marina Lima" /></div>
+              <div><label for="ncc-manager">Gerente responsável (usuário)</label><select id="ncc-manager"></select></div>
+              <div></div>
             </div>
             <label for="ncc-client">Cliente</label>
             <input id="ncc-client" placeholder="opcional — cliente/contrato atendido" />
@@ -628,6 +657,8 @@
     </main>
   </div>
   <datalist id="cc-datalist"></datalist>
+  <datalist id="prod-datalist"></datalist>
+  <datalist id="company-datalist"></datalist>
 
   <script>
     'use strict';
@@ -834,35 +865,85 @@
       REJECTED: ['Rejeitado', 'off'], RETURNED: ['Devolvido p/ ajuste', 'dev'], CANCELLED: ['Cancelado', 'off'],
     };
 
+    // ---- catálogo p/ os formulários (Produto em lista) ----
+    let prodByLabel = {};   // "CÓDIGO — descrição" → item
+    async function loadProductPicker() {
+      try {
+        const { items } = await api('/api/v1/items/');
+        prodByLabel = {};
+        $('prod-datalist').innerHTML = items.map(i => {
+          const label = `${i.code} — ${i.description}`;
+          prodByLabel[label] = i;
+          return `<option value="${escapeHtml(label)}"></option>`;
+        }).join('');
+      } catch {}
+    }
+    async function loadDeliveryLocations() {
+      try {
+        const { items } = await api('/api/v1/delivery-locations');
+        const options = items.length
+          ? '<option value="">Selecione…</option>' + items.map(l =>
+              `<option value="${escapeHtml(l.code + ' — ' + l.name)}">${escapeHtml(l.code)} — ${escapeHtml(l.name)}</option>`).join('')
+          : '<option value="">(sem locais cadastrados)</option>';
+        document.querySelectorAll('.loc-select').forEach(el => { const keep = el.value; el.innerHTML = options; if (keep) el.value = keep; });
+      } catch {}
+    }
+    async function loadCompanyDatalist() {
+      try {
+        const c = await api('/api/v1/company');
+        $('company-datalist').innerHTML = c.legalName ? `<option value="${escapeHtml(c.legalName)}"></option>` : '';
+        if (c.legalName && !$('pru-company').value) $('pru-company').value = c.legalName;
+      } catch {}
+    }
+
     function pruItemRow() {
       const div = document.createElement('div');
-      div.className = 'grid2 pru-item-row';
+      div.className = 'pru-item-row';
       div.innerHTML = `
-        <div><label>Descrição</label><input class="it-desc" required minlength="3" placeholder="ex.: Capacete de segurança CA 12345" /></div>
         <div class="grid2">
-          <div><label>Qtd</label><input class="it-qty" type="number" min="0.01" step="0.01" required value="1" /></div>
-          <div><label>Preço unit. (R$)</label><input class="it-price" type="number" min="0" step="0.01" placeholder="opcional" /></div>
+          <div><label>Produto <span class="sub">(escolha do catálogo ou descreva)</span></label>
+            <input class="it-prod" list="prod-datalist" required minlength="3" placeholder="digite para buscar no catálogo ou descreva o item" /></div>
+          <div class="grid2">
+            <div><label>Unid.</label><input class="it-unit" placeholder="UN" style="width:100%" /></div>
+            <div class="grid2">
+              <div><label>Qtde</label><input class="it-qty" type="number" min="0.01" step="0.01" required value="1" /></div>
+              <div><label>Preço unit.</label><input class="it-price" type="number" min="0" step="0.01" placeholder="opc." /></div>
+            </div>
+          </div>
         </div>`;
+      div.querySelector('.it-prod').addEventListener('change', (ev) => {
+        const p = prodByLabel[ev.target.value];
+        if (p) { div.querySelector('.it-unit').value = p.unitOfMeasure; if (p.referencePrice != null) div.querySelector('.it-price').value = p.referencePrice; }
+      });
       return div;
     }
-    LOADERS['pr-new-unit'] = () => {
+    LOADERS['pr-new-unit'] = async () => {
+      await Promise.all([loadProductPicker(), loadDeliveryLocations(), loadCompanyDatalist(), loadCcDatalist()]);
       if (!$('pru-items').children.length) $('pru-items').appendChild(pruItemRow());
     };
     $('pru-add-item').addEventListener('click', () => $('pru-items').appendChild(pruItemRow()));
 
     $('pru-form').addEventListener('submit', async (ev) => {
       ev.preventDefault();
-      const items = [...document.querySelectorAll('.pru-item-row')].map(row => ({
-        description: row.querySelector('.it-desc').value,
-        quantity: parseFloat(row.querySelector('.it-qty').value),
-        estimatedUnitPrice: row.querySelector('.it-price').value ? parseFloat(row.querySelector('.it-price').value) : null,
-      })).filter(i => i.description);
+      const items = [...document.querySelectorAll('.pru-item-row')].map(row => {
+        const label = row.querySelector('.it-prod').value;
+        const p = prodByLabel[label];
+        return {
+          description: p ? '' : label,
+          catalogItemId: p ? p.id : null,
+          unitOfMeasure: row.querySelector('.it-unit').value || null,
+          quantity: parseFloat(row.querySelector('.it-qty').value),
+          estimatedUnitPrice: row.querySelector('.it-price').value ? parseFloat(row.querySelector('.it-price').value) : null,
+        };
+      }).filter(i => i.description || i.catalogItemId);
       try {
         await api('/api/v1/purchase-requisitions/', { method: 'POST', body: {
           justification: $('pru-just').value, costCenter: $('pru-cc').value,
           priority: $('pru-priority').value, neededBy: $('pru-needed').value || null, items, kind: 'AVULSA',
+          needType: $('pru-type').value || null, deliveryLocation: $('pru-delivery').value || null,
+          company: $('pru-company').value || null, internalNotes: $('pru-notes').value || null,
         }});
-        toast('Rascunho criado. Revise em "Meus Pedidos" e envie para aprovação.', 'ok');
+        toast('SC criada como rascunho. Revise em "Meus Pedidos" e envie para aprovação.', 'ok');
         ev.target.reset(); $('pru-items').innerHTML = ''; $('pru-items').appendChild(pruItemRow());
         goTo('pr-mine');
       } catch (err) { toast(err.message, 'error'); }
@@ -884,28 +965,55 @@
             <td><input type="number" class="${qtyClass}" min="0.01" step="0.01" value="1" style="width:80px" /></td>
           </tr>`).join('') + '</tbody></table>';
     }
-    async function loadPrmItems() {
-      const family = $('prm-family').value;
-      if (!family) { $('prm-cat-list').innerHTML = ''; return; }
-      const { items } = await api('/api/v1/items/?family=' + encodeURIComponent(family));
-      $('prm-cat-list').innerHTML = familyTable(items, 'prm-pick', 'prm-check', 'prm-qty');
+    // ---- Solicitação em Lote: grade com saldo, previsão, consumo e cobertura ----
+    async function loadLotGrid() {
+      try {
+        const q = new URLSearchParams();
+        if ($('lot-family').value) q.set('family', $('lot-family').value);
+        if ($('lot-search').value) q.set('q', $('lot-search').value);
+        const { items } = await api('/api/v1/items/batch-view?' + q.toString());
+        $('lot-grid').innerHTML = items.length
+          ? `<table><thead><tr><th>Produto</th><th>Preço Un</th><th>Saldo Atual</th><th>Prev. Entrada</th><th>Consumo Médio</th><th>Cobertura</th><th>Qtd. a Solic.</th></tr></thead><tbody>` +
+            `<tr><td colspan="7" style="background:var(--surface-muted);font-weight:700;color:var(--brand-dark)">Geração de Solicitações de Compra (${items.length} itens)</td></tr>` +
+            items.map(i => `
+              <tr class="lot-row" data-id="${i.id}">
+                <td>${escapeHtml(i.code)} <span class="sub">(${escapeHtml(i.description)})</span><div class="sub">Grupo: ${escapeHtml(i.family)}</div></td>
+                <td>${i.referencePrice != null ? money(i.referencePrice) : '0,00'}</td>
+                <td>${fmtInt(i.stockAvailable)}</td>
+                <td>${fmtInt(i.inboundQty)}</td>
+                <td style="color:var(--brand)">${fmtInt(i.avgMonthlyConsumption)}</td>
+                <td>${i.coverageDays != null ? i.coverageDays + ' d' : '—'}</td>
+                <td><input type="number" class="lot-qty" min="0.01" step="0.01" style="width:86px" /></td>
+              </tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhum produto encontrado para o filtro.</p>';
+      } catch (err) { $('lot-grid').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     }
-    LOADERS['pr-new-multi'] = async () => { await fillFamilies('prm-family'); loadPrmItems(); };
-    $('prm-family').addEventListener('change', loadPrmItems);
+    LOADERS['pr-new-multi'] = async () => {
+      await Promise.all([loadDeliveryLocations(), loadCcDatalist()]);
+      const { families } = await api('/api/v1/items/families');
+      $('lot-family').innerHTML = '<option value="">Todos os grupos</option>' +
+        families.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('');
+      loadLotGrid();
+    };
+    $('lot-family').addEventListener('change', loadLotGrid);
+    $('lot-search-btn').addEventListener('click', loadLotGrid);
+    $('lot-search').addEventListener('change', loadLotGrid);
 
-    $('prm-form').addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const items = [...document.querySelectorAll('.prm-pick')]
-        .filter(r => r.querySelector('.prm-check').checked)
-        .map(r => ({ catalogItemId: r.dataset.id, quantity: parseFloat(r.querySelector('.prm-qty').value) || 1 }));
-      if (!items.length) { toast('Marque ao menos um produto da lista.', 'error'); return; }
+    $('lot-submit').addEventListener('click', async () => {
+      const items = [...document.querySelectorAll('.lot-row')]
+        .map(r => ({ catalogItemId: r.dataset.id, quantity: parseFloat(r.querySelector('.lot-qty').value) }))
+        .filter(i => i.quantity > 0);
+      if (!items.length) { toast('Informe a "Qtd. a Solicitar" de ao menos um produto.', 'error'); return; }
+      if (!$('prm-cc').value) { toast('Selecione o centro de custo.', 'error'); return; }
+      if (!$('prm-just').value) { toast('Informe a justificativa.', 'error'); return; }
       try {
         await api('/api/v1/purchase-requisitions/', { method: 'POST', body: {
           justification: $('prm-just').value, costCenter: $('prm-cc').value,
-          priority: $('prm-priority').value, items, kind: 'CATALOGO',
+          priority: $('prm-priority').value, neededBy: $('prm-needed').value || null, items, kind: 'CATALOGO',
+          deliveryLocation: $('lot-delivery').value || null,
         }});
-        toast('Rascunho criado. Revise em "Meus Pedidos" e envie para aprovação.', 'ok');
-        ev.target.reset();
+        toast(`SC em lote criada com ${items.length} item(ns). Revise em "Meus Pedidos" e envie para aprovação.`, 'ok');
+        document.querySelectorAll('.lot-qty').forEach(i => i.value = '');
         goTo('pr-mine');
       } catch (err) { toast(err.message, 'error'); }
     });
@@ -1692,6 +1800,11 @@
     }
     LOADERS['cost-centers'] = async () => {
       try {
+        try {
+          const { items: users } = await api('/api/v1/users/pickers');
+          $('ncc-manager').innerHTML = '<option value="">Selecione o gerente…</option>' +
+            users.map(u => `<option value="${u.id}">${escapeHtml(u.name)} (${ROLE_LABELS[u.role] || u.role})</option>`).join('');
+        } catch {}
         const { items } = await api('/api/v1/cost-centers/?all=true');
         $('cc-list').innerHTML = items.length
           ? '<table><thead><tr><th>Código</th><th>Nome</th><th>Regional</th><th>Gerente</th><th>Cliente</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
@@ -1719,8 +1832,8 @@
       ev.preventDefault();
       try {
         await api('/api/v1/cost-centers/', { method: 'POST', body: {
-          code: $('ncc-code').value, name: $('ncc-name').value,
-          region: $('ncc-region').value || null, managerName: $('ncc-manager').value || null,
+          name: $('ncc-name').value, region: $('ncc-region').value || null,
+          managerUserId: $('ncc-manager').value || null,
           clientName: $('ncc-client').value || null,
         }});
         toast('Centro de custo cadastrado.', 'ok');

@@ -11,7 +11,8 @@ public class CostCenter
     public string Code { get; set; } = string.Empty;        // único, caixa alta (ex.: CC-ADM-001)
     public string Name { get; set; } = string.Empty;
     public string? Region { get; set; }                     // regional (ex.: NORDESTE, SP-CAPITAL)
-    public string? ManagerName { get; set; }                // gerente responsável
+    public Guid? ManagerUserId { get; set; }                // gerente responsável (vínculo com usuário — alçadas)
+    public string? ManagerName { get; set; }                // snapshot do nome do gerente
     public string? ClientName { get; set; }                 // cliente/contrato atendido
     public bool Active { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }

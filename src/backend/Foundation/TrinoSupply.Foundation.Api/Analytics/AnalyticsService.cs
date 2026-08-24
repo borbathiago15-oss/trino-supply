@@ -199,6 +199,58 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
         return new { from, to, kpis, months, rankings, supplierTable, filterOptions };
     }
 
+    /// <summary>
+    /// Grade da Solicitação em Lote: por produto — preço, saldo disponível,
+    /// previsão de entrada (OCs emitidas), consumo médio mensal (90 dias) e cobertura em dias.
+    /// </summary>
+    public async Task<object> BatchViewAsync(string? family, string? search, Guid? locationId, CancellationToken ct = default)
+    {
+        var items = await db.CatalogItems.Where(i => i.Active).OrderBy(i => i.Family).ThenBy(i => i.Description)
+            .Take(1000).ToListAsync(ct);
+        if (family is not null) items = items.Where(i => string.Equals(i.Family, family, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (!string.IsNullOrWhiteSpace(search))
+            items = items.Where(i => i.Description.Contains(search, StringComparison.OrdinalIgnoreCase)
+                                  || i.Code.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
+
+        var balances = await db.StockBalances
+            .Where(b => locationId == null || b.LocationId == locationId)
+            .GroupBy(b => b.CatalogItemId)
+            .Select(g => new { ItemId = g.Key, Available = g.Sum(b => b.TotalQty - b.ReservedQty) })
+            .ToDictionaryAsync(x => x.ItemId, x => x.Available, ct);
+
+        var issuedPoIds = await db.PurchaseOrders.Where(o => o.Status == PurchaseOrderStatus.Issued)
+            .Select(o => o.Id).ToListAsync(ct);
+        var inbound = (await db.PurchaseOrderItems
+                .Where(i => i.CatalogItemId != null && issuedPoIds.Contains(i.OrderId)).ToListAsync(ct))
+            .GroupBy(i => i.CatalogItemId!.Value)
+            .ToDictionary(g => g.Key, g => g.Sum(i => i.Quantity));
+
+        var since = clock.GetUtcNow().AddDays(-90);
+        var consumption = (await db.StockMovements
+                .Where(m => m.Type == MovementType.Issue && m.PerformedAt >= since
+                            && (locationId == null || m.LocationId == locationId)).ToListAsync(ct))
+            .GroupBy(m => m.CatalogItemId)
+            .ToDictionary(g => g.Key, g => g.Sum(m => m.Quantity) / 3m); // média mensal
+
+        return new
+        {
+            items = items.Select(i =>
+            {
+                var saldo = balances.GetValueOrDefault(i.Id);
+                var consumo = consumption.GetValueOrDefault(i.Id);
+                return new
+                {
+                    id = i.Id, code = i.Code, description = i.Description, family = i.Family,
+                    unitOfMeasure = i.UnitOfMeasure, referencePrice = i.ReferencePrice,
+                    stockAvailable = saldo,
+                    inboundQty = inbound.GetValueOrDefault(i.Id),
+                    avgMonthlyConsumption = Math.Round(consumo, 2),
+                    coverageDays = consumo > 0 ? (int?)Math.Round(saldo / (consumo / 30m)) : null,
+                };
+            }),
+        };
+    }
+
     public async Task<object> StockAsync(Guid? locationId, string? family, int monthsBack, CancellationToken ct = default)
     {
         monthsBack = Math.Clamp(monthsBack, 1, 24);

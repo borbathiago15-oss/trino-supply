@@ -184,6 +184,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(r => r.NeededBy).HasColumnName("needed_by");
             e.Property(r => r.Justification).HasColumnName("justification").HasMaxLength(2000).IsRequired();
             e.Property(r => r.CostCenter).HasColumnName("cost_center").HasMaxLength(120).IsRequired();
+            e.Property(r => r.NeedType).HasColumnName("need_type").HasMaxLength(60);
+            e.Property(r => r.DeliveryLocation).HasColumnName("delivery_location").HasMaxLength(200);
+            e.Property(r => r.Company).HasColumnName("company").HasMaxLength(300);
+            e.Property(r => r.InternalNotes).HasColumnName("internal_notes").HasMaxLength(2000);
             e.Property(r => r.Currency).HasColumnName("currency").HasMaxLength(3);
             e.Property(r => r.RequesterId).HasColumnName("requester_id");
             e.Property(r => r.RequesterLabel).HasColumnName("requester_label").HasMaxLength(200);
@@ -231,6 +235,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(c => c.Code).HasColumnName("code").HasMaxLength(60).IsRequired();
             e.Property(c => c.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
             e.Property(c => c.Region).HasColumnName("region").HasMaxLength(120);
+            e.Property(c => c.ManagerUserId).HasColumnName("manager_user_id");
             e.Property(c => c.ManagerName).HasColumnName("manager_name").HasMaxLength(200);
             e.Property(c => c.ClientName).HasColumnName("client_name").HasMaxLength(200);
             e.Property(c => c.Active).HasColumnName("active");

@@ -18,22 +18,34 @@ public class CostCenterService(AppDbContext db, TimeProvider clock)
     }
 
     public async Task<(CostCenter? cc, UserError? error)> CreateAsync(
-        Guid actorId, string code, string name, string? region, string? manager, string? client,
+        Guid actorId, string? code, string name, string? region, Guid? managerUserId, string? client,
         CancellationToken ct = default)
     {
-        code = code.Trim().ToUpperInvariant();
-        if (code.Length < 2) return (null, new("CC-ERR-011", "Informe o código do centro de custo."));
         if (name.Trim().Length < 3) return (null, new("CC-ERR-012", "Informe o nome do centro de custo."));
-        if (await db.CostCenters.AnyAsync(c => c.Code == code, ct))
+        var regionClean = Clean(region)?.ToUpperInvariant();
+
+        code = Clean(code)?.ToUpperInvariant();
+        if (code is null)
+            code = await GenerateCodeAsync(regionClean, ct);   // regra automática: sigla da regional + sequência
+        else if (await db.CostCenters.AnyAsync(c => c.Code == code, ct))
             return (null, new("CC-ERR-010", "Já existe um centro de custo com este código."));
+
+        string? managerName = null;
+        if (managerUserId is not null)
+        {
+            var manager = await db.Users.SingleOrDefaultAsync(u => u.Id == managerUserId && u.Active, ct);
+            if (manager is null) return (null, new("CC-ERR-013", "Gerente responsável inválido: escolha um usuário ativo."));
+            managerName = manager.Name;
+        }
 
         var now = clock.GetUtcNow();
         var cc = new CostCenter
         {
             Code = code,
             Name = name.Trim(),
-            Region = Clean(region)?.ToUpperInvariant(),
-            ManagerName = Clean(manager),
+            Region = regionClean,
+            ManagerUserId = managerUserId,
+            ManagerName = managerName,
             ClientName = Clean(client),
             CreatedAt = now,
             UpdatedAt = now,
@@ -44,15 +56,38 @@ public class CostCenterService(AppDbContext db, TimeProvider clock)
         return (cc, null);
     }
 
+    /// <summary>Código automático: 2–3 letras da regional (sem acentos; "CC" sem regional) + sequência.</summary>
+    private async Task<string> GenerateCodeAsync(string? region, CancellationToken ct)
+    {
+        var prefix = "CC";
+        if (!string.IsNullOrWhiteSpace(region))
+        {
+            var letters = new string(region.Normalize(System.Text.NormalizationForm.FormD)
+                .Where(char.IsLetter).ToArray()).ToUpperInvariant();
+            if (letters.Length >= 2) prefix = letters[..Math.Min(3, letters.Length)];
+        }
+        var seq = await db.CostCenters.CountAsync(c => c.Code.StartsWith(prefix + "-"), ct) + 1;
+        var code = $"{prefix}-{seq:000}";
+        while (await db.CostCenters.AnyAsync(c => c.Code == code, ct))
+            code = $"{prefix}-{++seq:000}";
+        return code;
+    }
+
     public async Task<(CostCenter? cc, UserError? error)> UpdateAsync(
-        Guid id, string? name, string? region, string? manager, string? client, bool? active,
+        Guid id, string? name, string? region, Guid? managerUserId, string? client, bool? active,
         CancellationToken ct = default)
     {
         var cc = await db.CostCenters.SingleOrDefaultAsync(c => c.Id == id, ct);
         if (cc is null) return (null, new("CC-ERR-404", "Centro de custo não encontrado."));
         if (name is not null && name.Trim().Length >= 3) cc.Name = name.Trim();
         if (region is not null) cc.Region = Clean(region)?.ToUpperInvariant();
-        if (manager is not null) cc.ManagerName = Clean(manager);
+        if (managerUserId is not null)
+        {
+            var manager = await db.Users.SingleOrDefaultAsync(u => u.Id == managerUserId && u.Active, ct);
+            if (manager is null) return (null, new("CC-ERR-013", "Gerente responsável inválido: escolha um usuário ativo."));
+            cc.ManagerUserId = manager.Id;
+            cc.ManagerName = manager.Name;
+        }
         if (client is not null) cc.ClientName = Clean(client);
         if (active is not null) cc.Active = active.Value;
         cc.UpdatedAt = clock.GetUtcNow();

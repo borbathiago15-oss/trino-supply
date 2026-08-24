@@ -16,7 +16,8 @@ public class InventoryService(AppDbContext db, TimeProvider clock)
     public static bool CanOperate(string role) =>
         role is Roles.WarehouseOperator or Roles.WarehouseSupervisor or Roles.SupplyManager or Roles.SystemAdministrator;
 
-    public static bool CanView(string role) => CanOperate(role) || role == Roles.Auditor;
+    public static bool CanView(string role) =>
+        CanOperate(role) || role is Roles.Auditor or Roles.PurchasingOfficer; // comprador consulta p/ recebimento (PO-001)
 
     // ---- locais -------------------------------------------------------------
     public Task<List<StorageLocation>> LocationsAsync(bool onlyActive = true, CancellationToken ct = default)

@@ -250,6 +250,36 @@
         </div>
       </section>
 
+      <section id="buy-view" hidden>
+        <h2>Compras</h2>
+        <div id="buy-msg" class="msg" role="alert" aria-live="polite"></div>
+
+        <div class="toolbar">
+          <div>
+            <button id="buy-tab-demands" class="secondary" type="button" hidden>Demandas <span id="buy-demand-count"></span></button>
+            <button id="buy-tab-orders" class="secondary" type="button">Pedidos de compra</button>
+            <button id="buy-tab-suppliers" class="secondary" type="button" hidden>Fornecedores</button>
+          </div>
+          <button id="buy-refresh" class="secondary" type="button">Atualizar</button>
+        </div>
+        <div id="buy-panel"></div>
+
+        <div id="buy-supplier-admin" hidden>
+          <h2>Novo fornecedor</h2>
+          <form id="buy-sup-form">
+            <div class="grid2">
+              <div><label for="bs-legal">Razão social</label><input id="bs-legal" required minlength="3" placeholder="ex.: Distribuidora Alfa LTDA" /></div>
+              <div><label for="bs-tax">CNPJ/CPF</label><input id="bs-tax" required placeholder="somente números" /></div>
+            </div>
+            <div class="grid2">
+              <div><label for="bs-trade">Nome fantasia</label><input id="bs-trade" placeholder="opcional" /></div>
+              <div><label for="bs-email">E-mail</label><input id="bs-email" type="email" placeholder="opcional" /></div>
+            </div>
+            <button type="submit" class="full" style="margin-top:10px">Cadastrar fornecedor</button>
+          </form>
+        </div>
+      </section>
+
       <section id="catalog-view" hidden>
         <h2>Catálogo de Itens</h2>
         <div id="cat-msg" class="msg" role="alert" aria-live="polite"></div>
@@ -348,6 +378,8 @@
     const canRequestMr = (r) => ['Requester', 'SupplyManager', 'SystemAdministrator'].includes(r);
     const canWarehouse = (r) => ['WarehouseOperator', 'WarehouseSupervisor', 'SupplyManager', 'SystemAdministrator'].includes(r);
     const canSeeMr = (r) => canRequestMr(r) || canWarehouse(r) || r === 'Auditor';
+    const canBuy = (r) => ['PurchasingOfficer', 'SupplyManager', 'SystemAdministrator'].includes(r);
+    const canSeeBuy = (r) => canBuy(r) || r === 'Auditor';
 
     function showApp(user) {
       currentUser = user;
@@ -383,6 +415,17 @@
         whTab = 'queue';
         initWarehouse();
       }
+      const isBuyer = canSeeBuy(user.role);
+      $('buy-view').hidden = !isBuyer;
+      if (isBuyer) {
+        const manage = canBuy(user.role);
+        $('buy-tab-demands').hidden = !manage;
+        $('buy-tab-suppliers').hidden = !manage;
+        $('buy-supplier-admin').hidden = !manage;
+        buyTab = manage ? 'demands' : 'orders';
+        initBuying();
+      }
+      $('card').classList.toggle('wide', isAdmin || hasPr || canMaintainCatalog || hasMr || isWh || isBuyer);
     }
 
     function showLogin() {
@@ -902,6 +945,157 @@
         ev.target.reset();
         initWarehouse();
       } catch (err) { flash($('wh-msg'), err.message || 'Não foi possível criar o local.', 'error'); }
+    });
+
+    // ---- SUP-001/PO-001 — Compras (demandas, pedidos, fornecedores) ----
+    let buyTab = 'demands';
+    let buySuppliers = [];
+    const STATUS_PO = { EMITIDO: ['Emitido', ''], RECEBIDO: ['Recebido', 'on'], CANCELADO: ['Cancelado', 'off'] };
+    const supOpts = () => buySuppliers.map(s => `<option value="${s.id}">${escapeHtml(s.tradeName || s.legalName)}</option>`).join('');
+
+    async function initBuying() {
+      try {
+        if (canBuy(currentUser.role)) {
+          buySuppliers = (await api('/api/v1/suppliers/')).items;
+          if (!whLocations.length) {
+            try { whLocations = (await api('/api/v1/inventory/locations')).items; } catch {}
+          }
+        }
+        loadBuying();
+      } catch (err) { flash($('buy-msg'), err.message || 'Falha ao carregar compras.', 'error'); }
+    }
+
+    async function loadBuying() {
+      try {
+        if (buyTab === 'demands') {
+          const { approvedRequisitions, purchaseRouteItems } = await api('/api/v1/purchase-orders/demands');
+          $('buy-demand-count').textContent = '(' + (approvedRequisitions.length + purchaseRouteItems.length) + ')';
+          let html = '';
+          html += '<h2>Requisições aprovadas aguardando pedido</h2>';
+          html += approvedRequisitions.length
+            ? '<table aria-label="Requisições aprovadas"><thead><tr><th>Número</th><th>Itens</th><th>Valor est.</th><th>Emitir</th></tr></thead><tbody>' +
+              approvedRequisitions.map(r => `
+                <tr data-pr="${r.id}">
+                  <td>${escapeHtml(r.number)}<div class="sub">${escapeHtml(r.requesterLabel)} · CC: ${escapeHtml(r.costCenter)}</div></td>
+                  <td>${r.items.map(i => `${i.quantity}× ${i.catalogCode ? '[' + escapeHtml(i.catalogCode) + '] ' : ''}${escapeHtml(i.description)}`).join(' · ')}</td>
+                  <td>${money(r.totalEstimatedValue)}</td>
+                  <td class="row-actions">
+                    <select class="buy-sup-sel" aria-label="Fornecedor">${supOpts()}</select>
+                    <button data-act="convert" ${buySuppliers.length ? '' : 'disabled'}>Emitir pedido</button>
+                  </td>
+                </tr>`).join('') + '</tbody></table>'
+            : '<p class="hello">Nenhuma requisição aprovada aguardando pedido.</p>';
+          html += '<h2>Itens de solicitação em rota de compra</h2>';
+          html += purchaseRouteItems.length
+            ? '<table aria-label="Itens em rota de compra"><thead><tr><th>Origem</th><th>Item</th><th>Qtd</th><th>Emitir</th></tr></thead><tbody>' +
+              purchaseRouteItems.map((i, idx) => `
+                <tr data-route="${idx}" data-cat="${i.catalogItemId}" data-desc="${escapeHtml(i.description)}" data-qty="${i.quantity}" data-unit="${escapeHtml(i.unitOfMeasure)}">
+                  <td>${escapeHtml(i.materialRequisitionNumber)}<div class="sub">${escapeHtml(i.requesterLabel)} · CC: ${escapeHtml(i.costCenter)}</div></td>
+                  <td>[${escapeHtml(i.catalogCode)}] ${escapeHtml(i.description)}</td>
+                  <td>${i.quantity} ${escapeHtml(i.unitOfMeasure)}</td>
+                  <td class="row-actions">
+                    <select class="buy-sup-sel" aria-label="Fornecedor">${supOpts()}</select>
+                    <button data-act="route-po" ${buySuppliers.length ? '' : 'disabled'}>Emitir pedido</button>
+                  </td>
+                </tr>`).join('') + '</tbody></table>'
+            : '<p class="hello">Nenhum item aguardando compra vindo do almoxarifado.</p>';
+          if (!buySuppliers.length) html += '<p class="hello">Cadastre um fornecedor na aba "Fornecedores" para emitir pedidos.</p>';
+          $('buy-panel').innerHTML = html;
+        } else if (buyTab === 'orders') {
+          const { items } = await api('/api/v1/purchase-orders/');
+          $('buy-panel').innerHTML = items.length
+            ? '<table aria-label="Pedidos de compra"><thead><tr><th>Número</th><th>Fornecedor</th><th>Itens</th><th>Total</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+              items.map(o => {
+                const [label, cls] = STATUS_PO[o.status] || [o.status, ''];
+                const acts = o.status === 'EMITIDO' && canBuy(currentUser.role)
+                  ? `<select class="buy-rec-loc" aria-label="Local">${whLocations.length ? whLocations.map(l => `<option value="${l.id}">${escapeHtml(l.code)}</option>`).join('') : '<option value="">(sem local)</option>'}</select>
+                     <button data-act="receive">Receber</button>
+                     <button class="danger" data-act="cancel-po">Cancelar</button>` : '';
+                const src = o.sourcePrNumber ? `<div class="sub">de ${escapeHtml(o.sourcePrNumber)}</div>` : '';
+                const rec = o.receivedByLabel ? `<div class="sub">Recebido por ${escapeHtml(o.receivedByLabel)}</div>` : '';
+                return `<tr data-id="${o.id}">
+                  <td>${escapeHtml(o.number)}${src}</td>
+                  <td>${escapeHtml(o.supplierName)}${rec}</td>
+                  <td>${o.items.map(i => `${i.quantity}× ${i.catalogCode ? '[' + escapeHtml(i.catalogCode) + '] ' : ''}${escapeHtml(i.description)}`).join(' · ')}</td>
+                  <td>${money(o.totalValue)}</td>
+                  <td><span class="badge ${cls}">${label}</span>${o.cancelReason ? `<div class="sub">${escapeHtml(o.cancelReason)}</div>` : ''}</td>
+                  <td class="row-actions">${acts}</td>
+                </tr>`;
+              }).join('') + '</tbody></table>'
+            : '<p class="hello">Nenhum pedido de compra emitido ainda.</p>';
+        } else {
+          const { items } = await api('/api/v1/suppliers/?all=true');
+          buySuppliers = items.filter(s => s.active);
+          $('buy-panel').innerHTML = items.length
+            ? '<table aria-label="Fornecedores"><thead><tr><th>Fornecedor</th><th>CNPJ/CPF</th><th>Contato</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+              items.map(s => `
+                <tr data-id="${s.id}">
+                  <td>${escapeHtml(s.legalName)}${s.tradeName ? `<div class="sub">${escapeHtml(s.tradeName)}</div>` : ''}</td>
+                  <td>${escapeHtml(s.taxId)}</td>
+                  <td>${escapeHtml(s.email || '')}${s.phone ? `<div class="sub">${escapeHtml(s.phone)}</div>` : ''}</td>
+                  <td><span class="badge ${s.active ? 'on' : 'off'}">${s.active ? 'ATIVO' : 'INATIVO'}</span></td>
+                  <td class="row-actions"><button class="${s.active ? 'danger' : 'secondary'}" data-act="toggle-sup">${s.active ? 'Inativar' : 'Reativar'}</button></td>
+                </tr>`).join('') + '</tbody></table>'
+            : '<p class="hello">Nenhum fornecedor cadastrado ainda.</p>';
+        }
+      } catch (err) { flash($('buy-msg'), err.message || 'Falha ao carregar dados de compras.', 'error'); }
+    }
+
+    $('buy-tab-demands').addEventListener('click', () => { buyTab = 'demands'; loadBuying(); });
+    $('buy-tab-orders').addEventListener('click', () => { buyTab = 'orders'; loadBuying(); });
+    $('buy-tab-suppliers').addEventListener('click', () => { buyTab = 'suppliers'; loadBuying(); });
+    $('buy-refresh').addEventListener('click', () => initBuying());
+
+    $('buy-panel').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act]');
+      if (!btn) return;
+      const row = btn.closest('tr');
+      const act = btn.dataset.act;
+      try {
+        if (act === 'convert') {
+          const supplierId = row.querySelector('.buy-sup-sel').value;
+          if (!confirm('Emitir pedido de compra para esta requisição aprovada?')) return;
+          await api('/api/v1/purchase-orders/', { method: 'POST', body: { supplierId, sourcePrId: row.dataset.pr, items: [] } });
+          flash($('buy-msg'), 'Pedido emitido a partir da requisição.', 'ok');
+        } else if (act === 'route-po') {
+          const supplierId = row.querySelector('.buy-sup-sel').value;
+          if (!confirm('Emitir pedido de compra para este item?')) return;
+          await api('/api/v1/purchase-orders/', { method: 'POST', body: { supplierId, items: [{
+            description: row.dataset.desc, quantity: parseFloat(row.dataset.qty),
+            unitOfMeasure: row.dataset.unit, catalogItemId: row.dataset.cat,
+          }]}});
+          flash($('buy-msg'), 'Pedido emitido para o item em rota de compra.', 'ok');
+        } else if (act === 'receive') {
+          const locationId = row.querySelector('.buy-rec-loc').value;
+          if (!locationId) { flash($('buy-msg'), 'Crie um local de estoque no Almoxarifado primeiro.', 'error'); return; }
+          if (!confirm('Confirmar o recebimento? Itens de catálogo entram no estoque.')) return;
+          await api(`/api/v1/purchase-orders/${row.dataset.id}/receive`, { method: 'POST', body: { locationId } });
+          flash($('buy-msg'), 'Pedido recebido — estoque atualizado.', 'ok');
+        } else if (act === 'cancel-po') {
+          const reason = prompt('Motivo do cancelamento (obrigatório):');
+          if (!reason) return;
+          await api(`/api/v1/purchase-orders/${row.dataset.id}/cancel`, { method: 'POST', body: { reason } });
+          flash($('buy-msg'), 'Pedido cancelado.', 'ok');
+        } else if (act === 'toggle-sup') {
+          await api('/api/v1/suppliers/' + row.dataset.id, { method: 'PATCH', body: { active: btn.textContent === 'Reativar' } });
+          flash($('buy-msg'), 'Fornecedor atualizado.', 'ok');
+        }
+        loadBuying();
+      } catch (err) { flash($('buy-msg'), err.message || 'Operação não permitida.', 'error'); }
+    });
+
+    $('buy-sup-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try {
+        await api('/api/v1/suppliers/', { method: 'POST', body: {
+          legalName: $('bs-legal').value, tradeName: $('bs-trade').value || null,
+          taxId: $('bs-tax').value, email: $('bs-email').value || null,
+        }});
+        flash($('buy-msg'), 'Fornecedor cadastrado.', 'ok');
+        ev.target.reset();
+        buyTab = 'suppliers';
+        initBuying();
+      } catch (err) { flash($('buy-msg'), err.message || 'Não foi possível cadastrar o fornecedor.', 'error'); }
     });
 
     // sessão existente? valida contra /me

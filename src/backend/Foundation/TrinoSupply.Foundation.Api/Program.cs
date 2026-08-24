@@ -235,6 +235,39 @@ catalogGroup.MapGet("/", async (CatalogService svc, ClaimsPrincipal p, HttpConte
     return Ok(new { items = items.Select(CatalogView) }, ctx);
 });
 
+// ---- famílias de produtos (cadastro próprio: evita a mesma família escrita de vários jeitos)
+static object FamilyView(ProductFamily f) => new
+{
+    id = f.Id, name = f.Name, notes = f.Notes, active = f.Active,
+};
+
+var families = app.MapGroup("/api/v1/product-families").RequireAuthorization();
+families.AddEndpointFilter(RejectSupplierRole());
+
+families.MapGet("/", async (CatalogService svc, ClaimsPrincipal p, HttpContext ctx, bool? all) =>
+{
+    var includeInactive = all == true && CatalogService.CanMaintain(RoleOf(p));
+    return Ok(new { items = (await svc.ListFamiliesAsync(includeInactive)).Select(FamilyView) }, ctx);
+});
+
+families.MapPost("/", async (ProductFamilyRequest body, CatalogService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!CatalogService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.Produtos))
+        return Error(ctx, 403, "IC-ERR-900", "Seu usuário não mantém o catálogo.");
+    var (family, error) = await svc.CreateFamilyAsync(ActorId(p), body.Name ?? "", body.Notes);
+    return error is not null ? Error(ctx, error.Code == "IC-ERR-021" ? 409 : 400, error.Code, error.Message)
+        : Results.Json(new { data = FamilyView(family!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+families.MapPatch("/{id:guid}", async (Guid id, UpdateProductFamilyRequest body, CatalogService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!CatalogService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.Produtos))
+        return Error(ctx, 403, "IC-ERR-900", "Seu usuário não mantém o catálogo.");
+    var (family, error) = await svc.UpdateFamilyAsync(id, body.Name, body.Notes, body.Active);
+    return error is not null ? Error(ctx, error.Code == "IC-ERR-404" ? 404 : 400, error.Code, error.Message)
+        : Ok(FamilyView(family!), ctx);
+});
+
 // locais de entrega para os formulários de SC (sem dados de estoque; aberto a papéis internos)
 app.MapGet("/api/v1/delivery-locations", async (AppDbContext db, HttpContext ctx) =>
     Ok(new
@@ -1669,6 +1702,8 @@ public record ResetPasswordRequest(string NewPassword);
 public record ItemRequest(string? Description, decimal Quantity, string? UnitOfMeasure, decimal? EstimatedUnitPrice, string? Notes, Guid? CatalogItemId);
 public record CreateRequisitionRequest(string Justification, string CostCenter, string? Priority, DateOnly? NeededBy, List<ItemRequest>? Items, string? Kind,
     string? NeedType, string? DeliveryLocation, string? Company, string? InternalNotes);
+public record ProductFamilyRequest(string? Name, string? Notes);
+public record UpdateProductFamilyRequest(string? Name, string? Notes, bool? Active);
 public record ItemSupplierRequest(string? SupplierName, string? TaxId, string? Contact,
     string? SupplierItemCode, decimal? LastPrice, string? Notes);
 public record CreateCatalogItemRequest(string? Code, string Description, string Family, string? UnitOfMeasure,

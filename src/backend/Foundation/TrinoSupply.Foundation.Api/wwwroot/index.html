@@ -702,6 +702,26 @@
         </div>
       </section>
 
+      <!-- Cadastros: famílias de produtos -->
+      <section class="view" id="view-families">
+        <div class="panel">
+          <h2>Famílias de Produtos</h2>
+          <p class="hello">A família é escolhida em lista no cadastro do produto — assim a mesma família não aparece escrita de formas diferentes. Renomear aqui renomeia em todos os produtos.</p>
+          <div id="fam-list" class="tablewrap"></div>
+        </div>
+        <div class="panel">
+          <h2 id="fam-form-title">Nova família</h2>
+          <form id="fam-form">
+            <label for="nf-name">Nome</label>
+            <input id="nf-name" required minlength="3" placeholder="ex.: MATERIAL DE LIMPEZA" />
+            <label for="nf-notes">Observação</label>
+            <input id="nf-notes" placeholder="opcional — o que entra nesta família" />
+            <button type="submit" class="full" id="fam-form-submit">Cadastrar família</button>
+            <button type="button" class="secondary full" id="fam-form-cancel" style="margin-top:8px" hidden>Cancelar edição</button>
+          </form>
+        </div>
+      </section>
+
       <!-- Cadastros: produtos -->
       <section class="view" id="view-products">
         <div class="panel">
@@ -716,7 +736,7 @@
           <form id="cat-form">
             <div class="grid2">
               <div><label for="ci-code">Código <span class="sub">(opcional)</span></label><input id="ci-code" placeholder="deixe vazio para gerar automático" /></div>
-              <div><label for="ci-family">Família</label><input id="ci-family" required minlength="3" list="cat-families" placeholder="ex.: MATERIAL DE LIMPEZA" /></div>
+              <div><label for="ci-family">Família</label><select id="ci-family" required></select></div>
             </div>
             <p class="hello" style="margin:4px 0 0">Sem código informado, o sistema gera pela família (ex.: MAT-001). Se você já usa um código próprio, informe-o aqui.</p>
             <label for="ci-desc">Descrição</label>
@@ -845,6 +865,7 @@
         { id: 'users', label: 'Usuários', module: 'USUARIOS', show: isAdmin },
         { id: 'suppliers', label: 'Fornecedores', module: 'FORNECEDORES', show: canBuy },
         { id: 'products', label: 'Produtos', module: 'PRODUTOS', show: () => true },
+        { id: 'families', label: 'Famílias de Produtos', module: 'PRODUTOS', show: canMaintainCatalog },
         { id: 'cost-centers', label: 'Centros de Custo', module: 'CENTROS_CUSTO', show: canMaintainCatalog },
         { id: 'company', label: 'Empresas (CNPJs)', show: isAdmin },
       ]},
@@ -858,6 +879,7 @@
       'buy-demands': 'Demandas de Compra', 'buy-orders': 'Pedidos de Compra',
       triage: 'Triagem de Demandas',
       users: 'Cadastro de Usuários', suppliers: 'Cadastro de Fornecedores', products: 'Cadastro de Produtos',
+      families: 'Famílias de Produtos',
       'supply-dash': 'Dashboard de Suprimentos', 'cost-centers': 'Centros de Custo',
       quotations: 'Cotações / Processos de Compra', company: 'Empresas do Grupo (CNPJs)',
     };
@@ -1802,6 +1824,88 @@
       } catch (err) { toast(err.message, 'error'); }
     });
 
+    // ============ CADASTROS: FAMÍLIAS DE PRODUTOS ============
+    let familyCache = {};
+    let familyOptions = [];
+    let editingFamilyId = null;
+    async function loadFamilyOptions(selected) {
+      try {
+        const { items } = await api('/api/v1/product-families/');
+        familyOptions = items;
+        const sel = $('ci-family');
+        if (sel) {
+          sel.innerHTML = items.length
+            ? '<option value="">Selecione a família…</option>' +
+              items.map(f => `<option value="${escapeHtml(f.name)}">${escapeHtml(f.name)}</option>`).join('')
+            : '<option value="">(cadastre em Cadastros → Famílias de Produtos)</option>';
+          if (selected) sel.value = selected;
+        }
+      } catch {}
+    }
+    function setFamilyFormMode(f) {
+      editingFamilyId = f ? f.id : null;
+      $('fam-form-title').textContent = f ? `Editar família — ${f.name}` : 'Nova família';
+      $('fam-form-submit').textContent = f ? 'Salvar alterações' : 'Cadastrar família';
+      $('fam-form-cancel').hidden = !f;
+      if (f) { $('nf-name').value = f.name; $('nf-notes').value = f.notes || ''; }
+      else { $('fam-form').reset(); }
+    }
+    LOADERS['families'] = async () => {
+      try {
+        const { items } = await api('/api/v1/product-families/?all=true');
+        familyCache = Object.fromEntries(items.map(f => [f.id, f]));
+        const { items: prods } = await api('/api/v1/items/?all=true');
+        const usage = prods.reduce((acc, i) => { acc[i.family] = (acc[i.family] || 0) + 1; return acc; }, {});
+        $('fam-list').innerHTML = items.length
+          ? '<table><thead><tr><th>Família</th><th>Produtos</th><th>Observação</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+            items.map(f => `
+              <tr data-id="${f.id}">
+                <td>${escapeHtml(f.name)}</td>
+                <td>${usage[f.name] || 0}</td>
+                <td><div class="sub">${escapeHtml(f.notes || '—')}</div></td>
+                <td><span class="badge ${f.active ? 'on' : 'off'}">${f.active ? 'ATIVA' : 'INATIVA'}</span></td>
+                <td class="row-actions">
+                  <button class="secondary" data-act="edit-fam">Editar</button>
+                  <button class="${f.active ? 'danger' : 'secondary'}" data-act="toggle-fam">${f.active ? 'Inativar' : 'Reativar'}</button>
+                </td>
+              </tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhuma família cadastrada ainda — cadastre a primeira abaixo.</p>';
+        if (!editingFamilyId) setFamilyFormMode(null);
+      } catch (err) { $('fam-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
+    $('fam-form-cancel').addEventListener('click', () => setFamilyFormMode(null));
+    $('fam-list').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act]');
+      if (!btn) return;
+      const id = btn.closest('tr').dataset.id;
+      try {
+        if (btn.dataset.act === 'edit-fam') {
+          setFamilyFormMode(familyCache[id]);
+          $('fam-form-title').scrollIntoView({ behavior: 'smooth' });
+          return;
+        }
+        await api('/api/v1/product-families/' + id, { method: 'PATCH', body: { active: btn.textContent === 'Reativar' } });
+        toast('Família atualizada.', 'ok');
+        LOADERS['families'](); loadFamilyOptions();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+    $('fam-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const body = { name: $('nf-name').value, notes: $('nf-notes').value || null };
+      try {
+        if (editingFamilyId) {
+          await api('/api/v1/product-families/' + editingFamilyId, { method: 'PATCH', body });
+          toast('Família atualizada — os produtos dela acompanham o novo nome.', 'ok');
+          setFamilyFormMode(null);
+        } else {
+          await api('/api/v1/product-families/', { method: 'POST', body });
+          toast('Família cadastrada.', 'ok');
+          ev.target.reset();
+        }
+        LOADERS['families'](); loadFamilyOptions();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
     // ============ CADASTROS: PRODUTOS ============
     function itemSupplierRow(sup) {
       const div = document.createElement('div');
@@ -1858,7 +1962,7 @@
       $('cat-form-cancel').hidden = !i;
       $('ci-code').disabled = !!i;   // código é a identidade do item
       if (i) {
-        $('ci-code').value = i.code; $('ci-family').value = i.family;
+        $('ci-code').value = i.code; loadFamilyOptions(i.family); $('ci-family').value = i.family;
         $('ci-desc').value = i.description; $('ci-unit').value = i.unitOfMeasure || '';
         $('ci-price').value = i.referencePrice != null ? i.referencePrice : '';
         $('ci-stock').checked = !!i.stockControlled;
@@ -1868,6 +1972,7 @@
     }
     LOADERS['products'] = async () => {
       $('cat-admin').hidden = !canMaintainCatalog();
+      await loadFamilyOptions();
       try {
         const family = $('cat-filter-family').value;
         const { items } = await api('/api/v1/items/?all=true' + (family ? '&family=' + encodeURIComponent(family) : ''));
@@ -1940,7 +2045,7 @@
           const keepFamily = $('ci-family').value;
           ev.target.reset();
           renderItemSuppliers([]);
-          $('ci-family').value = keepFamily;
+          await loadFamilyOptions(keepFamily);
         }
         LOADERS['products']();
       } catch (err) { toast(err.message, 'error'); }

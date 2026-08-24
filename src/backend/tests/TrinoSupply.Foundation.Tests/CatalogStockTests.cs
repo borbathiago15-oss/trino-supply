@@ -92,6 +92,76 @@ public class CatalogStockTests
         Assert.Null(item.Suppliers.Single(s => s.SupplierName == "Comercial Beta").TaxId);
     }
 
+    // ---- famílias: cadastro próprio evita variações da mesma família ---------
+
+    [Fact]
+    public async Task Familia_nao_cadastrada_e_recusada_quando_ja_existe_cadastro()
+    {
+        var svc = Build(out _);
+        await svc.CreateFamilyAsync(Actor, "material de limpeza", null);
+
+        var (_, error) = await svc.CreateAsync(Actor, null, "Detergente", "LIMPEZA", "UN", 2m);
+        Assert.Equal("IC-ERR-022", error!.Code);
+
+        var (ok, none) = await svc.CreateAsync(Actor, null, "Detergente", "Material de Limpeza", "UN", 2m);
+        Assert.Null(none);
+        Assert.Equal("MATERIAL DE LIMPEZA", ok!.Family);
+    }
+
+    [Fact]
+    public async Task Familia_duplicada_e_recusada_e_o_nome_e_normalizado()
+    {
+        var svc = Build(out _);
+        var (family, error) = await svc.CreateFamilyAsync(Actor, "  material de limpeza  ", "Produtos de higiene");
+        Assert.Null(error);
+        Assert.Equal("MATERIAL DE LIMPEZA", family!.Name);
+
+        var (_, dup) = await svc.CreateFamilyAsync(Actor, "Material De Limpeza", null);
+        Assert.Equal("IC-ERR-021", dup!.Code);
+    }
+
+    [Fact]
+    public async Task Renomear_familia_leva_os_produtos_junto()
+    {
+        var svc = Build(out var db);
+        var (family, _) = await svc.CreateFamilyAsync(Actor, "LIMPEZA", null);
+        var (item, _) = await svc.CreateAsync(Actor, null, "Detergente", "LIMPEZA", "UN", 2m);
+
+        var (renamed, error) = await svc.UpdateFamilyAsync(family!.Id, "Material de Limpeza", null, null);
+        Assert.Null(error);
+        Assert.Equal("MATERIAL DE LIMPEZA", renamed!.Name);
+
+        var reloaded = await db.CatalogItems.SingleAsync(i => i.Id == item!.Id);
+        Assert.Equal("MATERIAL DE LIMPEZA", reloaded.Family);
+    }
+
+    [Fact]
+    public async Task Renomear_para_familia_existente_unifica_as_duas()
+    {
+        var svc = Build(out var db);
+        var (limpeza, _) = await svc.CreateFamilyAsync(Actor, "LIMPEZA", null);
+        await svc.CreateFamilyAsync(Actor, "MATERIAL DE LIMPEZA", null);
+        var (item, _) = await svc.CreateAsync(Actor, null, "Detergente", "LIMPEZA", "UN", 2m);
+
+        var (merged, error) = await svc.UpdateFamilyAsync(limpeza!.Id, "Material de Limpeza", null, null);
+        Assert.Null(error);
+        Assert.Equal("MATERIAL DE LIMPEZA", merged!.Name);
+
+        var families = await svc.ListFamiliesAsync(true);
+        Assert.Single(families);                                   // as duas viraram uma
+        var reloaded = await db.CatalogItems.SingleAsync(i => i.Id == item!.Id);
+        Assert.Equal("MATERIAL DE LIMPEZA", reloaded.Family);      // o produto acompanhou
+    }
+
+    [Fact]
+    public async Task Base_sem_cadastro_de_familias_continua_aceitando_qualquer_familia()
+    {
+        var svc = Build(out _);
+        var (item, error) = await svc.CreateAsync(Actor, null, "Detergente", "QUALQUER COISA", "UN", 2m);
+        Assert.Null(error);
+        Assert.Equal("QUALQUER COISA", item!.Family);
+    }
+
     [Fact]
     public async Task Edicao_substitui_a_lista_de_fornecedores_do_produto()
     {

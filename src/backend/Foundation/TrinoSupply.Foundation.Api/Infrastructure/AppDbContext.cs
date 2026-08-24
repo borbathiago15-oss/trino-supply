@@ -12,6 +12,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<RequisitionItem> RequisitionItems => Set<RequisitionItem>();
     public DbSet<Catalog.CatalogItem> CatalogItems => Set<Catalog.CatalogItem>();
     public DbSet<Catalog.CatalogItemSupplier> CatalogItemSuppliers => Set<Catalog.CatalogItemSupplier>();
+    public DbSet<Catalog.ProductFamily> ProductFamilies => Set<Catalog.ProductFamily>();
     public DbSet<Inventory.StorageLocation> StorageLocations => Set<Inventory.StorageLocation>();
     public DbSet<Inventory.StockBalance> StockBalances => Set<Inventory.StockBalance>();
     public DbSet<Inventory.StockMovement> StockMovements => Set<Inventory.StockMovement>();
@@ -80,6 +81,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(i => new { i.Family, i.Active });
             e.HasMany(i => i.Suppliers).WithOne().HasForeignKey(s => s.CatalogItemId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Catalog.ProductFamily>(e =>
+        {
+            e.ToTable("product_family", "materials");
+            e.HasKey(f => f.Id);
+            e.Property(f => f.Id).HasColumnName("id");
+            e.Property(f => f.Name).HasColumnName("name").HasMaxLength(120).IsRequired();
+            e.Property(f => f.Notes).HasColumnName("notes").HasMaxLength(300);
+            e.Property(f => f.Active).HasColumnName("active");
+            e.Property(f => f.CreatedAt).HasColumnName("created_at");
+            e.Property(f => f.UpdatedAt).HasColumnName("updated_at");
+            e.Property(f => f.CreatedBy).HasColumnName("created_by");
+            e.HasIndex(f => f.Name).IsUnique();
         });
 
         modelBuilder.Entity<Catalog.CatalogItemSupplier>(e =>

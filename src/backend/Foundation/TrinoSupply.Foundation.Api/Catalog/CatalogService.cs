@@ -18,6 +18,69 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
     public static bool CanMaintain(string role) =>
         role is Roles.SupplyManager or Roles.SystemAdministrator;
 
+    // ---- famílias (cadastro próprio) ----------------------------------------
+    public Task<List<ProductFamily>> ListFamiliesAsync(bool includeInactive, CancellationToken ct = default)
+    {
+        var q = db.ProductFamilies.AsQueryable();
+        if (!includeInactive) q = q.Where(f => f.Active);
+        return q.OrderBy(f => f.Name).Take(300).ToListAsync(ct);
+    }
+
+    public async Task<(ProductFamily? family, UserError? error)> CreateFamilyAsync(
+        Guid actorId, string name, string? notes, CancellationToken ct = default)
+    {
+        var clean = (name ?? "").Trim().ToUpperInvariant();
+        if (clean.Length < 3) return (null, new("IC-ERR-020", "Informe o nome da família (mín. 3 caracteres)."));
+        if (await db.ProductFamilies.AnyAsync(f => f.Name == clean, ct))
+            return (null, new("IC-ERR-021", "Já existe uma família com este nome."));
+
+        var now = clock.GetUtcNow();
+        var family = new ProductFamily { Name = clean, Notes = Clean(notes), CreatedAt = now, UpdatedAt = now, CreatedBy = actorId };
+        db.ProductFamilies.Add(family);
+        await db.SaveChangesAsync(ct);
+        return (family, null);
+    }
+
+    /// <summary>Renomear a família também renomeia os produtos que a usam (a identidade é o nome).</summary>
+    public async Task<(ProductFamily? family, UserError? error)> UpdateFamilyAsync(
+        Guid id, string? name, string? notes, bool? active, CancellationToken ct = default)
+    {
+        var family = await db.ProductFamilies.SingleOrDefaultAsync(f => f.Id == id, ct);
+        if (family is null) return (null, new("IC-ERR-404", "Família não encontrada."));
+
+        if (name is not null)
+        {
+            var clean = name.Trim().ToUpperInvariant();
+            if (clean.Length < 3) return (null, new("IC-ERR-020", "Informe o nome da família (mín. 3 caracteres)."));
+            if (clean != family.Name)
+            {
+                var previous = family.Name;
+                foreach (var item in await db.CatalogItems.Where(i => i.Family == previous).ToListAsync(ct))
+                    item.Family = clean;
+
+                // renomear para uma família que já existe = unificar as duas (é o caso de
+                // "LIMPEZA" e "MATERIAL DE LIMPEZA" convivendo): os produtos migram e a
+                // família de origem deixa de existir.
+                var existing = await db.ProductFamilies.SingleOrDefaultAsync(f => f.Name == clean && f.Id != id, ct);
+                if (existing is not null)
+                {
+                    db.ProductFamilies.Remove(family);
+                    if (notes is not null) existing.Notes = Clean(notes);
+                    if (active is not null) existing.Active = active.Value;
+                    existing.UpdatedAt = clock.GetUtcNow();
+                    await db.SaveChangesAsync(ct);
+                    return (existing, null);
+                }
+                family.Name = clean;
+            }
+        }
+        if (notes is not null) family.Notes = Clean(notes);
+        if (active is not null) family.Active = active.Value;
+        family.UpdatedAt = clock.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+        return (family, null);
+    }
+
     public async Task<List<string>> FamiliesAsync(bool onlyActive, CancellationToken ct = default)
     {
         var query = db.CatalogItems.AsQueryable();
@@ -52,6 +115,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         if (family.Length < 3) return (null, new("IC-ERR-014", "Informe a família do item (ex.: MATERIAL DE LIMPEZA)."));
         if (referencePrice is < 0) return (null, new("IC-ERR-015", "O preço de referência não pode ser negativo."));
         if (minimumQty is < 0) return (null, new("IC-ERR-016", "O estoque mínimo não pode ser negativo."));
+        if (await FamilyErrorAsync(family, ct) is { } familyError) return (null, familyError);
 
         if (code.Length == 0) code = await GenerateCodeAsync(family, ct);   // regra automática pela família
         else if (code.Length < 2) return (null, new("IC-ERR-012", "O código do item precisa ter ao menos 2 caracteres."));
@@ -76,6 +140,18 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         ReplaceSuppliers(item, suppliers, now);
         await db.SaveChangesAsync(ct);
         return (item, null);
+    }
+
+    /// <summary>
+    /// A família precisa existir no cadastro — evita a mesma família escrita de formas diferentes.
+    /// Enquanto o cadastro estiver vazio (base anterior à mudança), qualquer família é aceita.
+    /// </summary>
+    private async Task<UserError?> FamilyErrorAsync(string family, CancellationToken ct)
+    {
+        if (!await db.ProductFamilies.AnyAsync(ct)) return null;
+        return await db.ProductFamilies.AnyAsync(f => f.Name == family && f.Active, ct)
+            ? null
+            : new("IC-ERR-022", $"Família \"{family}\" não cadastrada — cadastre em Cadastros → Famílias de Produtos.");
     }
 
     /// <summary>Código automático: 3 letras da família (sem acento) + sequência — ex.: MAT-001.</summary>
@@ -137,6 +213,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         {
             var f = family.Trim().ToUpperInvariant();
             if (f.Length < 3) return (null, new("IC-ERR-014", "Família inválida."));
+            if (await FamilyErrorAsync(f, ct) is { } familyError) return (null, familyError);
             item.Family = f;
         }
         if (unit is not null && !string.IsNullOrWhiteSpace(unit)) item.UnitOfMeasure = unit.Trim().ToUpperInvariant();

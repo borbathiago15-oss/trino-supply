@@ -44,3 +44,18 @@ public class CatalogItemSupplier
     public Guid? SupplierId { get; set; }                      // vínculo opcional com o cadastro oficial
     public DateTimeOffset CreatedAt { get; set; }
 }
+
+/// <summary>
+/// Família (grupo) de produtos — cadastro próprio para o catálogo não acumular variações
+/// da mesma família escritas de formas diferentes. O nome, em caixa alta, é a identidade.
+/// </summary>
+public class ProductFamily
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Name { get; set; } = string.Empty;   // único, caixa alta (ex.: MATERIAL DE LIMPEZA)
+    public string? Notes { get; set; }
+    public bool Active { get; set; } = true;
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public Guid CreatedBy { get; set; }
+}

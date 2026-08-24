@@ -37,6 +37,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(u => u.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
             e.Property(u => u.PasswordHash).HasColumnName("password_hash").IsRequired();
             e.Property(u => u.Role).HasColumnName("role").HasMaxLength(50).IsRequired();
+            e.Property(u => u.Modules).HasColumnName("modules").HasMaxLength(300);
             e.Property(u => u.Active).HasColumnName("active");
             e.Property(u => u.CreatedAt).HasColumnName("created_at");
             e.Property(u => u.UpdatedAt).HasColumnName("updated_at");

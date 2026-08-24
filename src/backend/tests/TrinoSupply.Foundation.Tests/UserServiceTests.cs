@@ -139,4 +139,29 @@ public class UserServiceTests
 
         Assert.Equal("IAM-ERR-013", error!.Code);
     }
+
+    [Fact]
+    public async Task Modulos_do_cadastro_restringem_e_invalidos_sao_recusados()
+    {
+        var (users, _, _, admin) = Build();
+
+        var (maria, ok) = await users.CreateAsync("maria@trino.test", "Maria", Roles.Requester,
+            "SenhaDaMaria#1", ["SOLICITACOES"]);
+        Assert.Null(ok);
+        Assert.Equal(["SOLICITACOES"], AppModules.EffectiveFor(maria!));
+
+        var (_, invalid) = await users.CreateAsync("jose@trino.test", "José", Roles.Requester,
+            "SenhaDoJose#123", ["NAO_EXISTE"]);
+        Assert.Equal("IAM-ERR-017", invalid!.Code);
+
+        // sem módulos definidos → padrão do papel; admin sempre tem todos
+        var (padrao, _) = await users.CreateAsync("rita@trino.test", "Rita", Roles.Requester, "SenhaDaRita#123");
+        Assert.Equal(AppModules.DefaultsFor(Roles.Requester), AppModules.EffectiveFor(padrao!));
+        Assert.Equal(AppModules.All, AppModules.EffectiveFor(admin));
+
+        // atualização substitui a autorização
+        var (updated, upOk) = await users.UpdateAsync(maria!.Id, admin.Id, null, null, null, ["MATERIAL", "ESTOQUE"]);
+        Assert.Null(upOk);
+        Assert.Equal(["MATERIAL", "ESTOQUE"], AppModules.EffectiveFor(updated!));
+    }
 }

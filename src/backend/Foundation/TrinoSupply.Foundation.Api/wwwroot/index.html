@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Trino Supply — Acesso</title>
+  <title>Trino Supply</title>
   <style>
     :root {
       --bg: #0f172a;
@@ -17,6 +17,8 @@
       --danger-bg: #fef2f2;
       --ok: #15803d;
       --ok-bg: #f0fdf4;
+      --warn: #854d0e;
+      --warn-bg: #fef9c3;
       --border: #e2e8f0;
       --radius: 12px;
     }
@@ -24,22 +26,23 @@
     body {
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       background: linear-gradient(160deg, #0f172a 0%, #1e293b 60%, #1d4ed8 140%);
-      min-height: 100vh; display: flex; align-items: flex-start; justify-content: center;
-      color: var(--text); padding: 32px 16px;
+      min-height: 100vh; color: var(--text);
     }
+    body.login-mode { display: flex; align-items: flex-start; justify-content: center; padding: 32px 16px; }
+    body.app-mode { background: var(--surface-muted); }
+
     .card {
       background: var(--surface); border-radius: var(--radius);
       box-shadow: 0 20px 60px rgba(2, 6, 23, .45);
       width: 100%; max-width: 440px; padding: 36px 32px;
-      transition: max-width .2s ease;
     }
-    .card.wide { max-width: 760px; }
     .brand { text-align: center; margin-bottom: 26px; }
     .brand .mark { font-size: 26px; font-weight: 800; letter-spacing: -.5px; }
     .brand .mark span { color: var(--brand); }
     .brand .tag { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
     h1 { font-size: 17px; margin-bottom: 18px; font-weight: 600; }
-    h2 { font-size: 14px; margin: 26px 0 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
+    h2 { font-size: 14px; margin: 22px 0 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
+    h2:first-child { margin-top: 0; }
     label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 5px; }
     input, select {
       width: 100%; padding: 10px 12px; font-size: 14.5px; background: #fff;
@@ -60,38 +63,96 @@
     .msg { display: none; margin-top: 14px; padding: 11px 12px; font-size: 13.5px; border-radius: 8px; }
     .msg[data-show="true"] { display: block; }
     .msg.error { background: var(--danger-bg); color: var(--danger); border: 1px solid #fecaca; }
-    .msg.ok { background: var(--ok-bg); color: var(--ok); border: 1px solid #bbf7d0; }
     .footer { margin-top: 22px; text-align: center; font-size: 12px; color: var(--text-muted); }
-    .hello { font-size: 14.5px; color: var(--text-muted); margin-bottom: 16px; }
-    .hello strong { color: var(--text); }
-    .modules { display: grid; gap: 8px; }
-    .module {
-      display: flex; justify-content: space-between; align-items: center; gap: 10px;
-      background: var(--surface-muted); border: 1px solid var(--border);
-      border-radius: 8px; padding: 11px 13px; font-size: 13.5px;
+
+    /* ---- app shell ---- */
+    .shell { display: none; min-height: 100vh; }
+    body.app-mode .shell { display: flex; }
+    .sidebar {
+      width: 252px; flex-shrink: 0; background: var(--bg); color: #cbd5e1;
+      padding: 20px 12px 28px; display: flex; flex-direction: column; gap: 2px;
     }
+    .sidebar .mark { font-size: 19px; font-weight: 800; color: #fff; padding: 0 10px 14px; letter-spacing: -.4px; }
+    .sidebar .mark span { color: #93c5fd; }
+    .nav-title { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: #64748b; padding: 14px 10px 5px; }
+    .nav-item {
+      display: flex; justify-content: space-between; align-items: center; width: 100%;
+      text-align: left; background: none; border: 0; color: #cbd5e1;
+      padding: 8px 12px; border-radius: 8px; font-size: 13.5px; font-weight: 500; cursor: pointer;
+    }
+    .nav-item:hover { background: #1e293b; color: #fff; }
+    .nav-item.active { background: var(--brand); color: #fff; }
+    .nav-item .count { font-size: 11px; background: rgba(255,255,255,.16); border-radius: 99px; padding: 1px 7px; }
+    .content { flex: 1; padding: 22px 28px 48px; min-width: 0; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+    .topbar .title { font-size: 19px; font-weight: 700; color: var(--text); }
+    .topbar .who { font-size: 13px; color: var(--text-muted); display: flex; align-items: center; gap: 10px; }
+    .panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; margin-bottom: 16px; }
+    .view { display: none; }
+    .view.active { display: block; }
+
+    .alert-card {
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      border: 1px solid var(--border); border-left: 5px solid var(--brand);
+      border-radius: 10px; padding: 13px 15px; margin-bottom: 10px; background: #fff;
+      cursor: pointer; font-size: 14px;
+    }
+    .alert-card:hover { background: var(--surface-muted); }
+    .alert-card.alta { border-left-color: var(--danger); }
+    .alert-card.media { border-left-color: #ca8a04; }
+    .alert-card.info { border-left-color: var(--brand); }
+    .alert-card .n { font-size: 20px; font-weight: 800; min-width: 40px; text-align: center; }
+    .alert-card.alta .n { color: var(--danger); }
+    .alert-card.media .n { color: var(--warn); }
+    .alert-card.info .n { color: var(--brand); }
+
     .badge { font-size: 10.5px; font-weight: 700; padding: 3px 8px; border-radius: 99px; white-space: nowrap; background: #e0e7ff; color: var(--brand-dark); }
-    .badge.dev { background: #fef9c3; color: #854d0e; }
+    .badge.dev { background: var(--warn-bg); color: var(--warn); }
     .badge.off { background: #fee2e2; color: var(--danger); }
     .badge.on { background: #dcfce7; color: var(--ok); }
+    .tablewrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
     th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); padding: 8px 8px; border-bottom: 1px solid var(--border); }
     td { padding: 9px 8px; border-bottom: 1px solid var(--surface-muted); vertical-align: middle; }
     td .sub { color: var(--text-muted); font-size: 12px; }
-    .row-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .row-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
     .row-actions button { padding: 5px 10px; font-size: 12px; }
+    .row-actions select { width: auto; padding: 5px 8px; font-size: 12px; }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
-    @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
-    .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 4px; }
+    .hello { font-size: 14px; color: var(--text-muted); }
+    .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin-top: 6px; }
+    .checks label { display: flex; align-items: center; gap: 8px; font-weight: 500; margin: 0; font-size: 13.5px; }
+    .checks input { width: auto; }
+
+    #toast {
+      position: fixed; top: 16px; right: 16px; z-index: 50; display: none;
+      max-width: 380px; padding: 12px 16px; border-radius: 10px; font-size: 13.5px; font-weight: 500;
+      box-shadow: 0 10px 30px rgba(2,6,23,.25);
+    }
+    #toast.ok { display: block; background: var(--ok-bg); color: var(--ok); border: 1px solid #bbf7d0; }
+    #toast.error { display: block; background: var(--danger-bg); color: var(--danger); border: 1px solid #fecaca; }
+
+    @media (max-width: 820px) {
+      .shell { flex-direction: column; }
+      .sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px; padding: 12px; }
+      .sidebar .mark { padding: 0 10px 0 4px; }
+      .nav-title { display: none; }
+      .nav-item { width: auto; }
+      .content { padding: 16px; }
+      .grid2 { grid-template-columns: 1fr; }
+      .checks { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
-<body>
-  <main class="card" id="card">
+<body class="login-mode">
+  <div id="toast"></div>
+
+  <!-- ===================== LOGIN ===================== -->
+  <main class="card" id="login-card">
     <div class="brand">
       <div class="mark">TRINO <span>SUPPLY</span></div>
       <div class="tag">Enterprise Supply Management</div>
     </div>
-
     <section id="login-view">
       <h1>Entrar na plataforma</h1>
       <form id="login-form" autocomplete="on">
@@ -102,171 +163,259 @@
         <button id="submit" type="submit" class="full">Entrar</button>
       </form>
       <div id="login-msg" class="msg error" role="alert" aria-live="polite"></div>
+      <div class="footer">Trino Supply · acesso restrito e auditado</div>
     </section>
+  </main>
 
-    <section id="app-view" hidden>
-      <div class="toolbar">
-        <p class="hello">Sessão ativa como <strong id="user-name"></strong> <span id="user-role" class="sub"></span></p>
-        <button id="logout" class="danger" type="button">Sair</button>
+  <!-- ===================== APP SHELL ===================== -->
+  <div class="shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="mark">TRINO <span>SUPPLY</span></div>
+      <nav id="nav"></nav>
+    </aside>
+
+    <main class="content">
+      <div class="topbar">
+        <div class="title" id="page-title">Dashboard</div>
+        <div class="who">
+          <span>Sessão de <strong id="user-name"></strong> <span id="user-role"></span></span>
+          <button id="logout" class="danger" type="button">Sair</button>
+        </div>
       </div>
 
-      <h2>Módulos</h2>
-      <div class="modules">
-        <div class="module"><span>Foundation · Identidade e Usuários</span><span class="badge">ATIVO</span></div>
-        <div class="module"><span>PR-001 · Requisição de Compra</span><span class="badge dev">EM DESENVOLVIMENTO</span></div>
-        <div class="module"><span>MMS-002 · Catálogo de Itens</span><span class="badge dev">EM DESENVOLVIMENTO</span></div>
-        <div class="module"><span>MMS-003 · Solicitação de Material</span><span class="badge dev">EM DESENVOLVIMENTO</span></div>
-        <div class="module"><span>MMS-004 · Estoque</span><span class="badge dev">EM DESENVOLVIMENTO</span></div>
-        <div class="module"><span>MMS-005 · Recebimento (entrada)</span><span class="badge dev">EM DESENVOLVIMENTO</span></div>
-      </div>
-
-      <section id="pr-view" hidden>
-        <h2>Requisições de Compra</h2>
-        <div id="pr-msg" class="msg" role="alert" aria-live="polite"></div>
-
-        <div class="toolbar">
-          <div>
-            <button id="pr-tab-mine" class="secondary" type="button">Minhas requisições</button>
-            <button id="pr-tab-appr" class="secondary" type="button" hidden>Aprovações <span id="appr-count"></span></button>
-          </div>
-          <button id="pr-new" type="button" hidden>+ Nova requisição</button>
+      <!-- Dashboard -->
+      <section class="view" id="view-dashboard">
+        <div class="panel">
+          <h2>Central de Avisos</h2>
+          <div id="dash-alerts"><p class="hello">Carregando avisos…</p></div>
         </div>
-
-        <div id="pr-list"></div>
-
-        <form id="pr-form" hidden>
-          <h2 id="pr-form-title">Nova requisição</h2>
-
-          <label>Tipo de requisição</label>
-          <div class="modules" style="margin-bottom:6px">
-            <label class="module" style="cursor:pointer"><span><input type="radio" name="pr-kind" value="AVULSA" checked /> <strong>Avulsa</strong> — digito os itens livremente</span></label>
-            <label class="module" style="cursor:pointer"><span><input type="radio" name="pr-kind" value="CATALOGO" /> <strong>Por família (catálogo)</strong> — escolho vários itens de uma lista (ex.: Material de Limpeza)</span></label>
-          </div>
-
-          <div class="grid2">
-            <div><label for="pr-cc">Centro de custo</label><input id="pr-cc" required placeholder="ex.: CC-TI-001" /></div>
-            <div>
-              <label for="pr-priority">Prioridade</label>
-              <select id="pr-priority">
-                <option value="LOW">Baixa</option>
-                <option value="NORMAL" selected>Normal</option>
-                <option value="HIGH">Alta</option>
-                <option value="URGENT">Urgente</option>
-              </select>
-            </div>
-          </div>
-          <label for="pr-needed">Necessário até (opcional)</label>
-          <input id="pr-needed" type="date" />
-          <label for="pr-just">Justificativa</label>
-          <input id="pr-just" required placeholder="Por que esta compra é necessária?" />
-
-          <div id="pr-free-block">
-            <h2>Itens</h2>
-            <div id="pr-items"></div>
-            <button id="pr-add-item" class="secondary" type="button">+ Adicionar item</button>
-          </div>
-
-          <div id="pr-cat-block" hidden>
-            <h2>Itens da família</h2>
-            <label for="pr-family">Família</label>
-            <select id="pr-family"></select>
-            <div id="pr-cat-list" style="margin-top:10px"></div>
-          </div>
-
-          <button type="submit" class="full">Salvar rascunho</button>
-          <button id="pr-form-cancel" class="secondary full" type="button" style="margin-top:8px">Voltar</button>
-        </form>
       </section>
 
-      <section id="mr-view" hidden>
-        <h2>Solicitações de Material</h2>
-        <div id="mr-msg" class="msg" role="alert" aria-live="polite"></div>
-
-        <div class="toolbar">
-          <p class="hello sub">Peça ao almoxarifado itens do catálogo. Sem saldo em estoque, o item segue para rota de compra.</p>
-          <button id="mr-new" type="button" hidden>+ Nova solicitação</button>
-        </div>
-
-        <div id="mr-list"></div>
-
-        <form id="mr-form" hidden>
-          <h2>Nova solicitação de material</h2>
-          <div class="grid2">
-            <div><label for="mr-cc">Centro de custo</label><input id="mr-cc" required placeholder="ex.: CC-ADM-001" /></div>
-            <div><label for="mr-notes">Observações</label><input id="mr-notes" placeholder="opcional" /></div>
-          </div>
-          <label for="mr-family">Família do catálogo</label>
-          <select id="mr-family"></select>
-          <div id="mr-cat-list" style="margin-top:10px"></div>
-          <button type="submit" class="full" style="margin-top:10px">Enviar ao almoxarifado</button>
-          <button id="mr-form-cancel" class="secondary full" type="button" style="margin-top:8px">Voltar</button>
-        </form>
-      </section>
-
-      <section id="wh-view" hidden>
-        <h2>Almoxarifado</h2>
-        <div id="wh-msg" class="msg" role="alert" aria-live="polite"></div>
-
-        <div class="toolbar">
-          <div>
-            <button id="wh-tab-queue" class="secondary" type="button">Fila de atendimento <span id="wh-queue-count"></span></button>
-            <button id="wh-tab-stock" class="secondary" type="button">Posição de estoque</button>
-            <button id="wh-tab-mov" class="secondary" type="button">Movimentações</button>
-          </div>
-          <button id="wh-refresh" class="secondary" type="button">Atualizar</button>
-        </div>
-        <div id="wh-panel"></div>
-
-        <h2>Entrada de material (recebimento)</h2>
-        <form id="wh-entry-form">
-          <div class="grid2">
-            <div><label for="we-item">Item do catálogo</label><select id="we-item" required></select></div>
-            <div><label for="we-loc">Local de estoque</label><select id="we-loc" required></select></div>
-          </div>
-          <div class="grid2">
-            <div><label for="we-qty">Quantidade</label><input id="we-qty" type="number" min="0.01" step="0.01" required /></div>
-            <div><label for="we-origin">Origem</label>
-              <select id="we-origin">
-                <option value="RECEBIMENTO">Recebimento (NF conferida)</option>
-                <option value="DEVOLUCAO">Devolução</option>
-                <option value="CARGA_INICIAL">Carga inicial</option>
-              </select>
-            </div>
-          </div>
-          <label for="we-ref">Documento de origem</label>
-          <input id="we-ref" required placeholder="ex.: NF 12345" />
-          <button type="submit" class="full" style="margin-top:10px">Registrar entrada</button>
-        </form>
-
-        <div id="wh-loc-admin" hidden>
-          <h2>Novo local de estoque</h2>
-          <form id="wh-loc-form">
+      <!-- Solicitações: pedido unitário -->
+      <section class="view" id="view-pr-new-unit">
+        <div class="panel">
+          <h2>Pedido Unitário (itens digitados)</h2>
+          <form id="pru-form">
             <div class="grid2">
-              <div><label for="wl-code">Código</label><input id="wl-code" required minlength="2" placeholder="ex.: ALM-01" /></div>
-              <div><label for="wl-name">Nome</label><input id="wl-name" required minlength="3" placeholder="ex.: Almoxarifado Central" /></div>
+              <div><label for="pru-cc">Centro de custo</label><input id="pru-cc" required placeholder="ex.: CC-TI-001" /></div>
+              <div><label for="pru-priority">Prioridade</label>
+                <select id="pru-priority">
+                  <option value="LOW">Baixa</option>
+                  <option value="NORMAL" selected>Normal</option>
+                  <option value="HIGH">Alta</option>
+                  <option value="URGENT">Urgente</option>
+                </select>
+              </div>
             </div>
-            <button type="submit" class="full" style="margin-top:10px">Criar local</button>
+            <label for="pru-needed">Necessário até (opcional)</label>
+            <input id="pru-needed" type="date" />
+            <label for="pru-just">Justificativa</label>
+            <input id="pru-just" required placeholder="Por que esta compra é necessária?" />
+            <h2>Itens</h2>
+            <div id="pru-items"></div>
+            <button id="pru-add-item" class="secondary" type="button">+ Adicionar item</button>
+            <button type="submit" class="full">Criar rascunho do pedido</button>
           </form>
         </div>
       </section>
 
-      <section id="buy-view" hidden>
-        <h2>Compras</h2>
-        <div id="buy-msg" class="msg" role="alert" aria-live="polite"></div>
-
-        <div class="toolbar">
-          <div>
-            <button id="buy-tab-demands" class="secondary" type="button" hidden>Demandas <span id="buy-demand-count"></span></button>
-            <button id="buy-tab-orders" class="secondary" type="button">Pedidos de compra</button>
-            <button id="buy-tab-suppliers" class="secondary" type="button" hidden>Fornecedores</button>
-          </div>
-          <button id="buy-refresh" class="secondary" type="button">Atualizar</button>
+      <!-- Solicitações: pedido múltiplo -->
+      <section class="view" id="view-pr-new-multi">
+        <div class="panel">
+          <h2>Pedido Múltiplo (lista de produtos por família)</h2>
+          <form id="prm-form">
+            <div class="grid2">
+              <div><label for="prm-cc">Centro de custo</label><input id="prm-cc" required placeholder="ex.: CC-ADM-001" /></div>
+              <div><label for="prm-priority">Prioridade</label>
+                <select id="prm-priority">
+                  <option value="LOW">Baixa</option>
+                  <option value="NORMAL" selected>Normal</option>
+                  <option value="HIGH">Alta</option>
+                  <option value="URGENT">Urgente</option>
+                </select>
+              </div>
+            </div>
+            <label for="prm-just">Justificativa</label>
+            <input id="prm-just" required placeholder="ex.: Reposição mensal de material de limpeza" />
+            <label for="prm-family">Família de produtos</label>
+            <select id="prm-family"></select>
+            <div id="prm-cat-list" class="tablewrap" style="margin-top:10px"></div>
+            <button type="submit" class="full">Criar rascunho do pedido</button>
+          </form>
         </div>
-        <div id="buy-panel"></div>
+      </section>
 
-        <div id="buy-supplier-admin" hidden>
+      <!-- Solicitações: meus pedidos -->
+      <section class="view" id="view-pr-mine">
+        <div class="panel">
+          <h2>Meus Pedidos de Compra</h2>
+          <div id="pr-list" class="tablewrap"></div>
+        </div>
+      </section>
+
+      <!-- Central de aprovação -->
+      <section class="view" id="view-pr-approvals">
+        <div class="panel">
+          <h2>Central de Aprovação</h2>
+          <div id="appr-list" class="tablewrap"></div>
+        </div>
+      </section>
+
+      <!-- Material: solicitar -->
+      <section class="view" id="view-mr-new">
+        <div class="panel">
+          <h2>Solicitar Material ao Almoxarifado</h2>
+          <p class="hello">Itens do catálogo por família. Sem saldo em estoque, o item segue para rota de compra.</p>
+          <form id="mr-form">
+            <div class="grid2">
+              <div><label for="mr-cc">Centro de custo</label><input id="mr-cc" required placeholder="ex.: CC-ADM-001" /></div>
+              <div><label for="mr-notes">Observações</label><input id="mr-notes" placeholder="opcional" /></div>
+            </div>
+            <label for="mr-family">Família de produtos</label>
+            <select id="mr-family"></select>
+            <div id="mr-cat-list" class="tablewrap" style="margin-top:10px"></div>
+            <button type="submit" class="full">Enviar ao almoxarifado</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Material: minhas solicitações -->
+      <section class="view" id="view-mr-mine">
+        <div class="panel">
+          <h2>Minhas Solicitações de Material</h2>
+          <div id="mr-list" class="tablewrap"></div>
+        </div>
+      </section>
+
+      <!-- Estoque: dashboard -->
+      <section class="view" id="view-stock-dash">
+        <div class="panel">
+          <h2>Posição de Estoque</h2>
+          <div id="stock-balances" class="tablewrap"></div>
+        </div>
+        <div class="panel">
+          <h2>Últimas Movimentações (kardex)</h2>
+          <div id="stock-movements" class="tablewrap"></div>
+        </div>
+      </section>
+
+      <!-- Estoque: fila -->
+      <section class="view" id="view-wh-queue">
+        <div class="panel">
+          <h2>Fila de Atendimento do Almoxarifado</h2>
+          <div id="wh-queue-list" class="tablewrap"></div>
+        </div>
+      </section>
+
+      <!-- Estoque: entrada -->
+      <section class="view" id="view-stock-entry">
+        <div class="panel">
+          <h2>Entrada de Estoque</h2>
+          <form id="entry-form">
+            <div class="grid2">
+              <div><label for="we-item">Produto</label><select id="we-item" required></select></div>
+              <div><label for="we-loc">Local de estoque</label><select id="we-loc" required></select></div>
+            </div>
+            <div class="grid2">
+              <div><label for="we-qty">Quantidade</label><input id="we-qty" type="number" min="0.01" step="0.01" required /></div>
+              <div><label for="we-origin">Origem</label>
+                <select id="we-origin">
+                  <option value="RECEBIMENTO">Recebimento (NF conferida)</option>
+                  <option value="DEVOLUCAO">Devolução</option>
+                  <option value="CARGA_INICIAL">Carga inicial</option>
+                </select>
+              </div>
+            </div>
+            <label for="we-ref">Documento de origem</label>
+            <input id="we-ref" required placeholder="ex.: NF 12345" />
+            <button type="submit" class="full">Registrar entrada</button>
+          </form>
+        </div>
+        <div class="panel" id="loc-admin" hidden>
+          <h2>Novo local de estoque</h2>
+          <form id="loc-form">
+            <div class="grid2">
+              <div><label for="wl-code">Código</label><input id="wl-code" required minlength="2" placeholder="ex.: ALM-01" /></div>
+              <div><label for="wl-name">Nome</label><input id="wl-name" required minlength="3" placeholder="ex.: Almoxarifado Central" /></div>
+            </div>
+            <button type="submit" class="full">Criar local</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Estoque: saída -->
+      <section class="view" id="view-stock-issue">
+        <div class="panel">
+          <h2>Saída de Estoque (consumo)</h2>
+          <p class="hello">A saída nunca deixa o saldo negativo. Atendimentos de solicitação são feitos pela Fila de Atendimento.</p>
+          <form id="issue-form">
+            <div class="grid2">
+              <div><label for="wi-item">Produto</label><select id="wi-item" required></select></div>
+              <div><label for="wi-loc">Local de estoque</label><select id="wi-loc" required></select></div>
+            </div>
+            <div class="grid2">
+              <div><label for="wi-qty">Quantidade</label><input id="wi-qty" type="number" min="0.01" step="0.01" required /></div>
+              <div><label for="wi-ref">Documento/motivo</label><input id="wi-ref" required placeholder="ex.: OS 981 / consumo interno" /></div>
+            </div>
+            <button type="submit" class="full">Registrar saída</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Compras: demandas -->
+      <section class="view" id="view-buy-demands">
+        <div class="panel">
+          <h2>Requisições aprovadas aguardando pedido</h2>
+          <div id="buy-dem-prs" class="tablewrap"></div>
+        </div>
+        <div class="panel">
+          <h2>Itens em rota de compra (almoxarifado)</h2>
+          <div id="buy-dem-route" class="tablewrap"></div>
+        </div>
+      </section>
+
+      <!-- Compras: pedidos -->
+      <section class="view" id="view-buy-orders">
+        <div class="panel">
+          <h2>Pedidos de Compra</h2>
+          <div id="buy-orders-list" class="tablewrap"></div>
+        </div>
+      </section>
+
+      <!-- Cadastros: usuários -->
+      <section class="view" id="view-users">
+        <div class="panel">
+          <h2>Usuários</h2>
+          <div id="users-list" class="tablewrap"></div>
+        </div>
+        <div class="panel">
+          <h2 id="user-form-title">Novo usuário</h2>
+          <form id="user-form">
+            <div class="grid2">
+              <div><label for="nu-name">Nome</label><input id="nu-name" required minlength="2" /></div>
+              <div><label for="nu-email">E-mail</label><input id="nu-email" type="email" required /></div>
+            </div>
+            <div class="grid2">
+              <div><label for="nu-role">Papel</label><select id="nu-role" required></select></div>
+              <div><label for="nu-pass">Senha inicial (mín. 12)</label><input id="nu-pass" type="password" required minlength="12" autocomplete="new-password" /></div>
+            </div>
+            <label>Autorizações — este usuário poderá usar:</label>
+            <div class="checks" id="nu-modules"></div>
+            <button type="submit" class="full" id="user-form-submit">Criar usuário</button>
+            <button type="button" class="secondary full" id="user-form-cancel" style="margin-top:8px" hidden>Cancelar edição</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- Cadastros: fornecedores -->
+      <section class="view" id="view-suppliers">
+        <div class="panel">
+          <h2>Fornecedores</h2>
+          <div id="sup-list" class="tablewrap"></div>
+        </div>
+        <div class="panel">
           <h2>Novo fornecedor</h2>
-          <form id="buy-sup-form">
+          <form id="sup-form">
             <div class="grid2">
               <div><label for="bs-legal">Razão social</label><input id="bs-legal" required minlength="3" placeholder="ex.: Distribuidora Alfa LTDA" /></div>
               <div><label for="bs-tax">CNPJ/CPF</label><input id="bs-tax" required placeholder="somente números" /></div>
@@ -275,167 +424,193 @@
               <div><label for="bs-trade">Nome fantasia</label><input id="bs-trade" placeholder="opcional" /></div>
               <div><label for="bs-email">E-mail</label><input id="bs-email" type="email" placeholder="opcional" /></div>
             </div>
-            <button type="submit" class="full" style="margin-top:10px">Cadastrar fornecedor</button>
+            <button type="submit" class="full">Cadastrar fornecedor</button>
           </form>
         </div>
       </section>
 
-      <section id="catalog-view" hidden>
-        <h2>Catálogo de Itens</h2>
-        <div id="cat-msg" class="msg" role="alert" aria-live="polite"></div>
-        <div class="toolbar">
-          <select id="cat-filter-family"><option value="">Todas as famílias</option></select>
-          <button id="cat-refresh" class="secondary" type="button">Atualizar</button>
+      <!-- Cadastros: produtos -->
+      <section class="view" id="view-products">
+        <div class="panel">
+          <div class="topbar" style="margin-bottom:8px">
+            <h2 style="margin:0">Cadastro de Produtos</h2>
+            <select id="cat-filter-family" style="width:auto"><option value="">Todas as famílias</option></select>
+          </div>
+          <div id="cat-list" class="tablewrap"></div>
         </div>
-        <table aria-label="Itens do catálogo">
-          <thead><tr><th>Código</th><th>Descrição</th><th>Família</th><th>Preço ref.</th><th>Situação</th><th>Ações</th></tr></thead>
-          <tbody id="cat-body"></tbody>
-        </table>
-
-        <h2>Novo item do catálogo</h2>
-        <form id="cat-form">
-          <div class="grid2">
-            <div><label for="ci-code">Código</label><input id="ci-code" required minlength="2" placeholder="ex.: LMP-001" /></div>
-            <div><label for="ci-family">Família</label><input id="ci-family" required minlength="3" list="cat-families" placeholder="ex.: MATERIAL DE LIMPEZA" /></div>
-            <div><label for="ci-desc">Descrição</label><input id="ci-desc" required minlength="3" placeholder="ex.: Detergente neutro 500ml" /></div>
+        <div class="panel" id="cat-admin" hidden>
+          <h2>Novo produto</h2>
+          <form id="cat-form">
+            <div class="grid2">
+              <div><label for="ci-code">Código</label><input id="ci-code" required minlength="2" placeholder="ex.: LMP-001" /></div>
+              <div><label for="ci-family">Família</label><input id="ci-family" required minlength="3" list="cat-families" placeholder="ex.: MATERIAL DE LIMPEZA" /></div>
+            </div>
+            <label for="ci-desc">Descrição</label>
+            <input id="ci-desc" required minlength="3" placeholder="ex.: Detergente neutro 500ml" />
             <div class="grid2">
               <div><label for="ci-unit">Unidade</label><input id="ci-unit" placeholder="UN" /></div>
               <div><label for="ci-price">Preço ref. (R$)</label><input id="ci-price" type="number" min="0" step="0.01" placeholder="opcional" /></div>
             </div>
-          </div>
-          <datalist id="cat-families"></datalist>
-          <button type="submit" class="full">Adicionar ao catálogo</button>
-        </form>
+            <datalist id="cat-families"></datalist>
+            <button type="submit" class="full">Adicionar produto</button>
+          </form>
+        </div>
       </section>
-
-      <section id="admin-view" hidden>
-        <h2>Usuários</h2>
-        <div id="users-msg" class="msg" role="alert" aria-live="polite"></div>
-        <table aria-label="Usuários cadastrados">
-          <thead><tr><th>Usuário</th><th>Papel</th><th>Situação</th><th>Ações</th></tr></thead>
-          <tbody id="users-body"></tbody>
-        </table>
-
-        <h2>Novo usuário</h2>
-        <form id="create-form">
-          <div class="grid2">
-            <div><label for="nu-name">Nome</label><input id="nu-name" required minlength="2" /></div>
-            <div><label for="nu-email">E-mail</label><input id="nu-email" type="email" required /></div>
-            <div>
-              <label for="nu-role">Papel</label>
-              <select id="nu-role" required></select>
-            </div>
-            <div><label for="nu-pass">Senha inicial (mín. 12)</label><input id="nu-pass" type="password" required minlength="12" autocomplete="new-password" /></div>
-          </div>
-          <button type="submit" class="full">Criar usuário</button>
-        </form>
-      </section>
-    </section>
-
-    <div class="footer">Trino Supply · acesso restrito e auditado</div>
-  </main>
+    </main>
+  </div>
 
   <script>
+    'use strict';
     const $ = (id) => document.getElementById(id);
     const ROLE_LABELS = {
-      SystemAdministrator: 'Administrador do Sistema',
-      Requester: 'Solicitante',
-      Approver: 'Aprovador',
-      PurchasingOfficer: 'Comprador',
-      WarehouseOperator: 'Almoxarife',
-      WarehouseSupervisor: 'Supervisor de Almoxarifado',
-      SupplyManager: 'Gestor de Suprimentos',
-      Auditor: 'Auditor',
+      SystemAdministrator: 'Administrador', Requester: 'Solicitante', Approver: 'Aprovador',
+      PurchasingOfficer: 'Comprador', WarehouseOperator: 'Almoxarife', WarehouseSupervisor: 'Supervisor de Almoxarifado',
+      SupplyManager: 'Gestor de Suprimentos', Auditor: 'Auditor',
+    };
+    const MODULE_LABELS = {
+      SOLICITACOES: 'Solicitações de Compra', APROVACAO: 'Central de Aprovação',
+      MATERIAL: 'Solicitação de Material', ESTOQUE: 'Estoque / Almoxarifado',
+      COMPRAS: 'Compras', PRODUTOS: 'Cadastro de Produtos',
+      FORNECEDORES: 'Cadastro de Fornecedores', USUARIOS: 'Cadastro de Usuários',
+    };
+    const DEFAULT_MODULES = {
+      SystemAdministrator: Object.keys(MODULE_LABELS),
+      Requester: ['SOLICITACOES', 'MATERIAL'],
+      Approver: ['SOLICITACOES', 'APROVACAO'],
+      PurchasingOfficer: ['COMPRAS', 'FORNECEDORES', 'ESTOQUE'],
+      WarehouseOperator: ['ESTOQUE'],
+      WarehouseSupervisor: ['ESTOQUE', 'PRODUTOS'],
+      SupplyManager: ['SOLICITACOES', 'APROVACAO', 'MATERIAL', 'ESTOQUE', 'COMPRAS', 'PRODUTOS', 'FORNECEDORES'],
+      Auditor: ['SOLICITACOES', 'ESTOQUE', 'COMPRAS'],
     };
     const store = {
-      get access() { try { return sessionStorage.getItem('ts.access'); } catch { return null; } },
-      get refresh() { try { return sessionStorage.getItem('ts.refresh'); } catch { return null; } },
-      set(t) { try { sessionStorage.setItem('ts.access', t.accessToken); sessionStorage.setItem('ts.refresh', t.refreshToken); } catch {} },
-      clear() { try { sessionStorage.clear(); } catch {} },
+      get access() { return sessionStorage.getItem('ts.access'); },
+      get refresh() { return sessionStorage.getItem('ts.refresh'); },
+      set(data) { sessionStorage.setItem('ts.access', data.accessToken); sessionStorage.setItem('ts.refresh', data.refreshToken); },
+      clear() { sessionStorage.removeItem('ts.access'); sessionStorage.removeItem('ts.refresh'); },
     };
+    let currentUser = null;
 
-    function flash(el, text, kind) {
-      el.className = 'msg ' + kind; el.textContent = text; el.dataset.show = 'true';
-      if (kind === 'ok') setTimeout(() => { el.dataset.show = 'false'; }, 4000);
+    function toast(text, kind) {
+      const el = $('toast');
+      el.textContent = text; el.className = kind;
+      clearTimeout(el._t);
+      el._t = setTimeout(() => { el.className = ''; }, 4200);
     }
+    function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+    const money = (v) => (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
     async function api(path, options = {}) {
       const res = await fetch(path, {
         method: options.method || 'GET',
         headers: { 'Content-Type': 'application/json', ...(store.access ? { Authorization: 'Bearer ' + store.access } : {}) },
-        body: options.body ? JSON.stringify(options.body) : undefined,
+        body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw json.error || { message: 'Falha de comunicação com o servidor.' };
-      return json.data;
+      if (!res.ok) { const err = new Error(json.error?.message || 'Falha na operação.'); err.code = json.error?.code; err.status = res.status; throw err; }
+      return json.data ?? json;
     }
 
-    let currentUser = null;
+    // ---- capacidades por papel ----
+    const isAdmin = () => currentUser.role === 'SystemAdministrator';
+    const canCreatePr = () => ['Requester', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
+    const canDecidePr = () => ['Approver', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
+    const canRequestMr = () => ['Requester', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
+    const canWarehouse = () => ['WarehouseOperator', 'WarehouseSupervisor', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
+    const canBuy = () => ['PurchasingOfficer', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
+    const canMaintainCatalog = () => ['SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
+    const canManageLocations = () => ['WarehouseSupervisor', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
+    const hasModule = (m) => isAdmin() || (currentUser.modules || []).includes(m);
 
-    const canCreatePr = (r) => ['Requester', 'SupplyManager', 'SystemAdministrator'].includes(r);
-    const canDecidePr = (r) => ['Approver', 'SupplyManager', 'SystemAdministrator'].includes(r);
-    const canAccessPr = (r) => canCreatePr(r) || canDecidePr(r) || r === 'Auditor';
-    const canRequestMr = (r) => ['Requester', 'SupplyManager', 'SystemAdministrator'].includes(r);
-    const canWarehouse = (r) => ['WarehouseOperator', 'WarehouseSupervisor', 'SupplyManager', 'SystemAdministrator'].includes(r);
-    const canSeeMr = (r) => canRequestMr(r) || canWarehouse(r) || r === 'Auditor';
-    const canBuy = (r) => ['PurchasingOfficer', 'SupplyManager', 'SystemAdministrator'].includes(r);
-    const canSeeBuy = (r) => canBuy(r) || r === 'Auditor';
+    // ---- menu lateral ----
+    const MENU = [
+      { title: null, items: [{ id: 'dashboard', label: 'Dashboard', show: () => true }] },
+      { title: 'Solicitações de Compra', module: 'SOLICITACOES', items: [
+        { id: 'pr-new-unit', label: 'Pedido Unitário', show: canCreatePr },
+        { id: 'pr-new-multi', label: 'Pedido Múltiplo', show: canCreatePr },
+        { id: 'pr-mine', label: 'Meus Pedidos', show: () => true },
+        { id: 'pr-approvals', label: 'Central de Aprovação', module: 'APROVACAO', show: canDecidePr },
+      ]},
+      { title: 'Material', module: 'MATERIAL', items: [
+        { id: 'mr-new', label: 'Solicitar Material', show: canRequestMr },
+        { id: 'mr-mine', label: 'Minhas Solicitações', show: () => true },
+      ]},
+      { title: 'Estoque', module: 'ESTOQUE', items: [
+        { id: 'stock-dash', label: 'Dashboard de Estoque', show: () => true },
+        { id: 'wh-queue', label: 'Fila de Atendimento', show: canWarehouse },
+        { id: 'stock-entry', label: 'Entrada de Estoque', show: canWarehouse },
+        { id: 'stock-issue', label: 'Saída de Estoque', show: canWarehouse },
+      ]},
+      { title: 'Compras', module: 'COMPRAS', items: [
+        { id: 'buy-demands', label: 'Demandas', show: canBuy },
+        { id: 'buy-orders', label: 'Pedidos de Compra', show: () => true },
+      ]},
+      { title: 'Cadastros', items: [
+        { id: 'users', label: 'Usuários', module: 'USUARIOS', show: isAdmin },
+        { id: 'suppliers', label: 'Fornecedores', module: 'FORNECEDORES', show: canBuy },
+        { id: 'products', label: 'Produtos', module: 'PRODUTOS', show: () => true },
+      ]},
+    ];
+    const TITLES = {
+      dashboard: 'Dashboard', 'pr-new-unit': 'Pedido Unitário', 'pr-new-multi': 'Pedido Múltiplo',
+      'pr-mine': 'Meus Pedidos', 'pr-approvals': 'Central de Aprovação',
+      'mr-new': 'Solicitar Material', 'mr-mine': 'Minhas Solicitações',
+      'stock-dash': 'Dashboard de Estoque', 'wh-queue': 'Fila de Atendimento',
+      'stock-entry': 'Entrada de Estoque', 'stock-issue': 'Saída de Estoque',
+      'buy-demands': 'Demandas de Compra', 'buy-orders': 'Pedidos de Compra',
+      users: 'Cadastro de Usuários', suppliers: 'Cadastro de Fornecedores', products: 'Cadastro de Produtos',
+    };
+    const LOADERS = {};
+    let currentView = 'dashboard';
+
+    function visibleItems() {
+      const out = [];
+      for (const group of MENU) {
+        if (group.module && !hasModule(group.module)) continue;
+        const items = group.items.filter(i => (i.module ? hasModule(i.module) : true) && i.show());
+        if (items.length) out.push({ title: group.title, items });
+      }
+      return out;
+    }
+
+    function renderNav() {
+      $('nav').innerHTML = visibleItems().map(g =>
+        (g.title ? `<div class="nav-title">${escapeHtml(g.title)}</div>` : '') +
+        g.items.map(i => `<button class="nav-item" data-view="${i.id}"><span>${escapeHtml(i.label)}</span><span class="count" id="count-${i.id}" hidden></span></button>`).join('')
+      ).join('');
+    }
+
+    function goTo(view) {
+      if (!document.getElementById('view-' + view)) view = 'dashboard';
+      currentView = view;
+      document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+      $('view-' + view).classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+      $('page-title').textContent = TITLES[view] || 'Trino Supply';
+      LOADERS[view]?.();
+    }
+    $('nav').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('.nav-item');
+      if (btn) goTo(btn.dataset.view);
+    });
 
     function showApp(user) {
       currentUser = user;
-      $('login-view').hidden = true;
-      $('app-view').hidden = false;
+      document.body.classList.remove('login-mode');
+      document.body.classList.add('app-mode');
+      $('login-card').style.display = 'none';
       $('user-name').textContent = user.name || user.email;
       $('user-role').textContent = '(' + (ROLE_LABELS[user.role] || user.role) + ')';
-      const isAdmin = user.role === 'SystemAdministrator';
-      const canMaintainCatalog = ['SupplyManager', 'SystemAdministrator'].includes(user.role);
-      $('admin-view').hidden = !isAdmin;
-      $('catalog-view').hidden = !canMaintainCatalog;
-      const hasPr = canAccessPr(user.role);
-      $('pr-view').hidden = !hasPr;
-      const hasMr = canSeeMr(user.role);
-      $('mr-view').hidden = !hasMr;
-      const isWh = canWarehouse(user.role);
-      $('wh-view').hidden = !isWh;
-      $('card').classList.toggle('wide', isAdmin || hasPr || canMaintainCatalog || hasMr || isWh);
-      if (isAdmin) loadUsers();
-      if (canMaintainCatalog) loadCatalog();
-      if (hasPr) {
-        $('pr-new').hidden = !canCreatePr(user.role);
-        $('pr-tab-appr').hidden = !canDecidePr(user.role);
-        prTab = 'mine';
-        loadRequisitions();
-      }
-      if (hasMr) {
-        $('mr-new').hidden = !canRequestMr(user.role);
-        loadMrs();
-      }
-      if (isWh) {
-        $('wh-loc-admin').hidden = !['WarehouseSupervisor', 'SupplyManager', 'SystemAdministrator'].includes(user.role);
-        whTab = 'queue';
-        initWarehouse();
-      }
-      const isBuyer = canSeeBuy(user.role);
-      $('buy-view').hidden = !isBuyer;
-      if (isBuyer) {
-        const manage = canBuy(user.role);
-        $('buy-tab-demands').hidden = !manage;
-        $('buy-tab-suppliers').hidden = !manage;
-        $('buy-supplier-admin').hidden = !manage;
-        buyTab = manage ? 'demands' : 'orders';
-        initBuying();
-      }
-      $('card').classList.toggle('wide', isAdmin || hasPr || canMaintainCatalog || hasMr || isWh || isBuyer);
+      renderNav();
+      goTo('dashboard');
     }
-
     function showLogin() {
       store.clear(); currentUser = null;
-      $('app-view').hidden = true;
-      $('login-view').hidden = false;
-      $('card').classList.remove('wide');
+      document.body.classList.add('login-mode');
+      document.body.classList.remove('app-mode');
+      $('login-card').style.display = '';
     }
 
-    // ---- login/logout ----
     $('login-form').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       $('login-msg').dataset.show = 'false';
@@ -443,170 +618,41 @@
       try {
         const data = await api('/api/v1/auth/login', { method: 'POST', body: { email: $('email').value, password: $('password').value } });
         store.set(data); showApp(data.user);
-      } catch (err) { flash($('login-msg'), err.message || 'E-mail ou senha inválidos.', 'error'); }
-      finally { btn.disabled = false; btn.textContent = 'Entrar'; }
+      } catch (err) {
+        const el = $('login-msg'); el.textContent = err.message || 'E-mail ou senha inválidos.'; el.dataset.show = 'true';
+      } finally { btn.disabled = false; btn.textContent = 'Entrar'; }
     });
-
     $('logout').addEventListener('click', async () => {
       try { await api('/api/v1/auth/logout', { method: 'POST', body: { refreshToken: store.refresh } }); } catch {}
       showLogin();
     });
 
-    // ---- gestão de usuários (admin) ----
-    async function loadUsers() {
+    // ============ DASHBOARD ============
+    LOADERS['dashboard'] = async () => {
       try {
-        const data = await api('/api/v1/users/');
-        renderRoles(data.roles);
-        renderUsers(data.items);
-      } catch (err) { flash($('users-msg'), err.message || 'Falha ao carregar usuários.', 'error'); }
-    }
-
-    function renderRoles(roles) {
-      $('nu-role').innerHTML = roles.map(r => `<option value="${r}">${ROLE_LABELS[r] || r}</option>`).join('');
-    }
-
-    function renderUsers(items) {
-      $('users-body').innerHTML = items.map(u => `
-        <tr data-id="${u.id}">
-          <td>${escapeHtml(u.name)}<div class="sub">${escapeHtml(u.email)}</div></td>
-          <td>${ROLE_LABELS[u.role] || u.role}</td>
-          <td><span class="badge ${u.active ? 'on' : 'off'}">${u.active ? 'ATIVO' : 'INATIVO'}</span></td>
-          <td class="row-actions">
-            <button class="secondary" data-act="reset">Nova senha</button>
-            <button class="${u.active ? 'danger' : 'secondary'}" data-act="toggle">${u.active ? 'Inativar' : 'Reativar'}</button>
-          </td>
-        </tr>`).join('');
-    }
-
-    function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
-
-    $('users-body').addEventListener('click', async (ev) => {
-      const btn = ev.target.closest('button[data-act]');
-      if (!btn) return;
-      const id = btn.closest('tr').dataset.id;
-      try {
-        if (btn.dataset.act === 'toggle') {
-          const activate = btn.textContent === 'Reativar';
-          if (!activate && !confirm('Inativar este usuário? As sessões dele serão encerradas.')) return;
-          await api('/api/v1/users/' + id, { method: 'PATCH', body: { active: activate } });
-          flash($('users-msg'), activate ? 'Usuário reativado.' : 'Usuário inativado.', 'ok');
-        } else {
-          const pass = prompt('Nova senha para este usuário (mínimo 12 caracteres):');
-          if (!pass) return;
-          await api('/api/v1/users/' + id + '/reset-password', { method: 'POST', body: { newPassword: pass } });
-          flash($('users-msg'), 'Senha redefinida. As sessões do usuário foram encerradas.', 'ok');
-        }
-        loadUsers();
-      } catch (err) { flash($('users-msg'), err.message || 'Operação não permitida.', 'error'); }
-    });
-
-    $('create-form').addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      try {
-        await api('/api/v1/users/', { method: 'POST', body: {
-          name: $('nu-name').value, email: $('nu-email').value,
-          role: $('nu-role').value, password: $('nu-pass').value,
-        }});
-        flash($('users-msg'), 'Usuário criado com sucesso.', 'ok');
-        ev.target.reset();
-        loadUsers();
-      } catch (err) { flash($('users-msg'), err.message || 'Não foi possível criar o usuário.', 'error'); }
-    });
-
-    // ---- PR-001 — Requisições de Compra ----
-    let prTab = 'mine';
-    const STATUS_PR = {
-      DRAFT: ['Rascunho', 'dev'], IN_APPROVAL: ['Em aprovação', ''], APPROVED: ['Aprovada', 'on'],
-      REJECTED: ['Rejeitada', 'off'], RETURNED: ['Devolvida p/ ajuste', 'dev'], CANCELLED: ['Cancelada', 'off'],
-      SUBMITTED: ['Enviada', ''],
+        const { alerts } = await api('/api/v1/dashboard');
+        $('dash-alerts').innerHTML = alerts.length
+          ? alerts.map(a => `
+              <div class="alert-card ${a.severity}" data-view="${a.view}">
+                <span>${escapeHtml(a.text)}</span><span class="n">${a.count}</span>
+              </div>`).join('')
+          : '<p class="hello">Tudo em dia por aqui: nenhum aviso pendente. ✔</p>';
+      } catch (err) { $('dash-alerts').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
-    const money = (v) => (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-
-    async function loadRequisitions() {
-      try {
-        const path = prTab === 'appr' ? '/api/v1/approvals/pending' : '/api/v1/purchase-requisitions/';
-        const data = await api(path);
-        renderRequisitions(data.items);
-        if (canDecidePr(currentUser.role)) {
-          const appr = prTab === 'appr' ? data.items : (await api('/api/v1/approvals/pending')).items;
-          $('appr-count').textContent = '(' + appr.length + ')';
-        }
-      } catch (err) { flash($('pr-msg'), err.message || 'Falha ao carregar requisições.', 'error'); }
-    }
-
-    function prActions(r) {
-      const mine = r.requesterId === currentUser.id;
-      const acts = [];
-      if (prTab === 'appr' && canDecidePr(currentUser.role) && r.status === 'IN_APPROVAL' && !mine) {
-        acts.push('<button data-act="approve">Aprovar</button>',
-                  '<button class="secondary" data-act="return">Devolver</button>',
-                  '<button class="danger" data-act="reject">Rejeitar</button>');
-      }
-      if (prTab === 'mine' && mine) {
-        if (['DRAFT', 'RETURNED'].includes(r.status)) acts.push('<button data-act="submit">Enviar p/ aprovação</button>');
-        if (r.status === 'DRAFT') acts.push('<button class="danger" data-act="delete">Excluir</button>');
-        if (['DRAFT', 'RETURNED', 'IN_APPROVAL'].includes(r.status)) acts.push('<button class="danger" data-act="cancel">Cancelar</button>');
-      }
-      return acts.join('');
-    }
-
-    function renderRequisitions(items) {
-      if (!items.length) {
-        $('pr-list').innerHTML = '<p class="hello">' + (prTab === 'appr'
-          ? 'Nenhuma requisição aguardando a sua aprovação.'
-          : 'Nenhuma requisição ainda. Crie a primeira!') + '</p>';
-        return;
-      }
-      $('pr-list').innerHTML = '<table aria-label="Requisições"><thead><tr><th>Número</th><th>Resumo</th><th>Valor est.</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
-        items.map(r => {
-          const [label, cls] = STATUS_PR[r.status] || [r.status, ''];
-          const reason = r.decisionReason ? `<div class="sub">Motivo: ${escapeHtml(r.decisionReason)} (${escapeHtml(r.decidedByLabel || '')})</div>` : '';
-          const itemsTxt = r.items.map(i => `${i.quantity}× ${i.catalogCode ? '[' + escapeHtml(i.catalogCode) + '] ' : ''}${escapeHtml(i.description)}`).join(' · ');
-          const kindTag = r.kind === 'CATALOGO' ? ' · catálogo' : '';
-          return `<tr data-id="${r.id}">
-            <td>${escapeHtml(r.number)}<div class="sub">${(prTab === 'appr' ? escapeHtml(r.requesterLabel) : 'ciclo ' + r.cycle) + kindTag}</div></td>
-            <td>${escapeHtml(r.justification)}<div class="sub">${itemsTxt}</div><div class="sub">CC: ${escapeHtml(r.costCenter)}${r.neededBy ? ' · até ' + r.neededBy : ''}</div>${reason}</td>
-            <td>${money(r.totalEstimatedValue)}</td>
-            <td><span class="badge ${cls}">${label}</span></td>
-            <td class="row-actions">${prActions(r)}</td>
-          </tr>`;
-        }).join('') + '</tbody></table>';
-    }
-
-    $('pr-tab-mine').addEventListener('click', () => { prTab = 'mine'; $('pr-form').hidden = true; $('pr-list').hidden = false; loadRequisitions(); });
-    $('pr-tab-appr').addEventListener('click', () => { prTab = 'appr'; $('pr-form').hidden = true; $('pr-list').hidden = false; loadRequisitions(); });
-
-    $('pr-list').addEventListener('click', async (ev) => {
-      const btn = ev.target.closest('button[data-act]');
-      if (!btn) return;
-      const id = btn.closest('tr').dataset.id;
-      const act = btn.dataset.act;
-      try {
-        if (act === 'submit') await api(`/api/v1/purchase-requisitions/${id}/submit`, { method: 'POST', body: {} });
-        else if (act === 'approve') {
-          const comments = prompt('Comentário da aprovação (opcional):') || null;
-          await api(`/api/v1/purchase-requisitions/${id}/approve`, { method: 'POST', body: { comments } });
-        } else if (act === 'reject' || act === 'return') {
-          const reason = prompt(act === 'reject' ? 'Motivo da rejeição (obrigatório):' : 'O que o solicitante deve ajustar? (obrigatório)');
-          if (!reason) return;
-          await api(`/api/v1/purchase-requisitions/${id}/${act}`, { method: 'POST', body: { reason } });
-        } else if (act === 'cancel') {
-          const reason = prompt('Motivo do cancelamento (obrigatório):');
-          if (!reason) return;
-          await api(`/api/v1/purchase-requisitions/${id}/cancel`, { method: 'POST', body: { reason } });
-        } else if (act === 'delete') {
-          if (!confirm('Excluir este rascunho?')) return;
-          await api(`/api/v1/purchase-requisitions/${id}`, { method: 'DELETE' });
-        }
-        flash($('pr-msg'), 'Operação realizada com sucesso.', 'ok');
-        loadRequisitions();
-      } catch (err) { flash($('pr-msg'), err.message || 'Operação não permitida.', 'error'); }
+    $('dash-alerts').addEventListener('click', (ev) => {
+      const card = ev.target.closest('.alert-card');
+      if (card) goTo(card.dataset.view);
     });
 
-    // ---- formulário de nova requisição ----
-    function itemRow() {
+    // ============ SOLICITAÇÕES DE COMPRA ============
+    const STATUS_PR = {
+      DRAFT: ['Rascunho', 'dev'], IN_APPROVAL: ['Em aprovação', ''], APPROVED: ['Aprovado', 'on'],
+      REJECTED: ['Rejeitado', 'off'], RETURNED: ['Devolvido p/ ajuste', 'dev'], CANCELLED: ['Cancelado', 'off'],
+    };
+
+    function pruItemRow() {
       const div = document.createElement('div');
-      div.className = 'grid2 pr-item-row';
+      div.className = 'grid2 pru-item-row';
       div.innerHTML = `
         <div><label>Descrição</label><input class="it-desc" required minlength="3" placeholder="ex.: Capacete de segurança CA 12345" /></div>
         <div class="grid2">
@@ -615,81 +661,581 @@
         </div>`;
       return div;
     }
+    LOADERS['pr-new-unit'] = () => {
+      if (!$('pru-items').children.length) $('pru-items').appendChild(pruItemRow());
+    };
+    $('pru-add-item').addEventListener('click', () => $('pru-items').appendChild(pruItemRow()));
 
-    $('pr-new').addEventListener('click', () => {
-      $('pr-list').hidden = true;
-      $('pr-form').hidden = false;
-      $('pr-items').innerHTML = '';
-      $('pr-items').appendChild(itemRow());
-      $('pr-form').reset && $('pr-form').reset();
-      applyKind();
-    });
-    $('pr-add-item').addEventListener('click', () => $('pr-items').appendChild(itemRow()));
-    $('pr-form-cancel').addEventListener('click', () => { $('pr-form').hidden = true; $('pr-list').hidden = false; });
-
-    // ---- modo por família (catálogo) ----
-    const prKind = () => document.querySelector('input[name="pr-kind"]:checked')?.value || 'AVULSA';
-    document.querySelectorAll('input[name="pr-kind"]').forEach(r => r.addEventListener('change', applyKind));
-
-    async function applyKind() {
-      const catalogMode = prKind() === 'CATALOGO';
-      $('pr-free-block').hidden = catalogMode;
-      $('pr-cat-block').hidden = !catalogMode;
-      if (catalogMode) {
-        const { families } = await api('/api/v1/items/families');
-        $('pr-family').innerHTML = families.length
-          ? families.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('')
-          : '<option value="">(catálogo vazio — peça ao gestor para cadastrar itens)</option>';
-        loadFamilyItems();
-      }
-    }
-
-    $('pr-family').addEventListener('change', loadFamilyItems);
-
-    async function loadFamilyItems() {
-      const family = $('pr-family').value;
-      if (!family) { $('pr-cat-list').innerHTML = ''; return; }
-      const { items } = await api('/api/v1/items/?family=' + encodeURIComponent(family));
-      $('pr-cat-list').innerHTML = '<table aria-label="Itens da família"><thead><tr><th></th><th>Item</th><th>Unid.</th><th>Preço ref.</th><th>Qtd</th></tr></thead><tbody>' +
-        items.map(i => `
-          <tr class="cat-pick" data-id="${i.id}">
-            <td><input type="checkbox" class="cp-check" aria-label="Selecionar ${escapeHtml(i.description)}" /></td>
-            <td>${escapeHtml(i.description)}<div class="sub">${escapeHtml(i.code)}</div></td>
-            <td>${escapeHtml(i.unitOfMeasure)}</td>
-            <td>${i.referencePrice != null ? money(i.referencePrice) : '—'}</td>
-            <td><input type="number" class="cp-qty" min="0.01" step="0.01" value="1" style="width:80px" /></td>
-          </tr>`).join('') + '</tbody></table>';
-    }
-
-    $('pr-form').addEventListener('submit', async (ev) => {
+    $('pru-form').addEventListener('submit', async (ev) => {
       ev.preventDefault();
-      const kind = prKind();
-      let items;
-      if (kind === 'CATALOGO') {
-        items = [...document.querySelectorAll('.cat-pick')]
-          .filter(row => row.querySelector('.cp-check').checked)
-          .map(row => ({ catalogItemId: row.dataset.id, quantity: parseFloat(row.querySelector('.cp-qty').value) || 1 }));
-        if (!items.length) { flash($('pr-msg'), 'Marque ao menos um item da lista da família.', 'error'); return; }
-      } else {
-        items = [...document.querySelectorAll('.pr-item-row')].map(row => ({
-          description: row.querySelector('.it-desc').value,
-          quantity: parseFloat(row.querySelector('.it-qty').value),
-          estimatedUnitPrice: row.querySelector('.it-price').value ? parseFloat(row.querySelector('.it-price').value) : null,
-        })).filter(i => i.description);
-      }
+      const items = [...document.querySelectorAll('.pru-item-row')].map(row => ({
+        description: row.querySelector('.it-desc').value,
+        quantity: parseFloat(row.querySelector('.it-qty').value),
+        estimatedUnitPrice: row.querySelector('.it-price').value ? parseFloat(row.querySelector('.it-price').value) : null,
+      })).filter(i => i.description);
       try {
         await api('/api/v1/purchase-requisitions/', { method: 'POST', body: {
-          justification: $('pr-just').value, costCenter: $('pr-cc').value,
-          priority: $('pr-priority').value, neededBy: $('pr-needed').value || null, items, kind,
+          justification: $('pru-just').value, costCenter: $('pru-cc').value,
+          priority: $('pru-priority').value, neededBy: $('pru-needed').value || null, items, kind: 'AVULSA',
         }});
-        flash($('pr-msg'), 'Rascunho criado. Revise e clique em "Enviar p/ aprovação".', 'ok');
-        $('pr-form').hidden = true; $('pr-list').hidden = false;
-        prTab = 'mine'; loadRequisitions();
-      } catch (err) { flash($('pr-msg'), err.message || 'Não foi possível criar a requisição.', 'error'); }
+        toast('Rascunho criado. Revise em "Meus Pedidos" e envie para aprovação.', 'ok');
+        ev.target.reset(); $('pru-items').innerHTML = ''; $('pru-items').appendChild(pruItemRow());
+        goTo('pr-mine');
+      } catch (err) { toast(err.message, 'error'); }
     });
 
-    // ---- manutenção do catálogo (Gestor/Admin) ----
-    async function loadCatalog() {
+    async function fillFamilies(selectId) {
+      const { families } = await api('/api/v1/items/families');
+      $(selectId).innerHTML = families.length
+        ? families.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('')
+        : '<option value="">(catálogo vazio — cadastre produtos primeiro)</option>';
+    }
+    function familyTable(items, pickClass, checkClass, qtyClass) {
+      return '<table><thead><tr><th></th><th>Produto</th><th>Unid.</th><th>Qtd</th></tr></thead><tbody>' +
+        items.map(i => `
+          <tr class="${pickClass}" data-id="${i.id}">
+            <td><input type="checkbox" class="${checkClass}" aria-label="Selecionar ${escapeHtml(i.description)}" /></td>
+            <td>${escapeHtml(i.description)}<div class="sub">${escapeHtml(i.code)}</div></td>
+            <td>${escapeHtml(i.unitOfMeasure)}</td>
+            <td><input type="number" class="${qtyClass}" min="0.01" step="0.01" value="1" style="width:80px" /></td>
+          </tr>`).join('') + '</tbody></table>';
+    }
+    async function loadPrmItems() {
+      const family = $('prm-family').value;
+      if (!family) { $('prm-cat-list').innerHTML = ''; return; }
+      const { items } = await api('/api/v1/items/?family=' + encodeURIComponent(family));
+      $('prm-cat-list').innerHTML = familyTable(items, 'prm-pick', 'prm-check', 'prm-qty');
+    }
+    LOADERS['pr-new-multi'] = async () => { await fillFamilies('prm-family'); loadPrmItems(); };
+    $('prm-family').addEventListener('change', loadPrmItems);
+
+    $('prm-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const items = [...document.querySelectorAll('.prm-pick')]
+        .filter(r => r.querySelector('.prm-check').checked)
+        .map(r => ({ catalogItemId: r.dataset.id, quantity: parseFloat(r.querySelector('.prm-qty').value) || 1 }));
+      if (!items.length) { toast('Marque ao menos um produto da lista.', 'error'); return; }
+      try {
+        await api('/api/v1/purchase-requisitions/', { method: 'POST', body: {
+          justification: $('prm-just').value, costCenter: $('prm-cc').value,
+          priority: $('prm-priority').value, items, kind: 'CATALOGO',
+        }});
+        toast('Rascunho criado. Revise em "Meus Pedidos" e envie para aprovação.', 'ok');
+        ev.target.reset();
+        goTo('pr-mine');
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    function prRow(r, forApproval) {
+      const [label, cls] = STATUS_PR[r.status] || [r.status, ''];
+      const reason = r.decisionReason ? `<div class="sub">Motivo: ${escapeHtml(r.decisionReason)} (${escapeHtml(r.decidedByLabel || '')})</div>` : '';
+      const itemsTxt = r.items.map(i => `${i.quantity}× ${i.catalogCode ? '[' + escapeHtml(i.catalogCode) + '] ' : ''}${escapeHtml(i.description)}`).join(' · ');
+      const acts = [];
+      if (forApproval) {
+        acts.push('<button data-act="approve">Aprovar</button>',
+                  '<button class="secondary" data-act="return">Devolver</button>',
+                  '<button class="danger" data-act="reject">Rejeitar</button>');
+      } else if (r.requesterId === currentUser.id) {
+        if (['DRAFT', 'RETURNED'].includes(r.status)) acts.push('<button data-act="submit">Enviar p/ aprovação</button>');
+        if (r.status === 'DRAFT') acts.push('<button class="danger" data-act="delete">Excluir</button>');
+        if (['DRAFT', 'RETURNED', 'IN_APPROVAL'].includes(r.status)) acts.push('<button class="danger" data-act="cancel">Cancelar</button>');
+      }
+      return `<tr data-id="${r.id}">
+        <td>${escapeHtml(r.number)}<div class="sub">${forApproval ? escapeHtml(r.requesterLabel) : 'ciclo ' + r.cycle}${r.kind === 'CATALOGO' ? ' · múltiplo' : ' · unitário'}</div></td>
+        <td>${escapeHtml(r.justification)}<div class="sub">${itemsTxt}</div><div class="sub">CC: ${escapeHtml(r.costCenter)}${r.neededBy ? ' · até ' + r.neededBy : ''}</div>${reason}</td>
+        <td>${money(r.totalEstimatedValue)}</td>
+        <td><span class="badge ${cls}">${label}</span></td>
+        <td class="row-actions">${acts.join('')}</td>
+      </tr>`;
+    }
+    const PR_TABLE_HEAD = '<table><thead><tr><th>Número</th><th>Resumo</th><th>Valor est.</th><th>Situação</th><th>Ações</th></tr></thead><tbody>';
+
+    LOADERS['pr-mine'] = async () => {
+      try {
+        const { items } = await api('/api/v1/purchase-requisitions/');
+        $('pr-list').innerHTML = items.length
+          ? PR_TABLE_HEAD + items.map(r => prRow(r, false)).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhum pedido ainda. Crie pelo menu Pedido Unitário ou Pedido Múltiplo.</p>';
+      } catch (err) { $('pr-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
+    LOADERS['pr-approvals'] = async () => {
+      try {
+        const { items } = await api('/api/v1/approvals/pending');
+        $('appr-list').innerHTML = items.length
+          ? PR_TABLE_HEAD + items.map(r => prRow(r, true)).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhum pedido aguardando a sua aprovação.</p>';
+      } catch (err) { $('appr-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
+
+    async function prAction(id, act) {
+      if (act === 'submit') await api(`/api/v1/purchase-requisitions/${id}/submit`, { method: 'POST', body: {} });
+      else if (act === 'approve') {
+        const comments = prompt('Comentário da aprovação (opcional):') || null;
+        await api(`/api/v1/purchase-requisitions/${id}/approve`, { method: 'POST', body: { comments } });
+      } else if (act === 'reject' || act === 'return') {
+        const reason = prompt(act === 'reject' ? 'Motivo da rejeição (obrigatório):' : 'O que o solicitante deve ajustar? (obrigatório)');
+        if (!reason) return false;
+        await api(`/api/v1/purchase-requisitions/${id}/${act}`, { method: 'POST', body: { reason } });
+      } else if (act === 'cancel') {
+        const reason = prompt('Motivo do cancelamento (obrigatório):');
+        if (!reason) return false;
+        await api(`/api/v1/purchase-requisitions/${id}/cancel`, { method: 'POST', body: { reason } });
+      } else if (act === 'delete') {
+        if (!confirm('Excluir este rascunho?')) return false;
+        await api(`/api/v1/purchase-requisitions/${id}`, { method: 'DELETE' });
+      }
+      return true;
+    }
+    $('pr-list').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act]');
+      if (!btn) return;
+      try {
+        if (await prAction(btn.closest('tr').dataset.id, btn.dataset.act)) { toast('Operação realizada.', 'ok'); LOADERS['pr-mine'](); }
+      } catch (err) { toast(err.message, 'error'); }
+    });
+    $('appr-list').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act]');
+      if (!btn) return;
+      try {
+        if (await prAction(btn.closest('tr').dataset.id, btn.dataset.act)) { toast('Operação realizada.', 'ok'); LOADERS['pr-approvals'](); }
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    // ============ MATERIAL (MMS-003) ============
+    const STATUS_MR = {
+      AGUARDANDO_ALMOXARIFADO: ['Aguardando almoxarifado', ''],
+      ATENDIDA: ['Atendida', 'on'], ATENDIDA_PARCIAL: ['Atendida parcialmente', 'dev'],
+      ROTA_DE_COMPRA: ['Rota de compra', 'dev'], CANCELADA: ['Cancelada', 'off'],
+    };
+    const MR_ITEM_ST = { ENTREGUE: 'entregue ✓', ROTA_DE_COMPRA: 'rota de compra', PENDENTE: 'pendente' };
+    const mrItemsTxt = (r) => r.items.map(i =>
+      `${i.quantity}× [${escapeHtml(i.catalogCode)}] ${escapeHtml(i.description)} <em>(${MR_ITEM_ST[i.status] || i.status})</em>`).join(' · ');
+
+    async function loadMrCatItems() {
+      const family = $('mr-family').value;
+      if (!family) { $('mr-cat-list').innerHTML = ''; return; }
+      const { items } = await api('/api/v1/items/?family=' + encodeURIComponent(family));
+      $('mr-cat-list').innerHTML = familyTable(items, 'mr-pick', 'mp-check', 'mp-qty');
+    }
+    LOADERS['mr-new'] = async () => { await fillFamilies('mr-family'); loadMrCatItems(); };
+    $('mr-family').addEventListener('change', loadMrCatItems);
+
+    $('mr-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const items = [...document.querySelectorAll('.mr-pick')]
+        .filter(r => r.querySelector('.mp-check').checked)
+        .map(r => ({ catalogItemId: r.dataset.id, quantity: parseFloat(r.querySelector('.mp-qty').value) || 1 }));
+      if (!items.length) { toast('Marque ao menos um produto da lista.', 'error'); return; }
+      try {
+        await api('/api/v1/material-requisitions/', { method: 'POST', body: {
+          costCenter: $('mr-cc').value, notes: $('mr-notes').value || null, items,
+        }});
+        toast('Solicitação enviada ao almoxarifado.', 'ok');
+        ev.target.reset();
+        goTo('mr-mine');
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    LOADERS['mr-mine'] = async () => {
+      try {
+        const { items } = await api('/api/v1/material-requisitions/');
+        $('mr-list').innerHTML = items.length
+          ? '<table><thead><tr><th>Número</th><th>Itens</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+            items.map(r => {
+              const [label, cls] = STATUS_MR[r.status] || [r.status, ''];
+              const cancel = r.status === 'AGUARDANDO_ALMOXARIFADO' && r.requesterId === currentUser.id
+                ? '<button class="danger" data-act="cancel">Cancelar</button>' : '';
+              const who = r.fulfilledByLabel ? `<div class="sub">Atendida por ${escapeHtml(r.fulfilledByLabel)}</div>` : '';
+              return `<tr data-id="${r.id}">
+                <td>${escapeHtml(r.number)}<div class="sub">CC: ${escapeHtml(r.costCenter)}</div></td>
+                <td>${mrItemsTxt(r)}${who}</td>
+                <td><span class="badge ${cls}">${label}</span></td>
+                <td class="row-actions">${cancel}</td>
+              </tr>`;
+            }).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhuma solicitação de material ainda.</p>';
+      } catch (err) { $('mr-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
+    $('mr-list').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act="cancel"]');
+      if (!btn) return;
+      const reason = prompt('Motivo do cancelamento (obrigatório):');
+      if (!reason) return;
+      try {
+        await api(`/api/v1/material-requisitions/${btn.closest('tr').dataset.id}/cancel`, { method: 'POST', body: { reason } });
+        toast('Solicitação cancelada.', 'ok');
+        LOADERS['mr-mine']();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    // ============ ESTOQUE ============
+    let whLocations = [];
+    async function loadLocations() {
+      whLocations = (await api('/api/v1/inventory/locations')).items;
+      const opts = whLocations.length
+        ? whLocations.map(l => `<option value="${l.id}">${escapeHtml(l.code)} — ${escapeHtml(l.name)}</option>`).join('')
+        : '<option value="">(crie um local de estoque primeiro)</option>';
+      ['we-loc', 'wi-loc'].forEach(id => { if ($(id)) $(id).innerHTML = opts; });
+    }
+    async function loadItemOptions() {
+      const { items } = await api('/api/v1/items/');
+      const opts = items.length
+        ? items.map(i => `<option value="${i.id}">[${escapeHtml(i.code)}] ${escapeHtml(i.description)}</option>`).join('')
+        : '<option value="">(catálogo vazio)</option>';
+      ['we-item', 'wi-item'].forEach(id => { if ($(id)) $(id).innerHTML = opts; });
+    }
+    const locCode = (id) => { const l = whLocations.find(x => x.id === id); return l ? l.code : '—'; };
+
+    LOADERS['stock-dash'] = async () => {
+      try {
+        await loadLocations();
+        const { items } = await api('/api/v1/inventory/balances');
+        $('stock-balances').innerHTML = items.length
+          ? '<table><thead><tr><th>Produto</th><th>Família</th><th>Local</th><th>Total</th><th>Disponível</th></tr></thead><tbody>' +
+            items.map(b => `
+              <tr>
+                <td>${escapeHtml(b.itemDescription)}<div class="sub">${escapeHtml(b.itemCode)} · ${escapeHtml(b.unitOfMeasure)}</div></td>
+                <td>${escapeHtml(b.family)}</td>
+                <td>${escapeHtml(b.locationCode)}</td>
+                <td>${b.totalQty}</td>
+                <td><strong>${b.availableQty}</strong></td>
+              </tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Sem saldos ainda — registre a primeira entrada.</p>';
+        const movs = (await api('/api/v1/inventory/movements')).items;
+        $('stock-movements').innerHTML = movs.length
+          ? '<table><thead><tr><th>Número</th><th>Tipo</th><th>Produto</th><th>Qtd</th><th>Saldo</th><th>Por</th></tr></thead><tbody>' +
+            movs.map(m => `
+              <tr>
+                <td>${escapeHtml(m.number)}<div class="sub">${escapeHtml(m.origin)} · ${escapeHtml(m.originReference)}</div></td>
+                <td><span class="badge ${m.type === 'ENTRADA' ? 'on' : 'off'}">${m.type}</span></td>
+                <td>${escapeHtml(m.itemDescription)}<div class="sub">${escapeHtml(m.itemCode)} · ${locCode(m.locationId)}</div></td>
+                <td>${m.quantity}</td>
+                <td>${m.balanceBefore} → ${m.balanceAfter}</td>
+                <td>${escapeHtml(m.performedByLabel)}</td>
+              </tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhuma movimentação registrada.</p>';
+      } catch (err) { $('stock-balances').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
+
+    LOADERS['wh-queue'] = async () => {
+      try {
+        await loadLocations();
+        const { items } = await api('/api/v1/material-requisitions/?queue=true');
+        const locOpts = whLocations.map(l => `<option value="${l.id}">${escapeHtml(l.code)}</option>`).join('');
+        $('wh-queue-list').innerHTML = items.length
+          ? '<table><thead><tr><th>Número</th><th>Solicitante</th><th>Itens</th><th>Atender</th></tr></thead><tbody>' +
+            items.map(r => `
+              <tr data-id="${r.id}">
+                <td>${escapeHtml(r.number)}<div class="sub">CC: ${escapeHtml(r.costCenter)}</div></td>
+                <td>${escapeHtml(r.requesterLabel)}${r.notes ? `<div class="sub">${escapeHtml(r.notes)}</div>` : ''}</td>
+                <td>${mrItemsTxt(r)}</td>
+                <td class="row-actions">
+                  <select class="wh-fulfill-loc" aria-label="Local">${locOpts}</select>
+                  <button data-act="fulfill" ${whLocations.length ? '' : 'disabled'}>Atender</button>
+                </td>
+              </tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhuma solicitação aguardando atendimento.</p>';
+      } catch (err) { $('wh-queue-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
+    $('wh-queue-list').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act="fulfill"]');
+      if (!btn) return;
+      const row = btn.closest('tr');
+      const locationId = row.querySelector('.wh-fulfill-loc').value;
+      if (!locationId) { toast('Crie um local de estoque primeiro.', 'error'); return; }
+      if (!confirm('Atender esta solicitação? Itens com saldo serão baixados; itens sem saldo seguem para rota de compra.')) return;
+      try {
+        await api(`/api/v1/material-requisitions/${row.dataset.id}/fulfill`, { method: 'POST', body: { locationId } });
+        toast('Solicitação atendida.', 'ok');
+        LOADERS['wh-queue']();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    LOADERS['stock-entry'] = async () => {
+      $('loc-admin').hidden = !canManageLocations();
+      try { await loadLocations(); await loadItemOptions(); } catch (err) { toast(err.message, 'error'); }
+    };
+    $('entry-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try {
+        await api('/api/v1/inventory/entries', { method: 'POST', body: {
+          catalogItemId: $('we-item').value, locationId: $('we-loc').value,
+          quantity: parseFloat($('we-qty').value), origin: $('we-origin').value,
+          originReference: $('we-ref').value,
+        }});
+        toast('Entrada registrada com sucesso.', 'ok');
+        ev.target.reset();
+        goTo('stock-dash');
+      } catch (err) { toast(err.message, 'error'); }
+    });
+    $('loc-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try {
+        await api('/api/v1/inventory/locations', { method: 'POST', body: { code: $('wl-code').value, name: $('wl-name').value } });
+        toast('Local criado.', 'ok');
+        ev.target.reset();
+        loadLocations();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    LOADERS['stock-issue'] = async () => {
+      try { await loadLocations(); await loadItemOptions(); } catch (err) { toast(err.message, 'error'); }
+    };
+    $('issue-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try {
+        await api('/api/v1/inventory/issues', { method: 'POST', body: {
+          catalogItemId: $('wi-item').value, locationId: $('wi-loc').value,
+          quantity: parseFloat($('wi-qty').value), originReference: $('wi-ref').value,
+        }});
+        toast('Saída registrada com sucesso.', 'ok');
+        ev.target.reset();
+        goTo('stock-dash');
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    // ============ COMPRAS ============
+    let buySuppliers = [];
+    const STATUS_PO = { EMITIDO: ['Emitido', ''], RECEBIDO: ['Recebido', 'on'], CANCELADO: ['Cancelado', 'off'] };
+    const supOpts = () => buySuppliers.map(s => `<option value="${s.id}">${escapeHtml(s.tradeName || s.legalName)}</option>`).join('');
+    async function loadSuppliers() { buySuppliers = (await api('/api/v1/suppliers/')).items; }
+
+    LOADERS['buy-demands'] = async () => {
+      try {
+        await loadSuppliers();
+        const { approvedRequisitions, purchaseRouteItems } = await api('/api/v1/purchase-orders/demands');
+        $('buy-dem-prs').innerHTML = approvedRequisitions.length
+          ? '<table><thead><tr><th>Número</th><th>Itens</th><th>Valor est.</th><th>Emitir</th></tr></thead><tbody>' +
+            approvedRequisitions.map(r => `
+              <tr data-pr="${r.id}">
+                <td>${escapeHtml(r.number)}<div class="sub">${escapeHtml(r.requesterLabel)} · CC: ${escapeHtml(r.costCenter)}</div></td>
+                <td>${r.items.map(i => `${i.quantity}× ${i.catalogCode ? '[' + escapeHtml(i.catalogCode) + '] ' : ''}${escapeHtml(i.description)}`).join(' · ')}</td>
+                <td>${money(r.totalEstimatedValue)}</td>
+                <td class="row-actions">
+                  <select class="buy-sup-sel">${supOpts()}</select>
+                  <button data-act="convert" ${buySuppliers.length ? '' : 'disabled'}>Emitir pedido</button>
+                </td>
+              </tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhuma requisição aprovada aguardando pedido.</p>';
+        $('buy-dem-route').innerHTML = purchaseRouteItems.length
+          ? '<table><thead><tr><th>Origem</th><th>Produto</th><th>Qtd</th><th>Emitir</th></tr></thead><tbody>' +
+            purchaseRouteItems.map(i => `
+              <tr data-cat="${i.catalogItemId}" data-desc="${escapeHtml(i.description)}" data-qty="${i.quantity}" data-unit="${escapeHtml(i.unitOfMeasure)}">
+                <td>${escapeHtml(i.materialRequisitionNumber)}<div class="sub">${escapeHtml(i.requesterLabel)} · CC: ${escapeHtml(i.costCenter)}</div></td>
+                <td>[${escapeHtml(i.catalogCode)}] ${escapeHtml(i.description)}</td>
+                <td>${i.quantity} ${escapeHtml(i.unitOfMeasure)}</td>
+                <td class="row-actions">
+                  <select class="buy-sup-sel">${supOpts()}</select>
+                  <button data-act="route-po" ${buySuppliers.length ? '' : 'disabled'}>Emitir pedido</button>
+                </td>
+              </tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhum item aguardando compra vindo do almoxarifado.</p>';
+        if (!buySuppliers.length) $('buy-dem-prs').innerHTML += '<p class="hello">Cadastre um fornecedor em Cadastros → Fornecedores para emitir pedidos.</p>';
+      } catch (err) { $('buy-dem-prs').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
+    document.getElementById('view-buy-demands').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act]');
+      if (!btn) return;
+      const row = btn.closest('tr');
+      try {
+        const supplierId = row.querySelector('.buy-sup-sel').value;
+        if (btn.dataset.act === 'convert') {
+          if (!confirm('Emitir pedido de compra para esta requisição aprovada?')) return;
+          await api('/api/v1/purchase-orders/', { method: 'POST', body: { supplierId, sourcePrId: row.dataset.pr, items: [] } });
+        } else {
+          if (!confirm('Emitir pedido de compra para este item?')) return;
+          await api('/api/v1/purchase-orders/', { method: 'POST', body: { supplierId, items: [{
+            description: row.dataset.desc, quantity: parseFloat(row.dataset.qty),
+            unitOfMeasure: row.dataset.unit, catalogItemId: row.dataset.cat,
+          }]}});
+        }
+        toast('Pedido de compra emitido.', 'ok');
+        goTo('buy-orders');
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    LOADERS['buy-orders'] = async () => {
+      try {
+        try { await loadLocations(); } catch {}
+        const { items } = await api('/api/v1/purchase-orders/');
+        $('buy-orders-list').innerHTML = items.length
+          ? '<table><thead><tr><th>Número</th><th>Fornecedor</th><th>Itens</th><th>Total</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+            items.map(o => {
+              const [label, cls] = STATUS_PO[o.status] || [o.status, ''];
+              const acts = o.status === 'EMITIDO' && canBuy()
+                ? `<select class="buy-rec-loc">${whLocations.length ? whLocations.map(l => `<option value="${l.id}">${escapeHtml(l.code)}</option>`).join('') : '<option value="">(sem local)</option>'}</select>
+                   <button data-act="receive">Receber</button>
+                   <button class="danger" data-act="cancel-po">Cancelar</button>` : '';
+              const src = o.sourcePrNumber ? `<div class="sub">de ${escapeHtml(o.sourcePrNumber)}</div>` : '';
+              const rec = o.receivedByLabel ? `<div class="sub">Recebido por ${escapeHtml(o.receivedByLabel)}</div>` : '';
+              return `<tr data-id="${o.id}">
+                <td>${escapeHtml(o.number)}${src}</td>
+                <td>${escapeHtml(o.supplierName)}${rec}</td>
+                <td>${o.items.map(i => `${i.quantity}× ${i.catalogCode ? '[' + escapeHtml(i.catalogCode) + '] ' : ''}${escapeHtml(i.description)}`).join(' · ')}</td>
+                <td>${money(o.totalValue)}</td>
+                <td><span class="badge ${cls}">${label}</span>${o.cancelReason ? `<div class="sub">${escapeHtml(o.cancelReason)}</div>` : ''}</td>
+                <td class="row-actions">${acts}</td>
+              </tr>`;
+            }).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhum pedido de compra emitido ainda.</p>';
+      } catch (err) { $('buy-orders-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
+    $('buy-orders-list').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act]');
+      if (!btn) return;
+      const row = btn.closest('tr');
+      try {
+        if (btn.dataset.act === 'receive') {
+          const locationId = row.querySelector('.buy-rec-loc').value;
+          if (!locationId) { toast('Crie um local de estoque em Estoque → Entrada primeiro.', 'error'); return; }
+          if (!confirm('Confirmar o recebimento? Itens de catálogo entram no estoque.')) return;
+          await api(`/api/v1/purchase-orders/${row.dataset.id}/receive`, { method: 'POST', body: { locationId } });
+          toast('Pedido recebido — estoque atualizado.', 'ok');
+        } else {
+          const reason = prompt('Motivo do cancelamento (obrigatório):');
+          if (!reason) return;
+          await api(`/api/v1/purchase-orders/${row.dataset.id}/cancel`, { method: 'POST', body: { reason } });
+          toast('Pedido cancelado.', 'ok');
+        }
+        LOADERS['buy-orders']();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    // ============ CADASTROS: USUÁRIOS ============
+    let editingUserId = null;
+    function renderModuleChecks(checked) {
+      $('nu-modules').innerHTML = Object.entries(MODULE_LABELS).map(([key, label]) => `
+        <label><input type="checkbox" class="nu-mod" value="${key}" ${checked.includes(key) ? 'checked' : ''} ${key === 'USUARIOS' ? 'title="Somente administradores acessam usuários"' : ''} /> ${escapeHtml(label)}</label>`).join('');
+    }
+    function setUserFormMode(user) {
+      editingUserId = user ? user.id : null;
+      $('user-form-title').textContent = user ? `Editar autorização — ${user.name}` : 'Novo usuário';
+      $('user-form-submit').textContent = user ? 'Salvar autorização' : 'Criar usuário';
+      $('user-form-cancel').hidden = !user;
+      ['nu-name', 'nu-email', 'nu-pass'].forEach(id => { $(id).disabled = !!user; $(id).required = !user; });
+      $('nu-role').disabled = !!user;
+      if (user) {
+        $('nu-name').value = user.name; $('nu-email').value = user.email; $('nu-pass').value = '';
+        $('nu-role').value = user.role;
+        renderModuleChecks(user.modules || []);
+      } else {
+        $('user-form').reset();
+        renderModuleChecks(DEFAULT_MODULES[$('nu-role').value] || []);
+      }
+    }
+    let usersCache = {};
+    LOADERS['users'] = async () => {
+      try {
+        const data = await api('/api/v1/users/');
+        usersCache = Object.fromEntries(data.items.map(u => [u.id, u]));
+        $('nu-role').innerHTML = data.roles.map(r => `<option value="${r}">${ROLE_LABELS[r] || r}</option>`).join('');
+        const rows = data.items.map(u => `
+          <tr data-id="${u.id}">
+            <td>${escapeHtml(u.name)}<div class="sub">${escapeHtml(u.email)}</div></td>
+            <td>${ROLE_LABELS[u.role] || u.role}</td>
+            <td><div class="sub">${(u.modules || []).map(m => MODULE_LABELS[m] || m).join(' · ') || '—'}</div></td>
+            <td><span class="badge ${u.active ? 'on' : 'off'}">${u.active ? 'ATIVO' : 'INATIVO'}</span></td>
+            <td class="row-actions">
+              <button class="secondary" data-act="access">Autorizações</button>
+              <button class="secondary" data-act="reset">Nova senha</button>
+              <button class="${u.active ? 'danger' : 'secondary'}" data-act="toggle">${u.active ? 'Inativar' : 'Reativar'}</button>
+            </td>
+          </tr>`).join('');
+        $('users-list').innerHTML = '<table><thead><tr><th>Usuário</th><th>Papel</th><th>Autorizações</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        if (!editingUserId) setUserFormMode(null);
+      } catch (err) { $('users-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
+    $('nu-role').addEventListener('change', () => { if (!editingUserId) renderModuleChecks(DEFAULT_MODULES[$('nu-role').value] || []); });
+    $('user-form-cancel').addEventListener('click', () => setUserFormMode(null));
+
+    $('users-list').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act]');
+      if (!btn) return;
+      const row = btn.closest('tr');
+      const id = row.dataset.id;
+      try {
+        if (btn.dataset.act === 'access') {
+          setUserFormMode(usersCache[id]);
+          $('user-form-title').scrollIntoView({ behavior: 'smooth' });
+          return;
+        }
+        if (btn.dataset.act === 'toggle') {
+          const activate = btn.textContent === 'Reativar';
+          if (!activate && !confirm('Inativar este usuário? As sessões dele serão encerradas.')) return;
+          await api('/api/v1/users/' + id, { method: 'PATCH', body: { active: activate } });
+          toast(activate ? 'Usuário reativado.' : 'Usuário inativado.', 'ok');
+        } else if (btn.dataset.act === 'reset') {
+          const pass = prompt('Nova senha para este usuário (mínimo 12 caracteres):');
+          if (!pass) return;
+          await api('/api/v1/users/' + id + '/reset-password', { method: 'POST', body: { newPassword: pass } });
+          toast('Senha redefinida. As sessões do usuário foram encerradas.', 'ok');
+        }
+        LOADERS['users']();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    $('user-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const modules = [...document.querySelectorAll('.nu-mod:checked')].map(c => c.value);
+      try {
+        if (editingUserId) {
+          await api('/api/v1/users/' + editingUserId, { method: 'PATCH', body: { modules } });
+          toast('Autorizações atualizadas. Valem a partir do próximo login do usuário.', 'ok');
+          setUserFormMode(null);
+        } else {
+          await api('/api/v1/users/', { method: 'POST', body: {
+            name: $('nu-name').value, email: $('nu-email').value,
+            role: $('nu-role').value, password: $('nu-pass').value, modules,
+          }});
+          toast('Usuário criado com as autorizações selecionadas.', 'ok');
+          ev.target.reset();
+        }
+        LOADERS['users']();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    // ============ CADASTROS: FORNECEDORES ============
+    LOADERS['suppliers'] = async () => {
+      try {
+        const { items } = await api('/api/v1/suppliers/?all=true');
+        $('sup-list').innerHTML = items.length
+          ? '<table><thead><tr><th>Fornecedor</th><th>CNPJ/CPF</th><th>Contato</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+            items.map(s => `
+              <tr data-id="${s.id}">
+                <td>${escapeHtml(s.legalName)}${s.tradeName ? `<div class="sub">${escapeHtml(s.tradeName)}</div>` : ''}</td>
+                <td>${escapeHtml(s.taxId)}</td>
+                <td>${escapeHtml(s.email || '')}${s.phone ? `<div class="sub">${escapeHtml(s.phone)}</div>` : ''}</td>
+                <td><span class="badge ${s.active ? 'on' : 'off'}">${s.active ? 'ATIVO' : 'INATIVO'}</span></td>
+                <td class="row-actions"><button class="${s.active ? 'danger' : 'secondary'}" data-act="toggle-sup">${s.active ? 'Inativar' : 'Reativar'}</button></td>
+              </tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhum fornecedor cadastrado ainda.</p>';
+      } catch (err) { $('sup-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
+    $('sup-list').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act="toggle-sup"]');
+      if (!btn) return;
+      try {
+        await api('/api/v1/suppliers/' + btn.closest('tr').dataset.id, { method: 'PATCH', body: { active: btn.textContent === 'Reativar' } });
+        toast('Fornecedor atualizado.', 'ok');
+        LOADERS['suppliers']();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+    $('sup-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try {
+        await api('/api/v1/suppliers/', { method: 'POST', body: {
+          legalName: $('bs-legal').value, tradeName: $('bs-trade').value || null,
+          taxId: $('bs-tax').value, email: $('bs-email').value || null,
+        }});
+        toast('Fornecedor cadastrado.', 'ok');
+        ev.target.reset();
+        LOADERS['suppliers']();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    // ============ CADASTROS: PRODUTOS ============
+    LOADERS['products'] = async () => {
+      $('cat-admin').hidden = !canMaintainCatalog();
       try {
         const family = $('cat-filter-family').value;
         const { items } = await api('/api/v1/items/?all=true' + (family ? '&family=' + encodeURIComponent(family) : ''));
@@ -698,32 +1244,30 @@
         $('cat-filter-family').innerHTML = '<option value="">Todas as famílias</option>' +
           families.map(f => `<option value="${escapeHtml(f)}" ${f === current ? 'selected' : ''}>${escapeHtml(f)}</option>`).join('');
         $('cat-families').innerHTML = families.map(f => `<option value="${escapeHtml(f)}">`).join('');
-        $('cat-body').innerHTML = items.map(i => `
-          <tr data-id="${i.id}">
-            <td>${escapeHtml(i.code)}</td>
-            <td>${escapeHtml(i.description)}<div class="sub">${escapeHtml(i.unitOfMeasure)}</div></td>
-            <td>${escapeHtml(i.family)}</td>
-            <td>${i.referencePrice != null ? money(i.referencePrice) : '—'}</td>
-            <td><span class="badge ${i.active ? 'on' : 'off'}">${i.active ? 'ATIVO' : 'INATIVO'}</span></td>
-            <td class="row-actions"><button class="${i.active ? 'danger' : 'secondary'}" data-act="toggle">${i.active ? 'Inativar' : 'Reativar'}</button></td>
-          </tr>`).join('');
-      } catch (err) { flash($('cat-msg'), err.message || 'Falha ao carregar o catálogo.', 'error'); }
-    }
-
-    $('cat-refresh').addEventListener('click', loadCatalog);
-    $('cat-filter-family').addEventListener('change', loadCatalog);
-
-    $('cat-body').addEventListener('click', async (ev) => {
-      const btn = ev.target.closest('button[data-act]');
+        $('cat-list').innerHTML = items.length
+          ? '<table><thead><tr><th>Código</th><th>Produto</th><th>Família</th><th>Preço ref.</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+            items.map(i => `
+              <tr data-id="${i.id}">
+                <td>${escapeHtml(i.code)}</td>
+                <td>${escapeHtml(i.description)}<div class="sub">${escapeHtml(i.unitOfMeasure)}</div></td>
+                <td>${escapeHtml(i.family)}</td>
+                <td>${i.referencePrice != null ? money(i.referencePrice) : '—'}</td>
+                <td><span class="badge ${i.active ? 'on' : 'off'}">${i.active ? 'ATIVO' : 'INATIVO'}</span></td>
+                <td class="row-actions">${canMaintainCatalog() ? `<button class="${i.active ? 'danger' : 'secondary'}" data-act="toggle">${i.active ? 'Inativar' : 'Reativar'}</button>` : ''}</td>
+              </tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhum produto cadastrado ainda.</p>';
+      } catch (err) { $('cat-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
+    $('cat-filter-family').addEventListener('change', () => LOADERS['products']());
+    $('cat-list').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act="toggle"]');
       if (!btn) return;
-      const row = btn.closest('tr');
       try {
-        await api('/api/v1/items/' + row.dataset.id, { method: 'PATCH', body: { active: btn.textContent === 'Reativar' } });
-        flash($('cat-msg'), 'Item atualizado.', 'ok');
-        loadCatalog();
-      } catch (err) { flash($('cat-msg'), err.message || 'Operação não permitida.', 'error'); }
+        await api('/api/v1/items/' + btn.closest('tr').dataset.id, { method: 'PATCH', body: { active: btn.textContent === 'Reativar' } });
+        toast('Produto atualizado.', 'ok');
+        LOADERS['products']();
+      } catch (err) { toast(err.message, 'error'); }
     });
-
     $('cat-form').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       try {
@@ -732,370 +1276,12 @@
           unitOfMeasure: $('ci-unit').value || null,
           referencePrice: $('ci-price').value ? parseFloat($('ci-price').value) : null,
         }});
-        flash($('cat-msg'), 'Item adicionado ao catálogo.', 'ok');
+        toast('Produto adicionado ao catálogo.', 'ok');
         const keepFamily = $('ci-family').value;
         ev.target.reset();
-        $('ci-family').value = keepFamily; // facilita cadastrar vários da mesma família
-        loadCatalog();
-      } catch (err) { flash($('cat-msg'), err.message || 'Não foi possível adicionar o item.', 'error'); }
-    });
-
-    // ---- MMS-003 — Solicitações de Material ----
-    const STATUS_MR = {
-      AGUARDANDO_ALMOXARIFADO: ['Aguardando almoxarifado', ''],
-      ATENDIDA: ['Atendida', 'on'],
-      ATENDIDA_PARCIAL: ['Atendida parcialmente', 'dev'],
-      ROTA_DE_COMPRA: ['Rota de compra', 'dev'],
-      CANCELADA: ['Cancelada', 'off'],
-    };
-    const MR_ITEM_ST = { ENTREGUE: 'entregue ✓', ROTA_DE_COMPRA: 'rota de compra', PENDENTE: 'pendente' };
-
-    function mrItemsTxt(r) {
-      return r.items.map(i =>
-        `${i.quantity}× [${escapeHtml(i.catalogCode)}] ${escapeHtml(i.description)} <em>(${MR_ITEM_ST[i.status] || i.status})</em>`
-      ).join(' · ');
-    }
-
-    async function loadMrs() {
-      try {
-        const { items } = await api('/api/v1/material-requisitions/');
-        if (!items.length) {
-          $('mr-list').innerHTML = '<p class="hello">Nenhuma solicitação de material ainda.</p>';
-          return;
-        }
-        $('mr-list').innerHTML = '<table aria-label="Solicitações de material"><thead><tr><th>Número</th><th>Itens</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
-          items.map(r => {
-            const [label, cls] = STATUS_MR[r.status] || [r.status, ''];
-            const cancel = r.status === 'AGUARDANDO_ALMOXARIFADO' && r.requesterId === currentUser.id
-              ? '<button class="danger" data-act="cancel">Cancelar</button>' : '';
-            const who = r.fulfilledByLabel ? `<div class="sub">Atendida por ${escapeHtml(r.fulfilledByLabel)}</div>` : '';
-            return `<tr data-id="${r.id}">
-              <td>${escapeHtml(r.number)}<div class="sub">CC: ${escapeHtml(r.costCenter)}</div></td>
-              <td>${mrItemsTxt(r)}${who}</td>
-              <td><span class="badge ${cls}">${label}</span></td>
-              <td class="row-actions">${cancel}</td>
-            </tr>`;
-          }).join('') + '</tbody></table>';
-      } catch (err) { flash($('mr-msg'), err.message || 'Falha ao carregar solicitações.', 'error'); }
-    }
-
-    $('mr-list').addEventListener('click', async (ev) => {
-      const btn = ev.target.closest('button[data-act="cancel"]');
-      if (!btn) return;
-      const reason = prompt('Motivo do cancelamento (obrigatório):');
-      if (!reason) return;
-      try {
-        await api(`/api/v1/material-requisitions/${btn.closest('tr').dataset.id}/cancel`, { method: 'POST', body: { reason } });
-        flash($('mr-msg'), 'Solicitação cancelada.', 'ok');
-        loadMrs();
-      } catch (err) { flash($('mr-msg'), err.message || 'Operação não permitida.', 'error'); }
-    });
-
-    $('mr-new').addEventListener('click', async () => {
-      $('mr-list').hidden = true;
-      $('mr-form').hidden = false;
-      $('mr-form').reset();
-      const { families } = await api('/api/v1/items/families');
-      $('mr-family').innerHTML = families.length
-        ? families.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('')
-        : '<option value="">(catálogo vazio — peça ao gestor para cadastrar itens)</option>';
-      loadMrFamilyItems();
-    });
-    $('mr-form-cancel').addEventListener('click', () => { $('mr-form').hidden = true; $('mr-list').hidden = false; });
-    $('mr-family').addEventListener('change', loadMrFamilyItems);
-
-    async function loadMrFamilyItems() {
-      const family = $('mr-family').value;
-      if (!family) { $('mr-cat-list').innerHTML = ''; return; }
-      const { items } = await api('/api/v1/items/?family=' + encodeURIComponent(family));
-      $('mr-cat-list').innerHTML = '<table aria-label="Itens da família"><thead><tr><th></th><th>Item</th><th>Unid.</th><th>Qtd</th></tr></thead><tbody>' +
-        items.map(i => `
-          <tr class="mr-pick" data-id="${i.id}">
-            <td><input type="checkbox" class="mp-check" aria-label="Selecionar ${escapeHtml(i.description)}" /></td>
-            <td>${escapeHtml(i.description)}<div class="sub">${escapeHtml(i.code)}</div></td>
-            <td>${escapeHtml(i.unitOfMeasure)}</td>
-            <td><input type="number" class="mp-qty" min="0.01" step="0.01" value="1" style="width:80px" /></td>
-          </tr>`).join('') + '</tbody></table>';
-    }
-
-    $('mr-form').addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const items = [...document.querySelectorAll('.mr-pick')]
-        .filter(row => row.querySelector('.mp-check').checked)
-        .map(row => ({ catalogItemId: row.dataset.id, quantity: parseFloat(row.querySelector('.mp-qty').value) || 1 }));
-      if (!items.length) { flash($('mr-msg'), 'Marque ao menos um item da lista.', 'error'); return; }
-      try {
-        await api('/api/v1/material-requisitions/', { method: 'POST', body: {
-          costCenter: $('mr-cc').value, notes: $('mr-notes').value || null, items,
-        }});
-        flash($('mr-msg'), 'Solicitação enviada ao almoxarifado.', 'ok');
-        $('mr-form').hidden = true; $('mr-list').hidden = false;
-        loadMrs();
-      } catch (err) { flash($('mr-msg'), err.message || 'Não foi possível criar a solicitação.', 'error'); }
-    });
-
-    // ---- MMS-004/005 — Almoxarifado (fila, estoque, movimentações, entrada) ----
-    let whTab = 'queue';
-    let whLocations = [];
-
-    async function initWarehouse() {
-      try {
-        whLocations = (await api('/api/v1/inventory/locations')).items;
-        $('we-loc').innerHTML = whLocations.length
-          ? whLocations.map(l => `<option value="${l.id}">${escapeHtml(l.code)} — ${escapeHtml(l.name)}</option>`).join('')
-          : '<option value="">(crie um local de estoque primeiro)</option>';
-        const { items } = await api('/api/v1/items/');
-        $('we-item').innerHTML = items.length
-          ? items.map(i => `<option value="${i.id}">[${escapeHtml(i.code)}] ${escapeHtml(i.description)}</option>`).join('')
-          : '<option value="">(catálogo vazio)</option>';
-        loadWarehouse();
-      } catch (err) { flash($('wh-msg'), err.message || 'Falha ao carregar o almoxarifado.', 'error'); }
-    }
-
-    const locCode = (id) => { const l = whLocations.find(x => x.id === id); return l ? l.code : '—'; };
-
-    async function loadWarehouse() {
-      try {
-        if (whTab === 'queue') {
-          const { items } = await api('/api/v1/material-requisitions/?queue=true');
-          $('wh-queue-count').textContent = '(' + items.length + ')';
-          if (!items.length) { $('wh-panel').innerHTML = '<p class="hello">Nenhuma solicitação aguardando atendimento.</p>'; return; }
-          const locOpts = whLocations.map(l => `<option value="${l.id}">${escapeHtml(l.code)}</option>`).join('');
-          $('wh-panel').innerHTML = '<table aria-label="Fila de atendimento"><thead><tr><th>Número</th><th>Solicitante</th><th>Itens</th><th>Atender</th></tr></thead><tbody>' +
-            items.map(r => `
-              <tr data-id="${r.id}">
-                <td>${escapeHtml(r.number)}<div class="sub">CC: ${escapeHtml(r.costCenter)}</div></td>
-                <td>${escapeHtml(r.requesterLabel)}${r.notes ? `<div class="sub">${escapeHtml(r.notes)}</div>` : ''}</td>
-                <td>${mrItemsTxt(r)}</td>
-                <td class="row-actions">
-                  <select class="wh-fulfill-loc" aria-label="Local de atendimento">${locOpts}</select>
-                  <button data-act="fulfill" ${whLocations.length ? '' : 'disabled'}>Atender</button>
-                </td>
-              </tr>`).join('') + '</tbody></table>';
-        } else if (whTab === 'stock') {
-          const { items } = await api('/api/v1/inventory/balances');
-          $('wh-panel').innerHTML = items.length
-            ? '<table aria-label="Posição de estoque"><thead><tr><th>Item</th><th>Família</th><th>Local</th><th>Total</th><th>Disponível</th></tr></thead><tbody>' +
-              items.map(b => `
-                <tr>
-                  <td>${escapeHtml(b.itemDescription)}<div class="sub">${escapeHtml(b.itemCode)} · ${escapeHtml(b.unitOfMeasure)}</div></td>
-                  <td>${escapeHtml(b.family)}</td>
-                  <td>${escapeHtml(b.locationCode)}</td>
-                  <td>${b.totalQty}</td>
-                  <td><strong>${b.availableQty}</strong></td>
-                </tr>`).join('') + '</tbody></table>'
-            : '<p class="hello">Sem saldos ainda — registre a primeira entrada.</p>';
-        } else {
-          const { items } = await api('/api/v1/inventory/movements');
-          $('wh-panel').innerHTML = items.length
-            ? '<table aria-label="Movimentações"><thead><tr><th>Número</th><th>Tipo</th><th>Item</th><th>Qtd</th><th>Saldo</th><th>Por</th></tr></thead><tbody>' +
-              items.map(m => `
-                <tr>
-                  <td>${escapeHtml(m.number)}<div class="sub">${escapeHtml(m.origin)} · ${escapeHtml(m.originReference)}</div></td>
-                  <td><span class="badge ${m.type === 'ENTRADA' ? 'on' : 'off'}">${m.type}</span></td>
-                  <td>${escapeHtml(m.itemDescription)}<div class="sub">${escapeHtml(m.itemCode)} · ${locCode(m.locationId)}</div></td>
-                  <td>${m.quantity}</td>
-                  <td>${m.balanceBefore} → ${m.balanceAfter}</td>
-                  <td>${escapeHtml(m.performedByLabel)}</td>
-                </tr>`).join('') + '</tbody></table>'
-            : '<p class="hello">Nenhuma movimentação registrada.</p>';
-        }
-      } catch (err) { flash($('wh-msg'), err.message || 'Falha ao carregar dados do estoque.', 'error'); }
-    }
-
-    $('wh-tab-queue').addEventListener('click', () => { whTab = 'queue'; loadWarehouse(); });
-    $('wh-tab-stock').addEventListener('click', () => { whTab = 'stock'; loadWarehouse(); });
-    $('wh-tab-mov').addEventListener('click', () => { whTab = 'mov'; loadWarehouse(); });
-    $('wh-refresh').addEventListener('click', () => initWarehouse());
-
-    $('wh-panel').addEventListener('click', async (ev) => {
-      const btn = ev.target.closest('button[data-act="fulfill"]');
-      if (!btn) return;
-      const row = btn.closest('tr');
-      const locationId = row.querySelector('.wh-fulfill-loc').value;
-      if (!locationId) { flash($('wh-msg'), 'Crie um local de estoque primeiro.', 'error'); return; }
-      if (!confirm('Atender esta solicitação? Itens com saldo serão baixados; itens sem saldo seguem para rota de compra.')) return;
-      try {
-        await api(`/api/v1/material-requisitions/${row.dataset.id}/fulfill`, { method: 'POST', body: { locationId } });
-        flash($('wh-msg'), 'Solicitação atendida.', 'ok');
-        loadWarehouse();
-      } catch (err) { flash($('wh-msg'), err.message || 'Não foi possível atender.', 'error'); }
-    });
-
-    $('wh-entry-form').addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      try {
-        await api('/api/v1/inventory/entries', { method: 'POST', body: {
-          catalogItemId: $('we-item').value, locationId: $('we-loc').value,
-          quantity: parseFloat($('we-qty').value), origin: $('we-origin').value,
-          originReference: $('we-ref').value,
-        }});
-        flash($('wh-msg'), 'Entrada registrada com sucesso.', 'ok');
-        ev.target.reset();
-        whTab = 'stock';
-        loadWarehouse();
-      } catch (err) { flash($('wh-msg'), err.message || 'Não foi possível registrar a entrada.', 'error'); }
-    });
-
-    $('wh-loc-form').addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      try {
-        await api('/api/v1/inventory/locations', { method: 'POST', body: { code: $('wl-code').value, name: $('wl-name').value } });
-        flash($('wh-msg'), 'Local criado.', 'ok');
-        ev.target.reset();
-        initWarehouse();
-      } catch (err) { flash($('wh-msg'), err.message || 'Não foi possível criar o local.', 'error'); }
-    });
-
-    // ---- SUP-001/PO-001 — Compras (demandas, pedidos, fornecedores) ----
-    let buyTab = 'demands';
-    let buySuppliers = [];
-    const STATUS_PO = { EMITIDO: ['Emitido', ''], RECEBIDO: ['Recebido', 'on'], CANCELADO: ['Cancelado', 'off'] };
-    const supOpts = () => buySuppliers.map(s => `<option value="${s.id}">${escapeHtml(s.tradeName || s.legalName)}</option>`).join('');
-
-    async function initBuying() {
-      try {
-        if (canBuy(currentUser.role)) {
-          buySuppliers = (await api('/api/v1/suppliers/')).items;
-          if (!whLocations.length) {
-            try { whLocations = (await api('/api/v1/inventory/locations')).items; } catch {}
-          }
-        }
-        loadBuying();
-      } catch (err) { flash($('buy-msg'), err.message || 'Falha ao carregar compras.', 'error'); }
-    }
-
-    async function loadBuying() {
-      try {
-        if (buyTab === 'demands') {
-          const { approvedRequisitions, purchaseRouteItems } = await api('/api/v1/purchase-orders/demands');
-          $('buy-demand-count').textContent = '(' + (approvedRequisitions.length + purchaseRouteItems.length) + ')';
-          let html = '';
-          html += '<h2>Requisições aprovadas aguardando pedido</h2>';
-          html += approvedRequisitions.length
-            ? '<table aria-label="Requisições aprovadas"><thead><tr><th>Número</th><th>Itens</th><th>Valor est.</th><th>Emitir</th></tr></thead><tbody>' +
-              approvedRequisitions.map(r => `
-                <tr data-pr="${r.id}">
-                  <td>${escapeHtml(r.number)}<div class="sub">${escapeHtml(r.requesterLabel)} · CC: ${escapeHtml(r.costCenter)}</div></td>
-                  <td>${r.items.map(i => `${i.quantity}× ${i.catalogCode ? '[' + escapeHtml(i.catalogCode) + '] ' : ''}${escapeHtml(i.description)}`).join(' · ')}</td>
-                  <td>${money(r.totalEstimatedValue)}</td>
-                  <td class="row-actions">
-                    <select class="buy-sup-sel" aria-label="Fornecedor">${supOpts()}</select>
-                    <button data-act="convert" ${buySuppliers.length ? '' : 'disabled'}>Emitir pedido</button>
-                  </td>
-                </tr>`).join('') + '</tbody></table>'
-            : '<p class="hello">Nenhuma requisição aprovada aguardando pedido.</p>';
-          html += '<h2>Itens de solicitação em rota de compra</h2>';
-          html += purchaseRouteItems.length
-            ? '<table aria-label="Itens em rota de compra"><thead><tr><th>Origem</th><th>Item</th><th>Qtd</th><th>Emitir</th></tr></thead><tbody>' +
-              purchaseRouteItems.map((i, idx) => `
-                <tr data-route="${idx}" data-cat="${i.catalogItemId}" data-desc="${escapeHtml(i.description)}" data-qty="${i.quantity}" data-unit="${escapeHtml(i.unitOfMeasure)}">
-                  <td>${escapeHtml(i.materialRequisitionNumber)}<div class="sub">${escapeHtml(i.requesterLabel)} · CC: ${escapeHtml(i.costCenter)}</div></td>
-                  <td>[${escapeHtml(i.catalogCode)}] ${escapeHtml(i.description)}</td>
-                  <td>${i.quantity} ${escapeHtml(i.unitOfMeasure)}</td>
-                  <td class="row-actions">
-                    <select class="buy-sup-sel" aria-label="Fornecedor">${supOpts()}</select>
-                    <button data-act="route-po" ${buySuppliers.length ? '' : 'disabled'}>Emitir pedido</button>
-                  </td>
-                </tr>`).join('') + '</tbody></table>'
-            : '<p class="hello">Nenhum item aguardando compra vindo do almoxarifado.</p>';
-          if (!buySuppliers.length) html += '<p class="hello">Cadastre um fornecedor na aba "Fornecedores" para emitir pedidos.</p>';
-          $('buy-panel').innerHTML = html;
-        } else if (buyTab === 'orders') {
-          const { items } = await api('/api/v1/purchase-orders/');
-          $('buy-panel').innerHTML = items.length
-            ? '<table aria-label="Pedidos de compra"><thead><tr><th>Número</th><th>Fornecedor</th><th>Itens</th><th>Total</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
-              items.map(o => {
-                const [label, cls] = STATUS_PO[o.status] || [o.status, ''];
-                const acts = o.status === 'EMITIDO' && canBuy(currentUser.role)
-                  ? `<select class="buy-rec-loc" aria-label="Local">${whLocations.length ? whLocations.map(l => `<option value="${l.id}">${escapeHtml(l.code)}</option>`).join('') : '<option value="">(sem local)</option>'}</select>
-                     <button data-act="receive">Receber</button>
-                     <button class="danger" data-act="cancel-po">Cancelar</button>` : '';
-                const src = o.sourcePrNumber ? `<div class="sub">de ${escapeHtml(o.sourcePrNumber)}</div>` : '';
-                const rec = o.receivedByLabel ? `<div class="sub">Recebido por ${escapeHtml(o.receivedByLabel)}</div>` : '';
-                return `<tr data-id="${o.id}">
-                  <td>${escapeHtml(o.number)}${src}</td>
-                  <td>${escapeHtml(o.supplierName)}${rec}</td>
-                  <td>${o.items.map(i => `${i.quantity}× ${i.catalogCode ? '[' + escapeHtml(i.catalogCode) + '] ' : ''}${escapeHtml(i.description)}`).join(' · ')}</td>
-                  <td>${money(o.totalValue)}</td>
-                  <td><span class="badge ${cls}">${label}</span>${o.cancelReason ? `<div class="sub">${escapeHtml(o.cancelReason)}</div>` : ''}</td>
-                  <td class="row-actions">${acts}</td>
-                </tr>`;
-              }).join('') + '</tbody></table>'
-            : '<p class="hello">Nenhum pedido de compra emitido ainda.</p>';
-        } else {
-          const { items } = await api('/api/v1/suppliers/?all=true');
-          buySuppliers = items.filter(s => s.active);
-          $('buy-panel').innerHTML = items.length
-            ? '<table aria-label="Fornecedores"><thead><tr><th>Fornecedor</th><th>CNPJ/CPF</th><th>Contato</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
-              items.map(s => `
-                <tr data-id="${s.id}">
-                  <td>${escapeHtml(s.legalName)}${s.tradeName ? `<div class="sub">${escapeHtml(s.tradeName)}</div>` : ''}</td>
-                  <td>${escapeHtml(s.taxId)}</td>
-                  <td>${escapeHtml(s.email || '')}${s.phone ? `<div class="sub">${escapeHtml(s.phone)}</div>` : ''}</td>
-                  <td><span class="badge ${s.active ? 'on' : 'off'}">${s.active ? 'ATIVO' : 'INATIVO'}</span></td>
-                  <td class="row-actions"><button class="${s.active ? 'danger' : 'secondary'}" data-act="toggle-sup">${s.active ? 'Inativar' : 'Reativar'}</button></td>
-                </tr>`).join('') + '</tbody></table>'
-            : '<p class="hello">Nenhum fornecedor cadastrado ainda.</p>';
-        }
-      } catch (err) { flash($('buy-msg'), err.message || 'Falha ao carregar dados de compras.', 'error'); }
-    }
-
-    $('buy-tab-demands').addEventListener('click', () => { buyTab = 'demands'; loadBuying(); });
-    $('buy-tab-orders').addEventListener('click', () => { buyTab = 'orders'; loadBuying(); });
-    $('buy-tab-suppliers').addEventListener('click', () => { buyTab = 'suppliers'; loadBuying(); });
-    $('buy-refresh').addEventListener('click', () => initBuying());
-
-    $('buy-panel').addEventListener('click', async (ev) => {
-      const btn = ev.target.closest('button[data-act]');
-      if (!btn) return;
-      const row = btn.closest('tr');
-      const act = btn.dataset.act;
-      try {
-        if (act === 'convert') {
-          const supplierId = row.querySelector('.buy-sup-sel').value;
-          if (!confirm('Emitir pedido de compra para esta requisição aprovada?')) return;
-          await api('/api/v1/purchase-orders/', { method: 'POST', body: { supplierId, sourcePrId: row.dataset.pr, items: [] } });
-          flash($('buy-msg'), 'Pedido emitido a partir da requisição.', 'ok');
-        } else if (act === 'route-po') {
-          const supplierId = row.querySelector('.buy-sup-sel').value;
-          if (!confirm('Emitir pedido de compra para este item?')) return;
-          await api('/api/v1/purchase-orders/', { method: 'POST', body: { supplierId, items: [{
-            description: row.dataset.desc, quantity: parseFloat(row.dataset.qty),
-            unitOfMeasure: row.dataset.unit, catalogItemId: row.dataset.cat,
-          }]}});
-          flash($('buy-msg'), 'Pedido emitido para o item em rota de compra.', 'ok');
-        } else if (act === 'receive') {
-          const locationId = row.querySelector('.buy-rec-loc').value;
-          if (!locationId) { flash($('buy-msg'), 'Crie um local de estoque no Almoxarifado primeiro.', 'error'); return; }
-          if (!confirm('Confirmar o recebimento? Itens de catálogo entram no estoque.')) return;
-          await api(`/api/v1/purchase-orders/${row.dataset.id}/receive`, { method: 'POST', body: { locationId } });
-          flash($('buy-msg'), 'Pedido recebido — estoque atualizado.', 'ok');
-        } else if (act === 'cancel-po') {
-          const reason = prompt('Motivo do cancelamento (obrigatório):');
-          if (!reason) return;
-          await api(`/api/v1/purchase-orders/${row.dataset.id}/cancel`, { method: 'POST', body: { reason } });
-          flash($('buy-msg'), 'Pedido cancelado.', 'ok');
-        } else if (act === 'toggle-sup') {
-          await api('/api/v1/suppliers/' + row.dataset.id, { method: 'PATCH', body: { active: btn.textContent === 'Reativar' } });
-          flash($('buy-msg'), 'Fornecedor atualizado.', 'ok');
-        }
-        loadBuying();
-      } catch (err) { flash($('buy-msg'), err.message || 'Operação não permitida.', 'error'); }
-    });
-
-    $('buy-sup-form').addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      try {
-        await api('/api/v1/suppliers/', { method: 'POST', body: {
-          legalName: $('bs-legal').value, tradeName: $('bs-trade').value || null,
-          taxId: $('bs-tax').value, email: $('bs-email').value || null,
-        }});
-        flash($('buy-msg'), 'Fornecedor cadastrado.', 'ok');
-        ev.target.reset();
-        buyTab = 'suppliers';
-        initBuying();
-      } catch (err) { flash($('buy-msg'), err.message || 'Não foi possível cadastrar o fornecedor.', 'error'); }
+        $('ci-family').value = keepFamily;
+        LOADERS['products']();
+      } catch (err) { toast(err.message, 'error'); }
     });
 
     // sessão existente? valida contra /me

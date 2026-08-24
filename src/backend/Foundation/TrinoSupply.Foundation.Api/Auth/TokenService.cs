@@ -30,6 +30,7 @@ public class TokenService(JwtOptions options)
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new("name", user.Name),
             new(ClaimTypes.Role, user.Role),
+            new("modules", string.Join(',', AppModules.EffectiveFor(user))),
         };
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Secret));

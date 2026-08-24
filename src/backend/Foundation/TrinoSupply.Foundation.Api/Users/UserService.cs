@@ -18,8 +18,21 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
     public Task<List<User>> ListAsync(CancellationToken ct = default) =>
         db.Users.OrderBy(u => u.Name).ThenBy(u => u.Email).Take(500).ToListAsync(ct);
 
+    /// <summary>Normaliza a lista de módulos autorizados; null = usa o padrão do papel.</summary>
+    private static (string? csv, UserError? error) NormalizeModules(IReadOnlyList<string>? modules)
+    {
+        if (modules is null) return (null, null);
+        var clean = modules.Select(m => m.Trim().ToUpperInvariant())
+            .Where(m => m.Length > 0).Distinct().ToList();
+        var invalid = clean.Where(m => !AppModules.All.Contains(m)).ToList();
+        if (invalid.Count > 0)
+            return (null, new("IAM-ERR-017", $"Módulos inválidos: {string.Join(", ", invalid)}."));
+        return (clean.Count == 0 ? "" : string.Join(',', clean), null);
+    }
+
     public async Task<(User? user, UserError? error)> CreateAsync(
-        string email, string name, string role, string password, CancellationToken ct = default)
+        string email, string name, string role, string password,
+        IReadOnlyList<string>? modules = null, CancellationToken ct = default)
     {
         var normalized = email.Trim().ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(normalized) || !normalized.Contains('@'))
@@ -32,12 +45,15 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
             return (null, new("IAM-ERR-013", "A senha precisa ter no mínimo 12 caracteres."));
         if (await db.Users.AnyAsync(u => u.Email == normalized, ct))
             return (null, new("IAM-ERR-014", "Já existe um usuário com este e-mail."));
+        var (modulesCsv, modulesError) = NormalizeModules(modules);
+        if (modulesError is not null) return (null, modulesError);
 
         var user = new User
         {
             Email = normalized,
             Name = name.Trim(),
             Role = role,
+            Modules = modulesCsv,
             CreatedAt = clock.GetUtcNow(),
             UpdatedAt = clock.GetUtcNow(),
         };
@@ -48,12 +64,15 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
     }
 
     public async Task<(User? user, UserError? error)> UpdateAsync(
-        Guid id, Guid actorId, string? name, string? role, bool? active, CancellationToken ct = default)
+        Guid id, Guid actorId, string? name, string? role, bool? active,
+        IReadOnlyList<string>? modules = null, CancellationToken ct = default)
     {
         var user = await db.Users.SingleOrDefaultAsync(u => u.Id == id, ct);
         if (user is null) return (null, new("IAM-ERR-404", "Usuário não encontrado."));
         if (role is not null && !ValidRoles.Contains(role))
             return (null, new("IAM-ERR-012", "Papel inválido."));
+        var (modulesCsv, modulesError) = NormalizeModules(modules);
+        if (modulesError is not null) return (null, modulesError);
 
         var losesAdmin = user.Role == Roles.SystemAdministrator &&
                          ((role is not null && role != Roles.SystemAdministrator) || active == false);
@@ -64,6 +83,7 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
 
         if (name is not null && name.Trim().Length >= 2) user.Name = name.Trim();
         if (role is not null) user.Role = role;
+        if (modules is not null) user.Modules = modulesCsv;
         if (active is not null) user.Active = active.Value;
         user.UpdatedAt = clock.GetUtcNow();
 

@@ -276,7 +276,12 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
         var totalValue = balances.Sum(b => ValueOf(b.CatalogItemId, b.TotalQty));
         var availableByItem = balances.GroupBy(b => b.CatalogItemId)
             .ToDictionary(g => g.Key, g => g.Sum(b => b.TotalQty - b.ReservedQty));
-        var stockout = items.Where(i => i.Active && availableByItem.GetValueOrDefault(i.Id) <= 0)
+        // reposição: itens de almoxarifado no ou abaixo do estoque mínimo (sem mínimo = quando zera).
+        // Enquanto nenhum item estiver marcado como de estoque, considera todos (base ainda sem classificação).
+        var stockItems = items.Where(i => i.Active && i.StockControlled).ToList();
+        if (stockItems.Count == 0) stockItems = items.Where(i => i.Active).ToList();
+        var stockout = stockItems
+            .Where(i => availableByItem.GetValueOrDefault(i.Id) <= (i.MinimumQty ?? 0))
             .OrderBy(i => i.Family).ThenBy(i => i.Description).ToList();
 
         var movements = await db.StockMovements
@@ -345,6 +350,7 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
         {
             code = i.Code, description = i.Description, family = i.Family, unit = i.UnitOfMeasure,
             available = availableByItem.GetValueOrDefault(i.Id),
+            minimum = i.MinimumQty,
         }).ToList();
 
         var filterOptions = new

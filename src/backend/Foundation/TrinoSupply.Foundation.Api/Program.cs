@@ -210,6 +210,12 @@ static object CatalogView(CatalogItem i) => new
 {
     id = i.Id, code = i.Code, description = i.Description, family = i.Family,
     unitOfMeasure = i.UnitOfMeasure, referencePrice = i.ReferencePrice, active = i.Active,
+    stockControlled = i.StockControlled, minimumQty = i.MinimumQty,
+    suppliers = i.Suppliers.OrderBy(s => s.SupplierName).Select(s => new
+    {
+        id = s.Id, supplierName = s.SupplierName, taxId = s.TaxId, contact = s.Contact,
+        supplierItemCode = s.SupplierItemCode, lastPrice = s.LastPrice, notes = s.Notes,
+    }),
 };
 
 var catalogGroup = app.MapGroup("/api/v1/items").RequireAuthorization();
@@ -221,11 +227,11 @@ catalogGroup.MapGet("/families", async (CatalogService svc, ClaimsPrincipal p, H
     return Ok(new { families = await svc.FamiliesAsync(onlyActive: !CatalogService.CanMaintain(role)) }, ctx);
 });
 
-catalogGroup.MapGet("/", async (CatalogService svc, ClaimsPrincipal p, HttpContext ctx, string? family, string? q, bool? all) =>
+catalogGroup.MapGet("/", async (CatalogService svc, ClaimsPrincipal p, HttpContext ctx, string? family, string? q, bool? all, bool? stock) =>
 {
     var role = p.FindFirstValue(ClaimTypes.Role) ?? "";
     var includeInactive = all == true && CatalogService.CanMaintain(role);
-    var items = await svc.ListAsync(family, q, includeInactive);
+    var items = await svc.ListAsync(family, q, includeInactive, stock == true);
     return Ok(new { items = items.Select(CatalogView) }, ctx);
 });
 
@@ -249,7 +255,10 @@ catalogGroup.MapPost("/", async (CreateCatalogItemRequest body, CatalogService s
         return Error(ctx, 403, "IC-ERR-001", "Somente o gestor de suprimentos ou o administrador mantêm o catálogo.");
     if (!ModulesOf(p).Contains(AppModules.Produtos))
         return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para o cadastro de produtos.");
-    var (item, error) = await svc.CreateAsync(ActorId(p), body.Code, body.Description, body.Family, body.UnitOfMeasure, body.ReferencePrice);
+    var suppliers = body.Suppliers?.Select(x => new ItemSupplierInput(
+        x.SupplierName ?? "", x.TaxId, x.Contact, x.SupplierItemCode, x.LastPrice, x.Notes)).ToList();
+    var (item, error) = await svc.CreateAsync(ActorId(p), body.Code, body.Description, body.Family,
+        body.UnitOfMeasure, body.ReferencePrice, body.StockControlled == true, body.MinimumQty, suppliers);
     return error is not null
         ? Error(ctx, error.Code == "IC-ERR-010" ? 409 : 400, error.Code, error.Message)
         : Results.Json(new { data = CatalogView(item!), correlationId = CorrelationId(ctx) }, statusCode: 201);
@@ -262,7 +271,10 @@ catalogGroup.MapPatch("/{id:guid}", async (Guid id, UpdateCatalogItemRequest bod
         return Error(ctx, 403, "IC-ERR-001", "Somente o gestor de suprimentos ou o administrador mantêm o catálogo.");
     if (!ModulesOf(p).Contains(AppModules.Produtos))
         return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para o cadastro de produtos.");
-    var (item, error) = await svc.UpdateAsync(id, body.Description, body.Family, body.UnitOfMeasure, body.ReferencePrice, body.Active);
+    var suppliers = body.Suppliers?.Select(x => new ItemSupplierInput(
+        x.SupplierName ?? "", x.TaxId, x.Contact, x.SupplierItemCode, x.LastPrice, x.Notes)).ToList();
+    var (item, error) = await svc.UpdateAsync(id, body.Description, body.Family, body.UnitOfMeasure,
+        body.ReferencePrice, body.Active, body.StockControlled, body.MinimumQty, body.ClearMinimum == true, suppliers);
     return error is not null
         ? Error(ctx, error.Code == "IC-ERR-404" ? 404 : 400, error.Code, error.Message)
         : Ok(CatalogView(item!), ctx);
@@ -1657,8 +1669,13 @@ public record ResetPasswordRequest(string NewPassword);
 public record ItemRequest(string? Description, decimal Quantity, string? UnitOfMeasure, decimal? EstimatedUnitPrice, string? Notes, Guid? CatalogItemId);
 public record CreateRequisitionRequest(string Justification, string CostCenter, string? Priority, DateOnly? NeededBy, List<ItemRequest>? Items, string? Kind,
     string? NeedType, string? DeliveryLocation, string? Company, string? InternalNotes);
-public record CreateCatalogItemRequest(string Code, string Description, string Family, string? UnitOfMeasure, decimal? ReferencePrice);
-public record UpdateCatalogItemRequest(string? Description, string? Family, string? UnitOfMeasure, decimal? ReferencePrice, bool? Active);
+public record ItemSupplierRequest(string? SupplierName, string? TaxId, string? Contact,
+    string? SupplierItemCode, decimal? LastPrice, string? Notes);
+public record CreateCatalogItemRequest(string? Code, string Description, string Family, string? UnitOfMeasure,
+    decimal? ReferencePrice, bool? StockControlled, decimal? MinimumQty, List<ItemSupplierRequest>? Suppliers);
+public record UpdateCatalogItemRequest(string? Description, string? Family, string? UnitOfMeasure,
+    decimal? ReferencePrice, bool? Active, bool? StockControlled, decimal? MinimumQty, bool? ClearMinimum,
+    List<ItemSupplierRequest>? Suppliers);
 public record CreateLocationRequest(string Code, string Name);
 public record EntryRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity, string OriginReference, string? Origin);
 public record IssueRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity, string OriginReference);

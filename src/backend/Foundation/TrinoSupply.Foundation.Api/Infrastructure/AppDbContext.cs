@@ -17,6 +17,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Materials.MaterialRequisition> MaterialRequisitions => Set<Materials.MaterialRequisition>();
     public DbSet<Materials.MaterialRequisitionItem> MaterialRequisitionItems => Set<Materials.MaterialRequisitionItem>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
+    public DbSet<CostCenter> CostCenters => Set<CostCenter>();
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
     public DbSet<PurchaseOrderItem> PurchaseOrderItems => Set<PurchaseOrderItem>();
 
@@ -210,6 +211,24 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.Notes).HasColumnName("notes").HasMaxLength(500);
             e.Property(i => i.CreatedAt).HasColumnName("created_at");
             e.HasIndex(i => i.RequisitionId);
+        });
+
+        modelBuilder.Entity<CostCenter>(e =>
+        {
+            e.ToTable("cost_center"); // schema foundation (master data mínimo)
+            e.HasKey(c => c.Id);
+            e.Property(c => c.Id).HasColumnName("id");
+            e.Property(c => c.Code).HasColumnName("code").HasMaxLength(60).IsRequired();
+            e.Property(c => c.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+            e.Property(c => c.Region).HasColumnName("region").HasMaxLength(120);
+            e.Property(c => c.ManagerName).HasColumnName("manager_name").HasMaxLength(200);
+            e.Property(c => c.ClientName).HasColumnName("client_name").HasMaxLength(200);
+            e.Property(c => c.Active).HasColumnName("active");
+            e.Property(c => c.CreatedAt).HasColumnName("created_at");
+            e.Property(c => c.UpdatedAt).HasColumnName("updated_at");
+            e.Property(c => c.CreatedBy).HasColumnName("created_by");
+            e.Property(c => c.Version).HasColumnName("version");
+            e.HasIndex(c => c.Code).IsUnique();
         });
 
         modelBuilder.Entity<Supplier>(e =>

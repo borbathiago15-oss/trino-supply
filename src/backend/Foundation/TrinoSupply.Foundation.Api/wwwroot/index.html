@@ -21,6 +21,13 @@
       --warn-bg: #fef9c3;
       --border: #e2e8f0;
       --radius: 12px;
+      /* série de dados (paleta validada p/ daltonismo — dataviz) */
+      --s1: #2a78d6;  /* azul */
+      --s2: #eb6834;  /* laranja */
+      --s3: #1baf7a;  /* verde-água */
+      --s4: #eda100;  /* amarelo */
+      --s5: #e34948;  /* vermelho */
+      --s0: #94a3b8;  /* neutro */
     }
     * { box-sizing: border-box; margin: 0; }
     body {
@@ -124,6 +131,29 @@
     .checks label { display: flex; align-items: center; gap: 8px; font-weight: 500; margin: 0; font-size: 13.5px; }
     .checks input { width: auto; }
 
+    /* ---- dashboards ---- */
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 10px; margin-bottom: 16px; }
+    .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+    .kpi .v { font-size: 21px; font-weight: 800; letter-spacing: -.4px; }
+    .kpi .l { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 3px; }
+    .kpi .d { font-size: 12px; font-weight: 700; margin-top: 2px; }
+    .kpi .d.up { color: var(--ok); } .kpi .d.down { color: var(--danger); } .kpi .d.flat { color: var(--text-muted); }
+    .kpi.warn { border-left: 4px solid #ca8a04; } .kpi.bad { border-left: 4px solid var(--danger); }
+    .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 10px; align-items: end; }
+    .filters label { margin: 0 0 3px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
+    .filters select, .filters input { padding: 7px 9px; font-size: 13px; }
+    .viz-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .viz-grid .panel { margin-bottom: 16px; min-width: 0; }
+    .barlist .row { display: flex; align-items: center; gap: 8px; margin: 7px 0; font-size: 13px; }
+    .barlist .lbl { flex: 0 0 42%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .barlist .track { flex: 1; background: var(--surface-muted); border-radius: 4px; height: 14px; }
+    .barlist .fill { display: block; height: 100%; border-radius: 4px; min-width: 2px; }
+    .barlist .val { flex: 0 0 auto; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-muted); margin: 2px 0 8px; flex-wrap: wrap; }
+    .legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+    .chartwrap { overflow-x: auto; }
+    @media (max-width: 980px) { .viz-grid { grid-template-columns: 1fr; } }
+
     #toast {
       position: fixed; top: 16px; right: 16px; z-index: 50; display: none;
       max-width: 380px; padding: 12px 16px; border-radius: 10px; font-size: 13.5px; font-weight: 500;
@@ -191,13 +221,41 @@
         </div>
       </section>
 
+      <!-- Dashboard de Suprimentos -->
+      <section class="view" id="view-supply-dash">
+        <div class="panel">
+          <h2>Filtros</h2>
+          <div class="filters">
+            <div><label for="sd-from">De</label><input type="date" id="sd-from" /></div>
+            <div><label for="sd-to">Até</label><input type="date" id="sd-to" /></div>
+            <div><label for="sd-supplier">Fornecedor</label><select id="sd-supplier"></select></div>
+            <div><label for="sd-buyer">Comprador</label><select id="sd-buyer"></select></div>
+            <div><label for="sd-requester">Solicitante</label><select id="sd-requester"></select></div>
+            <div><label for="sd-family">Família</label><select id="sd-family"></select></div>
+            <div><label for="sd-cc">Centro de custo</label><select id="sd-cc"></select></div>
+            <div><label for="sd-region">Regional</label><select id="sd-region"></select></div>
+            <div><label for="sd-manager">Gerente</label><select id="sd-manager"></select></div>
+            <div><label for="sd-client">Cliente</label><select id="sd-client"></select></div>
+            <div><button id="sd-apply" type="button">Aplicar filtros</button></div>
+            <div><button id="sd-clear" type="button" class="secondary">Limpar</button></div>
+          </div>
+        </div>
+        <div class="kpis" id="sd-kpis"></div>
+        <div class="viz-grid">
+          <div class="panel"><h2>Solicitações por mês — situação</h2><div id="sd-months" class="chartwrap"></div></div>
+          <div class="panel"><h2>Valor comprado por mês (pedidos)</h2><div id="sd-po-months" class="chartwrap"></div></div>
+        </div>
+        <div class="viz-grid" id="sd-rankings"></div>
+        <div class="panel"><h2>Fornecedor — pedidos no período</h2><div id="sd-suppliers-table" class="tablewrap"></div></div>
+      </section>
+
       <!-- Solicitações: pedido unitário -->
       <section class="view" id="view-pr-new-unit">
         <div class="panel">
           <h2>Pedido Unitário (itens digitados)</h2>
           <form id="pru-form">
             <div class="grid2">
-              <div><label for="pru-cc">Centro de custo</label><input id="pru-cc" required placeholder="ex.: CC-TI-001" /></div>
+              <div><label for="pru-cc">Centro de custo</label><input id="pru-cc" list="cc-datalist" required placeholder="ex.: CC-TI-001" /></div>
               <div><label for="pru-priority">Prioridade</label>
                 <select id="pru-priority">
                   <option value="LOW">Baixa</option>
@@ -225,7 +283,7 @@
           <h2>Pedido Múltiplo (lista de produtos por família)</h2>
           <form id="prm-form">
             <div class="grid2">
-              <div><label for="prm-cc">Centro de custo</label><input id="prm-cc" required placeholder="ex.: CC-ADM-001" /></div>
+              <div><label for="prm-cc">Centro de custo</label><input id="prm-cc" list="cc-datalist" required placeholder="ex.: CC-ADM-001" /></div>
               <div><label for="prm-priority">Prioridade</label>
                 <select id="prm-priority">
                   <option value="LOW">Baixa</option>
@@ -268,7 +326,7 @@
           <p class="hello">Itens do catálogo por família. Sem saldo em estoque, o item segue para rota de compra.</p>
           <form id="mr-form">
             <div class="grid2">
-              <div><label for="mr-cc">Centro de custo</label><input id="mr-cc" required placeholder="ex.: CC-ADM-001" /></div>
+              <div><label for="mr-cc">Centro de custo</label><input id="mr-cc" list="cc-datalist" required placeholder="ex.: CC-ADM-001" /></div>
               <div><label for="mr-notes">Observações</label><input id="mr-notes" placeholder="opcional" /></div>
             </div>
             <label for="mr-family">Família de produtos</label>
@@ -289,6 +347,30 @@
 
       <!-- Estoque: dashboard -->
       <section class="view" id="view-stock-dash">
+        <div class="panel">
+          <h2>Filtros</h2>
+          <div class="filters">
+            <div><label for="st-loc">Local</label><select id="st-loc"></select></div>
+            <div><label for="st-family">Família</label><select id="st-family"></select></div>
+            <div><label for="st-months">Período</label>
+              <select id="st-months">
+                <option value="3">Últimos 3 meses</option>
+                <option value="6" selected>Últimos 6 meses</option>
+                <option value="12">Últimos 12 meses</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="kpis" id="st-kpis"></div>
+        <div class="viz-grid">
+          <div class="panel"><h2>Entradas × Saídas por mês (quantidade)</h2><div id="st-mov-chart" class="chartwrap"></div></div>
+          <div class="panel"><h2>Valor em estoque por família</h2><div id="st-family-rank"></div></div>
+        </div>
+        <div class="viz-grid">
+          <div class="panel"><h2>Top produtos por valor em estoque</h2><div id="st-top-value"></div></div>
+          <div class="panel"><h2>Maior giro — saídas no período</h2><div id="st-top-movers"></div></div>
+        </div>
+        <div class="panel"><h2>Rupturas — produtos ativos sem saldo disponível</h2><div id="st-stockout" class="tablewrap"></div></div>
         <div class="panel">
           <h2>Posição de Estoque</h2>
           <div id="stock-balances" class="tablewrap"></div>
@@ -429,6 +511,31 @@
         </div>
       </section>
 
+      <!-- Cadastros: centros de custo -->
+      <section class="view" id="view-cost-centers">
+        <div class="panel">
+          <h2>Centros de Custo</h2>
+          <p class="hello">As dimensões Regional, Gerente e Cliente dos dashboards vêm deste cadastro.</p>
+          <div id="cc-list" class="tablewrap"></div>
+        </div>
+        <div class="panel">
+          <h2>Novo centro de custo</h2>
+          <form id="cc-form">
+            <div class="grid2">
+              <div><label for="ncc-code">Código</label><input id="ncc-code" required minlength="2" placeholder="ex.: CC-NE-01" /></div>
+              <div><label for="ncc-name">Nome</label><input id="ncc-name" required minlength="3" placeholder="ex.: Filial Recife" /></div>
+            </div>
+            <div class="grid2">
+              <div><label for="ncc-region">Regional</label><input id="ncc-region" placeholder="ex.: NORDESTE" /></div>
+              <div><label for="ncc-manager">Gerente</label><input id="ncc-manager" placeholder="ex.: Marina Lima" /></div>
+            </div>
+            <label for="ncc-client">Cliente</label>
+            <input id="ncc-client" placeholder="opcional — cliente/contrato atendido" />
+            <button type="submit" class="full">Cadastrar centro de custo</button>
+          </form>
+        </div>
+      </section>
+
       <!-- Cadastros: produtos -->
       <section class="view" id="view-products">
         <div class="panel">
@@ -458,6 +565,7 @@
       </section>
     </main>
   </div>
+  <datalist id="cc-datalist"></datalist>
 
   <script>
     'use strict';
@@ -471,7 +579,8 @@
       SOLICITACOES: 'Solicitações de Compra', APROVACAO: 'Central de Aprovação',
       MATERIAL: 'Solicitação de Material', ESTOQUE: 'Estoque / Almoxarifado',
       COMPRAS: 'Compras', PRODUTOS: 'Cadastro de Produtos',
-      FORNECEDORES: 'Cadastro de Fornecedores', USUARIOS: 'Cadastro de Usuários',
+      FORNECEDORES: 'Cadastro de Fornecedores', CENTROS_CUSTO: 'Centros de Custo',
+      USUARIOS: 'Cadastro de Usuários',
     };
     const DEFAULT_MODULES = {
       SystemAdministrator: Object.keys(MODULE_LABELS),
@@ -480,7 +589,7 @@
       PurchasingOfficer: ['COMPRAS', 'FORNECEDORES', 'ESTOQUE'],
       WarehouseOperator: ['ESTOQUE'],
       WarehouseSupervisor: ['ESTOQUE', 'PRODUTOS'],
-      SupplyManager: ['SOLICITACOES', 'APROVACAO', 'MATERIAL', 'ESTOQUE', 'COMPRAS', 'PRODUTOS', 'FORNECEDORES'],
+      SupplyManager: ['SOLICITACOES', 'APROVACAO', 'MATERIAL', 'ESTOQUE', 'COMPRAS', 'PRODUTOS', 'FORNECEDORES', 'CENTROS_CUSTO'],
       Auditor: ['SOLICITACOES', 'ESTOQUE', 'COMPRAS'],
     };
     const store = {
@@ -524,7 +633,12 @@
 
     // ---- menu lateral ----
     const MENU = [
-      { title: null, items: [{ id: 'dashboard', label: 'Dashboard', show: () => true }] },
+      { title: null, items: [
+        { id: 'dashboard', label: 'Dashboard', show: () => true },
+        { id: 'supply-dash', label: 'Dashboard de Suprimentos',
+          show: () => (canDecidePr() || canBuy() || currentUser.role === 'Auditor') &&
+                      (hasModule('SOLICITACOES') || hasModule('APROVACAO') || hasModule('COMPRAS')) },
+      ]},
       { title: 'Solicitações de Compra', module: 'SOLICITACOES', items: [
         { id: 'pr-new-unit', label: 'Pedido Unitário', show: canCreatePr },
         { id: 'pr-new-multi', label: 'Pedido Múltiplo', show: canCreatePr },
@@ -549,6 +663,7 @@
         { id: 'users', label: 'Usuários', module: 'USUARIOS', show: isAdmin },
         { id: 'suppliers', label: 'Fornecedores', module: 'FORNECEDORES', show: canBuy },
         { id: 'products', label: 'Produtos', module: 'PRODUTOS', show: () => true },
+        { id: 'cost-centers', label: 'Centros de Custo', module: 'CENTROS_CUSTO', show: canMaintainCatalog },
       ]},
     ];
     const TITLES = {
@@ -559,6 +674,7 @@
       'stock-entry': 'Entrada de Estoque', 'stock-issue': 'Saída de Estoque',
       'buy-demands': 'Demandas de Compra', 'buy-orders': 'Pedidos de Compra',
       users: 'Cadastro de Usuários', suppliers: 'Cadastro de Fornecedores', products: 'Cadastro de Produtos',
+      'supply-dash': 'Dashboard de Suprimentos', 'cost-centers': 'Centros de Custo',
     };
     const LOADERS = {};
     let currentView = 'dashboard';
@@ -602,6 +718,7 @@
       $('user-name').textContent = user.name || user.email;
       $('user-role').textContent = '(' + (ROLE_LABELS[user.role] || user.role) + ')';
       renderNav();
+      loadCcDatalist();
       goTo('dashboard');
     }
     function showLogin() {
@@ -886,10 +1003,58 @@
     }
     const locCode = (id) => { const l = whLocations.find(x => x.id === id); return l ? l.code : '—'; };
 
+    function fillSelect(el, options, keep, placeholder) {
+      const current = keep ? el.value : '';
+      el.innerHTML = `<option value="">${placeholder}</option>` +
+        options.map(o => {
+          const val = typeof o === 'string' ? o : (o.id ?? o.code);
+          const lbl = typeof o === 'string' ? o : (o.label ?? (o.code ? o.code + ' — ' + o.name : o.name));
+          return `<option value="${escapeHtml(String(val))}" ${String(val) === current ? 'selected' : ''}>${escapeHtml(lbl)}</option>`;
+        }).join('');
+    }
+
     LOADERS['stock-dash'] = async () => {
       try {
         await loadLocations();
-        const { items } = await api('/api/v1/inventory/balances');
+        const q = new URLSearchParams();
+        if ($('st-loc').value) q.set('locationId', $('st-loc').value);
+        if ($('st-family').value) q.set('family', $('st-family').value);
+        q.set('months', $('st-months').value || '6');
+        const dash = await api('/api/v1/analytics/stock?' + q.toString());
+
+        fillSelect($('st-loc'), dash.filterOptions.locations.map(l => ({ id: l.id, label: l.code + ' — ' + l.name })), true, 'Todos os locais');
+        fillSelect($('st-family'), dash.filterOptions.families, true, 'Todas as famílias');
+
+        const k = dash.kpis;
+        $('st-kpis').innerHTML = `
+          <div class="kpi"><div class="l">Valor em estoque</div><div class="v">${money(k.totalValue)}</div><div class="d flat">preço de referência</div></div>
+          <div class="kpi"><div class="l">Produtos com saldo</div><div class="v">${fmtInt(k.skusWithBalance)}</div></div>
+          <div class="kpi ${k.stockoutCount > 0 ? 'bad' : ''}"><div class="l">Rupturas</div><div class="v">${fmtInt(k.stockoutCount)}</div><div class="d flat">ativos sem disponível</div></div>
+          <div class="kpi"><div class="l">Reservado</div><div class="v">${fmtInt(k.reservedQty)}</div></div>
+          <div class="kpi"><div class="l">Entradas no período</div><div class="v">${fmtInt(k.entriesQty)}</div></div>
+          <div class="kpi"><div class="l">Saídas no período</div><div class="v">${fmtInt(k.issuesQty)}</div></div>
+          <div class="kpi ${k.purchaseRouteItems > 0 ? 'warn' : ''}"><div class="l">Itens em rota de compra</div><div class="v">${fmtInt(k.purchaseRouteItems)}</div></div>`;
+
+        const movSeries = [
+          { name: 'Entradas', color: 'var(--s1)', values: dash.months.map(m => m.entriesQty) },
+          { name: 'Saídas', color: 'var(--s2)', values: dash.months.map(m => m.issuesQty) },
+        ];
+        $('st-mov-chart').innerHTML = legendHtml(movSeries) +
+          columnChart(dash.months.map(m => m.month), movSeries, { fmt: fmtInt });
+        $('st-family-rank').innerHTML = barList(dash.valueByFamily, { fmt: money, color: 'var(--s1)' });
+        $('st-top-value').innerHTML = barList(dash.topByValue, { fmt: money, color: 'var(--s3)' });
+        $('st-top-movers').innerHTML = barList(dash.topMovers.map(t => ({ label: t.label, value: t.qty })), { fmt: fmtInt, color: 'var(--s2)' });
+        $('st-stockout').innerHTML = dash.stockout.length
+          ? '<table><thead><tr><th>Código</th><th>Produto</th><th>Família</th><th>Disponível</th></tr></thead><tbody>' +
+            dash.stockout.map(s => `
+              <tr><td>${escapeHtml(s.code)}</td><td>${escapeHtml(s.description)}</td><td>${escapeHtml(s.family)}</td>
+              <td><span class="badge off">${s.available} ${escapeHtml(s.unit)}</span></td></tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhuma ruptura: todos os produtos ativos têm saldo disponível. ✔</p>';
+
+        const locFilter = $('st-loc').value;
+        const famFilter = $('st-family').value;
+        let { items } = await api('/api/v1/inventory/balances' + (locFilter ? '?locationId=' + locFilter : ''));
+        if (famFilter) items = items.filter(b => b.family === famFilter);
         $('stock-balances').innerHTML = items.length
           ? '<table><thead><tr><th>Produto</th><th>Família</th><th>Local</th><th>Total</th><th>Disponível</th></tr></thead><tbody>' +
             items.map(b => `
@@ -1281,6 +1446,216 @@
         ev.target.reset();
         $('ci-family').value = keepFamily;
         LOADERS['products']();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    // ============ HELPERS DE GRÁFICO (dataviz) ============
+    const fmtInt = (v) => (+v || 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 });
+    const fmtMoneyShort = (v) => {
+      v = +v || 0;
+      if (Math.abs(v) >= 1e6) return 'R$ ' + (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mi';
+      if (Math.abs(v) >= 1e3) return 'R$ ' + (v / 1e3).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mil';
+      return money(v);
+    };
+    const MONTH_PT = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+    const mLabel = (ym) => { const [y, m] = ym.split('-'); return MONTH_PT[+m - 1] + '/' + y.slice(2); };
+
+    function legendHtml(series) {
+      return '<div class="legend">' + series.map(s =>
+        `<span><span class="sw" style="background:${s.color}"></span>${escapeHtml(s.name)}</span>`).join('') + '</div>';
+    }
+
+    // colunas mensais (agrupadas ou empilhadas), com tooltip nativo por barra
+    function columnChart(labels, series, opts = {}) {
+      const stacked = !!opts.stacked, fmt = opts.fmt || fmtInt;
+      const H = 175, top = 12, bot = 24;
+      const slot = Math.max(40, stacked ? 40 : series.length * 14 + 16);
+      const W = Math.max(320, labels.length * slot + 30);
+      const totals = labels.map((_, i) => stacked
+        ? series.reduce((a, s) => a + (+s.values[i] || 0), 0)
+        : Math.max(0, ...series.map(s => +s.values[i] || 0)));
+      const max = Math.max(1e-9, ...totals);
+      const y = (v) => (H - bot) - (v / max) * (H - top - bot);
+      let out = `<svg viewBox="0 0 ${W} ${H}" style="width:100%" role="img" aria-label="Gráfico de colunas">`;
+      [0.5, 1].forEach(f => {
+        const gy = y(max * f);
+        out += `<line x1="28" y1="${gy}" x2="${W}" y2="${gy}" stroke="var(--border)" stroke-width="1"/>` +
+               `<text x="0" y="${gy + 3}" font-size="9" fill="var(--text-muted)">${fmt(max * f)}</text>`;
+      });
+      out += `<line x1="28" y1="${H - bot}" x2="${W}" y2="${H - bot}" stroke="var(--border)" stroke-width="1"/>`;
+      labels.forEach((lb, i) => {
+        const x0 = 32 + i * slot;
+        if (stacked) {
+          let acc = 0;
+          series.forEach(s => {
+            const v = +s.values[i] || 0; if (v <= 0) return;
+            acc += v;
+            const h = (v / max) * (H - top - bot);
+            out += `<rect x="${x0}" y="${y(acc)}" width="26" height="${Math.max(1, h - 1)}" rx="2" fill="${s.color}">` +
+                   `<title>${mLabel(lb)} — ${s.name}: ${fmt(v)}</title></rect>`;
+          });
+        } else {
+          series.forEach((s, si) => {
+            const v = +s.values[i] || 0;
+            const h = (v / max) * (H - top - bot);
+            out += `<rect x="${x0 + si * 13}" y="${y(v)}" width="11" height="${Math.max(v > 0 ? 2 : 0, h)}" rx="2" fill="${s.color}">` +
+                   `<title>${mLabel(lb)} — ${s.name}: ${fmt(v)}</title></rect>`;
+          });
+        }
+        const cx = x0 + (stacked ? 13 : series.length * 6.5);
+        out += `<text x="${cx}" y="${H - 8}" font-size="9.5" fill="var(--text-muted)" text-anchor="middle">${mLabel(lb)}</text>`;
+      });
+      return out + '</svg>';
+    }
+
+    // ranking horizontal com rótulo e valor visíveis
+    function barList(rows, opts = {}) {
+      const fmt = opts.fmt || fmtInt, color = opts.color || 'var(--s1)';
+      rows = (rows || []).map(r => ({ label: r.label, value: +(r.value ?? r.qty) || 0 }));
+      if (!rows.length) return '<p class="hello">Sem dados no período.</p>';
+      const max = Math.max(...rows.map(r => r.value), 1e-9);
+      return '<div class="barlist">' + rows.map(r => `
+        <div class="row" title="${escapeHtml(r.label)}: ${fmt(r.value)}">
+          <span class="lbl">${escapeHtml(r.label)}</span>
+          <span class="track"><span class="fill" style="width:${Math.max(2, r.value / max * 100)}%;background:${color}"></span></span>
+          <span class="val">${fmt(r.value)}</span>
+        </div>`).join('') + '</div>';
+    }
+
+    // ============ DASHBOARD DE SUPRIMENTOS ============
+    LOADERS['supply-dash'] = async () => {
+      try {
+        const q = new URLSearchParams();
+        if ($('sd-from').value) q.set('from', $('sd-from').value);
+        if ($('sd-to').value) q.set('to', $('sd-to').value);
+        for (const [id, param] of [['sd-supplier', 'supplierId'], ['sd-buyer', 'buyerId'], ['sd-requester', 'requesterId'],
+                                   ['sd-family', 'family'], ['sd-cc', 'costCenter'], ['sd-region', 'region'],
+                                   ['sd-manager', 'manager'], ['sd-client', 'client']]) {
+          if ($(id).value) q.set(param, $(id).value);
+        }
+        const dash = await api('/api/v1/analytics/supply?' + q.toString());
+        if (!$('sd-from').value) $('sd-from').value = dash.from;
+        if (!$('sd-to').value) $('sd-to').value = dash.to;
+
+        const fo = dash.filterOptions;
+        fillSelect($('sd-supplier'), fo.suppliers, true, 'Todos');
+        fillSelect($('sd-buyer'), fo.buyers, true, 'Todos');
+        fillSelect($('sd-requester'), fo.requesters, true, 'Todos');
+        fillSelect($('sd-family'), fo.families, true, 'Todas');
+        fillSelect($('sd-cc'), fo.costCenters.map(c => ({ id: c.code, label: c.code + ' — ' + c.name })), true, 'Todos');
+        fillSelect($('sd-region'), fo.regions, true, 'Todas');
+        fillSelect($('sd-manager'), fo.managers, true, 'Todos');
+        fillSelect($('sd-client'), fo.clients, true, 'Todos');
+
+        const k = dash.kpis;
+        const delta = k.prPrevCount > 0
+          ? Math.round((k.prCount - k.prPrevCount) / k.prPrevCount * 100)
+          : (k.prCount > 0 ? 100 : 0);
+        const deltaCls = delta > 0 ? 'up' : delta < 0 ? 'down' : 'flat';
+        $('sd-kpis').innerHTML = `
+          <div class="kpi"><div class="l">Solicitações</div><div class="v">${fmtInt(k.prCount)}</div>
+            <div class="d ${deltaCls}">${delta > 0 ? '▲' : delta < 0 ? '▼' : '•'} ${Math.abs(delta)}% vs período anterior (${fmtInt(k.prPrevCount)})</div></div>
+          <div class="kpi"><div class="l">Valor solicitado</div><div class="v">${fmtMoneyShort(k.prTotalValue)}</div></div>
+          <div class="kpi"><div class="l">Aprovadas</div><div class="v">${fmtInt(k.approvedCount)}</div><div class="d flat">${fmtMoneyShort(k.approvedValue)}</div></div>
+          <div class="kpi ${k.pendingApproval > 0 ? 'warn' : ''}"><div class="l">Aguardando aprovação</div><div class="v">${fmtInt(k.pendingApproval)}</div></div>
+          <div class="kpi ${k.overdue > 0 ? 'bad' : ''}"><div class="l">Em atraso</div><div class="v">${fmtInt(k.overdue)}</div><div class="d flat">data de necessidade vencida</div></div>
+          <div class="kpi"><div class="l">Tempo médio de aprovação</div><div class="v">${k.avgApprovalDays ?? '—'}${k.avgApprovalDays != null ? ' d' : ''}</div></div>
+          <div class="kpi"><div class="l">Pedidos de compra</div><div class="v">${fmtInt(k.poCount)}</div><div class="d flat">${fmtMoneyShort(k.poTotalValue)}</div></div>
+          <div class="kpi ${k.poLate > 0 ? 'bad' : ''}"><div class="l">Pedidos em aberto</div><div class="v">${fmtInt(k.poOpen)}</div><div class="d ${k.poLate > 0 ? 'down' : 'flat'}">${k.poLate > 0 ? k.poLate + ' há +7 dias' : 'nenhum atrasado'}</div></div>
+          <div class="kpi"><div class="l">Tempo médio de entrega</div><div class="v">${k.avgReceiveDays ?? '—'}${k.avgReceiveDays != null ? ' d' : ''}</div><div class="d flat">emissão → recebimento</div></div>`;
+
+        const statusSeries = [
+          { name: 'Aprovadas', color: 'var(--s3)', values: dash.months.map(m => m.approved) },
+          { name: 'Em aprovação', color: 'var(--s1)', values: dash.months.map(m => m.inApproval) },
+          { name: 'Devolvidas', color: 'var(--s4)', values: dash.months.map(m => m.returned) },
+          { name: 'Rejeitadas/Canceladas', color: 'var(--s5)', values: dash.months.map(m => m.rejectedOrCancelled) },
+          { name: 'Rascunho', color: 'var(--s0)', values: dash.months.map(m => m.draft) },
+        ];
+        $('sd-months').innerHTML = legendHtml(statusSeries) +
+          columnChart(dash.months.map(m => m.month), statusSeries, { stacked: true, fmt: fmtInt });
+        $('sd-po-months').innerHTML =
+          columnChart(dash.months.map(m => m.month),
+            [{ name: 'Valor comprado', color: 'var(--s1)', values: dash.months.map(m => m.poValue) }],
+            { fmt: fmtMoneyShort });
+
+        const r = dash.rankings;
+        const rankPanels = [
+          ['Fornecedores por valor comprado', r.suppliers, money, 'var(--s1)'],
+          ['Famílias por valor solicitado', r.families, money, 'var(--s3)'],
+          ['Compradores por valor', r.buyers, money, 'var(--s2)'],
+          ['Solicitantes por valor', r.requesters, money, 'var(--s1)'],
+          ['Regionais por valor solicitado', r.regions, money, 'var(--s3)'],
+          ['Gerentes por valor solicitado', r.managers, money, 'var(--s2)'],
+          ['Clientes por valor solicitado', r.clients, money, 'var(--s1)'],
+          ['Centros de custo por valor', r.costCenters, money, 'var(--s3)'],
+        ];
+        $('sd-rankings').innerHTML = rankPanels.map(([title, rows, fmt, color]) =>
+          `<div class="panel"><h2>${title}</h2>${barList(rows, { fmt, color })}</div>`).join('');
+
+        $('sd-suppliers-table').innerHTML = dash.supplierTable.length
+          ? '<table><thead><tr><th>Fornecedor</th><th>Pedidos</th><th>Em aberto</th><th>Quantidade</th><th>Valor</th></tr></thead><tbody>' +
+            dash.supplierTable.map(s => `
+              <tr><td>${escapeHtml(s.supplier)}</td><td>${fmtInt(s.orders)}</td>
+              <td>${s.open > 0 ? `<span class="badge dev">${s.open}</span>` : '0'}</td>
+              <td>${fmtInt(s.quantity)}</td><td>${money(s.value)}</td></tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhum pedido de compra no período.</p>';
+      } catch (err) { toast(err.message, 'error'); }
+    };
+    $('sd-apply').addEventListener('click', () => LOADERS['supply-dash']());
+    $('sd-clear').addEventListener('click', () => {
+      ['sd-from', 'sd-to', 'sd-supplier', 'sd-buyer', 'sd-requester', 'sd-family', 'sd-cc', 'sd-region', 'sd-manager', 'sd-client']
+        .forEach(id => { $(id).value = ''; });
+      LOADERS['supply-dash']();
+    });
+    ['sd-supplier', 'sd-buyer', 'sd-requester', 'sd-family', 'sd-cc', 'sd-region', 'sd-manager', 'sd-client']
+      .forEach(id => $(id).addEventListener('change', () => LOADERS['supply-dash']()));
+    ['st-loc', 'st-family', 'st-months'].forEach(id => $(id).addEventListener('change', () => LOADERS['stock-dash']()));
+
+    // ============ CADASTROS: CENTROS DE CUSTO ============
+    async function loadCcDatalist() {
+      try {
+        const { items } = await api('/api/v1/cost-centers/');
+        $('cc-datalist').innerHTML = items.map(c =>
+          `<option value="${escapeHtml(c.code)}">${escapeHtml(c.name)}${c.region ? ' · ' + escapeHtml(c.region) : ''}</option>`).join('');
+      } catch {}
+    }
+    LOADERS['cost-centers'] = async () => {
+      try {
+        const { items } = await api('/api/v1/cost-centers/?all=true');
+        $('cc-list').innerHTML = items.length
+          ? '<table><thead><tr><th>Código</th><th>Nome</th><th>Regional</th><th>Gerente</th><th>Cliente</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+            items.map(c => `
+              <tr data-id="${c.id}">
+                <td>${escapeHtml(c.code)}</td><td>${escapeHtml(c.name)}</td>
+                <td>${escapeHtml(c.region || '—')}</td><td>${escapeHtml(c.managerName || '—')}</td><td>${escapeHtml(c.clientName || '—')}</td>
+                <td><span class="badge ${c.active ? 'on' : 'off'}">${c.active ? 'ATIVO' : 'INATIVO'}</span></td>
+                <td class="row-actions"><button class="${c.active ? 'danger' : 'secondary'}" data-act="toggle-cc">${c.active ? 'Inativar' : 'Reativar'}</button></td>
+              </tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhum centro de custo cadastrado ainda.</p>';
+      } catch (err) { $('cc-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
+    $('cc-list').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act="toggle-cc"]');
+      if (!btn) return;
+      try {
+        await api('/api/v1/cost-centers/' + btn.closest('tr').dataset.id, { method: 'PATCH', body: { active: btn.textContent === 'Reativar' } });
+        toast('Centro de custo atualizado.', 'ok');
+        LOADERS['cost-centers']();
+        loadCcDatalist();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+    $('cc-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      try {
+        await api('/api/v1/cost-centers/', { method: 'POST', body: {
+          code: $('ncc-code').value, name: $('ncc-name').value,
+          region: $('ncc-region').value || null, managerName: $('ncc-manager').value || null,
+          clientName: $('ncc-client').value || null,
+        }});
+        toast('Centro de custo cadastrado.', 'ok');
+        ev.target.reset();
+        LOADERS['cost-centers']();
+        loadCcDatalist();
       } catch (err) { toast(err.message, 'error'); }
     });
 

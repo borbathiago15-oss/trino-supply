@@ -25,6 +25,7 @@ public class PurchaseRequisition
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Number { get; set; } = string.Empty;           // PR-2026-000123 (sequencial — PR-001-11)
+    public string Kind { get; set; } = "AVULSA";                 // AVULSA (digitada) | CATALOGO (itens por família — MMS-002)
     public RequisitionStatus Status { get; set; } = RequisitionStatus.Draft;
     public int Cycle { get; set; } = 1;                          // incrementa a cada resubmissão (PR-001-03)
     public string Priority { get; set; } = "NORMAL";
@@ -57,6 +58,8 @@ public class RequisitionItem
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid RequisitionId { get; set; }
+    public Guid? CatalogItemId { get; set; }                     // vínculo com o catálogo (MMS-002), quando houver
+    public string? CatalogCode { get; set; }                     // snapshot do código na data da solicitação
     public int Sequence { get; set; }
     public string Description { get; set; } = string.Empty;
     public decimal Quantity { get; set; }

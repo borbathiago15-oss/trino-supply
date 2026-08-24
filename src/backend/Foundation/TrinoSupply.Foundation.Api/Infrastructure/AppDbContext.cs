@@ -10,6 +10,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<PurchaseRequisition> Requisitions => Set<PurchaseRequisition>();
     public DbSet<RequisitionItem> RequisitionItems => Set<RequisitionItem>();
+    public DbSet<Catalog.CatalogItem> CatalogItems => Set<Catalog.CatalogItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -31,12 +32,32 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(u => u.Email).IsUnique();
         });
 
+        modelBuilder.Entity<Catalog.CatalogItem>(e =>
+        {
+            e.ToTable("catalog_item", "materials"); // MMS-002 MVP (modelo completo em MMS-002-11)
+            e.HasKey(i => i.Id);
+            e.Property(i => i.Id).HasColumnName("id");
+            e.Property(i => i.Code).HasColumnName("code").HasMaxLength(50).IsRequired();
+            e.Property(i => i.Description).HasColumnName("description").HasMaxLength(500).IsRequired();
+            e.Property(i => i.Family).HasColumnName("family").HasMaxLength(120).IsRequired();
+            e.Property(i => i.UnitOfMeasure).HasColumnName("unit_of_measure").HasMaxLength(10);
+            e.Property(i => i.ReferencePrice).HasColumnName("reference_price").HasPrecision(18, 4);
+            e.Property(i => i.Active).HasColumnName("active");
+            e.Property(i => i.CreatedAt).HasColumnName("created_at");
+            e.Property(i => i.UpdatedAt).HasColumnName("updated_at");
+            e.Property(i => i.CreatedBy).HasColumnName("created_by");
+            e.Property(i => i.Version).HasColumnName("version");
+            e.HasIndex(i => i.Code).IsUnique();
+            e.HasIndex(i => new { i.Family, i.Active });
+        });
+
         modelBuilder.Entity<PurchaseRequisition>(e =>
         {
             e.ToTable("purchase_requisition", "procurement");
             e.HasKey(r => r.Id);
             e.Property(r => r.Id).HasColumnName("id");
             e.Property(r => r.Number).HasColumnName("number").HasMaxLength(30).IsRequired();
+            e.Property(r => r.Kind).HasColumnName("kind").HasMaxLength(10);
             e.Property(r => r.Status).HasColumnName("status").HasConversion<short>();
             e.Property(r => r.Cycle).HasColumnName("cycle");
             e.Property(r => r.Priority).HasColumnName("priority").HasMaxLength(10);
@@ -70,6 +91,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(i => i.Id);
             e.Property(i => i.Id).HasColumnName("id");
             e.Property(i => i.RequisitionId).HasColumnName("requisition_id");
+            e.Property(i => i.CatalogItemId).HasColumnName("catalog_item_id");
+            e.Property(i => i.CatalogCode).HasColumnName("catalog_code").HasMaxLength(50);
             e.Property(i => i.Sequence).HasColumnName("sequence");
             e.Property(i => i.Description).HasColumnName("description").HasMaxLength(500).IsRequired();
             e.Property(i => i.Quantity).HasColumnName("quantity").HasPrecision(18, 4);

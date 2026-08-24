@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TrinoSupply.Foundation.Api.Catalog;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Infrastructure;
 using TrinoSupply.Foundation.Api.Procurement;
@@ -33,7 +34,7 @@ public class RequisitionServiceTests
             .Options;
         var db = new AppDbContext(options);
         var clock = new FixedTimeProvider(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero));
-        return (new RequisitionService(db, new FakeNumbers(), clock), db, clock);
+        return (new RequisitionService(db, new FakeNumbers(), new CatalogService(db, clock), clock), db, clock);
     }
 
     private static async Task<PurchaseRequisition> DraftAsync(RequisitionService svc, Actor requester, params ItemInput[] items)

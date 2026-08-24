@@ -54,9 +54,13 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
             .Take(100).ToListAsync(ct);
 
     // ---- ciclo de vida ------------------------------------------------------
+    public record ScHeaderInput(string? NeedType, string? DeliveryLocation, string? Company, string? InternalNotes);
+
+    private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
     public async Task<(PurchaseRequisition? pr, UserError? error)> CreateAsync(
         Actor actor, string justification, string costCenter, string? priority, DateOnly? neededBy,
-        IReadOnlyList<ItemInput> items, string? kind = null, CancellationToken ct = default)
+        IReadOnlyList<ItemInput> items, string? kind = null, ScHeaderInput? header = null, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(justification))
             return (null, new("PR-ERR-030", "Informe a justificativa da solicitação."));
@@ -84,6 +88,10 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
             CostCenter = costCenter.Trim(),
             Priority = priority,
             NeededBy = neededBy,
+            NeedType = Clean(header?.NeedType)?.ToUpperInvariant(),
+            DeliveryLocation = Clean(header?.DeliveryLocation),
+            Company = Clean(header?.Company),
+            InternalNotes = Clean(header?.InternalNotes),
             RequesterId = actor.Id,
             RequesterLabel = actor.Label,
             CreatedAt = now,

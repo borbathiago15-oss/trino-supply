@@ -32,6 +32,10 @@ public class PurchaseRequisition
     public DateOnly? NeededBy { get; set; }
     public string Justification { get; set; } = string.Empty;
     public string CostCenter { get; set; } = string.Empty;       // referência textual até FD-001-02/09 existirem
+    public string? NeedType { get; set; }                        // Tipo SC (tipo da necessidade)
+    public string? DeliveryLocation { get; set; }                // local de entrega
+    public string? Company { get; set; }                         // empresa solicitante (grupo)
+    public string? InternalNotes { get; set; }                   // observação interna
     public string Currency { get; set; } = "BRL";
     public Guid RequesterId { get; set; }
     public string RequesterLabel { get; set; } = string.Empty;

@@ -58,21 +58,36 @@ public class AnalyticsServiceTests
     {
         var w = Build();
 
-        var (cc, ok) = await w.Ccs.CreateAsync(Ana.Id, "cc-ne-01", "Filial Recife", "nordeste", "Marina Lima", "Cliente Alfa");
+        var marina = new User { Name = "Marina Lima", Email = "marina@trino.test", Role = Roles.Approver, PasswordHash = "x" };
+        w.Db.Users.Add(marina);
+        await w.Db.SaveChangesAsync();
+
+        var (cc, ok) = await w.Ccs.CreateAsync(Ana.Id, "cc-ne-01", "Filial Recife", "nordeste", marina.Id, "Cliente Alfa");
         Assert.Null(ok);
         Assert.Equal("CC-NE-01", cc!.Code);
         Assert.Equal("NORDESTE", cc.Region);
+        Assert.Equal("Marina Lima", cc.ManagerName);   // snapshot do usuário vinculado
 
         var (_, dup) = await w.Ccs.CreateAsync(Ana.Id, "CC-NE-01", "Outra", null, null, null);
         Assert.Equal("CC-ERR-010", dup!.Code);
+
+        // regra automática: sem código informado, gera a partir da regional
+        var (auto1, _) = await w.Ccs.CreateAsync(Ana.Id, null, "PepsiCo Simões Filho", "Bahia", null, null);
+        var (auto2, _) = await w.Ccs.CreateAsync(Ana.Id, null, "CHEP Salvador", "Bahia", null, null);
+        Assert.Equal("BAH-001", auto1!.Code);
+        Assert.Equal("BAH-002", auto2!.Code);
     }
 
     [Fact]
     public async Task Dashboard_de_suprimentos_agrega_por_regional_gerente_e_cliente()
     {
         var w = Build();
-        await w.Ccs.CreateAsync(Ana.Id, "CC-NE-01", "Filial Recife", "NORDESTE", "Marina Lima", "Cliente Alfa");
-        await w.Ccs.CreateAsync(Ana.Id, "CC-SP-01", "Matriz SP", "SUDESTE", "Paulo Souza", "Cliente Beta");
+        var marina = new User { Name = "Marina Lima", Email = "marina@trino.test", Role = Roles.Approver, PasswordHash = "x" };
+        var paulo = new User { Name = "Paulo Souza", Email = "paulo@trino.test", Role = Roles.Approver, PasswordHash = "x" };
+        w.Db.Users.AddRange(marina, paulo);
+        await w.Db.SaveChangesAsync();
+        await w.Ccs.CreateAsync(Ana.Id, "CC-NE-01", "Filial Recife", "NORDESTE", marina.Id, "Cliente Alfa");
+        await w.Ccs.CreateAsync(Ana.Id, "CC-SP-01", "Matriz SP", "SUDESTE", paulo.Id, "Cliente Beta");
 
         var (pr1, _) = await w.Prs.CreateAsync(Ana, "Limpeza NE", "CC-NE-01", "NORMAL", null,
             [new ItemInput("Detergente", 10, "UN", 5, null)]);

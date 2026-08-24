@@ -48,10 +48,25 @@ public class TriageService(AppDbContext db, TimeProvider clock)
             .Where(o => o.SourcePrId != null && o.Status != PurchaseOrderStatus.Cancelled)
             .Select(o => o.SourcePrId!.Value).ToListAsync(ct);
 
+        // SCs aprovadas (prontas para cotação) e as ainda em aprovação — o comprador enxerga
+        // o que está por vir e já pode designar quem dará continuidade quando a alçada liberar.
         var prs = await db.Requisitions.Include(r => r.Items)
-            .Where(r => r.DeletedAt == null && r.Status == RequisitionStatus.Approved
-                        && !closedPrIds.Contains(r.Id))
-            .OrderBy(r => r.DecidedAt).Take(200).ToListAsync(ct);
+            .Where(r => r.DeletedAt == null && !closedPrIds.Contains(r.Id)
+                        && (r.Status == RequisitionStatus.Approved || r.Status == RequisitionStatus.InApproval))
+            .OrderBy(r => r.SubmittedAt).Take(200).ToListAsync(ct);
+
+        // gerente responsável de cada CC, para dizer de quem a SC está esperando aprovação
+        var ccCodes = prs.Select(r => r.CostCenter.ToUpperInvariant()).Distinct().ToList();
+        var ccManagers = await db.CostCenters
+            .Where(c => c.Active && ccCodes.Contains(c.Code.ToUpper()))
+            .Select(c => new { c.Code, c.ManagerName }).ToListAsync(ct);
+        string PendingApprovalStatus(PurchaseRequisition r)
+        {
+            var manager = ccManagers.FirstOrDefault(m => m.Code.ToUpperInvariant() == r.CostCenter.ToUpperInvariant())?.ManagerName;
+            return string.IsNullOrWhiteSpace(manager)
+                ? "AGUARDANDO APROVAÇÃO — SEM GERENTE NO CC"
+                : $"AGUARDANDO APROVAÇÃO DE {manager.ToUpperInvariant()}";
+        }
 
         var quotationByPr = await db.Quotations
             .Where(q => q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected)
@@ -62,8 +77,9 @@ public class TriageService(AppDbContext db, TimeProvider clock)
             "SC", r.Id, r.Number, r.CostCenter, r.RequesterLabel,
             string.Join(" · ", r.Items.OrderBy(i => i.Sequence).Take(3)
                 .Select(i => $"{i.Quantity:0.##}× {i.Description}")),
-            r.TotalEstimatedValue, r.DecidedAt,
-            inQuotation.TryGetValue(r.Id, out var qn) ? $"EM COTAÇÃO ({qn})" : "AGUARDANDO COMPRADOR",
+            r.TotalEstimatedValue, r.SubmittedAt ?? r.CreatedAt,
+            r.Status == RequisitionStatus.InApproval ? PendingApprovalStatus(r)
+                : inQuotation.TryGetValue(r.Id, out var qn) ? $"EM COTAÇÃO ({qn})" : "AGUARDANDO COMPRADOR",
             r.AssignedToId, r.AssignedToLabel, r.AssignedByLabel, r.AssignedAt)).ToList();
 
         var mrs = await db.MaterialRequisitions.Include(r => r.Items)
@@ -111,8 +127,8 @@ public class TriageService(AppDbContext db, TimeProvider clock)
                 var pr = await db.Requisitions.Include(r => r.Items)
                     .SingleOrDefaultAsync(r => r.Id == id && r.DeletedAt == null, ct);
                 if (pr is null) return (null, new("TRI-ERR-404", "Demanda não encontrada."));
-                if (pr.Status != RequisitionStatus.Approved)
-                    return (null, new("TRI-ERR-020", "Só demandas aprovadas entram na triagem."));
+                if (pr.Status is not (RequisitionStatus.Approved or RequisitionStatus.InApproval))
+                    return (null, new("TRI-ERR-020", "Só solicitações enviadas para aprovação ou já aprovadas entram na triagem."));
                 pr.AssignedToId = responsible?.Id;
                 pr.AssignedToLabel = responsible?.Name;
                 pr.AssignedById = responsible is null ? null : actor.Id;
@@ -123,7 +139,8 @@ public class TriageService(AppDbContext db, TimeProvider clock)
                 await db.SaveChangesAsync(ct);
                 return (new TriageTicket("SC", pr.Id, pr.Number, pr.CostCenter, pr.RequesterLabel,
                     string.Join(" · ", pr.Items.OrderBy(i => i.Sequence).Take(3).Select(i => $"{i.Quantity:0.##}× {i.Description}")),
-                    pr.TotalEstimatedValue, pr.DecidedAt, "AGUARDANDO COMPRADOR",
+                    pr.TotalEstimatedValue, pr.SubmittedAt ?? pr.CreatedAt,
+                    pr.Status == RequisitionStatus.InApproval ? "AGUARDANDO APROVAÇÃO" : "AGUARDANDO COMPRADOR",
                     pr.AssignedToId, pr.AssignedToLabel, pr.AssignedByLabel, pr.AssignedAt), null);
             }
             case "MATERIAL":

@@ -1109,6 +1109,17 @@
     function prRow(r, forApproval) {
       const [label, cls] = STATUS_PR[r.status] || [r.status, ''];
       const reason = r.decisionReason ? `<div class="sub">Motivo: ${escapeHtml(r.decisionReason)} (${escapeHtml(r.decidedByLabel || '')})</div>` : '';
+      // quem precisa aprovar (ou o que está travando a alçada)
+      let flow = '';
+      if (r.status === 'IN_APPROVAL') {
+        flow = r.approvalIssue
+          ? `<div class="sub" style="color:var(--s5)">⚠ ${escapeHtml(r.approvalIssue)}</div>`
+          : `<div class="sub">Aguardando aprovação de: <strong>${escapeHtml(r.approverLabel || 'Gestor de Suprimentos')}</strong></div>`;
+      } else if (r.status === 'APPROVED') {
+        flow = r.assignedToLabel
+          ? `<div class="sub">Comprador responsável: <strong>${escapeHtml(r.assignedToLabel)}</strong></div>`
+          : '<div class="sub">Aprovado — aguardando Suprimentos designar o comprador responsável.</div>';
+      }
       const itemsTxt = r.items.map(i => `${i.quantity}× ${i.catalogCode ? '[' + escapeHtml(i.catalogCode) + '] ' : ''}${escapeHtml(i.description)}`).join(' · ');
       const acts = [];
       if (forApproval) {
@@ -1123,7 +1134,7 @@
       }
       return `<tr data-id="${r.id}">
         <td>${escapeHtml(r.number)}<div class="sub">${forApproval ? escapeHtml(r.requesterLabel) : 'ciclo ' + r.cycle}${r.kind === 'CATALOGO' ? ' · lote' : ' · SC'}</div></td>
-        <td>${escapeHtml(r.justification)}<div class="sub">${itemsTxt}</div><div class="sub">CC: ${escapeHtml(r.costCenter)}${r.neededBy ? ' · até ' + r.neededBy : ''}</div>${reason}</td>
+        <td>${escapeHtml(r.justification)}<div class="sub">${itemsTxt}</div><div class="sub">CC: ${escapeHtml(r.costCenter)}${r.neededBy ? ' · até ' + r.neededBy : ''}</div>${flow}${reason}</td>
         <td>${money(r.totalEstimatedValue)}</td>
         <td><span class="badge ${cls}">${label}</span></td>
         <td class="row-actions">${acts.join('')}</td>

@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using TrinoSupply.Foundation.Api.Auth;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Infrastructure;
+using TrinoSupply.Foundation.Api.Users;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,6 +35,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<TokenService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<UserService>();
 
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseNpgsql(ConnectionStringFactory.Resolve(builder.Configuration)));
@@ -135,6 +137,47 @@ auth.MapGet("/me", (ClaimsPrincipal principal, HttpContext ctx) =>
     }, ctx);
 }).RequireAuthorization();
 
+// ---- Gestão de usuários (exclusiva do SystemAdministrator) -------------------
+var users = app.MapGroup("/api/v1/users")
+    .RequireAuthorization(p => p.RequireRole(Roles.SystemAdministrator));
+
+static object UserView(User u) => new
+{
+    id = u.Id, email = u.Email, name = u.Name, role = u.Role, active = u.Active,
+    createdAt = u.CreatedAt, updatedAt = u.UpdatedAt,
+};
+
+static Guid ActorId(ClaimsPrincipal p) =>
+    Guid.TryParse(p.FindFirstValue(ClaimTypes.NameIdentifier) ?? p.FindFirstValue("sub"), out var id)
+        ? id : Guid.Empty;
+
+users.MapGet("/", async (UserService svc, HttpContext ctx) =>
+    Ok(new { items = (await svc.ListAsync()).Select(UserView), roles = UserService.ValidRoles }, ctx));
+
+users.MapPost("/", async (CreateUserRequest body, UserService svc, HttpContext ctx) =>
+{
+    var (user, error) = await svc.CreateAsync(body.Email, body.Name, body.Role, body.Password);
+    return error is not null
+        ? Error(ctx, error.Code == "IAM-ERR-014" ? 409 : 400, error.Code, error.Message)
+        : Results.Json(new { data = UserView(user!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+users.MapPatch("/{id:guid}", async (Guid id, UpdateUserRequest body, UserService svc, ClaimsPrincipal principal, HttpContext ctx) =>
+{
+    var (user, error) = await svc.UpdateAsync(id, ActorId(principal), body.Name, body.Role, body.Active);
+    return error is not null
+        ? Error(ctx, error.Code == "IAM-ERR-404" ? 404 : 422, error.Code, error.Message)
+        : Ok(UserView(user!), ctx);
+});
+
+users.MapPost("/{id:guid}/reset-password", async (Guid id, ResetPasswordRequest body, UserService svc, HttpContext ctx) =>
+{
+    var error = await svc.ResetPasswordAsync(id, body.NewPassword);
+    return error is not null
+        ? Error(ctx, error.Code == "IAM-ERR-404" ? 404 : 400, error.Code, error.Message)
+        : Ok(new { message = "Senha redefinida. As sessões do usuário foram encerradas." }, ctx);
+});
+
 app.MapFallbackToFile("index.html");
 
 app.Run();
@@ -150,5 +193,8 @@ static object ToResponse(AuthTokens t) => new
 
 public record LoginRequest(string Email, string Password);
 public record RefreshRequest(string RefreshToken);
+public record CreateUserRequest(string Email, string Name, string Role, string Password);
+public record UpdateUserRequest(string? Name, string? Role, bool? Active);
+public record ResetPasswordRequest(string NewPassword);
 
 public partial class Program;

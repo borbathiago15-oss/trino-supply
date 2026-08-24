@@ -213,16 +213,13 @@
         </div>
       </div>
 
-      <!-- Dashboard -->
-      <section class="view" id="view-dashboard">
+      <!-- Dashboard de Suprimentos (tela inicial) -->
+      <section class="view" id="view-supply-dash">
         <div class="panel">
           <h2>Central de Avisos</h2>
           <div id="dash-alerts"><p class="hello">Carregando avisos…</p></div>
         </div>
-      </section>
-
-      <!-- Dashboard de Suprimentos -->
-      <section class="view" id="view-supply-dash">
+        <div id="sd-analytics">
         <div class="panel">
           <h2>Filtros</h2>
           <div class="filters">
@@ -247,6 +244,7 @@
         </div>
         <div class="viz-grid" id="sd-rankings"></div>
         <div class="panel"><h2>Fornecedor — pedidos no período</h2><div id="sd-suppliers-table" class="tablewrap"></div></div>
+        </div>
       </section>
 
       <!-- Solicitações: pedido unitário -->
@@ -634,10 +632,7 @@
     // ---- menu lateral ----
     const MENU = [
       { title: null, items: [
-        { id: 'dashboard', label: 'Dashboard', show: () => true },
-        { id: 'supply-dash', label: 'Dashboard de Suprimentos',
-          show: () => (canDecidePr() || canBuy() || currentUser.role === 'Auditor') &&
-                      (hasModule('SOLICITACOES') || hasModule('APROVACAO') || hasModule('COMPRAS')) },
+        { id: 'supply-dash', label: 'Dashboard de Suprimentos', show: () => true },
       ]},
       { title: 'Solicitações de Compra', module: 'SOLICITACOES', items: [
         { id: 'pr-new-unit', label: 'Pedido Unitário', show: canCreatePr },
@@ -667,7 +662,7 @@
       ]},
     ];
     const TITLES = {
-      dashboard: 'Dashboard', 'pr-new-unit': 'Pedido Unitário', 'pr-new-multi': 'Pedido Múltiplo',
+      'pr-new-unit': 'Pedido Unitário', 'pr-new-multi': 'Pedido Múltiplo',
       'pr-mine': 'Meus Pedidos', 'pr-approvals': 'Central de Aprovação',
       'mr-new': 'Solicitar Material', 'mr-mine': 'Minhas Solicitações',
       'stock-dash': 'Dashboard de Estoque', 'wh-queue': 'Fila de Atendimento',
@@ -677,7 +672,7 @@
       'supply-dash': 'Dashboard de Suprimentos', 'cost-centers': 'Centros de Custo',
     };
     const LOADERS = {};
-    let currentView = 'dashboard';
+    let currentView = 'supply-dash';
 
     function visibleItems() {
       const out = [];
@@ -697,7 +692,7 @@
     }
 
     function goTo(view) {
-      if (!document.getElementById('view-' + view)) view = 'dashboard';
+      if (!document.getElementById('view-' + view)) view = 'supply-dash';
       currentView = view;
       document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
       $('view-' + view).classList.add('active');
@@ -719,7 +714,7 @@
       $('user-role').textContent = '(' + (ROLE_LABELS[user.role] || user.role) + ')';
       renderNav();
       loadCcDatalist();
-      goTo('dashboard');
+      goTo('supply-dash');
     }
     function showLogin() {
       store.clear(); currentUser = null;
@@ -744,8 +739,8 @@
       showLogin();
     });
 
-    // ============ DASHBOARD ============
-    LOADERS['dashboard'] = async () => {
+    // ============ CENTRAL DE AVISOS (dentro do Dashboard de Suprimentos) ============
+    async function loadAlerts() {
       try {
         const { alerts } = await api('/api/v1/dashboard');
         $('dash-alerts').innerHTML = alerts.length
@@ -755,7 +750,7 @@
               </div>`).join('')
           : '<p class="hello">Tudo em dia por aqui: nenhum aviso pendente. ✔</p>';
       } catch (err) { $('dash-alerts').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
-    };
+    }
     $('dash-alerts').addEventListener('click', (ev) => {
       const card = ev.target.closest('.alert-card');
       if (card) goTo(card.dataset.view);
@@ -1523,7 +1518,14 @@
     }
 
     // ============ DASHBOARD DE SUPRIMENTOS ============
+    const canSeeSupplyAnalytics = () =>
+      (canDecidePr() || canBuy() || currentUser.role === 'Auditor') &&
+      (hasModule('SOLICITACOES') || hasModule('APROVACAO') || hasModule('COMPRAS'));
+
     LOADERS['supply-dash'] = async () => {
+      loadAlerts();
+      $('sd-analytics').hidden = !canSeeSupplyAnalytics();
+      if (!canSeeSupplyAnalytics()) return;
       try {
         const q = new URLSearchParams();
         if ($('sd-from').value) q.set('from', $('sd-from').value);

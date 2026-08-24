@@ -12,7 +12,7 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
     public static readonly string[] ValidRoles =
     [
         Roles.SystemAdministrator, Roles.Requester, Roles.Approver, Roles.PurchasingOfficer,
-        Roles.WarehouseOperator, Roles.WarehouseSupervisor, Roles.SupplyManager, Roles.Auditor,
+        Roles.WarehouseOperator, Roles.WarehouseSupervisor, Roles.SupplyManager, Roles.Director, Roles.Auditor,
     ];
 
     public Task<List<User>> ListAsync(CancellationToken ct = default) =>

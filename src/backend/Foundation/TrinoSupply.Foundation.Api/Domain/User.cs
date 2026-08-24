@@ -27,6 +27,7 @@ public static class Roles
     public const string WarehouseOperator = "WarehouseOperator";
     public const string WarehouseSupervisor = "WarehouseSupervisor";
     public const string SupplyManager = "SupplyManager";
+    public const string Director = "Director";           // Diretor — 2ª alçada do processo de compras (RFQ-001)
     public const string Auditor = "Auditor";
 }
 
@@ -59,6 +60,7 @@ public static class AppModules
         Roles.WarehouseOperator => [Estoque],
         Roles.WarehouseSupervisor => [Estoque, Produtos],
         Roles.SupplyManager => [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, CentrosCusto],
+        Roles.Director => [Solicitacoes, Aprovacao, Compras],
         Roles.Auditor => [Solicitacoes, Estoque, Compras],
         _ => [],
     };

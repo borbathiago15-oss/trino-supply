@@ -20,6 +20,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<CostCenter> CostCenters => Set<CostCenter>();
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
     public DbSet<PurchaseOrderItem> PurchaseOrderItems => Set<PurchaseOrderItem>();
+    public DbSet<Quotation> Quotations => Set<Quotation>();
+    public DbSet<QuotationItem> QuotationItems => Set<QuotationItem>();
+    public DbSet<QuotationSupplier> QuotationSuppliers => Set<QuotationSupplier>();
+    public DbSet<Proposal> Proposals => Set<Proposal>();
+    public DbSet<ProposalItem> ProposalItems => Set<ProposalItem>();
+    public DbSet<ProcessEvent> ProcessEvents => Set<ProcessEvent>();
+    public DbSet<StoredDocument> StoredDocuments => Set<StoredDocument>();
+    public DbSet<CompanyProfile> CompanyProfiles => Set<CompanyProfile>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -28,6 +36,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.HasSequence<long>("mov_number_seq", "materials").StartsAt(1);   // MMS-004 (movimentações)
         modelBuilder.HasSequence<long>("mr_number_seq", "materials").StartsAt(1);    // MMS-003 (solicitações)
         modelBuilder.HasSequence<long>("po_number_seq", "procurement").StartsAt(1);  // PO-001 (pedidos)
+        modelBuilder.HasSequence<long>("rfq_number_seq", "procurement").StartsAt(1); // RFQ-001 (cotações)
+        modelBuilder.HasSequence<long>("bid_number_seq", "procurement").StartsAt(1); // RFQ-001 (BIDs)
 
         modelBuilder.Entity<User>(e =>
         {
@@ -241,6 +251,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(s => s.TaxId).HasColumnName("tax_id").HasMaxLength(14).IsRequired();
             e.Property(s => s.Email).HasColumnName("email").HasMaxLength(320);
             e.Property(s => s.Phone).HasColumnName("phone").HasMaxLength(40);
+            e.Property(s => s.PortalKeyHash).HasColumnName("portal_key_hash").HasMaxLength(64);
             e.Property(s => s.Active).HasColumnName("active");
             e.Property(s => s.CreatedAt).HasColumnName("created_at");
             e.Property(s => s.UpdatedAt).HasColumnName("updated_at");
@@ -261,6 +272,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(o => o.SupplierName).HasColumnName("supplier_name").HasMaxLength(300);
             e.Property(o => o.SourcePrId).HasColumnName("source_pr_id");
             e.Property(o => o.SourcePrNumber).HasColumnName("source_pr_number").HasMaxLength(30);
+            e.Property(o => o.QuotationId).HasColumnName("quotation_id");
+            e.Property(o => o.QuotationNumber).HasColumnName("quotation_number").HasMaxLength(30);
+            e.Property(o => o.PaymentTerms).HasColumnName("payment_terms").HasMaxLength(200);
+            e.Property(o => o.DeliveryDays).HasColumnName("delivery_days");
+            e.Property(o => o.FreightValue).HasColumnName("freight_value").HasPrecision(18, 4);
+            e.Property(o => o.PdfDocumentId).HasColumnName("pdf_document_id");
             e.Property(o => o.Notes).HasColumnName("notes").HasMaxLength(1000);
             e.Property(o => o.TotalValue).HasColumnName("total_value").HasPrecision(18, 4);
             e.Property(o => o.IssuedBy).HasColumnName("issued_by");
@@ -294,6 +311,173 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.CatalogCode).HasColumnName("catalog_code").HasMaxLength(50);
             e.Property(i => i.CreatedAt).HasColumnName("created_at");
             e.HasIndex(i => i.OrderId);
+        });
+
+        modelBuilder.Entity<Quotation>(e =>
+        {
+            e.ToTable("quotation", "procurement"); // RFQ-001
+            e.HasKey(q => q.Id);
+            e.Property(q => q.Id).HasColumnName("id");
+            e.Property(q => q.Number).HasColumnName("number").HasMaxLength(30).IsRequired();
+            e.Property(q => q.Kind).HasColumnName("kind").HasConversion<short>();
+            e.Property(q => q.Status).HasColumnName("status").HasConversion<short>();
+            e.Property(q => q.SourcePrId).HasColumnName("source_pr_id");
+            e.Property(q => q.SourcePrNumber).HasColumnName("source_pr_number").HasMaxLength(30);
+            e.Property(q => q.CostCenter).HasColumnName("cost_center").HasMaxLength(120);
+            e.Property(q => q.Justification).HasColumnName("justification").HasMaxLength(2000);
+            e.Property(q => q.Deadline).HasColumnName("deadline");
+            e.Property(q => q.Notes).HasColumnName("notes").HasMaxLength(1000);
+            e.Property(q => q.WinnerSupplierId).HasColumnName("winner_supplier_id");
+            e.Property(q => q.WinnerProposalId).HasColumnName("winner_proposal_id");
+            e.Property(q => q.SelectionCriteria).HasColumnName("selection_criteria").HasMaxLength(500);
+            e.Property(q => q.SelectionJustification).HasColumnName("selection_justification").HasMaxLength(2000);
+            e.Property(q => q.SelectedBy).HasColumnName("selected_by");
+            e.Property(q => q.SelectedByLabel).HasColumnName("selected_by_label").HasMaxLength(200);
+            e.Property(q => q.SelectedAt).HasColumnName("selected_at");
+            e.Property(q => q.ManagerApprovedBy).HasColumnName("manager_approved_by");
+            e.Property(q => q.ManagerApprovedByLabel).HasColumnName("manager_approved_by_label").HasMaxLength(200);
+            e.Property(q => q.ManagerApprovedAt).HasColumnName("manager_approved_at");
+            e.Property(q => q.DirectorApprovedBy).HasColumnName("director_approved_by");
+            e.Property(q => q.DirectorApprovedByLabel).HasColumnName("director_approved_by_label").HasMaxLength(200);
+            e.Property(q => q.DirectorApprovedAt).HasColumnName("director_approved_at");
+            e.Property(q => q.DecisionReason).HasColumnName("decision_reason").HasMaxLength(1000);
+            e.Property(q => q.PurchaseOrderId).HasColumnName("purchase_order_id");
+            e.Property(q => q.PurchaseOrderNumber).HasColumnName("purchase_order_number").HasMaxLength(30);
+            e.Property(q => q.CreatedBy).HasColumnName("created_by");
+            e.Property(q => q.CreatedByLabel).HasColumnName("created_by_label").HasMaxLength(200);
+            e.Property(q => q.CreatedAt).HasColumnName("created_at");
+            e.Property(q => q.UpdatedAt).HasColumnName("updated_at");
+            e.Property(q => q.Version).HasColumnName("version").IsConcurrencyToken();
+            e.HasIndex(q => q.Number).IsUnique(); // RFQ-BR-002
+            e.HasIndex(q => new { q.Status, q.CreatedAt });
+            e.HasIndex(q => q.SourcePrId);
+            e.HasMany(q => q.Items).WithOne().HasForeignKey(i => i.QuotationId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(q => q.Suppliers).WithOne().HasForeignKey(s => s.QuotationId).OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(q => q.Proposals).WithOne().HasForeignKey(p => p.QuotationId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<QuotationItem>(e =>
+        {
+            e.ToTable("quotation_item", "procurement");
+            e.HasKey(i => i.Id);
+            e.Property(i => i.Id).HasColumnName("id");
+            e.Property(i => i.QuotationId).HasColumnName("quotation_id");
+            e.Property(i => i.Sequence).HasColumnName("sequence");
+            e.Property(i => i.CatalogItemId).HasColumnName("catalog_item_id");
+            e.Property(i => i.CatalogCode).HasColumnName("catalog_code").HasMaxLength(50);
+            e.Property(i => i.Description).HasColumnName("description").HasMaxLength(500);
+            e.Property(i => i.Quantity).HasColumnName("quantity").HasPrecision(18, 4);
+            e.Property(i => i.UnitOfMeasure).HasColumnName("unit_of_measure").HasMaxLength(10);
+            e.HasIndex(i => i.QuotationId);
+        });
+
+        modelBuilder.Entity<QuotationSupplier>(e =>
+        {
+            e.ToTable("quotation_supplier", "procurement");
+            e.HasKey(s => s.Id);
+            e.Property(s => s.Id).HasColumnName("id");
+            e.Property(s => s.QuotationId).HasColumnName("quotation_id");
+            e.Property(s => s.SupplierId).HasColumnName("supplier_id");
+            e.Property(s => s.SupplierName).HasColumnName("supplier_name").HasMaxLength(300);
+            e.Property(s => s.TaxId).HasColumnName("tax_id").HasMaxLength(14);
+            e.Property(s => s.InvitedBy).HasColumnName("invited_by");
+            e.Property(s => s.InvitedByLabel).HasColumnName("invited_by_label").HasMaxLength(200);
+            e.Property(s => s.InvitedAt).HasColumnName("invited_at");
+            e.HasIndex(s => new { s.QuotationId, s.SupplierId }).IsUnique();
+        });
+
+        modelBuilder.Entity<Proposal>(e =>
+        {
+            e.ToTable("proposal", "procurement"); // imutável e versionada (RFQ-BR-004)
+            e.HasKey(p => p.Id);
+            e.Property(p => p.Id).HasColumnName("id");
+            e.Property(p => p.QuotationId).HasColumnName("quotation_id");
+            e.Property(p => p.SupplierId).HasColumnName("supplier_id");
+            e.Property(p => p.SupplierName).HasColumnName("supplier_name").HasMaxLength(300);
+            e.Property(p => p.VersionNumber).HasColumnName("version_number");
+            e.Property(p => p.TotalValue).HasColumnName("total_value").HasPrecision(18, 4);
+            e.Property(p => p.DeliveryDays).HasColumnName("delivery_days");
+            e.Property(p => p.PaymentTerms).HasColumnName("payment_terms").HasMaxLength(200);
+            e.Property(p => p.FreightValue).HasColumnName("freight_value").HasPrecision(18, 4);
+            e.Property(p => p.ValidUntil).HasColumnName("valid_until");
+            e.Property(p => p.Notes).HasColumnName("notes").HasMaxLength(1000);
+            e.Property(p => p.SubmittedVia).HasColumnName("submitted_via").HasMaxLength(10);
+            e.Property(p => p.SubmittedByLabel).HasColumnName("submitted_by_label").HasMaxLength(200);
+            e.Property(p => p.SubmittedAt).HasColumnName("submitted_at");
+            e.Property(p => p.AttachmentDocumentId).HasColumnName("attachment_document_id");
+            e.Property(p => p.AttachmentFileName).HasColumnName("attachment_file_name").HasMaxLength(300);
+            e.HasIndex(p => new { p.QuotationId, p.SupplierId, p.VersionNumber }).IsUnique();
+            e.HasMany(p => p.Items).WithOne().HasForeignKey(i => i.ProposalId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ProposalItem>(e =>
+        {
+            e.ToTable("proposal_item", "procurement");
+            e.HasKey(i => i.Id);
+            e.Property(i => i.Id).HasColumnName("id");
+            e.Property(i => i.ProposalId).HasColumnName("proposal_id");
+            e.Property(i => i.QuotationItemId).HasColumnName("quotation_item_id");
+            e.Property(i => i.UnitPrice).HasColumnName("unit_price").HasPrecision(18, 4);
+            e.Property(i => i.Quantity).HasColumnName("quantity").HasPrecision(18, 4);
+            e.HasIndex(i => i.ProposalId);
+        });
+
+        modelBuilder.Entity<ProcessEvent>(e =>
+        {
+            e.ToTable("process_event", "procurement"); // timeline imutável (RFQ-BR-009)
+            e.HasKey(v => v.Id);
+            e.Property(v => v.Id).HasColumnName("id");
+            e.Property(v => v.QuotationId).HasColumnName("quotation_id");
+            e.Property(v => v.EventType).HasColumnName("event_type").HasMaxLength(50);
+            e.Property(v => v.Description).HasColumnName("description").HasMaxLength(600);
+            e.Property(v => v.FromStatus).HasColumnName("from_status").HasConversion<short?>();
+            e.Property(v => v.ToStatus).HasColumnName("to_status").HasConversion<short?>();
+            e.Property(v => v.ActorId).HasColumnName("actor_id");
+            e.Property(v => v.ActorLabel).HasColumnName("actor_label").HasMaxLength(200);
+            e.Property(v => v.Note).HasColumnName("note").HasMaxLength(1000);
+            e.Property(v => v.DocumentId).HasColumnName("document_id");
+            e.Property(v => v.OccurredAt).HasColumnName("occurred_at");
+            e.HasIndex(v => new { v.QuotationId, v.OccurredAt });
+        });
+
+        modelBuilder.Entity<StoredDocument>(e =>
+        {
+            e.ToTable("stored_document"); // schema foundation — infra documental mínima
+            e.HasKey(d => d.Id);
+            e.Property(d => d.Id).HasColumnName("id");
+            e.Property(d => d.FileName).HasColumnName("file_name").HasMaxLength(300).IsRequired();
+            e.Property(d => d.ContentType).HasColumnName("content_type").HasMaxLength(120);
+            e.Property(d => d.SizeBytes).HasColumnName("size_bytes");
+            e.Property(d => d.Content).HasColumnName("content");
+            e.Property(d => d.EntityType).HasColumnName("entity_type").HasMaxLength(40);
+            e.Property(d => d.EntityId).HasColumnName("entity_id");
+            e.Property(d => d.SupplierId).HasColumnName("supplier_id");
+            e.Property(d => d.UploadedByLabel).HasColumnName("uploaded_by_label").HasMaxLength(200);
+            e.Property(d => d.UploadedAt).HasColumnName("uploaded_at");
+            e.HasIndex(d => new { d.EntityType, d.EntityId });
+        });
+
+        modelBuilder.Entity<CompanyProfile>(e =>
+        {
+            e.ToTable("company_profile"); // schema foundation — cabeçalho da OC
+            e.HasKey(c => c.Id);
+            e.Property(c => c.Id).HasColumnName("id");
+            e.Property(c => c.LegalName).HasColumnName("legal_name").HasMaxLength(300);
+            e.Property(c => c.Address).HasColumnName("address").HasMaxLength(300);
+            e.Property(c => c.District).HasColumnName("district").HasMaxLength(200);
+            e.Property(c => c.City).HasColumnName("city").HasMaxLength(120);
+            e.Property(c => c.State).HasColumnName("state").HasMaxLength(2);
+            e.Property(c => c.Zip).HasColumnName("zip").HasMaxLength(10);
+            e.Property(c => c.TaxId).HasColumnName("tax_id").HasMaxLength(20);
+            e.Property(c => c.StateRegistration).HasColumnName("state_registration").HasMaxLength(30);
+            e.Property(c => c.Phone).HasColumnName("phone").HasMaxLength(40);
+            e.Property(c => c.Email).HasColumnName("email").HasMaxLength(320);
+            e.Property(c => c.DeliveryAddress).HasColumnName("delivery_address").HasMaxLength(400);
+            e.Property(c => c.DeliveryTaxId).HasColumnName("delivery_tax_id").HasMaxLength(20);
+            e.Property(c => c.StandardClauses).HasColumnName("standard_clauses").HasMaxLength(2000);
+            e.Property(c => c.PaymentPolicy).HasColumnName("payment_policy").HasMaxLength(8000);
+            e.Property(c => c.UpdatedAt).HasColumnName("updated_at");
+            e.Property(c => c.UpdatedByLabel).HasColumnName("updated_by_label").HasMaxLength(200);
         });
 
         modelBuilder.Entity<RefreshToken>(e =>

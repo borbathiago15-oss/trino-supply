@@ -18,8 +18,14 @@ public class PurchaseOrder
     public PurchaseOrderStatus Status { get; set; } = PurchaseOrderStatus.Issued;
     public Guid SupplierId { get; set; }
     public string SupplierName { get; set; } = string.Empty;   // snapshot
-    public Guid? SourcePrId { get; set; }                      // requisição aprovada convertida (PO-BR-003)
+    public Guid? SourcePrId { get; set; }                      // requisição de origem do processo
     public string? SourcePrNumber { get; set; }
+    public Guid? QuotationId { get; set; }                     // processo de cotação de origem (RFQ-001)
+    public string? QuotationNumber { get; set; }
+    public string? PaymentTerms { get; set; }                  // condições da proposta vencedora
+    public int? DeliveryDays { get; set; }
+    public decimal? FreightValue { get; set; }
+    public Guid? PdfDocumentId { get; set; }                   // último PDF gerado (stored_document)
     public string? Notes { get; set; }
     public decimal TotalValue { get; set; }
     public List<PurchaseOrderItem> Items { get; set; } = [];

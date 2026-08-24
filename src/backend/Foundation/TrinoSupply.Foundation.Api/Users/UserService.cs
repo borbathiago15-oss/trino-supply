@@ -30,9 +30,24 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
         return (clean.Count == 0 ? "" : string.Join(',', clean), null);
     }
 
+    /// <summary>Normaliza a lista de centros de custo vinculados (códigos).</summary>
+    private static string? NormalizeCostCenters(IReadOnlyList<string>? costCenters) =>
+        costCenters is null ? null
+            : string.Join(',', costCenters.Select(c => c.Trim().ToUpperInvariant()).Where(c => c.Length > 0).Distinct());
+
+    private async Task<UserError?> ValidateDirectorAsync(Guid? directorId, CancellationToken ct)
+    {
+        if (directorId is null) return null;
+        var director = await db.Users.SingleOrDefaultAsync(u => u.Id == directorId && u.Active, ct);
+        if (director is null || director.Role is not (Roles.Director or Roles.SystemAdministrator))
+            return new("IAM-ERR-019", "Diretor responsável inválido: escolha um usuário ativo com papel Diretor.");
+        return null;
+    }
+
     public async Task<(User? user, UserError? error)> CreateAsync(
         string email, string name, string role, string password,
-        IReadOnlyList<string>? modules = null, CancellationToken ct = default)
+        IReadOnlyList<string>? modules = null, IReadOnlyList<string>? costCenters = null,
+        Guid? directorId = null, CancellationToken ct = default)
     {
         var normalized = email.Trim().ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(normalized) || !normalized.Contains('@'))
@@ -47,6 +62,7 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
             return (null, new("IAM-ERR-014", "Já existe um usuário com este e-mail."));
         var (modulesCsv, modulesError) = NormalizeModules(modules);
         if (modulesError is not null) return (null, modulesError);
+        if (await ValidateDirectorAsync(directorId, ct) is { } directorError) return (null, directorError);
 
         var user = new User
         {
@@ -54,6 +70,8 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
             Name = name.Trim(),
             Role = role,
             Modules = modulesCsv,
+            CostCenters = NormalizeCostCenters(costCenters),
+            DirectorId = directorId,
             CreatedAt = clock.GetUtcNow(),
             UpdatedAt = clock.GetUtcNow(),
         };
@@ -65,7 +83,8 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
 
     public async Task<(User? user, UserError? error)> UpdateAsync(
         Guid id, Guid actorId, string? name, string? role, bool? active,
-        IReadOnlyList<string>? modules = null, CancellationToken ct = default)
+        IReadOnlyList<string>? modules = null, IReadOnlyList<string>? costCenters = null,
+        Guid? directorId = null, bool clearDirector = false, CancellationToken ct = default)
     {
         var user = await db.Users.SingleOrDefaultAsync(u => u.Id == id, ct);
         if (user is null) return (null, new("IAM-ERR-404", "Usuário não encontrado."));
@@ -81,9 +100,13 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
         if (user.Id == actorId && active == false)
             return (null, new("IAM-ERR-016", "Você não pode inativar o seu próprio usuário."));
 
+        if (await ValidateDirectorAsync(directorId, ct) is { } directorError) return (null, directorError);
         if (name is not null && name.Trim().Length >= 2) user.Name = name.Trim();
         if (role is not null) user.Role = role;
         if (modules is not null) user.Modules = modulesCsv;
+        if (costCenters is not null) user.CostCenters = NormalizeCostCenters(costCenters);
+        if (directorId is not null) user.DirectorId = directorId;
+        else if (clearDirector) user.DirectorId = null;
         if (active is not null) user.Active = active.Value;
         user.UpdatedAt = clock.GetUtcNow();
 

@@ -48,6 +48,7 @@ builder.Services.AddScoped<MaterialRequisitionService>();
 builder.Services.AddScoped<SupplierService>();
 builder.Services.AddScoped<PurchaseOrderService>();
 builder.Services.AddScoped<CostCenterService>();
+builder.Services.AddScoped<CompanyService>();
 builder.Services.AddScoped<QuotationService>();
 builder.Services.AddScoped<TrinoSupply.Foundation.Api.Analytics.AnalyticsService>();
 
@@ -138,10 +139,14 @@ auth.MapPost("/logout", async (RefreshRequest body, AuthService svc, HttpContext
     return Ok(new { message = "Sessão encerrada." }, ctx);
 });
 
-auth.MapGet("/me", (ClaimsPrincipal principal, HttpContext ctx) =>
+auth.MapGet("/me", async (ClaimsPrincipal principal, AppDbContext db, HttpContext ctx) =>
 {
     var sub = principal.FindFirstValue(ClaimTypes.NameIdentifier)
               ?? principal.FindFirstValue("sub");
+    var costCenters = Array.Empty<string>();
+    if (Guid.TryParse(sub, out var uid))
+        costCenters = (await db.Users.Where(u => u.Id == uid).Select(u => u.CostCenters).FirstOrDefaultAsync() ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     return Ok(new
     {
         id = sub,
@@ -149,6 +154,7 @@ auth.MapGet("/me", (ClaimsPrincipal principal, HttpContext ctx) =>
         name = principal.FindFirstValue("name"),
         role = principal.FindFirstValue(ClaimTypes.Role),
         modules = (principal.FindFirstValue("modules") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries),
+        costCenters,
     }, ctx);
 }).RequireAuthorization();
 
@@ -160,6 +166,8 @@ static object UserView(User u) => new
 {
     id = u.Id, email = u.Email, name = u.Name, role = u.Role, active = u.Active,
     modules = AppModules.EffectiveFor(u), customModules = u.Modules is not null,
+    costCenters = (u.CostCenters ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+    directorId = u.DirectorId,
     createdAt = u.CreatedAt, updatedAt = u.UpdatedAt,
 };
 
@@ -172,7 +180,8 @@ users.MapGet("/", async (UserService svc, HttpContext ctx) =>
 
 users.MapPost("/", async (CreateUserRequest body, UserService svc, HttpContext ctx) =>
 {
-    var (user, error) = await svc.CreateAsync(body.Email, body.Name, body.Role, body.Password, body.Modules);
+    var (user, error) = await svc.CreateAsync(body.Email, body.Name, body.Role, body.Password,
+        body.Modules, body.CostCenters, body.DirectorId);
     return error is not null
         ? Error(ctx, error.Code == "IAM-ERR-014" ? 409 : 400, error.Code, error.Message)
         : Results.Json(new { data = UserView(user!), correlationId = CorrelationId(ctx) }, statusCode: 201);
@@ -180,7 +189,8 @@ users.MapPost("/", async (CreateUserRequest body, UserService svc, HttpContext c
 
 users.MapPatch("/{id:guid}", async (Guid id, UpdateUserRequest body, UserService svc, ClaimsPrincipal principal, HttpContext ctx) =>
 {
-    var (user, error) = await svc.UpdateAsync(id, ActorId(principal), body.Name, body.Role, body.Active, body.Modules);
+    var (user, error) = await svc.UpdateAsync(id, ActorId(principal), body.Name, body.Role, body.Active,
+        body.Modules, body.CostCenters, body.DirectorId, body.ClearDirector == true);
     return error is not null
         ? Error(ctx, error.Code == "IAM-ERR-404" ? 404 : 422, error.Code, error.Message)
         : Ok(UserView(user!), ctx);
@@ -545,7 +555,17 @@ app.MapGet("/api/v1/dashboard", async (AppDbContext db, ClaimsPrincipal p, HttpC
         }
         if (QuotationService.CanApproveAsManager(role))
         {
-            var mgr = await db.Quotations.CountAsync(q => q.Status == QuotationStatus.AwaitingManager && q.SelectedBy != uid);
+            var mgrQuery = db.Quotations.Where(q => q.Status == QuotationStatus.AwaitingManager && q.SelectedBy != uid);
+            if (role == Roles.Approver)
+            {
+                // Pleno: só processos dos CCs sob a sua gerência
+                var managedCodes = await db.CostCenters.Where(c => c.Active && c.ManagerUserId == uid)
+                    .Select(c => c.Code).ToListAsync();
+                mgrQuery = managedCodes.Count == 0
+                    ? mgrQuery.Where(_ => false)
+                    : mgrQuery.Where(q => managedCodes.Contains(q.CostCenter.ToUpper()));
+            }
+            var mgr = await mgrQuery.CountAsync();
             if (mgr > 0) alerts.Add(new
             {
                 kind = "APROVACAO_GERENTE", severity = "media", count = mgr, view = "quotations",
@@ -554,8 +574,29 @@ app.MapGet("/api/v1/dashboard", async (AppDbContext db, ClaimsPrincipal p, HttpC
         }
         if (QuotationService.CanApproveAsDirector(role))
         {
-            var dir = await db.Quotations.CountAsync(q => q.Status == QuotationStatus.AwaitingDirector
-                && q.SelectedBy != uid && q.ManagerApprovedBy != uid);
+            var awaiting = await db.Quotations.Where(q => q.Status == QuotationStatus.AwaitingDirector
+                && q.SelectedBy != uid && q.ManagerApprovedBy != uid)
+                .Select(q => new { q.CostCenter, q.ManagerApprovedBy }).ToListAsync();
+            var dir = awaiting.Count;
+            if (role == Roles.Director && dir > 0)
+            {
+                // Diretor: só processos roteados a ele (via gerente→diretor) ou sem roteamento
+                var ccCodes = awaiting.Select(a => a.CostCenter.ToUpperInvariant()).Distinct().ToList();
+                var ccManagers = await db.CostCenters
+                    .Where(c => c.Active && ccCodes.Contains(c.Code) && c.ManagerUserId != null)
+                    .ToDictionaryAsync(c => c.Code, c => c.ManagerUserId!.Value);
+                var managerIds = awaiting.Select(a => a.ManagerApprovedBy).OfType<Guid>()
+                    .Concat(ccManagers.Values).Distinct().ToList();
+                var directorOf = await db.Users.Where(u => managerIds.Contains(u.Id))
+                    .ToDictionaryAsync(u => u.Id, u => u.DirectorId);
+                dir = awaiting.Count(a =>
+                {
+                    var managerId = a.ManagerApprovedBy
+                        ?? (ccManagers.TryGetValue(a.CostCenter.ToUpperInvariant(), out var m) ? m : (Guid?)null);
+                    var linked = managerId is { } mid && directorOf.TryGetValue(mid, out var d) ? d : null;
+                    return linked is null || linked == uid;
+                });
+            }
             if (dir > 0) alerts.Add(new
             {
                 kind = "APROVACAO_DIRETOR", severity = "media", count = dir, view = "quotations",
@@ -886,6 +927,7 @@ pos.MapPost("/{id:guid}/cancel", async (Guid id, ReasonRequest body, PurchaseOrd
 static object CcView(CostCenter c) => new
 {
     id = c.Id, code = c.Code, name = c.Name, region = c.Region,
+    companyId = c.CompanyId,
     managerUserId = c.ManagerUserId, managerName = c.ManagerName,
     clientName = c.ClientName, active = c.Active,
 };
@@ -916,7 +958,7 @@ ccs.MapPost("/", async (CreateCostCenterRequest body, CostCenterService svc, Cla
 {
     if (!CostCenterService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.CentrosCusto))
         return Error(ctx, 403, "CC-ERR-900", "Seu usuário não mantém centros de custo.");
-    var (cc, error) = await svc.CreateAsync(ActorId(p), body.Code, body.Name, body.Region, body.ManagerUserId, body.ClientName);
+    var (cc, error) = await svc.CreateAsync(ActorId(p), body.Code, body.Name, body.Region, body.ManagerUserId, body.ClientName, body.CompanyId);
     return error is not null ? Error(ctx, 400, error.Code, error.Message)
         : Results.Json(new { data = CcView(cc!), correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
@@ -925,9 +967,47 @@ ccs.MapPatch("/{id:guid}", async (Guid id, UpdateCostCenterRequest body, CostCen
 {
     if (!CostCenterService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.CentrosCusto))
         return Error(ctx, 403, "CC-ERR-900", "Seu usuário não mantém centros de custo.");
-    var (cc, error) = await svc.UpdateAsync(id, body.Name, body.Region, body.ManagerUserId, body.ClientName, body.Active);
+    var (cc, error) = await svc.UpdateAsync(id, body.Name, body.Region, body.ManagerUserId, body.ClientName, body.Active, body.CompanyId);
     return error is not null ? Error(ctx, error.Code == "CC-ERR-404" ? 404 : 400, error.Code, error.Message)
         : Ok(CcView(cc!), ctx);
+});
+
+// ---- Empresas do grupo (CNPJs) — cada CC pode apontar para um CNPJ -----------
+static object CompanyView(Company c) => new
+{
+    id = c.Id, legalName = c.LegalName, taxId = c.TaxId, stateRegistration = c.StateRegistration,
+    address = c.Address, district = c.District, city = c.City, state = c.State, zip = c.Zip,
+    phone = c.Phone, email = c.Email, active = c.Active,
+};
+
+var companies = app.MapGroup("/api/v1/companies").RequireAuthorization();
+companies.AddEndpointFilter(RejectSupplierRole());
+
+// listagem aberta a autenticados internos: SC/CC usam o picker de empresa
+companies.MapGet("/", async (CompanyService svc, ClaimsPrincipal p, HttpContext ctx, bool? all) =>
+{
+    var includeInactive = all == true && CompanyService.CanMaintain(RoleOf(p));
+    return Ok(new { items = (await svc.ListAsync(includeInactive)).Select(CompanyView) }, ctx);
+});
+
+companies.MapPost("/", async (CreateCompanyRequest body, CompanyService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!CompanyService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.CentrosCusto))
+        return Error(ctx, 403, "EMP-ERR-900", "Seu usuário não mantém o cadastro de CNPJs do grupo.");
+    var (company, error) = await svc.CreateAsync(body.LegalName, body.TaxId, body.StateRegistration,
+        body.Address, body.District, body.City, body.State, body.Zip, body.Phone, body.Email);
+    return error is not null ? Error(ctx, error.Code == "EMP-ERR-012" ? 409 : 400, error.Code, error.Message)
+        : Results.Json(new { data = CompanyView(company!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+companies.MapPatch("/{id:guid}", async (Guid id, UpdateCompanyRequest body, CompanyService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!CompanyService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.CentrosCusto))
+        return Error(ctx, 403, "EMP-ERR-900", "Seu usuário não mantém o cadastro de CNPJs do grupo.");
+    var (company, error) = await svc.UpdateAsync(id, body.LegalName, body.StateRegistration, body.Address,
+        body.District, body.City, body.State, body.Zip, body.Phone, body.Email, body.Active);
+    return error is not null ? Error(ctx, error.Code == "EMP-ERR-404" ? 404 : 400, error.Code, error.Message)
+        : Ok(CompanyView(company!), ctx);
 });
 
 // ---- Dashboards analíticos ---------------------------------------------------
@@ -1335,6 +1415,33 @@ app.MapGet("/api/v1/purchase-orders/{id:guid}/pdf", async (Guid id, AppDbContext
     var company = await db.CompanyProfiles.FirstOrDefaultAsync();
     var quotation = order.QuotationId is null ? null : await qsvc.GetAsync(order.QuotationId.Value);
 
+    // CNPJ da empresa do CC de origem prevalece no cabeçalho (fallback: perfil padrão)
+    var ccCode = quotation?.CostCenter
+        ?? (order.SourcePrId is null ? null
+            : await db.Requisitions.Where(r => r.Id == order.SourcePrId).Select(r => r.CostCenter).FirstOrDefaultAsync());
+    if (!string.IsNullOrWhiteSpace(ccCode))
+    {
+        var normalizedCc = ccCode.Trim().ToUpperInvariant();
+        var companyId = await db.CostCenters.Where(c => c.Code == normalizedCc)
+            .Select(c => c.CompanyId).FirstOrDefaultAsync();
+        var ccCompany = companyId is null ? null
+            : await db.Companies.SingleOrDefaultAsync(c => c.Id == companyId && c.Active);
+        if (ccCompany is not null)
+            company = new CompanyProfile
+            {
+                LegalName = ccCompany.LegalName,
+                TaxId = ccCompany.TaxId.Length == 14
+                    ? $"{ccCompany.TaxId[..2]}.{ccCompany.TaxId[2..5]}.{ccCompany.TaxId[5..8]}/{ccCompany.TaxId[8..12]}-{ccCompany.TaxId[12..]}"
+                    : ccCompany.TaxId,
+                StateRegistration = ccCompany.StateRegistration ?? company?.StateRegistration,
+                Address = ccCompany.Address, District = ccCompany.District,
+                City = ccCompany.City, State = ccCompany.State, Zip = ccCompany.Zip,
+                Phone = ccCompany.Phone ?? company?.Phone, Email = ccCompany.Email ?? company?.Email,
+                DeliveryAddress = company?.DeliveryAddress, DeliveryTaxId = company?.DeliveryTaxId,
+                StandardClauses = company?.StandardClauses, PaymentPolicy = company?.PaymentPolicy,
+            };
+    }
+
     var pdf = PurchaseOrderPdf.Generate(order, supplier, company, quotation);
     var doc = new StoredDocument
     {
@@ -1394,8 +1501,10 @@ static object ToResponse(AuthTokens t) => new
 
 public record LoginRequest(string Email, string Password);
 public record RefreshRequest(string RefreshToken);
-public record CreateUserRequest(string Email, string Name, string Role, string Password, List<string>? Modules);
-public record UpdateUserRequest(string? Name, string? Role, bool? Active, List<string>? Modules);
+public record CreateUserRequest(string Email, string Name, string Role, string Password, List<string>? Modules,
+    List<string>? CostCenters, Guid? DirectorId);
+public record UpdateUserRequest(string? Name, string? Role, bool? Active, List<string>? Modules,
+    List<string>? CostCenters, Guid? DirectorId, bool? ClearDirector);
 public record ResetPasswordRequest(string NewPassword);
 public record ItemRequest(string? Description, decimal Quantity, string? UnitOfMeasure, decimal? EstimatedUnitPrice, string? Notes, Guid? CatalogItemId);
 public record CreateRequisitionRequest(string Justification, string CostCenter, string? Priority, DateOnly? NeededBy, List<ItemRequest>? Items, string? Kind,
@@ -1413,8 +1522,12 @@ public record UpdateSupplierRequest(string? TradeName, string? Email, string? Ph
 public record PoItemRequest(string Description, decimal Quantity, string? UnitOfMeasure, decimal? UnitPrice, Guid? CatalogItemId);
 public record CreatePurchaseOrderRequest(Guid SupplierId, string? Notes, List<PoItemRequest>? Items, Guid? SourcePrId);
 public record ReceiveOrderRequest(Guid LocationId);
-public record CreateCostCenterRequest(string? Code, string Name, string? Region, Guid? ManagerUserId, string? ClientName);
-public record UpdateCostCenterRequest(string? Name, string? Region, Guid? ManagerUserId, string? ClientName, bool? Active);
+public record CreateCostCenterRequest(string? Code, string Name, string? Region, Guid? ManagerUserId, string? ClientName, Guid? CompanyId);
+public record UpdateCostCenterRequest(string? Name, string? Region, Guid? ManagerUserId, string? ClientName, bool? Active, Guid? CompanyId);
+public record CreateCompanyRequest(string LegalName, string TaxId, string? StateRegistration, string Address,
+    string? District, string City, string State, string Zip, string? Phone, string? Email);
+public record UpdateCompanyRequest(string? LegalName, string? StateRegistration, string? Address, string? District,
+    string? City, string? State, string? Zip, string? Phone, string? Email, bool? Active);
 public record CreateQuotationRequest(Guid PrId, string? Kind, DateOnly? Deadline, string? Notes);
 public record InviteSuppliersRequest(List<Guid>? SupplierIds);
 public record ProposalItemRequest(Guid QuotationItemId, decimal UnitPrice, decimal? Quantity);

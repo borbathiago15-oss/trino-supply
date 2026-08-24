@@ -13,6 +13,10 @@ public class User
     public string Role { get; set; } = Roles.SystemAdministrator;
     /// <summary>Módulos autorizados (CSV de chaves de AppModules); null = padrão do papel.</summary>
     public string? Modules { get; set; }
+    /// <summary>Centros de custo vinculados (CSV de códigos) — escopo de solicitação do Júnior/Pleno; vazio = sem restrição.</summary>
+    public string? CostCenters { get; set; }
+    /// <summary>Diretor responsável pela 2ª alçada dos processos deste gerente (RFQ-001).</summary>
+    public Guid? DirectorId { get; set; }
     public bool Active { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;

@@ -21,9 +21,9 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
     public static bool CanConduct(string role) =>
         role is Roles.PurchasingOfficer or Roles.SupplyManager or Roles.SystemAdministrator;
 
-    /// <summary>Aprovação gerencial (1ª alçada).</summary>
+    /// <summary>Aprovação gerencial (1ª alçada). Aprovador (Pleno) só decide processos dos CCs que gerencia.</summary>
     public static bool CanApproveAsManager(string role) =>
-        role is Roles.SupplyManager or Roles.SystemAdministrator;
+        role is Roles.SupplyManager or Roles.SystemAdministrator or Roles.Approver;
 
     /// <summary>Aprovação da diretoria (2ª alçada).</summary>
     public static bool CanApproveAsDirector(string role) =>
@@ -242,6 +242,14 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
             return (null, new("RFQ-ERR-020", "O processo não está aguardando aprovação gerencial."));
         if (actor.Id == q.SelectedBy)
             return (null, new("RFQ-ERR-030", "Segregação de funções: quem selecionou o fornecedor não aprova a própria escolha."));
+        if (actor.Role == Roles.Approver)
+        {
+            var cc = q.CostCenter.Trim().ToUpperInvariant();
+            var manages = await db.CostCenters.AnyAsync(
+                c => c.Active && c.ManagerUserId == actor.Id && c.Code == cc, ct);
+            if (!manages)
+                return (null, new("RFQ-ERR-031", "Alçada por centro de custo: este processo pertence a um centro de custo que não está sob a sua gerência."));
+        }
         return await DecideAsync(q, actor, decision, reason, isDirector: false, ct);
     }
 
@@ -254,7 +262,27 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
             return (null, new("RFQ-ERR-020", "O processo não está aguardando aprovação da diretoria."));
         if (actor.Id == q.SelectedBy || actor.Id == q.ManagerApprovedBy)
             return (null, new("RFQ-ERR-030", "Segregação de funções: o Diretor não pode ser quem selecionou nem quem deu a aprovação gerencial."));
+        if (actor.Role != Roles.SystemAdministrator &&
+            await LinkedDirectorAsync(q, ct) is { } linkedDirector && linkedDirector != actor.Id)
+            return (null, new("RFQ-ERR-032", "Alçada por diretoria: este processo está vinculado a outro diretor responsável."));
         return await DecideAsync(q, actor, decision, reason, isDirector: true, ct);
+    }
+
+    /// <summary>
+    /// Diretor vinculado ao processo: o diretor cadastrado no gerente que aprovou a 1ª alçada
+    /// (ou, na falta dele, no gerente do centro de custo). Null = qualquer diretor pode decidir.
+    /// </summary>
+    private async Task<Guid?> LinkedDirectorAsync(Quotation q, CancellationToken ct)
+    {
+        var managerId = q.ManagerApprovedBy;
+        if (managerId is null)
+        {
+            var cc = q.CostCenter.Trim().ToUpperInvariant();
+            managerId = await db.CostCenters.Where(c => c.Active && c.Code == cc)
+                .Select(c => c.ManagerUserId).FirstOrDefaultAsync(ct);
+        }
+        if (managerId is null) return null;
+        return await db.Users.Where(u => u.Id == managerId).Select(u => u.DirectorId).FirstOrDefaultAsync(ct);
     }
 
     private async Task<(Quotation? q, UserError? error)> DecideAsync(

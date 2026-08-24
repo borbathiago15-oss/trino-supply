@@ -335,6 +335,22 @@
           <h2>Meus Pedidos de Compra</h2>
           <div id="pr-list" class="tablewrap"></div>
         </div>
+        <div class="panel" id="pr-edit-panel" hidden>
+          <h2 id="pr-edit-title">Editar pedido</h2>
+          <form id="pr-edit-form">
+            <label for="pe-just">Justificativa</label>
+            <input id="pe-just" required minlength="3" />
+            <div class="grid2">
+              <div><label for="pe-cc">Centro de Custo</label><select id="pe-cc" class="cc-select" required></select></div>
+              <div><label for="pe-priority">Prioridade</label>
+                <select id="pe-priority"><option value="LOW">Baixa</option><option value="NORMAL">Normal</option><option value="HIGH">Alta</option><option value="URGENT">Urgente</option></select></div>
+            </div>
+            <label for="pe-needed">Data de necessidade</label>
+            <input id="pe-needed" type="date" />
+            <button type="submit" class="full">Salvar alterações</button>
+            <button type="button" class="secondary full" id="pr-edit-cancel" style="margin-top:8px">Cancelar</button>
+          </form>
+        </div>
       </section>
 
       <!-- Central de aprovação -->
@@ -534,6 +550,10 @@
             </div>
             <label>Autorizações — este usuário poderá usar:</label>
             <div class="checks" id="nu-modules"></div>
+            <label>Centros de custo vinculados <span class="sub">(vazio = sem restrição; Júnior/Pleno só solicitam dos centros marcados)</span></label>
+            <div class="checks" id="nu-ccs"></div>
+            <label for="nu-director">Diretor responsável <span class="sub">(2ª alçada dos processos deste gerente)</span></label>
+            <select id="nu-director"><option value="">Sem diretor vinculado</option></select>
             <button type="submit" class="full" id="user-form-submit">Criar usuário</button>
             <button type="button" class="secondary full" id="user-form-cancel" style="margin-top:8px" hidden>Cancelar edição</button>
           </form>
@@ -547,7 +567,7 @@
           <div id="sup-list" class="tablewrap"></div>
         </div>
         <div class="panel">
-          <h2>Novo fornecedor</h2>
+          <h2 id="sup-form-title">Novo fornecedor</h2>
           <form id="sup-form">
             <div class="grid2">
               <div><label for="bs-legal">Razão social</label><input id="bs-legal" required minlength="3" placeholder="ex.: Distribuidora Alfa LTDA" /></div>
@@ -557,7 +577,10 @@
               <div><label for="bs-trade">Nome fantasia</label><input id="bs-trade" placeholder="opcional" /></div>
               <div><label for="bs-email">E-mail</label><input id="bs-email" type="email" placeholder="opcional" /></div>
             </div>
-            <button type="submit" class="full">Cadastrar fornecedor</button>
+            <label for="bs-phone">Telefone</label>
+            <input id="bs-phone" placeholder="opcional" />
+            <button type="submit" class="full" id="sup-form-submit">Cadastrar fornecedor</button>
+            <button type="button" class="secondary full" id="sup-form-cancel" style="margin-top:8px" hidden>Cancelar edição</button>
           </form>
         </div>
       </section>
@@ -570,7 +593,7 @@
           <div id="cc-list" class="tablewrap"></div>
         </div>
         <div class="panel">
-          <h2>Novo centro de custo</h2>
+          <h2 id="cc-form-title">Novo centro de custo</h2>
           <form id="cc-form">
             <div class="grid2">
               <div><label for="ncc-name">Nome</label><input id="ncc-name" required minlength="3" placeholder="ex.: PepsiCo Simões Filho" /></div>
@@ -579,19 +602,54 @@
             <p class="hello" style="margin:4px 0 0">O <strong>código é gerado automaticamente</strong> a partir da regional (ex.: BAH-001).</p>
             <div class="grid2">
               <div><label for="ncc-manager">Gerente responsável (usuário)</label><select id="ncc-manager"></select></div>
-              <div></div>
+              <div><label for="ncc-company">CNPJ de compras (empresa do grupo)</label><select id="ncc-company"></select></div>
             </div>
             <label for="ncc-client">Cliente</label>
             <input id="ncc-client" placeholder="opcional — cliente/contrato atendido" />
-            <button type="submit" class="full">Cadastrar centro de custo</button>
+            <button type="submit" class="full" id="cc-form-submit">Cadastrar centro de custo</button>
+            <button type="button" class="secondary full" id="cc-form-cancel" style="margin-top:8px" hidden>Cancelar edição</button>
           </form>
         </div>
       </section>
 
-      <!-- Cadastros: empresa (cabeçalho da OC) -->
+      <!-- Cadastros: empresas do grupo (CNPJs) + política da OC -->
       <section class="view" id="view-company">
         <div class="panel">
-          <h2>Empresa compradora — cabeçalho e política da Ordem de Compra</h2>
+          <h2>CNPJs do grupo</h2>
+          <p class="hello">Cada centro de custo pode apontar para um CNPJ — a OC daquele CC usa os dados dessa empresa no cabeçalho.</p>
+          <div id="emp-list" class="tablewrap"></div>
+        </div>
+        <div class="panel">
+          <h2 id="emp-form-title">Novo CNPJ</h2>
+          <form id="emp-form">
+            <div class="grid2">
+              <div><label for="ne-legal">Razão social</label><input id="ne-legal" required minlength="3" /></div>
+              <div><label for="ne-tax">CNPJ</label><input id="ne-tax" required placeholder="14 dígitos" /></div>
+            </div>
+            <div class="grid2">
+              <div><label for="ne-addr">Endereço</label><input id="ne-addr" required /></div>
+              <div><label for="ne-district">Bairro/Distrito</label><input id="ne-district" /></div>
+            </div>
+            <div class="grid2">
+              <div><label for="ne-city">Cidade</label><input id="ne-city" required /></div>
+              <div class="grid2">
+                <div><label for="ne-state">UF</label><input id="ne-state" required maxlength="2" minlength="2" /></div>
+                <div><label for="ne-zip">CEP</label><input id="ne-zip" required /></div>
+              </div>
+            </div>
+            <div class="grid2">
+              <div><label for="ne-ie">Inscrição Estadual</label><input id="ne-ie" /></div>
+              <div><label for="ne-phone">Fone</label><input id="ne-phone" /></div>
+            </div>
+            <label for="ne-email">E-mail de compras</label>
+            <input id="ne-email" type="email" />
+            <button type="submit" class="full" id="emp-form-submit">Cadastrar CNPJ</button>
+            <button type="button" class="secondary full" id="emp-form-cancel" style="margin-top:8px" hidden>Cancelar edição</button>
+          </form>
+        </div>
+        <div class="panel">
+          <h2>Padrão da OC — cabeçalho de reserva, cláusulas e política de pagamento</h2>
+          <p class="hello">Usado quando o CC do processo não tem CNPJ vinculado; as cláusulas e a política valem para todas as OCs.</p>
           <form id="company-form">
             <div class="grid2">
               <div><label for="co-legal">Razão social</label><input id="co-legal" required /></div>
@@ -637,7 +695,7 @@
           <div id="cat-list" class="tablewrap"></div>
         </div>
         <div class="panel" id="cat-admin" hidden>
-          <h2>Novo produto</h2>
+          <h2 id="cat-form-title">Novo produto</h2>
           <form id="cat-form">
             <div class="grid2">
               <div><label for="ci-code">Código</label><input id="ci-code" required minlength="2" placeholder="ex.: LMP-001" /></div>
@@ -650,7 +708,8 @@
               <div><label for="ci-price">Preço ref. (R$)</label><input id="ci-price" type="number" min="0" step="0.01" placeholder="opcional" /></div>
             </div>
             <datalist id="cat-families"></datalist>
-            <button type="submit" class="full">Adicionar produto</button>
+            <button type="submit" class="full" id="cat-form-submit">Adicionar produto</button>
+            <button type="button" class="secondary full" id="cat-form-cancel" style="margin-top:8px" hidden>Cancelar edição</button>
           </form>
         </div>
       </section>
@@ -723,7 +782,7 @@
     const canBuy = () => ['PurchasingOfficer', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
     const canMaintainCatalog = () => ['SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
     const canConductRfq = () => ['PurchasingOfficer', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
-    const canMgrApprove = () => ['SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
+    const canMgrApprove = () => ['SupplyManager', 'SystemAdministrator', 'Approver'].includes(currentUser.role);
     const canDirApprove = () => ['Director', 'SystemAdministrator'].includes(currentUser.role);
     const canViewRfq = () => canConductRfq() || canMgrApprove() || canDirApprove() || currentUser.role === 'Auditor';
     const canManageLocations = () => ['WarehouseSupervisor', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
@@ -760,7 +819,7 @@
         { id: 'suppliers', label: 'Fornecedores', module: 'FORNECEDORES', show: canBuy },
         { id: 'products', label: 'Produtos', module: 'PRODUTOS', show: () => true },
         { id: 'cost-centers', label: 'Centros de Custo', module: 'CENTROS_CUSTO', show: canMaintainCatalog },
-        { id: 'company', label: 'Empresa', show: isAdmin },
+        { id: 'company', label: 'Empresas (CNPJs)', show: isAdmin },
       ]},
     ];
     const TITLES = {
@@ -772,7 +831,7 @@
       'buy-demands': 'Demandas de Compra', 'buy-orders': 'Pedidos de Compra',
       users: 'Cadastro de Usuários', suppliers: 'Cadastro de Fornecedores', products: 'Cadastro de Produtos',
       'supply-dash': 'Dashboard de Suprimentos', 'cost-centers': 'Centros de Custo',
-      quotations: 'Cotações / Processos de Compra', company: 'Cadastro da Empresa',
+      quotations: 'Cotações / Processos de Compra', company: 'Empresas do Grupo (CNPJs)',
     };
     const LOADERS = {};
     let currentView = 'supply-dash';
@@ -818,6 +877,9 @@
       renderNav();
       loadCcDatalist();
       goTo('supply-dash');
+      // o login não traz os vínculos de CC: completa via /me e refaz os pickers
+      if (!user.costCenters) api('/api/v1/auth/me')
+        .then(u => { currentUser = u; loadCcDatalist(); }).catch(() => {});
     }
     function showLogin() {
       store.clear(); currentUser = null;
@@ -890,6 +952,13 @@
     }
     async function loadCompanyDatalist() {
       try {
+        const { items } = await api('/api/v1/companies/');
+        if (items.length) {
+          $('company-datalist').innerHTML = items.map(c => `<option value="${escapeHtml(c.legalName)}"></option>`).join('');
+          if (items.length === 1 && !$('pru-company').value) $('pru-company').value = items[0].legalName;
+          return;
+        }
+        // sem CNPJs cadastrados: cai no perfil padrão da OC
         const c = await api('/api/v1/company');
         $('company-datalist').innerHTML = c.legalName ? `<option value="${escapeHtml(c.legalName)}"></option>` : '';
         if (c.legalName && !$('pru-company').value) $('pru-company').value = c.legalName;
@@ -1028,7 +1097,8 @@
                   '<button class="secondary" data-act="return">Devolver</button>',
                   '<button class="danger" data-act="reject">Rejeitar</button>');
       } else if (r.requesterId === currentUser.id) {
-        if (['DRAFT', 'RETURNED'].includes(r.status)) acts.push('<button data-act="submit">Enviar p/ aprovação</button>');
+        if (['DRAFT', 'RETURNED'].includes(r.status)) acts.push('<button data-act="submit">Enviar p/ aprovação</button>',
+          '<button class="secondary" data-act="edit">Editar</button>');
         if (r.status === 'DRAFT') acts.push('<button class="danger" data-act="delete">Excluir</button>');
         if (['DRAFT', 'RETURNED', 'IN_APPROVAL'].includes(r.status)) acts.push('<button class="danger" data-act="cancel">Cancelar</button>');
       }
@@ -1042,14 +1112,44 @@
     }
     const PR_TABLE_HEAD = '<table><thead><tr><th>Número</th><th>Resumo</th><th>Valor est.</th><th>Situação</th><th>Ações</th></tr></thead><tbody>';
 
+    let prMineCache = {};
     LOADERS['pr-mine'] = async () => {
       try {
+        await loadCcDatalist();
         const { items } = await api('/api/v1/purchase-requisitions/');
+        prMineCache = Object.fromEntries(items.map(r => [r.id, r]));
         $('pr-list').innerHTML = items.length
           ? PR_TABLE_HEAD + items.map(r => prRow(r, false)).join('') + '</tbody></table>'
           : '<p class="hello">Nenhum pedido ainda. Crie pelo menu Pedido Unitário ou Pedido Múltiplo.</p>';
       } catch (err) { $('pr-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
+    let prEditingId = null;
+    function openPrEdit(r) {
+      prEditingId = r.id;
+      $('pr-edit-title').textContent = `Editar pedido ${r.number}`;
+      $('pe-just').value = r.justification || '';
+      $('pe-cc').value = r.costCenter || '';
+      $('pe-priority').value = r.priority || 'NORMAL';
+      $('pe-needed').value = r.neededBy || '';
+      $('pr-edit-panel').hidden = false;
+      $('pr-edit-panel').scrollIntoView({ behavior: 'smooth' });
+    }
+    $('pr-edit-cancel').addEventListener('click', () => { prEditingId = null; $('pr-edit-panel').hidden = true; });
+    $('pr-edit-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      if (!prEditingId) return;
+      try {
+        await api('/api/v1/purchase-requisitions/' + prEditingId, { method: 'PATCH', body: {
+          justification: $('pe-just').value, costCenter: $('pe-cc').value,
+          priority: $('pe-priority').value,
+          neededBy: $('pe-needed').value || null,
+          clearNeededBy: !$('pe-needed').value,
+        }});
+        toast('Pedido atualizado.', 'ok');
+        prEditingId = null; $('pr-edit-panel').hidden = true;
+        LOADERS['pr-mine']();
+      } catch (err) { toast(err.message, 'error'); }
+    });
     LOADERS['pr-approvals'] = async () => {
       try {
         const { items } = await api('/api/v1/approvals/pending');
@@ -1081,8 +1181,10 @@
     $('pr-list').addEventListener('click', async (ev) => {
       const btn = ev.target.closest('button[data-act]');
       if (!btn) return;
+      const id = btn.closest('tr').dataset.id;
+      if (btn.dataset.act === 'edit') { const r = prMineCache[id]; if (r) openPrEdit(r); return; }
       try {
-        if (await prAction(btn.closest('tr').dataset.id, btn.dataset.act)) { toast('Operação realizada.', 'ok'); LOADERS['pr-mine'](); }
+        if (await prAction(id, btn.dataset.act)) { toast('Operação realizada.', 'ok'); LOADERS['pr-mine'](); }
       } catch (err) { toast(err.message, 'error'); }
     });
     $('appr-list').addEventListener('click', async (ev) => {
@@ -1427,45 +1529,67 @@
 
     // ============ CADASTROS: USUÁRIOS ============
     let editingUserId = null;
+    let ccOptionsCache = [];   // centros de custo ativos p/ vínculos
     function renderModuleChecks(checked) {
       $('nu-modules').innerHTML = Object.entries(MODULE_LABELS).map(([key, label]) => `
         <label><input type="checkbox" class="nu-mod" value="${key}" ${checked.includes(key) ? 'checked' : ''} ${key === 'USUARIOS' ? 'title="Somente administradores acessam usuários"' : ''} /> ${escapeHtml(label)}</label>`).join('');
     }
+    function renderCcChecks(checked) {
+      $('nu-ccs').innerHTML = ccOptionsCache.length
+        ? ccOptionsCache.map(c => `
+          <label><input type="checkbox" class="nu-cc" value="${escapeHtml(c.code)}" ${checked.includes(c.code) ? 'checked' : ''} /> ${escapeHtml(c.code)} — ${escapeHtml(c.name)}</label>`).join('')
+        : '<p class="hello" style="margin:0">Nenhum centro de custo cadastrado ainda.</p>';
+    }
+    function renderDirectorPicker(users, selectedId) {
+      const directors = users.filter(u => u.active && (u.role === 'Director' || u.role === 'SystemAdministrator'));
+      $('nu-director').innerHTML = '<option value="">Sem diretor vinculado</option>' +
+        directors.map(d => `<option value="${d.id}" ${d.id === selectedId ? 'selected' : ''}>${escapeHtml(d.name)} (${ROLE_LABELS[d.role] || d.role})</option>`).join('');
+    }
     function setUserFormMode(user) {
       editingUserId = user ? user.id : null;
-      $('user-form-title').textContent = user ? `Editar autorização — ${user.name}` : 'Novo usuário';
-      $('user-form-submit').textContent = user ? 'Salvar autorização' : 'Criar usuário';
+      $('user-form-title').textContent = user ? `Editar usuário — ${user.name}` : 'Novo usuário';
+      $('user-form-submit').textContent = user ? 'Salvar alterações' : 'Criar usuário';
       $('user-form-cancel').hidden = !user;
-      ['nu-name', 'nu-email', 'nu-pass'].forEach(id => { $(id).disabled = !!user; $(id).required = !user; });
-      $('nu-role').disabled = !!user;
+      $('nu-email').disabled = !!user; $('nu-email').required = !user;
+      $('nu-pass').disabled = !!user; $('nu-pass').required = !user;
       if (user) {
         $('nu-name').value = user.name; $('nu-email').value = user.email; $('nu-pass').value = '';
         $('nu-role').value = user.role;
         renderModuleChecks(user.modules || []);
+        renderCcChecks(user.costCenters || []);
+        renderDirectorPicker(Object.values(usersCache), user.directorId || '');
       } else {
         $('user-form').reset();
         renderModuleChecks(DEFAULT_MODULES[$('nu-role').value] || []);
+        renderCcChecks([]);
+        renderDirectorPicker(Object.values(usersCache), '');
       }
     }
     let usersCache = {};
     LOADERS['users'] = async () => {
       try {
-        const data = await api('/api/v1/users/');
+        const [data, ccData] = await Promise.all([
+          api('/api/v1/users/'),
+          api('/api/v1/cost-centers/').catch(() => ({ items: [] })),
+        ]);
+        ccOptionsCache = ccData.items || [];
         usersCache = Object.fromEntries(data.items.map(u => [u.id, u]));
         $('nu-role').innerHTML = data.roles.map(r => `<option value="${r}">${ROLE_LABELS[r] || r}</option>`).join('');
+        const dirName = (id) => (usersCache[id] && usersCache[id].name) || '';
         const rows = data.items.map(u => `
           <tr data-id="${u.id}">
             <td>${escapeHtml(u.name)}<div class="sub">${escapeHtml(u.email)}</div></td>
             <td>${ROLE_LABELS[u.role] || u.role}</td>
             <td><div class="sub">${(u.modules || []).map(m => MODULE_LABELS[m] || m).join(' · ') || '—'}</div></td>
+            <td><div class="sub">${(u.costCenters || []).join(' · ') || '—'}${u.directorId ? '<br>Diretor: ' + escapeHtml(dirName(u.directorId) || '—') : ''}</div></td>
             <td><span class="badge ${u.active ? 'on' : 'off'}">${u.active ? 'ATIVO' : 'INATIVO'}</span></td>
             <td class="row-actions">
-              <button class="secondary" data-act="access">Autorizações</button>
+              <button class="secondary" data-act="access">Editar</button>
               <button class="secondary" data-act="reset">Nova senha</button>
               <button class="${u.active ? 'danger' : 'secondary'}" data-act="toggle">${u.active ? 'Inativar' : 'Reativar'}</button>
             </td>
           </tr>`).join('');
-        $('users-list').innerHTML = '<table><thead><tr><th>Usuário</th><th>Papel</th><th>Autorizações</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' + rows + '</tbody></table>';
+        $('users-list').innerHTML = '<table><thead><tr><th>Usuário</th><th>Papel</th><th>Autorizações</th><th>Vínculos (CC / Diretor)</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' + rows + '</tbody></table>';
         if (!editingUserId) setUserFormMode(null);
       } catch (err) { $('users-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
@@ -1501,17 +1625,22 @@
     $('user-form').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const modules = [...document.querySelectorAll('.nu-mod:checked')].map(c => c.value);
+      const costCenters = [...document.querySelectorAll('.nu-cc:checked')].map(c => c.value);
+      const directorId = $('nu-director').value || null;
       try {
         if (editingUserId) {
-          await api('/api/v1/users/' + editingUserId, { method: 'PATCH', body: { modules } });
-          toast('Autorizações atualizadas. Valem a partir do próximo login do usuário.', 'ok');
+          await api('/api/v1/users/' + editingUserId, { method: 'PATCH', body: {
+            name: $('nu-name').value, role: $('nu-role').value, modules, costCenters,
+            directorId, clearDirector: !directorId,
+          }});
+          toast('Usuário atualizado. Autorizações valem a partir do próximo login.', 'ok');
           setUserFormMode(null);
         } else {
           await api('/api/v1/users/', { method: 'POST', body: {
             name: $('nu-name').value, email: $('nu-email').value,
-            role: $('nu-role').value, password: $('nu-pass').value, modules,
+            role: $('nu-role').value, password: $('nu-pass').value, modules, costCenters, directorId,
           }});
-          toast('Usuário criado com as autorizações selecionadas.', 'ok');
+          toast('Usuário criado com autorizações e vínculos selecionados.', 'ok');
           ev.target.reset();
         }
         LOADERS['users']();
@@ -1519,9 +1648,23 @@
     });
 
     // ============ CADASTROS: FORNECEDORES ============
+    let supCache = {};
+    let editingSupId = null;
+    function setSupFormMode(s) {
+      editingSupId = s ? s.id : null;
+      $('sup-form-title').textContent = s ? `Editar fornecedor — ${s.legalName}` : 'Novo fornecedor';
+      $('sup-form-submit').textContent = s ? 'Salvar alterações' : 'Cadastrar fornecedor';
+      $('sup-form-cancel').hidden = !s;
+      $('bs-legal').disabled = !!s; $('bs-tax').disabled = !!s;   // identidade fiscal não muda na edição
+      if (s) {
+        $('bs-legal').value = s.legalName; $('bs-tax').value = s.taxId;
+        $('bs-trade').value = s.tradeName || ''; $('bs-email').value = s.email || ''; $('bs-phone').value = s.phone || '';
+      } else { $('sup-form').reset(); }
+    }
     LOADERS['suppliers'] = async () => {
       try {
         const { items } = await api('/api/v1/suppliers/?all=true');
+        supCache = Object.fromEntries(items.map(s => [s.id, s]));
         $('sup-list').innerHTML = items.length
           ? '<table><thead><tr><th>Fornecedor</th><th>CNPJ/CPF</th><th>Contato</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
             items.map(s => `
@@ -1531,18 +1674,26 @@
                 <td>${escapeHtml(s.email || '')}${s.phone ? `<div class="sub">${escapeHtml(s.phone)}</div>` : ''}</td>
                 <td><span class="badge ${s.active ? 'on' : 'off'}">${s.active ? 'ATIVO' : 'INATIVO'}</span></td>
                 <td class="row-actions">
+                  <button class="secondary" data-act="edit-sup">Editar</button>
                   <button class="secondary" data-act="portal-key">Chave do portal</button>
                   <button class="${s.active ? 'danger' : 'secondary'}" data-act="toggle-sup">${s.active ? 'Inativar' : 'Reativar'}</button>
                 </td>
               </tr>`).join('') + '</tbody></table>'
           : '<p class="hello">Nenhum fornecedor cadastrado ainda.</p>';
+        if (!editingSupId) setSupFormMode(null);
       } catch (err) { $('sup-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
+    $('sup-form-cancel').addEventListener('click', () => setSupFormMode(null));
     $('sup-list').addEventListener('click', async (ev) => {
       const btn = ev.target.closest('button[data-act]');
       if (!btn) return;
       const id = btn.closest('tr').dataset.id;
       try {
+        if (btn.dataset.act === 'edit-sup') {
+          setSupFormMode(supCache[id]);
+          $('sup-form-title').scrollIntoView({ behavior: 'smooth' });
+          return;
+        }
         if (btn.dataset.act === 'portal-key') {
           if (!confirm('Gerar nova chave do Portal do Fornecedor? A chave anterior deixa de funcionar.')) return;
           const { accessKey } = await api('/api/v1/suppliers/' + id + '/portal-key', { method: 'POST', body: {} });
@@ -1557,23 +1708,46 @@
     $('sup-form').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       try {
-        await api('/api/v1/suppliers/', { method: 'POST', body: {
-          legalName: $('bs-legal').value, tradeName: $('bs-trade').value || null,
-          taxId: $('bs-tax').value, email: $('bs-email').value || null,
-        }});
-        toast('Fornecedor cadastrado.', 'ok');
-        ev.target.reset();
+        if (editingSupId) {
+          await api('/api/v1/suppliers/' + editingSupId, { method: 'PATCH', body: {
+            tradeName: $('bs-trade').value || '', email: $('bs-email').value || '', phone: $('bs-phone').value || '',
+          }});
+          toast('Fornecedor atualizado.', 'ok');
+          setSupFormMode(null);
+        } else {
+          await api('/api/v1/suppliers/', { method: 'POST', body: {
+            legalName: $('bs-legal').value, tradeName: $('bs-trade').value || null,
+            taxId: $('bs-tax').value, email: $('bs-email').value || null, phone: $('bs-phone').value || null,
+          }});
+          toast('Fornecedor cadastrado.', 'ok');
+          ev.target.reset();
+        }
         LOADERS['suppliers']();
       } catch (err) { toast(err.message, 'error'); }
     });
 
     // ============ CADASTROS: PRODUTOS ============
+    let catCache = {};
+    let editingCatId = null;
+    function setCatFormMode(i) {
+      editingCatId = i ? i.id : null;
+      $('cat-form-title').textContent = i ? `Editar produto — ${i.code}` : 'Novo produto';
+      $('cat-form-submit').textContent = i ? 'Salvar alterações' : 'Adicionar produto';
+      $('cat-form-cancel').hidden = !i;
+      $('ci-code').disabled = !!i;   // código é a identidade do item
+      if (i) {
+        $('ci-code').value = i.code; $('ci-family').value = i.family;
+        $('ci-desc').value = i.description; $('ci-unit').value = i.unitOfMeasure || '';
+        $('ci-price').value = i.referencePrice != null ? i.referencePrice : '';
+      } else { $('cat-form').reset(); }
+    }
     LOADERS['products'] = async () => {
       $('cat-admin').hidden = !canMaintainCatalog();
       try {
         const family = $('cat-filter-family').value;
         const { items } = await api('/api/v1/items/?all=true' + (family ? '&family=' + encodeURIComponent(family) : ''));
         const { families } = await api('/api/v1/items/families');
+        catCache = Object.fromEntries(items.map(i => [i.id, i]));
         const current = $('cat-filter-family').value;
         $('cat-filter-family').innerHTML = '<option value="">Todas as famílias</option>' +
           families.map(f => `<option value="${escapeHtml(f)}" ${f === current ? 'selected' : ''}>${escapeHtml(f)}</option>`).join('');
@@ -1587,17 +1761,25 @@
                 <td>${escapeHtml(i.family)}</td>
                 <td>${i.referencePrice != null ? money(i.referencePrice) : '—'}</td>
                 <td><span class="badge ${i.active ? 'on' : 'off'}">${i.active ? 'ATIVO' : 'INATIVO'}</span></td>
-                <td class="row-actions">${canMaintainCatalog() ? `<button class="${i.active ? 'danger' : 'secondary'}" data-act="toggle">${i.active ? 'Inativar' : 'Reativar'}</button>` : ''}</td>
+                <td class="row-actions">${canMaintainCatalog() ? `<button class="secondary" data-act="edit">Editar</button><button class="${i.active ? 'danger' : 'secondary'}" data-act="toggle">${i.active ? 'Inativar' : 'Reativar'}</button>` : ''}</td>
               </tr>`).join('') + '</tbody></table>'
           : '<p class="hello">Nenhum produto cadastrado ainda.</p>';
+        if (!editingCatId) setCatFormMode(null);
       } catch (err) { $('cat-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
     $('cat-filter-family').addEventListener('change', () => LOADERS['products']());
+    $('cat-form-cancel').addEventListener('click', () => setCatFormMode(null));
     $('cat-list').addEventListener('click', async (ev) => {
-      const btn = ev.target.closest('button[data-act="toggle"]');
+      const btn = ev.target.closest('button[data-act]');
       if (!btn) return;
+      const id = btn.closest('tr').dataset.id;
       try {
-        await api('/api/v1/items/' + btn.closest('tr').dataset.id, { method: 'PATCH', body: { active: btn.textContent === 'Reativar' } });
+        if (btn.dataset.act === 'edit') {
+          setCatFormMode(catCache[id]);
+          $('cat-form-title').scrollIntoView({ behavior: 'smooth' });
+          return;
+        }
+        await api('/api/v1/items/' + id, { method: 'PATCH', body: { active: btn.textContent === 'Reativar' } });
         toast('Produto atualizado.', 'ok');
         LOADERS['products']();
       } catch (err) { toast(err.message, 'error'); }
@@ -1605,15 +1787,25 @@
     $('cat-form').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       try {
-        await api('/api/v1/items/', { method: 'POST', body: {
-          code: $('ci-code').value, description: $('ci-desc').value, family: $('ci-family').value,
-          unitOfMeasure: $('ci-unit').value || null,
-          referencePrice: $('ci-price').value ? parseFloat($('ci-price').value) : null,
-        }});
-        toast('Produto adicionado ao catálogo.', 'ok');
-        const keepFamily = $('ci-family').value;
-        ev.target.reset();
-        $('ci-family').value = keepFamily;
+        if (editingCatId) {
+          await api('/api/v1/items/' + editingCatId, { method: 'PATCH', body: {
+            description: $('ci-desc').value, family: $('ci-family').value,
+            unitOfMeasure: $('ci-unit').value || null,
+            referencePrice: $('ci-price').value ? parseFloat($('ci-price').value) : null,
+          }});
+          toast('Produto atualizado.', 'ok');
+          setCatFormMode(null);
+        } else {
+          await api('/api/v1/items/', { method: 'POST', body: {
+            code: $('ci-code').value, description: $('ci-desc').value, family: $('ci-family').value,
+            unitOfMeasure: $('ci-unit').value || null,
+            referencePrice: $('ci-price').value ? parseFloat($('ci-price').value) : null,
+          }});
+          toast('Produto adicionado ao catálogo.', 'ok');
+          const keepFamily = $('ci-family').value;
+          ev.target.reset();
+          $('ci-family').value = keepFamily;
+        }
         LOADERS['products']();
       } catch (err) { toast(err.message, 'error'); }
     });
@@ -1790,7 +1982,11 @@
     // ============ CADASTROS: CENTROS DE CUSTO ============
     async function loadCcDatalist() {
       try {
-        const { items } = await api('/api/v1/cost-centers/');
+        let { items } = await api('/api/v1/cost-centers/');
+        // Alçada por CC: Júnior/Pleno com vínculos só veem os seus centros nos formulários
+        const linked = (currentUser && currentUser.costCenters) || [];
+        if (linked.length && ['Requester', 'Approver'].includes(currentUser.role))
+          items = items.filter(c => linked.includes(c.code));
         const options = items.length
           ? '<option value="">Selecione o centro de custo…</option>' + items.map(c =>
               `<option value="${escapeHtml(c.code)}">${escapeHtml(c.code)} — ${escapeHtml(c.name)}${c.region ? ' · ' + escapeHtml(c.region) : ''}</option>`).join('')
@@ -1798,31 +1994,71 @@
         document.querySelectorAll('.cc-select').forEach(el => { const keep = el.value; el.innerHTML = options; if (keep) el.value = keep; });
       } catch {}
     }
+    let ccCache = {};
+    let companiesCache = [];
+    let editingCcId = null;
+    function setCcFormMode(c) {
+      editingCcId = c ? c.id : null;
+      $('cc-form-title').textContent = c ? `Editar centro de custo — ${c.code}` : 'Novo centro de custo';
+      $('cc-form-submit').textContent = c ? 'Salvar alterações' : 'Cadastrar centro de custo';
+      $('cc-form-cancel').hidden = !c;
+      if (c) {
+        $('ncc-name').value = c.name; $('ncc-region').value = c.region || '';
+        $('ncc-manager').value = c.managerUserId || '';
+        $('ncc-company').value = c.companyId || '';
+        $('ncc-client').value = c.clientName || '';
+      } else { $('cc-form').reset(); }
+    }
     LOADERS['cost-centers'] = async () => {
       try {
         try {
           const { items: users } = await api('/api/v1/users/pickers');
+          const keepM = $('ncc-manager').value;
           $('ncc-manager').innerHTML = '<option value="">Selecione o gerente…</option>' +
             users.map(u => `<option value="${u.id}">${escapeHtml(u.name)} (${ROLE_LABELS[u.role] || u.role})</option>`).join('');
+          if (keepM) $('ncc-manager').value = keepM;
+        } catch {}
+        try {
+          const { items: comps } = await api('/api/v1/companies/');
+          companiesCache = comps;
+          const keepC = $('ncc-company').value;
+          $('ncc-company').innerHTML = '<option value="">Usar padrão da OC</option>' +
+            comps.map(c => `<option value="${c.id}">${escapeHtml(c.legalName)} — ${escapeHtml(c.taxId)}</option>`).join('');
+          if (keepC) $('ncc-company').value = keepC;
         } catch {}
         const { items } = await api('/api/v1/cost-centers/?all=true');
+        ccCache = Object.fromEntries(items.map(c => [c.id, c]));
+        const compName = (id) => { const c = companiesCache.find(x => x.id === id); return c ? c.legalName : '—'; };
         $('cc-list').innerHTML = items.length
-          ? '<table><thead><tr><th>Código</th><th>Nome</th><th>Regional</th><th>Gerente</th><th>Cliente</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+          ? '<table><thead><tr><th>Código</th><th>Nome</th><th>Regional</th><th>Gerente</th><th>CNPJ de compras</th><th>Cliente</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
             items.map(c => `
               <tr data-id="${c.id}">
                 <td>${escapeHtml(c.code)}</td><td>${escapeHtml(c.name)}</td>
-                <td>${escapeHtml(c.region || '—')}</td><td>${escapeHtml(c.managerName || '—')}</td><td>${escapeHtml(c.clientName || '—')}</td>
+                <td>${escapeHtml(c.region || '—')}</td><td>${escapeHtml(c.managerName || '—')}</td>
+                <td><div class="sub">${escapeHtml(c.companyId ? compName(c.companyId) : '—')}</div></td>
+                <td>${escapeHtml(c.clientName || '—')}</td>
                 <td><span class="badge ${c.active ? 'on' : 'off'}">${c.active ? 'ATIVO' : 'INATIVO'}</span></td>
-                <td class="row-actions"><button class="${c.active ? 'danger' : 'secondary'}" data-act="toggle-cc">${c.active ? 'Inativar' : 'Reativar'}</button></td>
+                <td class="row-actions">
+                  <button class="secondary" data-act="edit-cc">Editar</button>
+                  <button class="${c.active ? 'danger' : 'secondary'}" data-act="toggle-cc">${c.active ? 'Inativar' : 'Reativar'}</button>
+                </td>
               </tr>`).join('') + '</tbody></table>'
           : '<p class="hello">Nenhum centro de custo cadastrado ainda.</p>';
+        if (!editingCcId) setCcFormMode(null);
       } catch (err) { $('cc-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
+    $('cc-form-cancel').addEventListener('click', () => setCcFormMode(null));
     $('cc-list').addEventListener('click', async (ev) => {
-      const btn = ev.target.closest('button[data-act="toggle-cc"]');
+      const btn = ev.target.closest('button[data-act]');
       if (!btn) return;
+      const id = btn.closest('tr').dataset.id;
       try {
-        await api('/api/v1/cost-centers/' + btn.closest('tr').dataset.id, { method: 'PATCH', body: { active: btn.textContent === 'Reativar' } });
+        if (btn.dataset.act === 'edit-cc') {
+          setCcFormMode(ccCache[id]);
+          $('cc-form-title').scrollIntoView({ behavior: 'smooth' });
+          return;
+        }
+        await api('/api/v1/cost-centers/' + id, { method: 'PATCH', body: { active: btn.textContent === 'Reativar' } });
         toast('Centro de custo atualizado.', 'ok');
         LOADERS['cost-centers']();
         loadCcDatalist();
@@ -1830,14 +2066,22 @@
     });
     $('cc-form').addEventListener('submit', async (ev) => {
       ev.preventDefault();
+      const body = {
+        name: $('ncc-name').value, region: $('ncc-region').value || null,
+        managerUserId: $('ncc-manager').value || null,
+        clientName: $('ncc-client').value || null,
+        companyId: $('ncc-company').value || null,
+      };
       try {
-        await api('/api/v1/cost-centers/', { method: 'POST', body: {
-          name: $('ncc-name').value, region: $('ncc-region').value || null,
-          managerUserId: $('ncc-manager').value || null,
-          clientName: $('ncc-client').value || null,
-        }});
-        toast('Centro de custo cadastrado.', 'ok');
-        ev.target.reset();
+        if (editingCcId) {
+          await api('/api/v1/cost-centers/' + editingCcId, { method: 'PATCH', body });
+          toast('Centro de custo atualizado.', 'ok');
+          setCcFormMode(null);
+        } else {
+          await api('/api/v1/cost-centers/', { method: 'POST', body });
+          toast('Centro de custo cadastrado.', 'ok');
+          ev.target.reset();
+        }
         LOADERS['cost-centers']();
         loadCcDatalist();
       } catch (err) { toast(err.message, 'error'); }
@@ -2153,8 +2397,87 @@
       } catch (err) { toast(err.message, 'error'); }
     });
 
-    // ============ CADASTROS: EMPRESA ============
+    // ============ CADASTROS: EMPRESAS DO GRUPO (CNPJs) + PADRÃO DA OC ============
+    let empCache = {};
+    let editingEmpId = null;
+    const fmtCnpj = (d) => d && d.length === 14 ? `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}` : (d || '');
+    function setEmpFormMode(c) {
+      editingEmpId = c ? c.id : null;
+      $('emp-form-title').textContent = c ? `Editar CNPJ — ${c.legalName}` : 'Novo CNPJ';
+      $('emp-form-submit').textContent = c ? 'Salvar alterações' : 'Cadastrar CNPJ';
+      $('emp-form-cancel').hidden = !c;
+      $('ne-tax').disabled = !!c;   // o CNPJ é a identidade da empresa
+      if (c) {
+        $('ne-legal').value = c.legalName; $('ne-tax').value = fmtCnpj(c.taxId);
+        $('ne-addr').value = c.address; $('ne-district').value = c.district || '';
+        $('ne-city').value = c.city; $('ne-state').value = c.state; $('ne-zip').value = c.zip;
+        $('ne-ie').value = c.stateRegistration || ''; $('ne-phone').value = c.phone || '';
+        $('ne-email').value = c.email || '';
+      } else { $('emp-form').reset(); }
+    }
+    async function loadEmpList() {
+      try {
+        const { items } = await api('/api/v1/companies/?all=true');
+        empCache = Object.fromEntries(items.map(c => [c.id, c]));
+        $('emp-list').innerHTML = items.length
+          ? '<table><thead><tr><th>Razão social</th><th>CNPJ</th><th>Cidade/UF</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+            items.map(c => `
+              <tr data-id="${c.id}">
+                <td>${escapeHtml(c.legalName)}${c.email ? `<div class="sub">${escapeHtml(c.email)}</div>` : ''}</td>
+                <td>${escapeHtml(fmtCnpj(c.taxId))}</td>
+                <td>${escapeHtml(c.city)}/${escapeHtml(c.state)}</td>
+                <td><span class="badge ${c.active ? 'on' : 'off'}">${c.active ? 'ATIVA' : 'INATIVA'}</span></td>
+                <td class="row-actions">
+                  <button class="secondary" data-act="edit-emp">Editar</button>
+                  <button class="${c.active ? 'danger' : 'secondary'}" data-act="toggle-emp">${c.active ? 'Inativar' : 'Reativar'}</button>
+                </td>
+              </tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhum CNPJ cadastrado ainda — cadastre as empresas do grupo abaixo.</p>';
+        if (!editingEmpId) setEmpFormMode(null);
+      } catch (err) { $('emp-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    }
+    $('emp-form-cancel').addEventListener('click', () => setEmpFormMode(null));
+    $('emp-list').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act]');
+      if (!btn) return;
+      const id = btn.closest('tr').dataset.id;
+      try {
+        if (btn.dataset.act === 'edit-emp') {
+          setEmpFormMode(empCache[id]);
+          $('emp-form-title').scrollIntoView({ behavior: 'smooth' });
+          return;
+        }
+        await api('/api/v1/companies/' + id, { method: 'PATCH', body: { active: btn.textContent === 'Reativar' } });
+        toast('Empresa atualizada.', 'ok');
+        loadEmpList();
+        loadCompanyDatalist();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+    $('emp-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const body = {
+        legalName: $('ne-legal').value, stateRegistration: $('ne-ie').value || null,
+        address: $('ne-addr').value, district: $('ne-district').value || null,
+        city: $('ne-city').value, state: $('ne-state').value, zip: $('ne-zip').value,
+        phone: $('ne-phone').value || null, email: $('ne-email').value || null,
+      };
+      try {
+        if (editingEmpId) {
+          await api('/api/v1/companies/' + editingEmpId, { method: 'PATCH', body });
+          toast('Empresa atualizada.', 'ok');
+          setEmpFormMode(null);
+        } else {
+          await api('/api/v1/companies/', { method: 'POST', body: { ...body, taxId: $('ne-tax').value } });
+          toast('CNPJ cadastrado — ele já aparece na lista e nos vínculos de centro de custo.', 'ok');
+          ev.target.reset();
+        }
+        loadEmpList();
+        loadCompanyDatalist();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
     LOADERS['company'] = async () => {
+      loadEmpList();
       try {
         const c = await api('/api/v1/company');
         $('co-legal').value = c.legalName || '';

@@ -46,12 +46,36 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         return actor.SeesAll || pr.RequesterId == actor.Id ? pr : null; // fora do escopo ⇒ 404 (anti-enumeração)
     }
 
-    /// <summary>Fila de aprovação: tudo em IN_APPROVAL, exceto as do próprio usuário (SoD — ABAC-01).</summary>
-    public Task<List<PurchaseRequisition>> PendingApprovalsAsync(Actor actor, CancellationToken ct = default) =>
-        db.Requisitions.Include(r => r.Items)
-            .Where(r => r.DeletedAt == null && r.Status == RequisitionStatus.InApproval && r.RequesterId != actor.Id)
-            .OrderBy(r => r.SubmittedAt)
-            .Take(100).ToListAsync(ct);
+    /// <summary>
+    /// Centros de custo em que o usuário é o gerente responsável (vínculo do cadastro do CC).
+    /// Alçada por CC: o Gerente (Pleno) só aprova o que pertence aos CCs vinculados a ele.
+    /// </summary>
+    public async Task<List<string>> ManagedCostCentersAsync(Guid userId, CancellationToken ct = default) =>
+        await db.CostCenters.Where(c => c.ManagerUserId == userId && c.Active)
+            .Select(c => c.Code).ToListAsync(ct);
+
+    /// <summary>Fila de aprovação: IN_APPROVAL, exceto as próprias (SoD); gerente com CCs vinculados vê só os seus.</summary>
+    public async Task<List<PurchaseRequisition>> PendingApprovalsAsync(Actor actor, CancellationToken ct = default)
+    {
+        var query = db.Requisitions.Include(r => r.Items)
+            .Where(r => r.DeletedAt == null && r.Status == RequisitionStatus.InApproval && r.RequesterId != actor.Id);
+        if (actor.Role == Roles.Approver)
+        {
+            var managed = await ManagedCostCentersAsync(actor.Id, ct);
+            if (managed.Count > 0) query = query.Where(r => managed.Contains(r.CostCenter.ToUpper()));
+        }
+        return await query.OrderBy(r => r.SubmittedAt).Take(100).ToListAsync(ct);
+    }
+
+    /// <summary>Gerente (Approver) com CCs vinculados só decide SCs desses CCs.</summary>
+    private async Task<UserError?> CheckApprovalScopeAsync(Actor actor, PurchaseRequisition pr, CancellationToken ct)
+    {
+        if (actor.Role != Roles.Approver) return null;
+        var managed = await ManagedCostCentersAsync(actor.Id, ct);
+        if (managed.Count > 0 && !managed.Contains(pr.CostCenter.ToUpperInvariant()))
+            return new("PR-ERR-002", "Este centro de custo não está vinculado à sua alçada de aprovação.");
+        return null;
+    }
 
     // ---- ciclo de vida ------------------------------------------------------
     public record ScHeaderInput(string? NeedType, string? DeliveryLocation, string? Company, string? InternalNotes);
@@ -72,6 +96,10 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         kind = (kind ?? "AVULSA").ToUpperInvariant();
         if (kind is not ("AVULSA" or "CATALOGO"))
             return (null, new("PR-ERR-030", "Tipo de requisição inválido (AVULSA ou CATALOGO)."));
+
+        // Alçada por CC: Júnior/Pleno com centros vinculados só solicitam dos seus centros
+        if (await CheckCcLinkAsync(actor, costCenter, ct) is { } ccLinkError)
+            return (null, ccLinkError);
         if (kind == "CATALOGO" && items.Any(i => i.CatalogItemId is null))
             return (null, new("PR-ERR-030", "Em requisição por catálogo, todos os itens devem vir do catálogo."));
 
@@ -109,6 +137,17 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         return (pr, null); // EVT-001 RequisitionCreated (outbox: incremento futuro)
     }
 
+    /// <summary>Júnior/Pleno com centros vinculados só solicitam dos seus centros (PR-ERR-021).</summary>
+    private async Task<UserError?> CheckCcLinkAsync(Actor actor, string costCenter, CancellationToken ct)
+    {
+        if (actor.Role is not (Roles.Requester or Roles.Approver)) return null;
+        var linked = await db.Users.Where(u => u.Id == actor.Id).Select(u => u.CostCenters).SingleOrDefaultAsync(ct);
+        if (string.IsNullOrWhiteSpace(linked)) return null;
+        var codes = linked.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return codes.Contains(costCenter.Trim().ToUpperInvariant()) ? null
+            : new("PR-ERR-021", "Centro de custo fora do seu vínculo: solicite apenas dos centros vinculados ao seu usuário.");
+    }
+
     public async Task<(PurchaseRequisition? pr, UserError? error)> UpdateHeaderAsync(
         Actor actor, Guid id, string? justification, string? costCenter, string? priority, DateOnly? neededBy,
         bool clearNeededBy, CancellationToken ct = default)
@@ -124,6 +163,7 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         if (costCenter is not null)
         {
             if (string.IsNullOrWhiteSpace(costCenter)) return (null, new("PR-ERR-021", "O centro de custo não pode ficar vazio."));
+            if (await CheckCcLinkAsync(actor, costCenter, ct) is { } ccLinkError) return (null, ccLinkError);
             pr!.CostCenter = costCenter.Trim();
         }
         if (priority is not null)
@@ -254,6 +294,8 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
             return (null, new("PR-ERR-040", "A requisição não está aguardando aprovação."));
         if (pr.RequesterId == actor.Id)
             return (null, new("PR-ERR-041", "O solicitante não pode decidir a própria requisição (segregação de funções)."));
+        if (await CheckApprovalScopeAsync(actor, pr, ct) is { } scopeError)
+            return (null, scopeError);
         if (reasonRequired && string.IsNullOrWhiteSpace(reasonOrComments))
             return (null, new("PR-ERR-030", "Informe o motivo da decisão."));
 

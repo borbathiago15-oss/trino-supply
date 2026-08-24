@@ -847,6 +847,8 @@ static object MrView(MaterialRequisition r) => new
     costCenter = r.CostCenter, notes = r.Notes,
     requesterId = r.RequesterId, requesterLabel = r.RequesterLabel,
     fulfilledByLabel = r.FulfilledByLabel, fulfilledAt = r.FulfilledAt, cancelReason = r.CancelReason,
+    assignedToId = r.AssignedToId, assignedToLabel = r.AssignedToLabel,
+    assignedByLabel = r.AssignedByLabel, assignedAt = r.AssignedAt,
     items = r.Items.Select(i => new
     {
         itemId = i.Id, catalogCode = i.CatalogCode, description = i.Description,
@@ -864,7 +866,7 @@ static object MrView(MaterialRequisition r) => new
 var mrs = app.MapGroup("/api/v1/material-requisitions").RequireAuthorization();
 mrs.AddEndpointFilter(RequireModules(AppModules.Material, AppModules.Estoque));
 
-mrs.MapGet("/", async (MaterialRequisitionService svc, ClaimsPrincipal p, HttpContext ctx, bool? queue) =>
+mrs.MapGet("/", async (MaterialRequisitionService svc, ClaimsPrincipal p, HttpContext ctx, bool? queue, bool? mine) =>
 {
     var role = RoleOf(p);
     var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
@@ -872,7 +874,9 @@ mrs.MapGet("/", async (MaterialRequisitionService svc, ClaimsPrincipal p, HttpCo
         return Error(ctx, 403, "MR-ERR-001", "Seu papel não acessa a fila do almoxarifado.");
     if (queue != true && !(MaterialRequisitionService.CanRequest(role) || MaterialRequisitionService.CanSeeAll(role)))
         return Error(ctx, 403, "MR-ERR-001", "Seu papel não acessa solicitações de material.");
-    return Ok(new { items = (await svc.ListAsync(actor, queue == true)).Select(MrView) }, ctx);
+    var list = await svc.ListAsync(actor, queue == true);
+    if (mine == true) list = list.Where(r => r.AssignedToId == actor.Id).ToList();
+    return Ok(new { items = list.Select(MrView) }, ctx);
 });
 
 mrs.MapPost("/", async (CreateMaterialRequisitionRequest body, MaterialRequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>

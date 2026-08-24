@@ -426,7 +426,13 @@
       <!-- Estoque: fila -->
       <section class="view" id="view-wh-queue">
         <div class="panel">
-          <h2>Fila de Atendimento do Almoxarifado</h2>
+          <div class="topbar" style="margin-bottom:8px">
+            <h2 style="margin:0">Fila de Atendimento do Almoxarifado</h2>
+            <select id="wh-filter" style="width:auto">
+              <option value="TODAS">Toda a fila</option>
+              <option value="MINHAS">Designadas a mim</option>
+            </select>
+          </div>
           <div id="wh-queue-list" class="tablewrap"></div>
         </div>
       </section>
@@ -821,14 +827,51 @@
     function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
     const money = (v) => (v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
-    async function api(path, options = {}) {
+    // renova o access token (15 min) com o refresh token; uma renovação por vez
+    let refreshInFlight = null;
+    async function renewSession() {
+      if (!store.refresh) return false;
+      if (!refreshInFlight) {
+        refreshInFlight = (async () => {
+          try {
+            const res = await fetch('/api/v1/auth/refresh', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ refreshToken: store.refresh }),
+            });
+            if (!res.ok) return false;
+            const json = await res.json().catch(() => ({}));
+            const data = json.data ?? json;
+            if (!data.accessToken) return false;
+            store.set(data);
+            return true;
+          } catch { return false; } finally { setTimeout(() => { refreshInFlight = null; }, 0); }
+        })();
+      }
+      return refreshInFlight;
+    }
+
+    async function api(path, options = {}, _retried = false) {
       const res = await fetch(path, {
         method: options.method || 'GET',
         headers: { 'Content-Type': 'application/json', ...(store.access ? { Authorization: 'Bearer ' + store.access } : {}) },
         body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
       });
+      // sessão expirada: renova uma vez e repete a chamada, sem perder a tela
+      if (res.status === 401 && !_retried && store.refresh && !path.includes('/auth/')) {
+        if (await renewSession()) return api(path, options, true);
+        showLogin();
+        toast('Sua sessão expirou. Entre novamente.', 'error');
+        const err = new Error('Sua sessão expirou. Entre novamente.');
+        err.status = 401; throw err;
+      }
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) { const err = new Error(json.error?.message || 'Falha na operação.'); err.code = json.error?.code; err.status = res.status; throw err; }
+      if (!res.ok) {
+        const fallback = res.status === 401 ? 'Sua sessão expirou. Entre novamente.'
+          : res.status >= 500 ? 'O servidor não respondeu a esta operação. Tente novamente em instantes.'
+          : 'Falha na operação.';
+        const err = new Error(json.error?.message || fallback);
+        err.code = json.error?.code; err.status = res.status; throw err;
+      }
       return json.data ?? json;
     }
 
@@ -1474,23 +1517,34 @@
     LOADERS['wh-queue'] = async () => {
       try {
         await loadLocations();
-        const { items } = await api('/api/v1/material-requisitions/?queue=true');
+        const onlyMine = $('wh-filter') && $('wh-filter').value === 'MINHAS';
+        const { items } = await api('/api/v1/material-requisitions/?queue=true' + (onlyMine ? '&mine=true' : ''));
         const locOpts = whLocations.map(l => `<option value="${l.id}">${escapeHtml(l.code)}</option>`).join('');
         $('wh-queue-list').innerHTML = items.length
-          ? '<table><thead><tr><th>Número</th><th>Solicitante</th><th>Itens</th><th>Atender</th></tr></thead><tbody>' +
-            items.map(r => `
+          ? '<table><thead><tr><th>Número</th><th>Solicitante</th><th>Itens</th><th>Responsável</th><th>Atender</th></tr></thead><tbody>' +
+            items.map(r => {
+              const mine = r.assignedToId && currentUser && r.assignedToId === currentUser.id;
+              const resp = r.assignedToLabel
+                ? `<strong>${escapeHtml(r.assignedToLabel)}</strong>${mine ? '<div class="sub">designada a você</div>' : ''}${r.assignedByLabel ? `<div class="sub">por ${escapeHtml(r.assignedByLabel)}</div>` : ''}`
+                : '<span class="sub">sem responsável (Triagem de Demandas)</span>';
+              return `
               <tr data-id="${r.id}">
                 <td>${escapeHtml(r.number)}<div class="sub">CC: ${escapeHtml(r.costCenter)}</div></td>
                 <td>${escapeHtml(r.requesterLabel)}${r.notes ? `<div class="sub">${escapeHtml(r.notes)}</div>` : ''}</td>
                 <td>${mrItemsTxt(r)}</td>
+                <td>${resp}</td>
                 <td class="row-actions">
                   <select class="wh-fulfill-loc" aria-label="Local">${locOpts}</select>
                   <button data-act="fulfill" ${whLocations.length ? '' : 'disabled'}>Atender</button>
                 </td>
-              </tr>`).join('') + '</tbody></table>'
-          : '<p class="hello">Nenhuma solicitação aguardando atendimento.</p>';
+              </tr>`;
+            }).join('') + '</tbody></table>'
+          : (onlyMine
+              ? '<p class="hello">Nenhuma solicitação designada a você. Troque o filtro para ver toda a fila.</p>'
+              : '<p class="hello">Nenhuma solicitação aguardando atendimento.</p>');
       } catch (err) { $('wh-queue-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
+    $('wh-filter').addEventListener('change', () => LOADERS['wh-queue']());
     $('wh-queue-list').addEventListener('click', async (ev) => {
       const btn = ev.target.closest('button[data-act="fulfill"]');
       if (!btn) return;

@@ -63,8 +63,9 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
             .Select(c => c.Code.ToUpper()).ToListAsync(ct);
 
     /// <summary>
-    /// Fila de aprovação: IN_APPROVAL, exceto as próprias (SoD); gerente com CCs vinculados vê os seus
-    /// e também os centros de custo sem gerente responsável — nenhuma SC pode ficar órfã de aprovador.
+    /// Fila de aprovação de SC (legado): no fluxo atual a autorização acontece no processo de cotação,
+    /// com os preços. Só restam aqui as solicitações que já estavam em aprovação antes da mudança.
+    /// Exceto as próprias (SoD); gerente com CCs vinculados vê os seus e os CCs sem gerente responsável.
     /// </summary>
     public async Task<List<PurchaseRequisition>> PendingApprovalsAsync(Actor actor, CancellationToken ct = default)
     {
@@ -262,7 +263,9 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
             return (null, new("PR-ERR-050", "A data de necessidade não pode estar no passado."));
 
         var isResubmission = pr.Status == RequisitionStatus.Returned;
-        pr.Status = RequisitionStatus.InApproval; // ST-002/ST-003 transientes no MVP (validação síncrona OK)
+        // Fluxo: a SC vai direto para Suprimentos cotar; a alçada decide uma vez só, com os preços
+        // do mapa de propostas (Gerente do CC → Diretor, em RFQ-001).
+        pr.Status = RequisitionStatus.Submitted;
         pr.SubmittedAt = clock.GetUtcNow();
         pr.DecisionReason = null;
         pr.DecidedAt = null;
@@ -291,7 +294,8 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         if (string.IsNullOrWhiteSpace(reason))
             return (null, new("PR-ERR-030", "Informe o motivo do cancelamento."));
         // Política padrão: cancel-after-approval = false (PR-001-03, ST-005)
-        if (pr.Status is not (RequisitionStatus.Draft or RequisitionStatus.Returned or RequisitionStatus.InApproval))
+        if (pr.Status is not (RequisitionStatus.Draft or RequisitionStatus.Returned
+                              or RequisitionStatus.Submitted or RequisitionStatus.InApproval))
             return (null, new("PR-ERR-040", "O estado atual não permite cancelamento."));
 
         pr.Status = RequisitionStatus.Cancelled;
@@ -340,7 +344,7 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
     {
         var pr = await GetAsync(actor, id, ct);
         if (pr is null) return (null, new("PR-ERR-404", "Requisição não encontrada."));
-        if (pr.Status != RequisitionStatus.InApproval)
+        if (pr.Status is not (RequisitionStatus.InApproval or RequisitionStatus.Submitted))
             return (null, new("PR-ERR-040", "A requisição não está aguardando aprovação."));
         if (pr.RequesterId == actor.Id)
             return (null, new("PR-ERR-041", "O solicitante não pode decidir a própria requisição (segregação de funções)."));

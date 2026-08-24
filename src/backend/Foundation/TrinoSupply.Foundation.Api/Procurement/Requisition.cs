@@ -2,15 +2,17 @@ namespace TrinoSupply.Foundation.Api.Procurement;
 
 /// <summary>
 /// Estados oficiais expostos pela API (PR-001-13 §3.1), derivados da State Machine PR-001-03.
-/// SUBMITTED e a validação (ST-002/ST-003) são transientes no MVP: a submissão valida
-/// sincronamente e cai em IN_APPROVAL (ST-004) ou RETURNED (ST-007).
+/// Fluxo atual: a SC enviada (SUBMITTED) vai direto para Suprimentos cotar; a autorização
+/// acontece uma vez só no processo de cotação, com os preços do mapa de propostas
+/// (Gerente do CC → Diretor). APPROVED = compra autorizada pela alçada.
+/// IN_APPROVAL só existe nas solicitações anteriores a essa mudança.
 /// </summary>
 public enum RequisitionStatus : short
 {
     Draft = 1,        // ST-001
-    Submitted = 2,    // ST-002 (transiente)
-    InApproval = 3,   // ST-004 Waiting Approval
-    Approved = 4,     // ST-005
+    Submitted = 2,    // enviada — em cotação com Suprimentos
+    InApproval = 3,   // legado: autorização prévia sem preço
+    Approved = 4,     // compra autorizada na alçada (com preços)
     Rejected = 5,     // ST-006
     Returned = 6,     // ST-007 Returned for Adjustment
     Cancelled = 7,    // ST-009 (terminal)

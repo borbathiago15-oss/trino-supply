@@ -73,12 +73,13 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
 
         var open = await db.Requisitions.Include(r => r.Items)
             .Where(r => r.DeletedAt == null
-                        && (r.Status == RequisitionStatus.Approved || r.Status == RequisitionStatus.InApproval)
+                        && (r.Status == RequisitionStatus.Submitted || r.Status == RequisitionStatus.Approved
+                            || r.Status == RequisitionStatus.InApproval)
                         && !activeQuotationPrs.Contains(r.Id) && !linkedPoPrs.Contains(r.Id))
             .OrderBy(r => r.DecidedAt ?? r.SubmittedAt).Take(200).ToListAsync(ct);
 
-        var ready = open.Where(r => r.Status == RequisitionStatus.Approved).ToList();
-        var waiting = open.Where(r => r.Status == RequisitionStatus.InApproval).ToList();
+        var ready = open.Where(r => r.Status is RequisitionStatus.Submitted or RequisitionStatus.Approved).ToList();
+        var waiting = open.Where(r => r.Status == RequisitionStatus.InApproval).ToList();   // legado
         if (waiting.Count == 0) return (ready, []);
 
         var codes = waiting.Select(r => r.CostCenter.ToUpperInvariant()).Distinct().ToList();
@@ -99,8 +100,8 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
         Actor actor, Guid prId, QuotationKind kind, DateOnly? deadline, string? notes, CancellationToken ct = default)
     {
         var pr = await db.Requisitions.Include(r => r.Items).SingleOrDefaultAsync(r => r.Id == prId, ct);
-        if (pr is null || pr.Status != RequisitionStatus.Approved)
-            return (null, new("RFQ-ERR-001", "A requisição de origem não está aprovada."));
+        if (pr is null || pr.Status is not (RequisitionStatus.Submitted or RequisitionStatus.Approved))
+            return (null, new("RFQ-ERR-001", "A requisição de origem precisa estar enviada (ou aprovada) para virar cotação."));
         if (await db.Quotations.AnyAsync(q => q.SourcePrId == prId
                 && q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected, ct))
             return (null, new("RFQ-ERR-001", "A requisição já possui um processo de cotação ativo."));
@@ -317,6 +318,20 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
         return await db.Users.Where(u => u.Id == managerId).Select(u => u.DirectorId).FirstOrDefaultAsync(ct);
     }
 
+    /// <summary>Compra autorizada pela diretoria: a SC de origem passa a APROVADA (autorização com preço).</summary>
+    private async Task MarkSourcePrApprovedAsync(Quotation q, Actor actor, CancellationToken ct)
+    {
+        var pr = await db.Requisitions.SingleOrDefaultAsync(r => r.Id == q.SourcePrId, ct);
+        if (pr is null || pr.Status == RequisitionStatus.Approved) return;
+        pr.Status = RequisitionStatus.Approved;
+        pr.DecidedById = actor.Id;
+        pr.DecidedByLabel = actor.Label;
+        pr.DecidedAt = clock.GetUtcNow();
+        pr.DecisionReason = $"Compra aprovada no processo {q.Number}.";
+        pr.UpdatedAt = clock.GetUtcNow();
+        pr.Version += 1;
+    }
+
     private async Task<(Quotation? q, UserError? error)> DecideAsync(
         Quotation q, Actor actor, string decision, string? reason, bool isDirector, CancellationToken ct)
     {
@@ -332,6 +347,7 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
                     q.DirectorApprovedByLabel = actor.Label;
                     q.DirectorApprovedAt = clock.GetUtcNow();
                     q.Status = QuotationStatus.ApprovedForIssue;
+                    await MarkSourcePrApprovedAsync(q, actor, ct);
                     AddEvent(q, "DIRETOR_APROVOU",
                         "Diretoria aprovou. Processo APROVADO PARA EMISSÃO DA OC — tarefa disponível para Suprimentos.",
                         actor, from, q.Status, reason);

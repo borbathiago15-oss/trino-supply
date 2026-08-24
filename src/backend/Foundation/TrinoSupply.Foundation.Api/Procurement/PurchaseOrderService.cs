@@ -36,7 +36,7 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
             .Where(q => q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected)
             .Select(q => q.SourcePrId).ToListAsync(ct);
         var prs = await db.Requisitions.Include(r => r.Items)
-            .Where(r => r.Status == RequisitionStatus.Approved
+            .Where(r => (r.Status == RequisitionStatus.Submitted || r.Status == RequisitionStatus.Approved)
                         && !linkedPrIds.Contains(r.Id) && !quotedPrIds.Contains(r.Id))
             .OrderBy(r => r.DecidedAt).Take(100).ToListAsync(ct);
 

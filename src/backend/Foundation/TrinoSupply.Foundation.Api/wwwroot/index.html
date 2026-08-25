@@ -737,6 +737,39 @@
           </div>
           <div id="cat-list" class="tablewrap"></div>
         </div>
+        <div class="panel" id="cat-import" hidden>
+          <h2>Importar produtos por planilha</h2>
+          <p class="hello">A planilha precisa ter as colunas <strong>Produto</strong> (código) e <strong>Descrição</strong> — .xlsx ou .csv. Família, tipo e uso valem para o arquivo inteiro. A prévia mostra o que será criado antes de confirmar.</p>
+          <div class="grid2">
+            <div><label for="imp-file">Planilha</label><input id="imp-file" type="file" accept=".xlsx,.csv,.txt" /></div>
+            <div><label for="imp-family">Família</label><select id="imp-family"></select></div>
+          </div>
+          <div class="grid2">
+            <div><label for="imp-type">Tipo de produto</label><select id="imp-type"></select></div>
+            <div class="grid2">
+              <div><label for="imp-unit">Unidade padrão</label><input id="imp-unit" placeholder="UN" /></div>
+              <div><label for="imp-min">Estoque mínimo</label><input id="imp-min" type="number" min="0" step="0.01" placeholder="opcional" /></div>
+            </div>
+          </div>
+          <label>Uso dos produtos importados</label>
+          <div class="checks">
+            <label><input type="checkbox" id="imp-stock" /> Item de almoxarifado</label>
+            <label><input type="checkbox" id="imp-purchasable" checked /> Disponível para compra</label>
+          </div>
+          <label>Grade de tamanhos <span class="sub">(EPI e Fardamento: cada tamanho vira um item, ex.: 12003-P)</span></label>
+          <div class="row-actions" style="margin-bottom:6px">
+            <button type="button" class="secondary" data-sizes="letras">Letras (PP…XXG)</button>
+            <button type="button" class="secondary" data-sizes="numeros">Numéricos (34…46)</button>
+            <button type="button" class="secondary" data-sizes="limpar">Sem tamanhos</button>
+          </div>
+          <input id="imp-sizes" placeholder="deixe vazio para não desdobrar — ou informe: P, M, G, GG" />
+          <div class="row-actions" style="margin-top:10px">
+            <button type="button" id="imp-preview">Pré-visualizar</button>
+            <button type="button" id="imp-commit" hidden>Confirmar importação</button>
+          </div>
+          <div id="imp-result" style="margin-top:10px"></div>
+        </div>
+
         <div class="panel" id="cat-admin" hidden>
           <h2 id="cat-form-title">Novo produto</h2>
           <form id="cat-form">
@@ -1974,6 +2007,69 @@
       } catch (err) { toast(err.message, 'error'); }
     });
 
+    // ============ IMPORTAÇÃO DE PRODUTOS POR PLANILHA ============
+    const SIZE_PRESETS = {
+      letras: 'PP, P, M, G, GG, XG, XXG',
+      numeros: '34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46',
+      limpar: '',
+    };
+    async function sendImport(commit) {
+      const file = $('imp-file').files[0];
+      if (!file) { toast('Escolha a planilha primeiro.', 'error'); return null; }
+      if (!$('imp-family').value) { toast('Escolha a família dos produtos.', 'error'); return null; }
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('family', $('imp-family').value);
+      if ($('imp-type').value) fd.append('productType', $('imp-type').value);
+      fd.append('stockControlled', $('imp-stock').checked ? 'true' : 'false');
+      fd.append('purchasable', $('imp-purchasable').checked ? 'true' : 'false');
+      if ($('imp-unit').value) fd.append('unit', $('imp-unit').value);
+      if ($('imp-min').value) fd.append('minimumQty', $('imp-min').value);
+      if ($('imp-sizes').value) fd.append('sizes', $('imp-sizes').value);
+      fd.append('commit', commit ? 'true' : 'false');
+
+      const res = await fetch('/api/v1/items/import', {
+        method: 'POST', headers: { Authorization: 'Bearer ' + store.access }, body: fd,
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { toast((json.error && json.error.message) || 'Falha ao ler a planilha.', 'error'); return null; }
+      return json.data ?? json;
+    }
+    function renderImport(data, commit) {
+      const badge = (st) => st === 'NOVO' ? '<span class="badge on">NOVO</span>'
+        : st === 'DUPLICADO' ? '<span class="badge dev">JÁ EXISTE</span>' : '<span class="badge off">ERRO</span>';
+      const problems = data.rows.filter(r => r.status !== 'NOVO');
+      const sample = data.rows.filter(r => r.status === 'NOVO').slice(0, 8);
+      $('imp-result').innerHTML = `
+        <p class="hello"><strong>${data.fileName}</strong> · ${data.totalLines} linha(s) lida(s) —
+        <strong>${data.toCreate}</strong> produto(s) ${commit ? 'importado(s)' : 'a criar'},
+        ${data.duplicates} já existente(s), ${data.errors} com erro.</p>
+        ${(data.warnings || []).map(w => `<p class="hello" style="color:var(--s4)">⚠ ${escapeHtml(w)}</p>`).join('')}
+        ${sample.length ? '<div class="tablewrap"><table><thead><tr><th>Código</th><th>Descrição</th><th>Tam.</th><th>Situação</th></tr></thead><tbody>' +
+          sample.map(r => `<tr><td>${escapeHtml(r.code)}</td><td>${escapeHtml(r.description)}</td><td>${escapeHtml(r.size || '—')}</td><td>${badge(r.status)}</td></tr>`).join('') +
+          (data.toCreate > sample.length ? `<tr><td colspan="4" class="sub">…e mais ${data.toCreate - sample.length} produto(s).</td></tr>` : '') +
+          '</tbody></table></div>' : ''}
+        ${problems.length ? '<h2 style="margin:12px 0 4px">Linhas não importadas</h2><div class="tablewrap"><table><thead><tr><th>Linha</th><th>Código</th><th>Situação</th><th>Motivo</th></tr></thead><tbody>' +
+          problems.slice(0, 30).map(r => `<tr><td>${r.line}</td><td>${escapeHtml(r.code)}</td><td>${badge(r.status)}</td><td class="sub">${escapeHtml(r.message || '')}</td></tr>`).join('') +
+          (problems.length > 30 ? `<tr><td colspan="4" class="sub">…e mais ${problems.length - 30} linha(s).</td></tr>` : '') +
+          '</tbody></table></div>' : ''}`;
+      $('imp-commit').hidden = commit || data.toCreate === 0;
+    }
+    $('imp-preview').addEventListener('click', async () => {
+      const data = await sendImport(false);
+      if (data) renderImport(data, false);
+    });
+    $('imp-commit').addEventListener('click', async () => {
+      const data = await sendImport(true);
+      if (!data) return;
+      renderImport(data, true);
+      toast(`${data.toCreate} produto(s) importado(s).`, 'ok');
+      $('imp-file').value = '';
+      LOADERS['products']();
+    });
+    document.querySelectorAll('[data-sizes]').forEach(btn =>
+      btn.addEventListener('click', () => { $('imp-sizes').value = SIZE_PRESETS[btn.dataset.sizes]; }));
+
     // ============ CADASTROS: PRODUTOS ============
     let productTypes = [];
     async function loadProductTypes(selected) {
@@ -2086,7 +2182,18 @@
     }
     LOADERS['products'] = async () => {
       $('cat-admin').hidden = !canMaintainCatalog();
+      $('cat-import').hidden = !canMaintainCatalog();
       await Promise.all([loadFamilyOptions(), loadProductTypes()]);
+      // espelha as listas no painel de importação
+      if ($('imp-family')) {
+        const keepF = $('imp-family').value;
+        $('imp-family').innerHTML = $('ci-family').innerHTML;
+        if (keepF) $('imp-family').value = keepF;
+        const keepT = $('imp-type').value;
+        $('imp-type').innerHTML = '<option value="">Sem tipo definido</option>' +
+          productTypes.map(t => `<option value="${t.key}">${escapeHtml(t.label)}</option>`).join('');
+        if (keepT) $('imp-type').value = keepT;
+      }
       try {
         const family = $('cat-filter-family').value;
         const { items } = await api('/api/v1/items/?all=true' + (family ? '&family=' + encodeURIComponent(family) : ''));

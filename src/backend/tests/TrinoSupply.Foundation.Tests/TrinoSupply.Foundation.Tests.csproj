@@ -23,4 +23,8 @@
     <ProjectReference Include="..\..\Foundation\TrinoSupply.Foundation.Api\TrinoSupply.Foundation.Api.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="fixtures\**\*.xlsx" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

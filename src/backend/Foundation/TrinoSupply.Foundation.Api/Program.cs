@@ -42,6 +42,7 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<IPrNumberGenerator, PostgresPrNumberGenerator>();
 builder.Services.AddScoped<CatalogService>();
+builder.Services.AddScoped<CatalogImportService>();
 builder.Services.AddScoped<RequisitionService>();
 builder.Services.AddScoped<InventoryService>();
 builder.Services.AddScoped<MaterialRequisitionService>();
@@ -213,6 +214,7 @@ static object CatalogView(CatalogItem i) => new
     stockControlled = i.StockControlled, purchasable = i.Purchasable, minimumQty = i.MinimumQty,
     productType = i.ProductType, productTypeLabel = i.ProductType is null ? null : ProductTypes.LabelOf(i.ProductType),
     caNumber = i.CaNumber, fispqDocumentId = i.FispqDocumentId, fispqFileName = i.FispqFileName,
+    baseCode = i.BaseCode, size = i.Size,
     compliancePending = (ProductTypes.RequiresFispq(i.ProductType) && i.FispqDocumentId is null)
                         || (ProductTypes.RequiresCa(i.ProductType) && string.IsNullOrWhiteSpace(i.CaNumber)),
     suppliers = i.Suppliers.OrderBy(s => s.SupplierName).Select(s => new
@@ -238,6 +240,69 @@ catalogGroup.MapGet("/", async (CatalogService svc, ClaimsPrincipal p, HttpConte
     var items = await svc.ListAsync(family, q, includeInactive, stock == true);
     return Ok(new { items = items.Select(CatalogView) }, ctx);
 });
+
+// importação de produtos por planilha (.xlsx/.csv) — preview e confirmação
+app.MapPost("/api/v1/items/import", async (HttpRequest request, CatalogImportService svc,
+    ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!CatalogService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.Produtos))
+        return Error(ctx, 403, "IC-ERR-900", "Seu usuário não mantém o catálogo.");
+    if (!request.HasFormContentType) return Error(ctx, 400, "IMP-ERR-001", "Envie a planilha como multipart/form-data.");
+
+    var form = await request.ReadFormAsync();
+    var file = form.Files.FirstOrDefault();
+    if (file is null || file.Length == 0) return Error(ctx, 400, "IMP-ERR-001", "Nenhuma planilha enviada.");
+    if (file.Length > StoredDocument.MaxSizeBytes) return Error(ctx, 400, "DOC-ERR-002", "Arquivo acima de 10 MB.");
+
+    List<string[]> rows;
+    try
+    {
+        using var ms = new MemoryStream();
+        await file.CopyToAsync(ms);
+        ms.Position = 0;
+        rows = SpreadsheetReader.Read(ms, file.FileName);
+    }
+    catch (Exception)
+    {
+        return Error(ctx, 400, "IMP-ERR-002", "Não consegui ler a planilha: envie um arquivo .xlsx ou .csv válido.");
+    }
+
+    string? Field(string name) => form.TryGetValue(name, out var v) && !string.IsNullOrWhiteSpace(v) ? v.ToString() : null;
+    var options = new ImportOptions(
+        Family: Field("family") ?? "",
+        ProductType: Field("productType"),
+        StockControlled: Field("stockControlled") == "true",
+        Purchasable: Field("purchasable") != "false",
+        MinimumQty: decimal.TryParse(Field("minimumQty"), System.Globalization.NumberStyles.Any,
+            System.Globalization.CultureInfo.InvariantCulture, out var min) ? min : null,
+        Unit: Field("unit"),
+        Sizes: (Field("sizes") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+    var commit = Field("commit") == "true";
+    var (result, error) = await svc.ImportAsync(ActorId(p), rows, options, commit);
+    if (error is not null) return Error(ctx, 400, error.Code, error.Message);
+
+    // as linhas com problema aparecem primeiro: são elas que o usuário precisa corrigir na planilha
+    var problems = result!.Rows.Where(r => r.Status != "NOVO").ToList();
+    var shown = problems.Take(400)
+        .Concat(result.Rows.Where(r => r.Status == "NOVO").Take(Math.Max(0, 400 - problems.Count)))
+        .ToList();
+
+    return Ok(new
+    {
+        fileName = file.FileName,
+        totalLines = result.TotalLines, toCreate = result.ToCreate,
+        duplicates = result.Duplicates, errors = result.Errors, committed = result.Committed,
+        warnings = result.Warnings,
+        rowsTruncated = result.Rows.Count > shown.Count,
+        rows = shown.Select(r => new
+        {
+            line = r.Line, code = r.Code, description = r.Description,
+            size = r.Size, status = r.Status, message = r.Message,
+        }),
+        sizeSuggestions = new { letters = CatalogImportService.LetterSizes, numbers = CatalogImportService.NumberSizes },
+    }, ctx);
+}).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
 
 // tipos de produto (lista fixa do catálogo, com as exigências de conformidade)
 app.MapGet("/api/v1/product-types", (HttpContext ctx) => Ok(new

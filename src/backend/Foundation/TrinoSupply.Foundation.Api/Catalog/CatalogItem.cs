@@ -21,6 +21,10 @@ public class CatalogItem
     public decimal? MinimumQty { get; set; }
     /// <summary>Tipo do produto (ProductTypes) — define as exigências de conformidade.</summary>
     public string? ProductType { get; set; }
+    /// <summary>Código do produto sem o tamanho (EPI/Fardamento: 12003 para 12003-P, 12003-M…).</summary>
+    public string? BaseCode { get; set; }
+    /// <summary>Tamanho da variante (P, M, G, GG, XG, XXG ou numérico 35–46).</summary>
+    public string? Size { get; set; }
     /// <summary>Número do C.A. (Certificado de Aprovação) — obrigatório em EPI e EPC.</summary>
     public string? CaNumber { get; set; }
     /// <summary>FISPQ (Ficha de Informações de Segurança) — obrigatória em produto químico.</summary>

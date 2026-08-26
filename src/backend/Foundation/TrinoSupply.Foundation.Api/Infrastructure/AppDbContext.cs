@@ -198,6 +198,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(r => r.AssignedById).HasColumnName("assigned_by_id");
             e.Property(r => r.AssignedByLabel).HasColumnName("assigned_by_label").HasMaxLength(200);
             e.Property(r => r.AssignedAt).HasColumnName("assigned_at");
+            e.Property(r => r.ApprovedById).HasColumnName("approved_by_id");
+            e.Property(r => r.ApprovedByLabel).HasColumnName("approved_by_label").HasMaxLength(200);
+            e.Property(r => r.ApprovedAt).HasColumnName("approved_at");
+            e.Property(r => r.DecisionReason).HasColumnName("decision_reason").HasMaxLength(500);
+            e.Property(r => r.PurchaseRequisitionId).HasColumnName("purchase_requisition_id");
+            e.Property(r => r.PurchaseRequisitionNumber).HasColumnName("purchase_requisition_number").HasMaxLength(30);
             e.Property(r => r.CreatedAt).HasColumnName("created_at");
             e.Property(r => r.UpdatedAt).HasColumnName("updated_at");
             e.Property(r => r.Version).HasColumnName("version").IsConcurrencyToken();
@@ -219,9 +225,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.Description).HasColumnName("description").HasMaxLength(500);
             e.Property(i => i.UnitOfMeasure).HasColumnName("unit_of_measure").HasMaxLength(10);
             e.Property(i => i.Quantity).HasColumnName("quantity").HasPrecision(18, 4);
+            e.Property(i => i.ApprovedQuantity).HasColumnName("approved_quantity").HasPrecision(18, 4);
+            e.Property(i => i.FulfilledQuantity).HasColumnName("fulfilled_quantity").HasPrecision(18, 4);
             e.Property(i => i.Status).HasColumnName("status").HasConversion<short>();
             e.Property(i => i.StockMovementId).HasColumnName("stock_movement_id");
             e.Property(i => i.CreatedAt).HasColumnName("created_at");
+            e.Ignore(i => i.EffectiveQuantity);
             e.HasIndex(i => i.RequisitionId);
         });
 

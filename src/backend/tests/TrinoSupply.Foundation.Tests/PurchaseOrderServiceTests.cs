@@ -196,20 +196,25 @@ public class PurchaseOrderServiceTests
     }
 
     [Fact]
-    public async Task Demandas_incluem_itens_de_solicitacao_em_rota_de_compra()
+    public async Task Faltante_do_almoxarifado_entra_como_solicitacao_e_nao_como_item_solto()
     {
         var w = await BuildAsync();
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero));
         var mrs = new TrinoSupply.Foundation.Api.Materials.MaterialRequisitionService(
-            w.Db, w.Catalog, w.Inv, new FixedTimeProvider(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero)));
+            w.Db, w.Catalog, w.Inv, clock);
+        var prs = new RequisitionService(w.Db, new FakeNumbers(), w.Catalog, clock);
+
         var (mr, _) = await mrs.CreateAsync(Ana, "CC-01", null,
             [new TrinoSupply.Foundation.Api.Materials.MaterialItemInput(w.Detergente.Id, 5)]);
-        await mrs.FulfillAsync(Otavio, mr!.Id, w.Local.Id);   // sem saldo → rota de compra
+        await mrs.ApproveAsync(Bruno, mr!.Id, null, null);
+        var (atendida, error) = await mrs.FulfillAsync(Otavio, mr.Id,
+            [new(mr.Items.Single().Id, 0)], prs);            // nada em estoque
+        Assert.Null(error);
 
-        var (_, mrItems) = await w.Pos.DemandsAsync();
-
-        var demand = Assert.Single(mrItems);
-        Assert.Equal(mr.Number, demand.mr.Number);
-        Assert.Equal(5, demand.item.Quantity);
+        // o faltante virou SC própria, e a lista de demandas não repete o item
+        var (demandPrs, mrItems) = await w.Pos.DemandsAsync();
+        Assert.Empty(mrItems);
+        Assert.Contains(demandPrs, r => r.Number == atendida!.PurchaseRequisitionNumber);
     }
 
     [Fact]

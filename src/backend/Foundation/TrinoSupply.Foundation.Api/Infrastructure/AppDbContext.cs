@@ -508,6 +508,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(p => p.DeliveryDays).HasColumnName("delivery_days");
             e.Property(p => p.PaymentTerms).HasColumnName("payment_terms").HasMaxLength(200);
             e.Property(p => p.FreightValue).HasColumnName("freight_value").HasPrecision(18, 4);
+            e.Property(p => p.DiscountValue).HasColumnName("discount_value").HasPrecision(18, 4);
+            e.Property(p => p.Currency).HasColumnName("currency").HasMaxLength(3);
             e.Property(p => p.ValidUntil).HasColumnName("valid_until");
             e.Property(p => p.Notes).HasColumnName("notes").HasMaxLength(1000);
             e.Property(p => p.SubmittedVia).HasColumnName("submitted_via").HasMaxLength(10);

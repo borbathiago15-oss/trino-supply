@@ -1439,6 +1439,7 @@ static object ProposalView(Proposal p, Quotation q) => new
     id = p.Id, supplierId = p.SupplierId, supplierName = p.SupplierName,
     version = p.VersionNumber, totalValue = p.TotalValue, deliveryDays = p.DeliveryDays,
     paymentTerms = p.PaymentTerms, freightValue = p.FreightValue, validUntil = p.ValidUntil,
+    discountValue = p.DiscountValue, currency = p.Currency,
     notes = p.Notes, submittedVia = p.SubmittedVia, submittedByLabel = p.SubmittedByLabel,
     submittedAt = p.SubmittedAt, attachmentDocumentId = p.AttachmentDocumentId,
     attachmentFileName = p.AttachmentFileName,
@@ -1589,7 +1590,8 @@ rfq.MapPost("/{id:guid}/proposals", async (Guid id, InternalProposalRequest body
     var role = RoleOf(p);
     if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não registra propostas.");
     var input = new ProposalInput(body.DeliveryDays, body.PaymentTerms, body.FreightValue, body.ValidUntil, body.Notes,
-        (body.Items ?? []).Select(i => new ProposalItemInput(i.QuotationItemId, i.UnitPrice, i.Quantity)).ToList());
+        (body.Items ?? []).Select(i => new ProposalItemInput(i.QuotationItemId, i.UnitPrice, i.Quantity)).ToList(),
+        body.DiscountValue, body.Currency);
     var (proposal, error) = await svc.SubmitProposalAsync(id, body.SupplierId, input, "INTERNO", p.FindFirstValue("name") ?? "Usuário");
     if (error is not null) return Error(ctx, error.Code == "RFQ-ERR-020" ? 409 : 400, error.Code, error.Message);
     var q = await svc.GetAsync(id);
@@ -2119,7 +2121,8 @@ public record UpdateCompanyRequest(string? LegalName, string? StateRegistration,
 public record CreateQuotationRequest(Guid PrId, string? Kind, DateOnly? Deadline, string? Notes);
 public record InviteSuppliersRequest(List<Guid>? SupplierIds);
 public record ProposalItemRequest(Guid QuotationItemId, decimal UnitPrice, decimal? Quantity);
-public record InternalProposalRequest(Guid SupplierId, int? DeliveryDays, string? PaymentTerms, decimal? FreightValue, DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items);
+public record InternalProposalRequest(Guid SupplierId, int? DeliveryDays, string? PaymentTerms, decimal? FreightValue,
+    DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items, decimal? DiscountValue, string? Currency);
 public record SelectWinnerRequest(Guid ProposalId, List<string>? Criteria, string Justification);
 public record QuotationDecisionRequest(string Decision, string? Reason);
 public record IssuePoRequest(string? Notes);

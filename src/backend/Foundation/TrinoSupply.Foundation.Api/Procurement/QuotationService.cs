@@ -7,7 +7,8 @@ namespace TrinoSupply.Foundation.Api.Procurement;
 
 public record ProposalInput(
     int? DeliveryDays, string? PaymentTerms, decimal? FreightValue, DateOnly? ValidUntil,
-    string? Notes, IReadOnlyList<ProposalItemInput> Items);
+    string? Notes, IReadOnlyList<ProposalItemInput> Items,
+    decimal? DiscountValue = null, string? Currency = null);
 /// <summary>SC já designada a um comprador, mas ainda retida na aprovação.</summary>
 public record QueueBlocked(PurchaseRequisition Pr, string Reason);
 
@@ -147,8 +148,9 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
     {
         var q = await GetAsync(id, ct);
         if (q is null) return (null, new("RFQ-ERR-404", "Cotação não encontrada."));
-        if (q.Status != QuotationStatus.Open)
-            return (null, new("RFQ-ERR-020", "Somente cotações abertas recebem convites."));
+        // o comprador ainda inclui fornecedores durante a análise, enquanto não escolheu o vencedor
+        if (q.Status is not (QuotationStatus.Open or QuotationStatus.Analysis) || q.WinnerSupplierId is not null)
+            return (null, new("RFQ-ERR-020", "Só dá para convidar fornecedores enquanto o processo está em cotação/análise."));
 
         var suppliers = await db.Suppliers.Where(s => supplierIds.Contains(s.Id)).ToListAsync(ct);
         foreach (var sid in supplierIds.Distinct())
@@ -178,8 +180,8 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
     {
         var q = await GetAsync(quotationId, ct);
         if (q is null) return (null, new("RFQ-ERR-404", "Cotação não encontrada."));
-        if (q.Status != QuotationStatus.Open)
-            return (null, new("RFQ-ERR-020", "A cotação não está mais aberta para propostas."));
+        if (q.Status is not (QuotationStatus.Open or QuotationStatus.Analysis) || q.WinnerSupplierId is not null)
+            return (null, new("RFQ-ERR-020", "A cotação não recebe mais propostas."));
         if (q.Suppliers.All(s => s.SupplierId != supplierId))
             return (null, new("RFQ-ERR-050", "Fornecedor não convidado para esta cotação."));
         var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
@@ -202,6 +204,8 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
             DeliveryDays = input.DeliveryDays,
             PaymentTerms = string.IsNullOrWhiteSpace(input.PaymentTerms) ? null : input.PaymentTerms.Trim(),
             FreightValue = input.FreightValue,
+            DiscountValue = input.DiscountValue,
+            Currency = string.IsNullOrWhiteSpace(input.Currency) ? "BRL" : input.Currency.Trim().ToUpperInvariant(),
             ValidUntil = input.ValidUntil,
             Notes = string.IsNullOrWhiteSpace(input.Notes) ? null : input.Notes.Trim(),
             SubmittedVia = via,
@@ -217,7 +221,10 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
                 UnitPrice = i.UnitPrice, Quantity = i.Quantity ?? qi.Quantity,
             });
         }
-        proposal.TotalValue = proposal.Items.Sum(i => i.UnitPrice * i.Quantity) + (proposal.FreightValue ?? 0);
+        proposal.TotalValue = proposal.Items.Sum(i => i.UnitPrice * i.Quantity)
+            + (proposal.FreightValue ?? 0) - (proposal.DiscountValue ?? 0);
+        if (proposal.TotalValue < 0)
+            return (null, new("RFQ-ERR-021", "O desconto não pode ser maior que o total da proposta."));
         db.Proposals.Add(proposal);
         AddEvent(q, "PROPOSTA_RECEBIDA",
             $"Proposta v{version} de {proposal.SupplierName} recebida ({via}) — total {proposal.TotalValue:0.00}.",

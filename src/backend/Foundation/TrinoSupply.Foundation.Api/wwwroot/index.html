@@ -3325,19 +3325,59 @@
         `Atenciosamente,\nSuprimentos — Trino Supply`;
     }
 
+    /// Mapa de cotação (slide 13): itens nas linhas, fornecedores nas colunas, com frete,
+    /// desconto, validade, moeda, condição de pagamento, observação e anexo — e o melhor
+    /// preço de cada item destacado.
     function proposalMatrix(q) {
       const latest = q.proposals.filter(p => p.isLatest);
-      if (!latest.length) return '<p class="hello">Nenhuma proposta recebida ainda.</p>';
-      const head = '<tr><th>Item</th>' + latest.map(p => `<th>${escapeHtml(p.supplierName)}${p.isWinner ? ' 🏆' : ''}</th>`).join('') + '</tr>';
-      const rows = q.items.map(i => '<tr><td>' + escapeHtml(i.description) + `<div class="sub">${i.quantity} ${escapeHtml(i.unitOfMeasure)}</div></td>` +
-        latest.map(p => {
-          const pi = p.items.find(x => x.quotationItemId === i.id);
-          return `<td>${pi ? money(pi.unitPrice) : '—'}</td>`;
-        }).join('') + '</tr>').join('');
-      const totals = '<tr><td><strong>Total (c/ frete)</strong></td>' + latest.map(p => `<td><strong>${money(p.totalValue)}</strong></td>`).join('') + '</tr>';
-      const conds = '<tr><td class="sub">Prazo · Pagamento</td>' + latest.map(p =>
-        `<td class="sub">${p.deliveryDays ?? '—'} dias · ${escapeHtml(p.paymentTerms || '—')}</td>`).join('') + '</tr>';
-      return `<table>${head}${rows}${totals}${conds}</table>`;
+      if (!latest.length) return '<p class="hello">Nenhuma proposta lançada ainda. Registre abaixo o que cada fornecedor respondeu.</p>';
+
+      const priceOf = (p, itemId) => {
+        const pi = p.items.find(x => x.quotationItemId === itemId);
+        return pi ? pi.unitPrice : null;
+      };
+      const head = '<tr><th>Produto</th><th>Qtde</th>' +
+        latest.map(p => `<th>${escapeHtml(p.supplierName)}${p.isWinner ? ' 🏆' : ''}` +
+          `<div class="sub">v${p.version} · ${escapeHtml(p.submittedVia === 'PORTAL' ? 'portal' : 'lançada por ' + (p.submittedByLabel || 'compras'))}</div></th>`).join('') + '</tr>';
+
+      const rows = q.items.map(i => {
+        const precos = latest.map(p => priceOf(p, i.id)).filter(v => v != null);
+        const melhor = precos.length ? Math.min(...precos) : null;
+        return '<tr><td>' + escapeHtml(i.description) + `</td><td class="sub">${i.quantity} ${escapeHtml(i.unitOfMeasure)}</td>` +
+          latest.map(p => {
+            const v = priceOf(p, i.id);
+            if (v == null) return '<td class="sub">—</td>';
+            const total = v * i.quantity;
+            const win = melhor != null && v === melhor && latest.length > 1;
+            return `<td${win ? ' style="background:#dcfce7"' : ''}>${money(v)}` +
+                   `<div class="sub">total ${money(total)}${win ? ' · melhor preço' : ''}</div></td>`;
+          }).join('') + '</tr>';
+      }).join('');
+
+      const linha = (rotulo, fn, forte) => '<tr><td' + (forte ? '><strong>' + rotulo + '</strong>' : ' class="sub">' + rotulo) +
+        '</td><td></td>' + latest.map(p => `<td${forte ? '' : ' class="sub"'}>${fn(p)}</td>`).join('') + '</tr>';
+
+      const menorTotal = Math.min(...latest.map(p => p.totalValue));
+      const totais = '<tr><td><strong>Total da cotação</strong></td><td></td>' + latest.map(p => {
+        const win = p.totalValue === menorTotal && latest.length > 1;
+        return `<td${win ? ' style="background:#dcfce7"' : ''}><strong>${money(p.totalValue)}</strong>` +
+               `${win ? '<div class="sub">menor total</div>' : ''}</td>`;
+      }).join('') + '</tr>';
+
+      return '<table>' + head +
+        rows +
+        linha('Frete', p => p.freightValue != null ? money(p.freightValue) : '—') +
+        linha('Desconto', p => p.discountValue != null ? '− ' + money(p.discountValue) : '—') +
+        totais +
+        linha('Validade da proposta', p => p.validUntil || '—') +
+        linha('Moeda', p => escapeHtml(p.currency || 'BRL')) +
+        linha('Condição de pagamento', p => escapeHtml(p.paymentTerms || '—')) +
+        linha('Prazo de entrega', p => p.deliveryDays != null ? p.deliveryDays + ' dias' : '—') +
+        linha('Observação', p => escapeHtml(p.notes || '—')) +
+        linha('Anexo', p => p.attachmentDocumentId
+          ? `<a href="#" data-doc="${p.attachmentDocumentId}" data-act="download-doc">${escapeHtml(p.attachmentFileName || 'anexo')}</a>`
+          : '—') +
+        '</table>';
     }
 
     function renderRfqDetail(q) {
@@ -3369,7 +3409,7 @@
             <td>${s.hasProposal ? '<span class="badge on">RECEBIDA</span>' : '<span class="badge dev">AGUARDANDO</span>'}</td>
             <td class="row-actions"><button class="secondary" data-act="copy-invite">Copiar convite</button></td></tr>`).join('') + '</tbody></table></div>'
         : '<p class="hello">Nenhum fornecedor convidado ainda.</p>';
-      if (conduct && q.status === 'COTACAO_ABERTA')
+      if (conduct && ['COTACAO_ABERTA', 'EM_ANALISE'].includes(q.status))
         html += `<div class="row-actions" style="margin-top:8px">
           <select id="rfq-add-sup">${supOpts()}</select>
           <button data-act="invite" ${buySuppliers.length ? '' : 'disabled'}>Convidar fornecedor</button>
@@ -3377,12 +3417,12 @@
       html += '</div>';
 
       // propostas + comparação
-      html += `<div class="panel"><h2>Propostas recebidas — comparação</h2><div class="tablewrap">${proposalMatrix(q)}</div>`;
+      html += `<div class="panel"><h2>Mapa de cotação</h2><div class="tablewrap">${proposalMatrix(q)}</div>`;
       const withAttachment = q.proposals.filter(p => p.attachmentDocumentId);
       if (withAttachment.length)
         html += '<div style="margin-top:8px">' + withAttachment.map(p =>
           `<div class="sub">📎 ${escapeHtml(p.supplierName)} v${p.version}: <a href="#" data-doc="${p.attachmentDocumentId}" data-act="download-doc">${escapeHtml(p.attachmentFileName || 'anexo')}</a></div>`).join('') + '</div>';
-      if (conduct && q.status === 'COTACAO_ABERTA' && q.suppliers.length) {
+      if (conduct && ['COTACAO_ABERTA', 'EM_ANALISE'].includes(q.status) && q.suppliers.length) {
         html += `<h2>Registrar proposta recebida fora do portal</h2>
           <div class="grid2">
             <div><label>Fornecedor</label><select id="ip-supplier">${q.suppliers.map(s => `<option value="${s.supplierId}">${escapeHtml(s.supplierName)}</option>`).join('')}</select></div>
@@ -3392,9 +3432,19 @@
             </div>
           </div>
           <div class="grid2">
-            <div><label>Frete (R$)</label><input id="ip-freight" type="number" min="0" step="0.01" /></div>
-            <div><label>Validade da proposta</label><input id="ip-valid" type="date" /></div>
+            <div class="grid2">
+              <div><label>Frete (R$)</label><input id="ip-freight" type="number" min="0" step="0.01" /></div>
+              <div><label>Desconto (R$)</label><input id="ip-discount" type="number" min="0" step="0.01" /></div>
+            </div>
+            <div class="grid2">
+              <div><label>Validade da proposta</label><input id="ip-valid" type="date" /></div>
+              <div><label>Moeda</label>
+                <select id="ip-currency"><option value="BRL">Real (BRL)</option>
+                  <option value="USD">Dólar (USD)</option><option value="EUR">Euro (EUR)</option></select></div>
+            </div>
           </div>
+          <label>Observação da proposta</label>
+          <input id="ip-notes" placeholder="ex.: condição especial, prazo de embalagem…" />
           <label>Preços unitários</label>
           <div class="tablewrap"><table><tbody>` +
           q.items.map(i => `<tr><td>${escapeHtml(i.description)} <span class="sub">(${i.quantity} ${escapeHtml(i.unitOfMeasure)})</span></td>
@@ -3514,6 +3564,9 @@
             deliveryDays: $('ip-delivery').value ? parseInt($('ip-delivery').value) : null,
             paymentTerms: $('ip-payment').value || null,
             freightValue: $('ip-freight').value ? parseFloat($('ip-freight').value) : null,
+            discountValue: $('ip-discount').value ? parseFloat($('ip-discount').value) : null,
+            currency: $('ip-currency').value || 'BRL',
+            notes: $('ip-notes').value || null,
             validUntil: $('ip-valid').value || null, items,
           }});
           if (file) {

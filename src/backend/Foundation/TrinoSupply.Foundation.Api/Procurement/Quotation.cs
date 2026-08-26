@@ -106,6 +106,8 @@ public class Proposal
     public int? DeliveryDays { get; set; }
     public string? PaymentTerms { get; set; }
     public decimal? FreightValue { get; set; }
+    public decimal? DiscountValue { get; set; }               // desconto negociado (mapa de cotação)
+    public string Currency { get; set; } = "BRL";             // moeda da proposta
     public DateOnly? ValidUntil { get; set; }
     public string? Notes { get; set; }
     public string SubmittedVia { get; set; } = "PORTAL";      // PORTAL | INTERNO

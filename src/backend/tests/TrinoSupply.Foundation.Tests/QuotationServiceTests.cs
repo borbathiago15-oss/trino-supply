@@ -116,14 +116,51 @@ public class QuotationServiceTests
     }
 
     [Fact]
-    public async Task Propostas_sao_versionadas_e_bloqueadas_apos_encerramento()
+    public async Task Propostas_sao_versionadas_ate_a_escolha_do_fornecedor()
     {
         var w = await BuildAsync();
         var q = await UpToAnalysisAsync(w);
 
         Assert.Equal(2, q.Proposals.Count);
+
+        // em análise o comprador ainda lança o que o fornecedor respondeu (mapa de cotação,
+        // revisão de telas 2026-08-26): entra como nova versão da proposta
+        var (nova, erro) = await w.Rfq.SubmitProposalAsync(q.Id, w.Alfa.Id, ProposalFor(q, 1, 1), "INTERNO", "Carla");
+        Assert.Null(erro);
+        Assert.Equal(2, nova!.VersionNumber);
+
+        // escolhido o vencedor (a versão mais recente), o mapa fecha
+        var (escolhido, erroEscolha) = await w.Rfq.SelectWinnerAsync(Carla, q.Id, nova.Id, "Preço", "Menor preço.");
+        Assert.Null(erroEscolha);
+        Assert.Equal(QuotationStatus.AwaitingManager, escolhido!.Status);
         var (_, late) = await w.Rfq.SubmitProposalAsync(q.Id, w.Alfa.Id, ProposalFor(q, 1, 1), "PORTAL", "Alfa");
-        Assert.Equal("RFQ-ERR-020", late!.Code); // encerrada não recebe proposta
+        Assert.Equal("RFQ-ERR-020", late!.Code);
+    }
+
+    [Fact]
+    public async Task Fornecedor_pode_entrar_na_analise_e_o_desconto_abate_o_total()
+    {
+        var w = await BuildAsync();
+        var q = await UpToAnalysisAsync(w);
+
+        // slide 12: dava para convidar só com a cotação aberta; agora vale durante a análise
+        var (comNovo, erro) = await w.Rfq.InviteSuppliersAsync(Carla, q.Id, [w.Beta.Id]);
+        Assert.Null(erro);
+        Assert.Contains(comNovo!.Suppliers, s => s.SupplierId == w.Beta.Id);
+
+        var itens = q.Items.Select(i => new ProposalItemInput(i.Id, 10m, i.Quantity)).ToList();
+        var bruto = q.Items.Sum(i => 10m * i.Quantity);
+        var (proposta, semErro) = await w.Rfq.SubmitProposalAsync(q.Id, w.Beta.Id,
+            new ProposalInput(5, "30 dias", 50m, null, "com desconto", itens, DiscountValue: 30m, Currency: "brl"),
+            "INTERNO", "Carla");
+        Assert.Null(semErro);
+        Assert.Equal(bruto + 50m - 30m, proposta!.TotalValue);
+        Assert.Equal("BRL", proposta.Currency);
+
+        var (_, descontoAlto) = await w.Rfq.SubmitProposalAsync(q.Id, w.Beta.Id,
+            new ProposalInput(5, null, null, null, null, itens, DiscountValue: bruto + 1m, Currency: null),
+            "INTERNO", "Carla");
+        Assert.Equal("RFQ-ERR-021", descontoAlto!.Code);
     }
 
     [Fact]

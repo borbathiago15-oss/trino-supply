@@ -12,7 +12,14 @@ public record TriageTicket(
     Guid Id, string Number, string CostCenter, string RequesterLabel, string Summary,
     decimal? EstimatedValue, DateTimeOffset? OpenedAt, string Status,
     Guid? AssignedToId, string? AssignedToLabel, string? AssignedByLabel, DateTimeOffset? AssignedAt,
-    ProcessStatusView? Process = null);   // situação do fluxo de compras (slide "Status das Solicitações")
+    ProcessStatusView? Process = null,    // situação do fluxo de compras (slide "Status das Solicitações")
+    string Priority = "NORMAL", DateOnly? NeededBy = null, string? Justification = null,
+    IReadOnlyList<TriageTicketItem>? Items = null);
+
+/// <summary>Item da demanda: a tela lista uma linha por item, como no ERP (slides 8 e 9).</summary>
+public record TriageTicketItem(
+    Guid Id, int Sequence, string? Code, string Description, string? Size,
+    decimal Quantity, string UnitOfMeasure, string? Notes);
 
 public record TriageResponsible(Guid Id, string Name, string Role);
 
@@ -75,6 +82,10 @@ public class TriageService(AppDbContext db, TimeProvider clock)
             .Select(q => new { q.SourcePrId, q.Number }).ToListAsync(ct);
         var inQuotation = quotationByPr.ToDictionary(x => x.SourcePrId, x => x.Number);
 
+        // tamanho do produto (grade de EPI/fardamento) para a lista por item
+        var sizeByItem = await db.CatalogItems.Where(c => c.Size != null)
+            .Select(c => new { c.Id, c.Size }).ToDictionaryAsync(x => x.Id, x => x.Size, ct);
+
         // situação única do fluxo de compras, a mesma que o solicitante vê
         var prIds = prs.Select(r => r.Id).ToList();
         var quotations = await db.Quotations.Where(q => prIds.Contains(q.SourcePrId))
@@ -93,7 +104,12 @@ public class TriageService(AppDbContext db, TimeProvider clock)
             r.TotalEstimatedValue, r.SubmittedAt ?? r.CreatedAt,
             r.Status == RequisitionStatus.InApproval ? PendingApprovalStatus(r)
                 : inQuotation.TryGetValue(r.Id, out var qn) ? $"EM COTAÇÃO ({qn})" : "AGUARDANDO COMPRADOR",
-            r.AssignedToId, r.AssignedToLabel, r.AssignedByLabel, r.AssignedAt, ProcessOf(r))).ToList();
+            r.AssignedToId, r.AssignedToLabel, r.AssignedByLabel, r.AssignedAt, ProcessOf(r),
+            r.Priority, r.NeededBy, r.Justification,
+            r.Items.OrderBy(i => i.Sequence).Select(i => new TriageTicketItem(
+                i.Id, i.Sequence, i.CatalogCode, i.Description,
+                sizeByItem.GetValueOrDefault(i.CatalogItemId ?? Guid.Empty),
+                i.Quantity, i.UnitOfMeasure, i.Notes)).ToList())).ToList();
 
         var mrs = await db.MaterialRequisitions.Include(r => r.Items)
             .Where(r => r.Status == MaterialRequisitionStatus.Submitted
@@ -108,7 +124,12 @@ public class TriageService(AppDbContext db, TimeProvider clock)
             r.AssignedToId, r.AssignedToLabel, r.AssignedByLabel, r.AssignedAt,
             r.Status == MaterialRequisitionStatus.PurchaseRoute
                 ? new ProcessStatusView("ROTA_COMPRA", "Rota de compra", "warn", "Sem saldo no almoxarifado: segue para compra.")
-                : new ProcessStatusView("PENDENTE", "Pendente", "", "Aguardando o almoxarifado atender."))));
+                : new ProcessStatusView("PENDENTE", "Pendente", "", "Aguardando o almoxarifado atender."),
+            "NORMAL", null, r.Notes,
+            r.Items.Select((i, idx) => new TriageTicketItem(
+                i.Id, idx + 1, i.CatalogCode, i.Description,
+                sizeByItem.GetValueOrDefault(i.CatalogItemId),
+                i.Quantity, i.UnitOfMeasure, null)).ToList())));
 
         tickets = filter switch
         {

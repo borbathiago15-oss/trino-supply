@@ -3181,19 +3181,38 @@
         $('tri-count').textContent = `${items.length} de ${data.total} demanda(s)`;
         const options = (selected) => '<option value="">— sem responsável —</option>' +
           triResponsibles.map(r => `<option value="${r.id}" ${r.id === selected ? 'selected' : ''}>${escapeHtml(r.name)} (${ROLE_LABELS[r.role] || r.role})</option>`).join('');
-        $('tri-list').innerHTML = items.length
-          ? '<table><thead><tr><th>Demanda</th><th>Resumo</th><th>Valor est.</th><th>Situação</th><th>Responsável</th></tr></thead><tbody>' +
-            items.map(t => `
-              <tr data-id="${t.id}" data-kind="${t.kind}">
-                <td>${escapeHtml(t.number)}<div class="sub">${t.kind === 'SC' ? 'Solicitação de compra' : 'Material'} · ${escapeHtml(t.requesterLabel)}</div></td>
-                <td>${escapeHtml(t.summary || '—')}<div class="sub">CC: ${escapeHtml(t.costCenter)}${t.openedAt ? ' · desde ' + new Date(t.openedAt).toLocaleDateString('pt-BR') : ''}</div></td>
-                <td>${t.estimatedValue != null ? money(t.estimatedValue) : '—'}</td>
-                <td><span class="badge ${t.processStatusTone || ''}" title="${escapeHtml(t.processStatusHint || '')}">${escapeHtml(t.processStatusLabel || t.status)}</span>
-                    <div class="sub">${escapeHtml(t.status)}</div></td>
-                <td>${mayAssign
+        // uma linha por item, como no ERP (slides 8 e 9): o cabeçalho da demanda só aparece
+        // na primeira linha e as células de situação e responsável são mescladas
+        const dt = (v) => v ? new Date(v).toLocaleDateString('pt-BR') : '—';
+        const linhasDe = (t) => {
+          const its = (t.items || []).length ? t.items : [{ id: t.id, description: t.summary || '—', quantity: '', unitOfMeasure: '' }];
+          const urgente = t.priority === 'URGENT';
+          return its.map((i, idx) => `
+            <tr data-id="${t.id}" data-kind="${t.kind}"${urgente ? ' style="color:var(--danger)"' : ''}>
+              <td style="white-space:nowrap">${idx === 0 ? '<strong>' + escapeHtml(t.number) + '</strong>' : ''}
+                  <div class="sub">${escapeHtml(t.number)}/${String(i.sequence || idx + 1).padStart(4, '0')}</div></td>
+              <td>${i.code ? '<span class="sub">[' + escapeHtml(i.code) + ']</span> ' : ''}${escapeHtml(i.description)}
+                  ${idx === 0 && t.justification ? `<div class="sub">${escapeHtml(t.justification)}</div>` : ''}</td>
+              <td>${escapeHtml(i.size || '—')}</td>
+              <td>${escapeHtml(t.requesterLabel)}</td>
+              <td>${escapeHtml(t.costCenter)}</td>
+              <td style="white-space:nowrap">${i.quantity !== '' ? fmtInt(i.quantity) + ' ' + escapeHtml(i.unitOfMeasure || '') : '—'}</td>
+              <td style="white-space:nowrap">${dt(t.openedAt)}</td>
+              <td style="white-space:nowrap">${t.neededBy || '—'}</td>
+              <td style="white-space:nowrap">${urgente ? '<strong>URGENTE</strong>' : 'Normal'}</td>
+              ${idx === 0 ? `<td rowspan="${its.length}">${mayAssign
                     ? `<select class="tri-assign" style="width:100%">${options(t.assignedToId)}</select>${t.assignedByLabel ? `<div class="sub">designado por ${escapeHtml(t.assignedByLabel)}</div>` : ''}`
                     : `${escapeHtml(t.assignedToLabel || '—')}${t.assignedByLabel ? `<div class="sub">por ${escapeHtml(t.assignedByLabel)}</div>` : ''}`}</td>
-              </tr>`).join('') + '</tbody></table>'
+                <td rowspan="${its.length}"><span class="badge ${t.processStatusTone || ''}" title="${escapeHtml(t.processStatusHint || '')}">${escapeHtml(t.processStatusLabel || t.status)}</span>
+                    <div class="sub">${escapeHtml(t.status)}</div>
+                    ${t.estimatedValue ? `<div class="sub">${money(t.estimatedValue)}</div>` : ''}</td>` : ''}
+            </tr>`).join('');
+        };
+        $('tri-list').innerHTML = items.length
+          ? '<table style="min-width:1180px"><thead><tr><th>SC / Item</th><th>Produto | Serviço</th><th>Tam.</th><th>Solicitante</th>' +
+            '<th>Centro de custo</th><th>Qtde.</th><th>Emissão</th><th>Necessidade</th><th>Prioridade</th>' +
+            '<th>Comprador</th><th>Status</th></tr></thead><tbody>' +
+            items.map(linhasDe).join('') + '</tbody></table>'
           : '<p class="hello">Nenhuma demanda neste filtro. ✔</p>';
       } catch (err) { $('tri-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };

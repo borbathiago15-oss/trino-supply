@@ -1294,6 +1294,12 @@ static object TicketView(TriageTicket t) => new
     openedAt = t.OpenedAt, status = t.Status,
     processStatus = t.Process?.Key, processStatusLabel = t.Process?.Label,
     processStatusTone = t.Process?.Tone, processStatusHint = t.Process?.Explanation,
+    priority = t.Priority, neededBy = t.NeededBy, justification = t.Justification,
+    items = (t.Items ?? []).Select(i => new
+    {
+        id = i.Id, sequence = i.Sequence, code = i.Code, description = i.Description,
+        size = i.Size, quantity = i.Quantity, unitOfMeasure = i.UnitOfMeasure, notes = i.Notes,
+    }),
     assignedToId = t.AssignedToId, assignedToLabel = t.AssignedToLabel,
     assignedByLabel = t.AssignedByLabel, assignedAt = t.AssignedAt,
 };

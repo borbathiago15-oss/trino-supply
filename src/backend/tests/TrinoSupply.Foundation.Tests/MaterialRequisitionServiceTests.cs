@@ -66,6 +66,19 @@ public class MaterialRequisitionServiceTests
         await w.Db.SaveChangesAsync();
     }
 
+    /// <summary>Centro de custo com uma lista de gente no nível informado (alçadas do cadastro).</summary>
+    private static async Task ComNivelAsync(World w, string code, int level, params Actor[] pessoas)
+    {
+        var ccId = await w.Db.CostCenters.Where(c => c.Code == code).Select(c => c.Id).SingleAsync();
+        foreach (var pessoa in pessoas)
+            w.Db.CostCenterApprovers.Add(new CostCenterApprover
+            {
+                CostCenterId = ccId, UserId = pessoa.Id, UserName = pessoa.Label,
+                Level = level, CreatedAt = DateTimeOffset.UtcNow,
+            });
+        await w.Db.SaveChangesAsync();
+    }
+
     private static async Task<MaterialRequisition> AprovadaAsync(World w, params MaterialItemInput[] itens)
     {
         var (mr, _) = await w.Mrs.CreateAsync(Ana, "CC-01", null, itens);
@@ -135,6 +148,27 @@ public class MaterialRequisitionServiceTests
         Assert.Equal(4m, item.ApprovedQuantity);
         Assert.Equal(4m, item.EffectiveQuantity);
         Assert.Equal("Bruno Responsável", aprovada.ApprovedByLabel);
+    }
+
+    [Fact]
+    public async Task Qualquer_pessoa_do_nivel_1_do_centro_aprova()
+    {
+        var w = await BuildAsync();
+        await ComResponsavelAsync(w, "CC-01", Bruno);
+        var carla = new Actor(Guid.NewGuid(), "Carla Nível 1", Roles.Approver);
+        var diego = new Actor(Guid.NewGuid(), "Diego Nível 1", Roles.Approver);
+        await ComNivelAsync(w, "CC-01", ApprovalLevels.Level1, carla, diego);
+
+        // com a lista cadastrada, o gerente antigo deixa de valer sozinho
+        var (mr, _) = await w.Mrs.CreateAsync(Ana, "CC-01", null, [new MaterialItemInput(w.Detergente.Id, 3)]);
+        var (_, foraDaAlcada) = await w.Mrs.ApproveAsync(Bruno, mr!.Id, null, null);
+        Assert.Equal("MR-ERR-002", foraDaAlcada!.Code);
+        Assert.Contains("Carla Nível 1", foraDaAlcada.Message);
+
+        var (aprovada, error) = await w.Mrs.ApproveAsync(diego, mr.Id, null, null);
+        Assert.Null(error);
+        Assert.Equal(MaterialRequisitionStatus.Approved, aprovada!.Status);
+        Assert.Equal("Diego Nível 1", aprovada.ApprovedByLabel);
     }
 
     [Fact]

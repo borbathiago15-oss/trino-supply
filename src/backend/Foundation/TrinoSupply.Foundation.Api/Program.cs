@@ -1336,6 +1336,11 @@ static object CcView(CostCenter c) => new
     companyId = c.CompanyId,
     managerUserId = c.ManagerUserId, managerName = c.ManagerName,
     clientName = c.ClientName, active = c.Active,
+    // alçadas do centro: qualquer pessoa do nível resolve a etapa
+    level1 = c.Approvers.Where(a => a.Level == ApprovalLevels.Level1)
+        .Select(a => new { userId = a.UserId, name = a.UserName }).ToList(),
+    level2 = c.Approvers.Where(a => a.Level == ApprovalLevels.Level2)
+        .Select(a => new { userId = a.UserId, name = a.UserName }).ToList(),
 };
 
 // usuários ativos (id + nome + papel) para pickers de vínculo — sem dados sensíveis
@@ -1364,7 +1369,7 @@ ccs.MapPost("/", async (CreateCostCenterRequest body, CostCenterService svc, Cla
 {
     if (!CostCenterService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.CentrosCusto))
         return Error(ctx, 403, "CC-ERR-900", "Seu usuário não mantém centros de custo.");
-    var (cc, error) = await svc.CreateAsync(ActorId(p), body.Code, body.Name, body.Region, body.ManagerUserId, body.ClientName, body.CompanyId);
+    var (cc, error) = await svc.CreateAsync(ActorId(p), body.Code, body.Name, body.Region, body.ManagerUserId, body.ClientName, body.CompanyId, body.Level1UserIds, body.Level2UserIds);
     return error is not null ? Error(ctx, 400, error.Code, error.Message)
         : Results.Json(new { data = CcView(cc!), correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
@@ -1373,7 +1378,7 @@ ccs.MapPatch("/{id:guid}", async (Guid id, UpdateCostCenterRequest body, CostCen
 {
     if (!CostCenterService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.CentrosCusto))
         return Error(ctx, 403, "CC-ERR-900", "Seu usuário não mantém centros de custo.");
-    var (cc, error) = await svc.UpdateAsync(id, body.Name, body.Region, body.ManagerUserId, body.ClientName, body.Active, body.CompanyId);
+    var (cc, error) = await svc.UpdateAsync(id, body.Name, body.Region, body.ManagerUserId, body.ClientName, body.Active, body.CompanyId, body.Level1UserIds, body.Level2UserIds);
     return error is not null ? Error(ctx, error.Code == "CC-ERR-404" ? 404 : 400, error.Code, error.Message)
         : Ok(CcView(cc!), ctx);
 });
@@ -2211,8 +2216,8 @@ public record UpdateSupplierRequest(string? TradeName, string? Email, string? Ph
 public record PoItemRequest(string Description, decimal Quantity, string? UnitOfMeasure, decimal? UnitPrice, Guid? CatalogItemId);
 public record CreatePurchaseOrderRequest(Guid SupplierId, string? Notes, List<PoItemRequest>? Items, Guid? SourcePrId);
 public record ReceiveOrderRequest(Guid LocationId);
-public record CreateCostCenterRequest(string? Code, string Name, string? Region, Guid? ManagerUserId, string? ClientName, Guid? CompanyId);
-public record UpdateCostCenterRequest(string? Name, string? Region, Guid? ManagerUserId, string? ClientName, bool? Active, Guid? CompanyId);
+public record CreateCostCenterRequest(string? Code, string Name, string? Region, Guid? ManagerUserId, string? ClientName, Guid? CompanyId, IReadOnlyList<Guid>? Level1UserIds = null, IReadOnlyList<Guid>? Level2UserIds = null);
+public record UpdateCostCenterRequest(string? Name, string? Region, Guid? ManagerUserId, string? ClientName, bool? Active, Guid? CompanyId, IReadOnlyList<Guid>? Level1UserIds = null, IReadOnlyList<Guid>? Level2UserIds = null);
 public record AssignTicketRequest(string? Kind, Guid Id, Guid? ResponsibleId);
 public record CreateCompanyRequest(string LegalName, string TaxId, string? StateRegistration, string Address,
     string? District, string City, string State, string Zip, string? Phone, string? Email);

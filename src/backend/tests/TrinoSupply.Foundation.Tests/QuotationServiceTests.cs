@@ -84,6 +84,52 @@ public class QuotationServiceTests
         return dir;
     }
 
+    /// <summary>Cadastra o centro com as listas de alçada (Nível 1 e Nível 2).</summary>
+    private static async Task ComAlcadasAsync(World w, string code, Actor[] nivel1, Actor[] nivel2)
+    {
+        var cc = new CostCenter
+        {
+            Code = code, Name = "Centro de teste", Active = true,
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        foreach (var (pessoas, level) in new[] { (nivel1, ApprovalLevels.Level1), (nivel2, ApprovalLevels.Level2) })
+            foreach (var pessoa in pessoas)
+                cc.Approvers.Add(new CostCenterApprover
+                {
+                    CostCenterId = cc.Id, UserId = pessoa.Id, UserName = pessoa.Label,
+                    Level = level, CreatedAt = DateTimeOffset.UtcNow,
+                });
+        w.Db.CostCenters.Add(cc);
+        await w.Db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task Alcadas_do_centro_valem_sobre_o_vinculo_antigo_nos_dois_niveis()
+    {
+        var w = await BuildAsync();
+        var elias = new Actor(Guid.NewGuid(), "Elias Nível 1", Roles.Approver);
+        var fabio = new Actor(Guid.NewGuid(), "Fábio Nível 2", Roles.Director);
+        await ComAlcadasAsync(w, "CC-01", [elias], [fabio]);
+
+        var q = await UpToAnalysisAsync(w);
+        var winner = q.Proposals.First(p => p.SupplierId == w.Alfa.Id);
+        await w.Rfq.SelectWinnerAsync(Carla, q.Id, winner.Id, "Preço", "Menor preço.");
+
+        var (_, foraDoNivel1) = await w.Rfq.ManagerDecisionAsync(Gustavo, q.Id, "APROVAR", null);
+        Assert.Equal("RFQ-ERR-031", foraDoNivel1!.Code);
+        Assert.Contains("Elias Nível 1", foraDoNivel1.Message);
+        var (comNivel1, e1) = await w.Rfq.ManagerDecisionAsync(elias, q.Id, "APROVAR", null);
+        Assert.Null(e1);
+        Assert.Equal(QuotationStatus.AwaitingDirector, comNivel1!.Status);
+
+        var (_, foraDoNivel2) = await w.Rfq.DirectorDecisionAsync(Diana, q.Id, "APROVAR", null);
+        Assert.Equal("RFQ-ERR-032", foraDoNivel2!.Code);
+        Assert.Contains("Fábio Nível 2", foraDoNivel2.Message);
+        var (comNivel2, e2) = await w.Rfq.DirectorDecisionAsync(fabio, q.Id, "APROVAR", null);
+        Assert.Null(e2);
+        Assert.Equal(QuotationStatus.ApprovedForIssue, comNivel2!.Status);
+    }
+
     [Fact]
     public async Task Cotacao_nasce_de_pr_aprovada_com_numero_unico_e_itens_copiados()
     {

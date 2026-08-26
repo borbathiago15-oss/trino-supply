@@ -140,10 +140,18 @@ public class MaterialRequisitionService(AppDbContext db, CatalogService catalog,
         return (mr, null);
     }
 
-    /// <summary>Quem aprova é o responsável do centro de custo (Nível 1) — ou o administrador.</summary>
+    /// <summary>Quem aprova é quem está no Nível 1 do centro de custo — ou o administrador.</summary>
     private async Task<UserError?> ApprovalScopeErrorAsync(Actor actor, MaterialRequisition mr, CancellationToken ct)
     {
         if (actor.IsAdmin) return null;
+        // alçada do centro: qualquer pessoa do Nível 1 resolve a etapa
+        if (await ApprovalLevels.CanDecideAsync(db, mr.CostCenter, ApprovalLevels.Level1, actor.Id, ct) is { } noNivel)
+            return noNivel
+                ? null
+                : new("MR-ERR-002", "Esta solicitação é aprovada pelo Nível 1 do centro de custo: " +
+                    await ApprovalLevels.LabelAsync(db, mr.CostCenter, ApprovalLevels.Level1, ct) + ".");
+
+        // centro sem Nível 1 cadastrado: vale o responsável antigo do centro
         var cc = await db.CostCenters
             .SingleOrDefaultAsync(c => c.Code.ToUpper() == mr.CostCenter.ToUpper() && c.Active, ct);
         // centro sem responsável definido: qualquer aprovador destrava, para a fila não parar

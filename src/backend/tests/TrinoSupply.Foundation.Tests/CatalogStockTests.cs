@@ -55,11 +55,13 @@ public class CatalogStockTests
         var svc = Build(out _);
         await svc.CreateAsync(Actor, null, "Detergente neutro", "Material de Limpeza", "UN", 2m,
             stockControlled: true, minimumQty: 12m);
-        await svc.CreateAsync(Actor, null, "Notebook i5", "Equipamentos", "UN", 4500m);   // compra direta
+        await svc.CreateAsync(Actor, null, "Notebook i5", "Equipamentos", "UN", 4500m);
 
+        // o uso deixou de ser marcado no cadastro (revisão de telas 2026-08-26): todo produto
+        // serve ao almoxarifado e à compra; o filtro de estoque passa a trazer o catálogo inteiro
         var estoque = await svc.ListAsync(null, null, false, stockOnly: true);
-        var item = Assert.Single(estoque);
-        Assert.Equal("Detergente neutro", item.Description);
+        Assert.Equal(2, estoque.Count);
+        var item = Assert.Single(estoque, i => i.Description == "Detergente neutro");
         Assert.Equal(12m, item.MinimumQty);
 
         var todos = await svc.ListAsync(null, null, false);
@@ -162,9 +164,12 @@ public class CatalogStockTests
         var todos = await svc.ListAsync(null, null, false);
         Assert.Contains(todos, i => i.Id == both.Id);             // e continua comprável
 
-        var (_, semUso) = await svc.CreateAsync(Actor, null, "Sem uso", "HIGIENE", "UN", 1m,
+        // o uso deixou de ser marcado na tela (revisão de telas 2026-08-26): a API ainda aceita
+        // os dois desmarcados para o acervo antigo, sem recusar o cadastro
+        var (semUso, semUsoErro) = await svc.CreateAsync(Actor, null, "Sem uso", "HIGIENE", "UN", 1m,
             stockControlled: false, purchasable: false);
-        Assert.Equal("IC-ERR-018", semUso!.Code);
+        Assert.Null(semUsoErro);
+        Assert.NotNull(semUso);
     }
 
     // ---- famílias: cadastro próprio evita variações da mesma família ---------

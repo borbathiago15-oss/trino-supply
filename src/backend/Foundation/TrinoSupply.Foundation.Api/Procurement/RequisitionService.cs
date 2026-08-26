@@ -34,7 +34,7 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
     // ---- consulta -----------------------------------------------------------
     public async Task<List<PurchaseRequisition>> ListAsync(Actor actor, RequisitionStatus? status, CancellationToken ct = default)
     {
-        var query = db.Requisitions.Include(r => r.Items)
+        var query = db.Requisitions.Include(r => r.Items).Include(r => r.Attachments)
             .Where(r => r.DeletedAt == null);
         if (!actor.SeesAll) query = query.Where(r => r.RequesterId == actor.Id);
         if (status is not null) query = query.Where(r => r.Status == status);
@@ -43,7 +43,7 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
 
     public async Task<PurchaseRequisition?> GetAsync(Actor actor, Guid id, CancellationToken ct = default)
     {
-        var pr = await db.Requisitions.Include(r => r.Items)
+        var pr = await db.Requisitions.Include(r => r.Items).Include(r => r.Attachments)
             .SingleOrDefaultAsync(r => r.Id == id && r.DeletedAt == null, ct);
         if (pr is null) return null;
         return actor.SeesAll || pr.RequesterId == actor.Id ? pr : null; // fora do escopo ⇒ 404 (anti-enumeração)
@@ -233,10 +233,9 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
     {
         var pr = await GetAsync(actor, id, ct);
         if (pr is null) return new("PR-ERR-404", "Requisição não encontrada.");
-        if (pr.Status != RequisitionStatus.Draft)
-            return new("PR-ERR-040", "Somente rascunhos podem ser excluídos.");
         if (pr.RequesterId != actor.Id && !actor.IsAdmin)
-            return new("PR-ERR-001", "Somente o titular pode excluir o rascunho.");
+            return new("PR-ERR-001", "Somente o titular pode excluir a solicitação.");
+        if (await ChangeWindowErrorAsync(pr, ct) is { } windowError) return windowError;
         pr.DeletedAt = clock.GetUtcNow();
         pr.DeletedBy = actor.Id;
         await TouchAndSaveAsync(pr, ct);
@@ -362,15 +361,33 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         return (pr, null); // EVT-006/007/008 conforme o desfecho
     }
 
+    /// <summary>
+    /// Janela de alteração pedida na revisão de telas (2026-08-26): o solicitante mexe na SC
+    /// enquanto ela ainda não tem comprador designado nem cotação aberta. Depois disso o
+    /// processo é do comprador, e nem ele nem o solicitante alteram o que já foi cotado.
+    /// </summary>
     private async Task<(PurchaseRequisition? pr, UserError? error)> GetEditableAsync(Actor actor, Guid id, CancellationToken ct)
     {
         var pr = await GetAsync(actor, id, ct);
         if (pr is null) return (null, new("PR-ERR-404", "Requisição não encontrada."));
         if (pr.RequesterId != actor.Id && !actor.IsAdmin)
             return (null, new("PR-ERR-001", "Somente o titular pode alterar a requisição."));
-        if (!pr.IsEditable)
-            return (null, new("PR-ERR-040", "A requisição não está em um estado editável (somente Rascunho ou Devolvida)."));
+        if (await ChangeWindowErrorAsync(pr, ct) is { } windowError) return (null, windowError);
         return (pr, null);
+    }
+
+    /// <summary>Motivo pelo qual a SC não pode mais ser alterada nem excluída pelo titular.</summary>
+    public async Task<UserError?> ChangeWindowErrorAsync(PurchaseRequisition pr, CancellationToken ct = default)
+    {
+        if (pr.IsEditable) return null;                       // rascunho ou devolvida: sempre editável
+        if (pr.Status != RequisitionStatus.Submitted)
+            return new("PR-ERR-040", "A solicitação já saiu da fase inicial e não pode mais ser alterada.");
+        if (pr.AssignedToId is not null)
+            return new("PR-ERR-041",
+                $"A solicitação já está com o comprador {pr.AssignedToLabel}: peça a alteração a ele.");
+        if (await db.Quotations.AnyAsync(q => q.SourcePrId == pr.Id, ct))
+            return new("PR-ERR-041", "A solicitação já entrou em cotação e não pode mais ser alterada.");
+        return null;
     }
 
     private static (RequisitionItem? item, UserError? error) BuildItem(

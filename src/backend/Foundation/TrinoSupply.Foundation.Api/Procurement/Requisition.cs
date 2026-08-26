@@ -20,6 +20,10 @@ public enum RequisitionStatus : short
 
 public static class RequisitionPriorities
 {
+    /// <summary>Oferecidas na tela: só Normal e Urgente (revisão de telas 2026-08-26).</summary>
+    public static readonly string[] Offered = ["NORMAL", "URGENT"];
+
+    /// <summary>Aceitas pela API — LOW/HIGH seguem válidas para as solicitações já gravadas.</summary>
     public static readonly string[] All = ["LOW", "NORMAL", "HIGH", "URGENT"];
 }
 
@@ -53,6 +57,7 @@ public class PurchaseRequisition
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset? DecidedAt { get; set; }
     public List<RequisitionItem> Items { get; set; } = [];
+    public List<RequisitionAttachment> Attachments { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? DeletedAt { get; set; }
@@ -79,4 +84,18 @@ public class RequisitionItem
     public decimal? EstimatedUnitPrice { get; set; }
     public string? Notes { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>Anexo da solicitação (PDF, imagem, planilha) — pedido na revisão de telas de 2026-08-26.</summary>
+public class RequisitionAttachment
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid RequisitionId { get; set; }
+    public Guid DocumentId { get; set; }
+    public string FileName { get; set; } = string.Empty;
+    public string ContentType { get; set; } = string.Empty;
+    public long SizeBytes { get; set; }
+    public Guid UploadedBy { get; set; }
+    public string UploadedByLabel { get; set; } = string.Empty;
+    public DateTimeOffset UploadedAt { get; set; }
 }

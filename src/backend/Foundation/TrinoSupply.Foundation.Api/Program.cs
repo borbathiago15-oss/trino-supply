@@ -219,7 +219,7 @@ static object CatalogView(CatalogItem i) => new
                         || (ProductTypes.RequiresCa(i.ProductType) && string.IsNullOrWhiteSpace(i.CaNumber)),
     suppliers = i.Suppliers.OrderBy(s => s.SupplierName).Select(s => new
     {
-        id = s.Id, supplierName = s.SupplierName, taxId = s.TaxId, contact = s.Contact,
+        id = s.Id, supplierId = s.SupplierId, supplierName = s.SupplierName, taxId = s.TaxId, contact = s.Contact,
         supplierItemCode = s.SupplierItemCode, lastPrice = s.LastPrice, notes = s.Notes,
     }),
 };
@@ -411,9 +411,9 @@ catalogGroup.MapPost("/", async (CreateCatalogItemRequest body, CatalogService s
     if (!ModulesOf(p).Contains(AppModules.Produtos))
         return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para o cadastro de produtos.");
     var suppliers = body.Suppliers?.Select(x => new ItemSupplierInput(
-        x.SupplierName ?? "", x.TaxId, x.Contact, x.SupplierItemCode, x.LastPrice, x.Notes)).ToList();
+        x.SupplierName ?? "", x.TaxId, x.Contact, x.SupplierItemCode, x.LastPrice, x.Notes, x.SupplierId)).ToList();
     var (item, error) = await svc.CreateAsync(ActorId(p), body.Code, body.Description, body.Family,
-        body.UnitOfMeasure, body.ReferencePrice, body.StockControlled == true, body.MinimumQty, suppliers,
+        body.UnitOfMeasure, body.ReferencePrice, body.StockControlled ?? true, body.MinimumQty, suppliers,
         body.Purchasable ?? true, body.ProductType, body.CaNumber);
     return error is not null
         ? Error(ctx, error.Code == "IC-ERR-010" ? 409 : 400, error.Code, error.Message)
@@ -428,7 +428,7 @@ catalogGroup.MapPatch("/{id:guid}", async (Guid id, UpdateCatalogItemRequest bod
     if (!ModulesOf(p).Contains(AppModules.Produtos))
         return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para o cadastro de produtos.");
     var suppliers = body.Suppliers?.Select(x => new ItemSupplierInput(
-        x.SupplierName ?? "", x.TaxId, x.Contact, x.SupplierItemCode, x.LastPrice, x.Notes)).ToList();
+        x.SupplierName ?? "", x.TaxId, x.Contact, x.SupplierItemCode, x.LastPrice, x.Notes, x.SupplierId)).ToList();
     var (item, error) = await svc.UpdateAsync(id, body.Description, body.Family, body.UnitOfMeasure,
         body.ReferencePrice, body.Active, body.StockControlled, body.MinimumQty, body.ClearMinimum == true, suppliers,
         body.Purchasable, body.ProductType, body.CaNumber);
@@ -436,6 +436,17 @@ catalogGroup.MapPatch("/{id:guid}", async (Guid id, UpdateCatalogItemRequest bod
         ? Error(ctx, error.Code == "IC-ERR-404" ? 404 : 400, error.Code, error.Message)
         : Ok(CatalogView(item!), ctx);
 });
+
+/// <summary>
+/// Quem opera o almoxarifado: os papéis históricos ou qualquer usuário com o módulo
+/// "Estoque / Almoxarifado" autorizado — os papéis de almoxarifado saíram do cadastro
+/// de usuário na revisão de telas de 2026-08-26.
+/// </summary>
+static bool CanOperateStock(ClaimsPrincipal p) =>
+    InventoryService.CanOperate(RoleOf(p)) || ModulesOf(p).Contains(AppModules.Estoque);
+
+static bool CanViewStock(ClaimsPrincipal p) =>
+    InventoryService.CanView(RoleOf(p)) || ModulesOf(p).Contains(AppModules.Estoque);
 
 // ---- PR-001 — Requisição de Compra (MVP conforme PR-001-03/13) --------------
 static Actor? BuildActor(ClaimsPrincipal p)
@@ -481,6 +492,11 @@ static object PrView(PurchaseRequisition r, ApproverHint? approver = null) => ne
     assignedToLabel = r.AssignedToLabel,
     decidedAt = r.DecidedAt,
     submittedAt = r.SubmittedAt,
+    attachments = r.Attachments.OrderBy(a => a.UploadedAt).Select(a => new
+    {
+        id = a.Id, documentId = a.DocumentId, fileName = a.FileName,
+        sizeBytes = a.SizeBytes, uploadedAt = a.UploadedAt, uploadedByLabel = a.UploadedByLabel,
+    }),
     items = r.Items.OrderBy(i => i.Sequence).Select(i => new
     {
         itemId = i.Id, sequence = i.Sequence, description = i.Description,
@@ -677,7 +693,7 @@ app.MapGet("/api/v1/dashboard", async (AppDbContext db, RequisitionService prSvc
     }
 
     // Fila do almoxarifado
-    if (mods.Contains(AppModules.Estoque) && InventoryService.CanOperate(role))
+    if (mods.Contains(AppModules.Estoque) && CanOperateStock(p))
     {
         var queue = await db.MaterialRequisitions.CountAsync(r => r.Status == MaterialRequisitionStatus.Submitted);
         if (queue > 0) alerts.Add(new
@@ -843,7 +859,7 @@ inv.AddEndpointFilter(RequireModules(AppModules.Estoque, AppModules.Compras));
 
 inv.MapGet("/locations", async (InventoryService svc, ClaimsPrincipal p, HttpContext ctx) =>
 {
-    if (!InventoryService.CanView(RoleOf(p))) return Error(ctx, 403, "IV-ERR-900", "Seu papel não acessa o estoque.");
+    if (!CanViewStock(p)) return Error(ctx, 403, "IV-ERR-900", "Seu usuário não acessa o estoque.");
     return Ok(new { items = (await svc.LocationsAsync()).Select(l => new { id = l.Id, code = l.Code, name = l.Name }) }, ctx);
 });
 
@@ -859,7 +875,7 @@ inv.MapPost("/locations", async (CreateLocationRequest body, InventoryService sv
 
 inv.MapGet("/balances", async (InventoryService svc, ClaimsPrincipal p, HttpContext ctx, Guid? itemId, Guid? locationId) =>
 {
-    if (!InventoryService.CanView(RoleOf(p))) return Error(ctx, 403, "IV-ERR-900", "Seu papel não acessa o estoque.");
+    if (!CanViewStock(p)) return Error(ctx, 403, "IV-ERR-900", "Seu usuário não acessa o estoque.");
     var rows = await svc.BalancesAsync(itemId, locationId);
     return Ok(new
     {
@@ -876,7 +892,7 @@ inv.MapGet("/balances", async (InventoryService svc, ClaimsPrincipal p, HttpCont
 
 inv.MapGet("/movements", async (InventoryService svc, ClaimsPrincipal p, HttpContext ctx, Guid? itemId, Guid? locationId) =>
 {
-    if (!InventoryService.CanView(RoleOf(p))) return Error(ctx, 403, "IV-ERR-900", "Seu papel não acessa o estoque.");
+    if (!CanViewStock(p)) return Error(ctx, 403, "IV-ERR-900", "Seu usuário não acessa o estoque.");
     return Ok(new { items = (await svc.MovementsAsync(itemId, locationId)).Select(MovementView) }, ctx);
 });
 
@@ -884,7 +900,7 @@ inv.MapGet("/movements", async (InventoryService svc, ClaimsPrincipal p, HttpCon
 inv.MapPost("/entries", async (EntryRequest body, InventoryService svc, ClaimsPrincipal p, HttpContext ctx) =>
 {
     var role = RoleOf(p);
-    if (!InventoryService.CanOperate(role)) return Error(ctx, 403, "IV-ERR-900", "Seu papel não registra entradas.");
+    if (!CanOperateStock(p)) return Error(ctx, 403, "IV-ERR-900", "Seu usuário não registra entradas.");
     var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
     var origin = body.Origin?.ToUpperInvariant() switch
     {
@@ -901,7 +917,7 @@ inv.MapPost("/entries", async (EntryRequest body, InventoryService svc, ClaimsPr
 inv.MapPost("/issues", async (IssueRequest body, InventoryService svc, ClaimsPrincipal p, HttpContext ctx) =>
 {
     var role = RoleOf(p);
-    if (!InventoryService.CanOperate(role)) return Error(ctx, 403, "IV-ERR-900", "Seu papel não registra saídas.");
+    if (!CanOperateStock(p)) return Error(ctx, 403, "IV-ERR-900", "Seu usuário não registra saídas.");
     var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
     var (movement, error) = await svc.RegisterIssueAsync(actor, body.CatalogItemId, body.LocationId, body.Quantity, MovementOrigin.Consumption, body.OriginReference);
     return error is not null ? Error(ctx, error.Code == "IV-ERR-020" ? 422 : 400, error.Code, error.Message)
@@ -946,7 +962,7 @@ mrs.MapGet("/", async (MaterialRequisitionService svc, ClaimsPrincipal p, HttpCo
 {
     var role = RoleOf(p);
     var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
-    if (queue == true && !MaterialRequisitionService.CanFulfill(role))
+    if (queue == true && !CanOperateStock(p))
         return Error(ctx, 403, "MR-ERR-001", "Seu papel não acessa a fila do almoxarifado.");
     if (queue != true && !(MaterialRequisitionService.CanRequest(role) || MaterialRequisitionService.CanSeeAll(role)))
         return Error(ctx, 403, "MR-ERR-001", "Seu papel não acessa solicitações de material.");
@@ -970,7 +986,7 @@ mrs.MapPost("/", async (CreateMaterialRequisitionRequest body, MaterialRequisiti
 mrs.MapPost("/{id:guid}/fulfill", async (Guid id, FulfillRequest body, MaterialRequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
 {
     var role = RoleOf(p);
-    if (!MaterialRequisitionService.CanFulfill(role))
+    if (!CanOperateStock(p))
         return Error(ctx, 403, "MR-ERR-001", "Seu papel não atende solicitações.");
     var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
     var (mr, error) = await svc.FulfillAsync(actor, id, body.LocationId);
@@ -1283,7 +1299,7 @@ analytics.MapGet("/supply", async (TrinoSupply.Foundation.Api.Analytics.Analytic
 analytics.MapGet("/stock", async (TrinoSupply.Foundation.Api.Analytics.AnalyticsService svc,
     ClaimsPrincipal p, HttpContext ctx, Guid? locationId, string? family, int? months) =>
 {
-    if (!InventoryService.CanView(RoleOf(p)))
+    if (!CanViewStock(p))
         return Error(ctx, 403, "AN-ERR-900", "Seu papel não acessa o dashboard de estoque.");
     var mods = ModulesOf(p);
     if (!mods.Contains(AppModules.Estoque) && !mods.Contains(AppModules.Compras))
@@ -1676,6 +1692,68 @@ app.MapPost("/api/v1/quotations/{id:guid}/proposals/{proposalId:guid}/attachment
     return Ok(new { documentId = doc.Id, fileName = doc.FileName }, ctx);
 }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
 
+// ==== Anexos da solicitação de compra (PDF, imagem, planilha) ================
+app.MapPost("/api/v1/purchase-requisitions/{id:guid}/attachments",
+    async (Guid id, HttpRequest request, RequisitionService svc, AppDbContext db,
+           TimeProvider clock, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var actor = BuildActor(p)!;
+    var pr = await svc.GetAsync(actor, id);
+    if (pr is null) return Error(ctx, 404, "PR-ERR-404", "Solicitação não encontrada.");
+    if (pr.RequesterId != actor.Id && !actor.IsAdmin)
+        return Error(ctx, 403, "PR-ERR-001", "Somente o titular anexa documentos à solicitação.");
+    if (await svc.ChangeWindowErrorAsync(pr) is { } windowError)
+        return Error(ctx, 409, windowError.Code, windowError.Message);
+
+    if (!request.HasFormContentType) return Error(ctx, 400, "DOC-ERR-001", "Envie o arquivo como multipart/form-data.");
+    var form = await request.ReadFormAsync();
+    var file = form.Files.FirstOrDefault();
+    if (file is null || file.Length == 0) return Error(ctx, 400, "DOC-ERR-001", "Nenhum arquivo enviado.");
+    if (file.Length > StoredDocument.MaxSizeBytes) return Error(ctx, 400, "DOC-ERR-002", "Arquivo acima de 10 MB.");
+    if (!StoredDocument.AllowedContentTypes.Contains(file.ContentType))
+        return Error(ctx, 400, "DOC-ERR-003", "Formato não permitido: envie PDF, planilha (XLSX/XLS/CSV), imagem ou DOCX.");
+
+    using var ms = new MemoryStream();
+    await file.CopyToAsync(ms);
+    var now = clock.GetUtcNow();
+    var doc = new StoredDocument
+    {
+        FileName = Path.GetFileName(file.FileName), ContentType = file.ContentType, SizeBytes = file.Length,
+        Content = ms.ToArray(), EntityType = "REQUISITION", EntityId = pr.Id,
+        UploadedByLabel = actor.Label, UploadedAt = now,
+    };
+    db.StoredDocuments.Add(doc);
+    var attachment = new RequisitionAttachment
+    {
+        RequisitionId = pr.Id, DocumentId = doc.Id, FileName = doc.FileName,
+        ContentType = doc.ContentType, SizeBytes = doc.SizeBytes,
+        UploadedBy = actor.Id, UploadedByLabel = actor.Label, UploadedAt = now,
+    };
+    db.RequisitionAttachments.Add(attachment);
+    await db.SaveChangesAsync();
+    return Ok(new { id = attachment.Id, documentId = doc.Id, fileName = doc.FileName }, ctx);
+}).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+
+app.MapDelete("/api/v1/purchase-requisitions/{id:guid}/attachments/{attachmentId:guid}",
+    async (Guid id, Guid attachmentId, RequisitionService svc, AppDbContext db, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var actor = BuildActor(p)!;
+    var pr = await svc.GetAsync(actor, id);
+    if (pr is null) return Error(ctx, 404, "PR-ERR-404", "Solicitação não encontrada.");
+    if (pr.RequesterId != actor.Id && !actor.IsAdmin)
+        return Error(ctx, 403, "PR-ERR-001", "Somente o titular remove anexos da solicitação.");
+    if (await svc.ChangeWindowErrorAsync(pr) is { } windowError)
+        return Error(ctx, 409, windowError.Code, windowError.Message);
+    var attachment = await db.RequisitionAttachments
+        .SingleOrDefaultAsync(a => a.Id == attachmentId && a.RequisitionId == id);
+    if (attachment is null) return Error(ctx, 404, "DOC-ERR-404", "Anexo não encontrado.");
+    var doc = await db.StoredDocuments.SingleOrDefaultAsync(d => d.Id == attachment.DocumentId);
+    if (doc is not null) db.StoredDocuments.Remove(doc);
+    db.RequisitionAttachments.Remove(attachment);
+    await db.SaveChangesAsync();
+    return Ok(new { removed = true }, ctx);
+}).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+
 // ==== Documentos (download autorizado por papel/vínculo) =====================
 app.MapGet("/api/v1/documents/{id:guid}", async (Guid id, AppDbContext db, ClaimsPrincipal p, HttpContext ctx) =>
 {
@@ -1685,6 +1763,14 @@ app.MapGet("/api/v1/documents/{id:guid}", async (Guid id, AppDbContext db, Claim
     if (role == "Supplier")
     {
         if (PortalSupplierId(p) != doc.SupplierId) return Error(ctx, 404, "DOC-ERR-404", "Documento não encontrado.");
+    }
+    else if (doc.EntityType == "REQUISITION")
+    {
+        // anexo de SC: o titular da solicitação sempre baixa o seu próprio documento
+        var actor = BuildActor(p)!;
+        var owner = await db.Requisitions.AnyAsync(r => r.Id == doc.EntityId && r.RequesterId == actor.Id);
+        if (!owner && !actor.SeesAll && !QuotationService.CanView(role) && role != Roles.Auditor)
+            return Error(ctx, 403, "DOC-ERR-900", "Seu papel não acessa este documento.");
     }
     else if (!QuotationService.CanView(role) && role != Roles.Auditor)
         return Error(ctx, 403, "DOC-ERR-900", "Seu papel não acessa documentos do processo.");
@@ -1833,7 +1919,7 @@ public record CreateRequisitionRequest(string Justification, string CostCenter, 
 public record ProductFamilyRequest(string? Name, string? Notes);
 public record UpdateProductFamilyRequest(string? Name, string? Notes, bool? Active);
 public record ItemSupplierRequest(string? SupplierName, string? TaxId, string? Contact,
-    string? SupplierItemCode, decimal? LastPrice, string? Notes);
+    string? SupplierItemCode, decimal? LastPrice, string? Notes, Guid? SupplierId = null);
 public record CreateCatalogItemRequest(string? Code, string Description, string Family, string? UnitOfMeasure,
     decimal? ReferencePrice, bool? StockControlled, decimal? MinimumQty, List<ItemSupplierRequest>? Suppliers,
     bool? Purchasable, string? ProductType, string? CaNumber);

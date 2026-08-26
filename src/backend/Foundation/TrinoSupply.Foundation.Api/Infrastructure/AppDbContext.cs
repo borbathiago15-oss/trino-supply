@@ -30,6 +30,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ProposalItem> ProposalItems => Set<ProposalItem>();
     public DbSet<ProcessEvent> ProcessEvents => Set<ProcessEvent>();
     public DbSet<StoredDocument> StoredDocuments => Set<StoredDocument>();
+    public DbSet<RequisitionAttachment> RequisitionAttachments => Set<RequisitionAttachment>();
     public DbSet<CompanyProfile> CompanyProfiles => Set<CompanyProfile>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -264,6 +265,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(r => new { r.RequesterId, r.CreatedAt });
             e.HasMany(r => r.Items).WithOne().HasForeignKey(i => i.RequisitionId)
                 .OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(r => r.Attachments).WithOne().HasForeignKey(a => a.RequisitionId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<RequisitionItem>(e =>
@@ -282,6 +285,22 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.Notes).HasColumnName("notes").HasMaxLength(500);
             e.Property(i => i.CreatedAt).HasColumnName("created_at");
             e.HasIndex(i => i.RequisitionId);
+        });
+
+        modelBuilder.Entity<RequisitionAttachment>(e =>
+        {
+            e.ToTable("purchase_requisition_attachment", "procurement");
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Id).HasColumnName("id");
+            e.Property(a => a.RequisitionId).HasColumnName("requisition_id");
+            e.Property(a => a.DocumentId).HasColumnName("document_id");
+            e.Property(a => a.FileName).HasColumnName("file_name").HasMaxLength(260).IsRequired();
+            e.Property(a => a.ContentType).HasColumnName("content_type").HasMaxLength(120);
+            e.Property(a => a.SizeBytes).HasColumnName("size_bytes");
+            e.Property(a => a.UploadedBy).HasColumnName("uploaded_by");
+            e.Property(a => a.UploadedByLabel).HasColumnName("uploaded_by_label").HasMaxLength(200);
+            e.Property(a => a.UploadedAt).HasColumnName("uploaded_at");
+            e.HasIndex(a => a.RequisitionId);
         });
 
         modelBuilder.Entity<CostCenter>(e =>

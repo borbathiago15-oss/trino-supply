@@ -49,8 +49,6 @@ public class CatalogImportService(AppDbContext db, TimeProvider clock)
         var type = string.IsNullOrWhiteSpace(options.ProductType) ? null : options.ProductType.Trim().ToUpperInvariant();
         if (type is not null && !ProductTypes.IsValid(type))
             return (null, new("IC-ERR-025", "Tipo de produto inválido."));
-        if (!options.StockControlled && !options.Purchasable)
-            return (null, new("IC-ERR-018", "Marque ao menos um uso: item de almoxarifado e/ou disponível para compra."));
 
         var map = DetectColumns(rows[0], out var hasHeader);
         if (map.Code < 0 || map.Description < 0)
@@ -102,8 +100,8 @@ public class CatalogImportService(AppDbContext db, TimeProvider clock)
                     Family = family,
                     UnitOfMeasure = unit.ToUpperInvariant(),
                     ReferencePrice = price,
-                    StockControlled = options.StockControlled,
-                    Purchasable = options.Purchasable,
+                    StockControlled = true,     // uso deixou de ser marcado na tela (revisão 2026-08-26)
+                    Purchasable = true,
                     MinimumQty = options.MinimumQty,
                     ProductType = type,
                     BaseCode = variant is null ? null : code.ToUpperInvariant(),

@@ -11,7 +11,7 @@ namespace TrinoSupply.Foundation.Api.Catalog;
 /// </summary>
 /// <summary>Fornecedor informado no cadastro do produto (não precisa estar cadastrado na plataforma).</summary>
 public record ItemSupplierInput(string SupplierName, string? TaxId, string? Contact,
-    string? SupplierItemCode, decimal? LastPrice, string? Notes);
+    string? SupplierItemCode, decimal? LastPrice, string? Notes, Guid? SupplierId = null);
 
 public class CatalogService(AppDbContext db, TimeProvider clock)
 {
@@ -126,7 +126,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
 
     public async Task<(CatalogItem? item, UserError? error)> CreateAsync(
         Guid actorId, string? code, string description, string family, string? unit, decimal? referencePrice,
-        bool stockControlled = false, decimal? minimumQty = null,
+        bool stockControlled = true, decimal? minimumQty = null,
         IReadOnlyList<ItemSupplierInput>? suppliers = null, bool purchasable = true,
         string? productType = null, string? caNumber = null, CancellationToken ct = default)
     {
@@ -137,8 +137,6 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         if (referencePrice is < 0) return (null, new("IC-ERR-015", "O preço de referência não pode ser negativo."));
         if (minimumQty is < 0) return (null, new("IC-ERR-016", "O estoque mínimo não pode ser negativo."));
         if (await FamilyErrorAsync(family, ct) is { } familyError) return (null, familyError);
-        if (!stockControlled && !purchasable)
-            return (null, new("IC-ERR-018", "Marque ao menos um uso: item de almoxarifado e/ou disponível para compra."));
         var (typeKey, typeError) = NormalizeType(productType, caNumber);
         if (typeError is not null) return (null, typeError);
 
@@ -231,6 +229,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
             var link = new CatalogItemSupplier
             {
                 CatalogItemId = item.Id,
+                SupplierId = s.SupplierId,                 // vínculo com o cadastro de fornecedores
                 SupplierName = s.SupplierName.Trim(),
                 TaxId = Digits(s.TaxId),
                 Contact = Clean(s.Contact),
@@ -279,8 +278,6 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         }
         if (stockControlled is not null) item.StockControlled = stockControlled.Value;
         if (purchasable is not null) item.Purchasable = purchasable.Value;
-        if (!item.StockControlled && !item.Purchasable)
-            return (null, new("IC-ERR-018", "Marque ao menos um uso: item de almoxarifado e/ou disponível para compra."));
         if (productType is not null || caNumber is not null)
         {
             var (typeKey, typeError) = NormalizeType(productType ?? item.ProductType, caNumber ?? item.CaNumber);

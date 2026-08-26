@@ -14,6 +14,7 @@
 |-------|---------|-----------|-----|
 | DS-ASSET-001 | `assets/logo/trino-supply-logo-login.png` | 1448×1086 PNG | Área de login e superfícies escuras |
 | DS-ASSET-002 | `src/.../wwwroot/assets/brand/trino-supply-logo.png` | 640×204 PNG (alpha) | Versão web do DS-ASSET-001 para a tela de login — mesmo desenho, fundo removido e comprimido (43 KB) |
+| DS-ASSET-003 | `src/.../wwwroot/assets/brand/trino-supply-mark.png` | 420×108 PNG (alpha) | Versão compacta (símbolo + wordmark + régua, sem tagline) para o topo do menu e do Portal do Fornecedor (16 KB) |
 
 ## 2. Descrição da Marca
 

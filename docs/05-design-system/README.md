@@ -13,6 +13,7 @@
 | Asset | Arquivo | Dimensões | Uso |
 |-------|---------|-----------|-----|
 | DS-ASSET-001 | `assets/logo/trino-supply-logo-login.png` | 1448×1086 PNG | Área de login e superfícies escuras |
+| DS-ASSET-002 | `src/.../wwwroot/assets/brand/trino-supply-logo.png` | 640×204 PNG (alpha) | Versão web do DS-ASSET-001 para a tela de login — mesmo desenho, fundo removido e comprimido (43 KB) |
 
 ## 2. Descrição da Marca
 
@@ -38,5 +39,5 @@
 
 1. Não alterar cores, proporções ou orientação do símbolo.
 2. Sobre fundos claros, utilizar versão adaptada (a produzir — atualmente só existe a versão para fundo escuro).
-3. A área de login do produto deve usar DS-ASSET-001 como asset principal.
+3. A área de login do produto deve usar DS-ASSET-001 (na web, sua versão otimizada DS-ASSET-002) como asset principal.
 4. Novos assets de marca exigem registro no Document Registry (GOV-002).

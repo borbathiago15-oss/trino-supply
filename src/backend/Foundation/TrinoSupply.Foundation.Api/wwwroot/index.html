@@ -525,7 +525,7 @@
       <section class="view" id="view-mr-new">
         <div class="panel">
           <h2>Solicitar Material ao Almoxarifado</h2>
-          <p class="hello">Itens do catálogo por família. Sem saldo em estoque, o item segue para rota de compra.</p>
+          <p class="hello">Escolha os itens e as quantidades. A solicitação vai para a aprovação do responsável do seu centro de custo e, depois de liberada, para o almoxarifado atender — o que não houver em estoque vira solicitação de compra automaticamente.</p>
           <form id="mr-form">
             <div class="grid2">
               <div><label for="mr-cc">Centro de custo</label><select id="mr-cc" class="cc-select" required></select></div>
@@ -548,40 +548,6 @@
       </section>
 
       <!-- Estoque: dashboard -->
-      <section class="view" id="view-stock-dash">
-        <div class="panel">
-          <h2>Filtros</h2>
-          <div class="filters">
-            <div><label for="st-loc">Local</label><select id="st-loc"></select></div>
-            <div><label for="st-family">Família</label><select id="st-family"></select></div>
-            <div><label for="st-months">Período</label>
-              <select id="st-months">
-                <option value="3">Últimos 3 meses</option>
-                <option value="6" selected>Últimos 6 meses</option>
-                <option value="12">Últimos 12 meses</option>
-              </select>
-            </div>
-          </div>
-        </div>
-        <div class="kpis" id="st-kpis"></div>
-        <div class="viz-grid">
-          <div class="panel"><h2>Entradas × Saídas por mês (quantidade)</h2><div id="st-mov-chart" class="chartwrap"></div></div>
-          <div class="panel"><h2>Valor em estoque por família</h2><div id="st-family-rank"></div></div>
-        </div>
-        <div class="viz-grid">
-          <div class="panel"><h2>Top produtos por valor em estoque</h2><div id="st-top-value"></div></div>
-          <div class="panel"><h2>Maior giro — saídas no período</h2><div id="st-top-movers"></div></div>
-        </div>
-        <div class="panel"><h2>Rupturas — produtos ativos sem saldo disponível</h2><div id="st-stockout" class="tablewrap"></div></div>
-        <div class="panel">
-          <h2>Posição de Estoque</h2>
-          <div id="stock-balances" class="tablewrap"></div>
-        </div>
-        <div class="panel">
-          <h2>Últimas Movimentações (kardex)</h2>
-          <div id="stock-movements" class="tablewrap"></div>
-        </div>
-      </section>
 
       <!-- Estoque: fila -->
       <section class="view" id="view-wh-queue">
@@ -593,64 +559,48 @@
               <option value="MINHAS">Designadas a mim</option>
             </select>
           </div>
+          <p class="hello">Só entra aqui o que o responsável do centro aprovou. Informe quanto você entregou de cada item — o que faltar vira solicitação de compra no nome de quem pediu.</p>
           <div id="wh-queue-list" class="tablewrap"></div>
+        </div>
+
+        <div class="panel" id="wh-fulfill" hidden>
+          <div class="topbar" style="margin-bottom:8px">
+            <h2 style="margin:0" id="wh-fulfill-title">Atendimento</h2>
+            <button type="button" class="secondary" id="wh-fulfill-close">Fechar</button>
+          </div>
+          <div id="wh-fulfill-items" class="tablewrap"></div>
+          <div class="row-actions" style="margin-top:10px">
+            <button type="button" id="wh-fulfill-all">Atender tudo</button>
+            <button type="button" id="wh-fulfill-save">Confirmar atendimento</button>
+          </div>
+          <p class="hello" id="wh-fulfill-hint" style="margin-top:8px"></p>
+        </div>
+      </section>
+
+      <!-- Estoque: painel de atendimentos (no lugar do dashboard de estoque) -->
+      <section class="view" id="view-wh-panel">
+        <div class="kpis" id="wh-kpis"></div>
+        <div class="panel">
+          <h2>Atendimentos em andamento</h2>
+          <div id="wh-panel-andamento" class="tablewrap"></div>
+        </div>
+        <div class="panel">
+          <h2>Concluídos parcialmente — aguardando a compra do faltante</h2>
+          <div id="wh-panel-parcial" class="tablewrap"></div>
+        </div>
+        <div class="panel">
+          <h2>Atendimentos concluídos</h2>
+          <div id="wh-panel-concluido" class="tablewrap"></div>
+        </div>
+        <div class="viz-grid">
+          <div class="panel"><h2>Por centro de custo</h2><div id="wh-panel-centro" class="tablewrap"></div></div>
+          <div class="panel"><h2>Por solicitante</h2><div id="wh-panel-solicitante" class="tablewrap"></div></div>
         </div>
       </section>
 
       <!-- Estoque: entrada -->
-      <section class="view" id="view-stock-entry">
-        <div class="panel">
-          <h2>Entrada de Estoque</h2>
-          <form id="entry-form">
-            <div class="grid2">
-              <div><label for="we-item">Produto</label><select id="we-item" required></select></div>
-              <div><label for="we-loc">Local de estoque</label><select id="we-loc" required></select></div>
-            </div>
-            <div class="grid2">
-              <div><label for="we-qty">Quantidade</label><input id="we-qty" type="number" min="0.01" step="0.01" required /></div>
-              <div><label for="we-origin">Origem</label>
-                <select id="we-origin">
-                  <option value="RECEBIMENTO">Recebimento (NF conferida)</option>
-                  <option value="DEVOLUCAO">Devolução</option>
-                  <option value="CARGA_INICIAL">Carga inicial</option>
-                </select>
-              </div>
-            </div>
-            <label for="we-ref">Documento de origem</label>
-            <input id="we-ref" required placeholder="ex.: NF 12345" />
-            <button type="submit" class="full">Registrar entrada</button>
-          </form>
-        </div>
-        <div class="panel" id="loc-admin" hidden>
-          <h2>Novo local de estoque</h2>
-          <form id="loc-form">
-            <div class="grid2">
-              <div><label for="wl-code">Código</label><input id="wl-code" required minlength="2" placeholder="ex.: ALM-01" /></div>
-              <div><label for="wl-name">Nome</label><input id="wl-name" required minlength="3" placeholder="ex.: Almoxarifado Central" /></div>
-            </div>
-            <button type="submit" class="full">Criar local</button>
-          </form>
-        </div>
-      </section>
 
       <!-- Estoque: saída -->
-      <section class="view" id="view-stock-issue">
-        <div class="panel">
-          <h2>Saída de Estoque (consumo)</h2>
-          <p class="hello">A saída nunca deixa o saldo negativo. Atendimentos de solicitação são feitos pela Fila de Atendimento.</p>
-          <form id="issue-form">
-            <div class="grid2">
-              <div><label for="wi-item">Produto</label><select id="wi-item" required></select></div>
-              <div><label for="wi-loc">Local de estoque</label><select id="wi-loc" required></select></div>
-            </div>
-            <div class="grid2">
-              <div><label for="wi-qty">Quantidade</label><input id="wi-qty" type="number" min="0.01" step="0.01" required /></div>
-              <div><label for="wi-ref">Documento/motivo</label><input id="wi-ref" required placeholder="ex.: OS 981 / consumo interno" /></div>
-            </div>
-            <button type="submit" class="full">Registrar saída</button>
-          </form>
-        </div>
-      </section>
 
       <!-- Compras: triagem de demandas (tickets) -->
       <section class="view" id="view-triage">
@@ -715,13 +665,6 @@
       </section>
 
       <!-- Compras: demandas do almoxarifado -->
-      <section class="view" id="view-buy-demands">
-        <div class="panel">
-          <h2>Itens em rota de compra (almoxarifado)</h2>
-          <p class="hello">Requisições de compra aprovadas entram pela fila de <strong>Cotações / Processos</strong> — a emissão direta de OC a partir de requisição foi desativada (RFQ-BR-010).</p>
-          <div id="buy-dem-route" class="tablewrap"></div>
-        </div>
-      </section>
 
       <!-- Compras: pedidos -->
       <section class="view" id="view-buy-orders">
@@ -1177,17 +1120,12 @@
         { id: 'mr-mine', label: 'Minhas Solicitações', show: () => true },
       ]},
       { title: 'Estoque', module: 'ESTOQUE', items: [
-        { id: 'stock-dash', label: 'Dashboard de Estoque', show: () => true },
         { id: 'wh-queue', label: 'Fila de Atendimento', show: canWarehouse },
-        { label: 'Movimentações', children: [
-          { id: 'stock-entry', label: 'Entrada de Estoque', show: canWarehouse },
-          { id: 'stock-issue', label: 'Saída de Estoque', show: canWarehouse },
-        ]},
+        { id: 'wh-panel', label: 'Painel de Atendimentos', show: canWarehouse },
       ]},
       { title: 'Compras', module: 'COMPRAS', items: [
         { id: 'triage', label: 'Gestão de Solicitações', show: () => canTriage() || canBuy() || canWarehouse() },
         { id: 'quotations', label: 'Cotações / Processos', show: () => canViewRfq() },
-        { id: 'buy-demands', label: 'Demandas do Almoxarifado', show: canBuy },
         { id: 'buy-orders', label: 'Pedidos de Compra', show: () => true },
       ]},
       { title: 'Cadastros', items: [
@@ -1207,9 +1145,8 @@
       'pr-new-unit': 'Inclusão de SC', 'pr-new-multi': 'Solicitação em Lote',
       'pr-mine': 'Meus Pedidos', 'pr-approvals': 'Central de Aprovação',
       'mr-new': 'Solicitar Material', 'mr-mine': 'Minhas Solicitações',
-      'stock-dash': 'Dashboard de Estoque', 'wh-queue': 'Fila de Atendimento',
-      'stock-entry': 'Entrada de Estoque', 'stock-issue': 'Saída de Estoque',
-      'buy-demands': 'Demandas de Compra', 'buy-orders': 'Pedidos de Compra',
+      'wh-queue': 'Fila de Atendimento', 'wh-panel': 'Painel de Atendimentos',
+      'buy-orders': 'Pedidos de Compra',
       triage: 'Gestão de Solicitações',
       users: 'Cadastro de Usuários', suppliers: 'Cadastro de Fornecedores', products: 'Cadastro de Produtos',
       families: 'Famílias de Produtos',
@@ -1658,6 +1595,8 @@
         LOADERS['pr-mine']();
       } catch (err) { toast(err.message, 'error'); }
     });
+    let mrApprovalCache = {};
+
     LOADERS['pr-approvals'] = async () => {
       try {
         // 1) compras cotadas aguardando a minha alçada (com preços do mapa de propostas)
@@ -1679,14 +1618,39 @@
             }).join('') + '</tbody></table>'
           : '<p class="hello">Nenhuma compra aguardando a sua aprovação. ✔</p>';
 
-        // 2) solicitações do fluxo anterior (autorização sem preço), se ainda houver
+        // 2) solicitações de material aguardando a aprovação do responsável do centro (Nível 1)
+        let materiais = [];
+        try {
+          materiais = (await api('/api/v1/material-requisitions/')).items
+            .filter(r => r.status === 'AGUARDANDO_APROVACAO');
+        } catch {}
+        mrApprovalCache = Object.fromEntries(materiais.map(r => [r.id, r]));
+        const matHtml = materiais.length
+          ? '<h2 style="margin:18px 0 6px">Material do almoxarifado — sua aprovação</h2>' +
+            '<p class="hello">Aprove como está ou ajuste a quantidade liberada; a quantidade pedida não muda.</p>' +
+            '<div class="tablewrap"><table><thead><tr><th>Solicitação</th><th>Solicitante</th><th>Itens</th><th>Ações</th></tr></thead><tbody>' +
+            materiais.map(r => `<tr data-mr="${r.id}">
+              <td>${escapeHtml(r.number)}<div class="sub">CC: ${escapeHtml(r.costCenter)}</div></td>
+              <td>${escapeHtml(r.requesterLabel)}${r.notes ? `<div class="sub">${escapeHtml(r.notes)}</div>` : ''}</td>
+              <td>${r.items.map(i => `<div>${escapeHtml(i.description)}
+                    <input type="number" class="mr-qty" data-item="${i.itemId}" min="0" step="0.01"
+                           max="${i.quantity}" value="${i.quantity}" style="width:90px;margin-left:6px" />
+                    <span class="sub">de ${fmtInt(i.quantity)} ${escapeHtml(i.unitOfMeasure)}</span></div>`).join('')}</td>
+              <td class="row-actions">
+                <button data-act="mr-approve">Aprovar</button>
+                <button class="danger" data-act="mr-reject">Recusar</button>
+              </td>
+            </tr>`).join('') + '</tbody></table></div>'
+          : '';
+
+        // 3) solicitações do fluxo anterior (autorização sem preço), se ainda houver
         let legacy = [];
         try { legacy = (await api('/api/v1/approvals/pending')).items; } catch {}
         const legacyHtml = legacy.length
           ? '<h2 style="margin:18px 0 6px">Solicitações do fluxo anterior</h2>' +
             PR_TABLE_HEAD + legacy.map(r => prRow(r, true)).join('') + '</tbody></table>'
           : '';
-        $('appr-list').innerHTML = procHtml + legacyHtml;
+        $('appr-list').innerHTML = procHtml + matHtml + legacyHtml;
       } catch (err) { $('appr-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
 
@@ -1736,6 +1700,27 @@
         const id = btn.closest('tr').dataset.q;
         goTo('quotations');
         setTimeout(() => openRfq(id), 400);
+        return;
+      }
+      // aprovação (Nível 1) da solicitação de material, com quantidade liberada por item
+      if (btn.dataset.act === 'mr-approve' || btn.dataset.act === 'mr-reject') {
+        const row = btn.closest('tr');
+        const id = row.dataset.mr;
+        try {
+          if (btn.dataset.act === 'mr-reject') {
+            const reason = prompt('Justificativa da recusa (obrigatória):');
+            if (!reason) return;
+            await api(`/api/v1/material-requisitions/${id}/reject`, { method: 'POST', body: { reason } });
+            toast('Solicitação recusada.', 'ok');
+          } else {
+            const items = [...row.querySelectorAll('.mr-qty')]
+              .map(el => ({ itemId: el.dataset.item, quantity: parseFloat(el.value) || 0 }));
+            const notes = prompt('Observação da aprovação (opcional):') || null;
+            await api(`/api/v1/material-requisitions/${id}/approve`, { method: 'POST', body: { items, notes } });
+            toast('Solicitação liberada para o almoxarifado.', 'ok');
+          }
+          LOADERS['pr-approvals']();
+        } catch (err) { toast(err.message, 'error'); }
         return;
       }
       try {
@@ -1829,7 +1814,7 @@
       const opts = items.length
         ? items.map(i => `<option value="${i.id}">[${escapeHtml(i.code)}] ${escapeHtml(i.description)}</option>`).join('')
         : '<option value="">(marque produtos como "Item de almoxarifado" em Cadastros → Produtos)</option>';
-      ['we-item', 'wi-item'].forEach(id => { if ($(id)) $(id).innerHTML = opts; });
+      ['we-item', 'wi-item'].forEach(id => { if ($(id)) $(id).innerHTML = opts; });   // acervo: telas removidas
     }
     const locCode = (id) => { const l = whLocations.find(x => x.id === id); return l ? l.code : '—'; };
 
@@ -1843,162 +1828,129 @@
         }).join('');
     }
 
-    LOADERS['stock-dash'] = async () => {
-      try {
-        await loadLocations();
-        const q = new URLSearchParams();
-        if ($('st-loc').value) q.set('locationId', $('st-loc').value);
-        if ($('st-family').value) q.set('family', $('st-family').value);
-        q.set('months', $('st-months').value || '6');
-        const dash = await api('/api/v1/analytics/stock?' + q.toString());
-
-        fillSelect($('st-loc'), dash.filterOptions.locations.map(l => ({ id: l.id, label: l.code + ' — ' + l.name })), true, 'Todos os locais');
-        fillSelect($('st-family'), dash.filterOptions.families, true, 'Todas as famílias');
-
-        const k = dash.kpis;
-        $('st-kpis').innerHTML = `
-          <div class="kpi"><div class="l">Valor em estoque</div><div class="v">${money(k.totalValue)}</div><div class="d flat">preço de referência</div></div>
-          <div class="kpi"><div class="l">Produtos com saldo</div><div class="v">${fmtInt(k.skusWithBalance)}</div></div>
-          <div class="kpi ${k.stockoutCount > 0 ? 'bad' : ''}"><div class="l">Rupturas</div><div class="v">${fmtInt(k.stockoutCount)}</div><div class="d flat">ativos sem disponível</div></div>
-          <div class="kpi"><div class="l">Reservado</div><div class="v">${fmtInt(k.reservedQty)}</div></div>
-          <div class="kpi"><div class="l">Entradas no período</div><div class="v">${fmtInt(k.entriesQty)}</div></div>
-          <div class="kpi"><div class="l">Saídas no período</div><div class="v">${fmtInt(k.issuesQty)}</div></div>
-          <div class="kpi ${k.purchaseRouteItems > 0 ? 'warn' : ''}"><div class="l">Itens em rota de compra</div><div class="v">${fmtInt(k.purchaseRouteItems)}</div></div>`;
-
-        const movSeries = [
-          { name: 'Entradas', color: 'var(--s1)', values: dash.months.map(m => m.entriesQty) },
-          { name: 'Saídas', color: 'var(--s2)', values: dash.months.map(m => m.issuesQty) },
-        ];
-        $('st-mov-chart').innerHTML = legendHtml(movSeries) +
-          columnChart(dash.months.map(m => m.month), movSeries, { fmt: fmtInt });
-        $('st-family-rank').innerHTML = barList(dash.valueByFamily, { fmt: money, color: 'var(--s1)' });
-        $('st-top-value').innerHTML = barList(dash.topByValue, { fmt: money, color: 'var(--s3)' });
-        $('st-top-movers').innerHTML = barList(dash.topMovers.map(t => ({ label: t.label, value: t.qty })), { fmt: fmtInt, color: 'var(--s2)' });
-        $('st-stockout').innerHTML = dash.stockout.length
-          ? '<table><thead><tr><th>Código</th><th>Produto</th><th>Família</th><th>Disponível</th></tr></thead><tbody>' +
-            dash.stockout.map(s => `
-              <tr><td>${escapeHtml(s.code)}</td><td>${escapeHtml(s.description)}</td><td>${escapeHtml(s.family)}</td>
-              <td><span class="badge off">${s.available} ${escapeHtml(s.unit)}</span></td></tr>`).join('') + '</tbody></table>'
-          : '<p class="hello">Nenhuma ruptura: todos os produtos ativos têm saldo disponível. ✔</p>';
-
-        const locFilter = $('st-loc').value;
-        const famFilter = $('st-family').value;
-        let { items } = await api('/api/v1/inventory/balances' + (locFilter ? '?locationId=' + locFilter : ''));
-        if (famFilter) items = items.filter(b => b.family === famFilter);
-        $('stock-balances').innerHTML = items.length
-          ? '<table><thead><tr><th>Produto</th><th>Família</th><th>Local</th><th>Total</th><th>Disponível</th></tr></thead><tbody>' +
-            items.map(b => `
-              <tr>
-                <td>${escapeHtml(b.itemDescription)}<div class="sub">${escapeHtml(b.itemCode)} · ${escapeHtml(b.unitOfMeasure)}</div></td>
-                <td>${escapeHtml(b.family)}</td>
-                <td>${escapeHtml(b.locationCode)}</td>
-                <td>${b.totalQty}</td>
-                <td><strong>${b.availableQty}</strong></td>
-              </tr>`).join('') + '</tbody></table>'
-          : '<p class="hello">Sem saldos ainda — registre a primeira entrada.</p>';
-        const movs = (await api('/api/v1/inventory/movements')).items;
-        $('stock-movements').innerHTML = movs.length
-          ? '<table><thead><tr><th>Número</th><th>Tipo</th><th>Produto</th><th>Qtd</th><th>Saldo</th><th>Por</th></tr></thead><tbody>' +
-            movs.map(m => `
-              <tr>
-                <td>${escapeHtml(m.number)}<div class="sub">${escapeHtml(m.origin)} · ${escapeHtml(m.originReference)}</div></td>
-                <td><span class="badge ${m.type === 'ENTRADA' ? 'on' : 'off'}">${m.type}</span></td>
-                <td>${escapeHtml(m.itemDescription)}<div class="sub">${escapeHtml(m.itemCode)} · ${locCode(m.locationId)}</div></td>
-                <td>${m.quantity}</td>
-                <td>${m.balanceBefore} → ${m.balanceAfter}</td>
-                <td>${escapeHtml(m.performedByLabel)}</td>
-              </tr>`).join('') + '</tbody></table>'
-          : '<p class="hello">Nenhuma movimentação registrada.</p>';
-      } catch (err) { $('stock-balances').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
-    };
+    // ---- fila de atendimento do almoxarifado ----
+    let whCache = {}, whOpenId = null;
 
     LOADERS['wh-queue'] = async () => {
       try {
-        await loadLocations();
         const onlyMine = $('wh-filter') && $('wh-filter').value === 'MINHAS';
         const { items } = await api('/api/v1/material-requisitions/?queue=true' + (onlyMine ? '&mine=true' : ''));
-        const locOpts = whLocations.map(l => `<option value="${l.id}">${escapeHtml(l.code)}</option>`).join('');
+        whCache = Object.fromEntries(items.map(r => [r.id, r]));
         $('wh-queue-list').innerHTML = items.length
-          ? '<table><thead><tr><th>Número</th><th>Solicitante</th><th>Itens</th><th>Responsável</th><th>Atender</th></tr></thead><tbody>' +
+          ? '<table><thead><tr><th>Solicitação</th><th>Solicitante</th><th>Itens aprovados</th><th>Responsável</th><th></th></tr></thead><tbody>' +
             items.map(r => {
               const mine = r.assignedToId && currentUser && r.assignedToId === currentUser.id;
               const resp = r.assignedToLabel
-                ? `<strong>${escapeHtml(r.assignedToLabel)}</strong>${mine ? '<div class="sub">designada a você</div>' : ''}${r.assignedByLabel ? `<div class="sub">por ${escapeHtml(r.assignedByLabel)}</div>` : ''}`
+                ? `<strong>${escapeHtml(r.assignedToLabel)}</strong>${mine ? '<div class="sub">designada a você</div>' : ''}`
                 : '<span class="sub">sem responsável (Gestão de Solicitações)</span>';
+              const itens = r.items.map(i => `${fmtInt(i.effectiveQuantity)}× ${escapeHtml(i.description)}`).join(' · ');
               return `
               <tr data-id="${r.id}">
                 <td>${escapeHtml(r.number)}<div class="sub">CC: ${escapeHtml(r.costCenter)}</div></td>
                 <td>${escapeHtml(r.requesterLabel)}${r.notes ? `<div class="sub">${escapeHtml(r.notes)}</div>` : ''}</td>
-                <td>${mrItemsTxt(r)}</td>
+                <td>${itens}${r.approvedByLabel ? `<div class="sub">aprovado por ${escapeHtml(r.approvedByLabel)}</div>` : ''}</td>
                 <td>${resp}</td>
-                <td class="row-actions">
-                  <select class="wh-fulfill-loc" aria-label="Local">${locOpts}</select>
-                  <button data-act="fulfill" ${whLocations.length ? '' : 'disabled'}>Atender</button>
-                </td>
+                <td class="row-actions"><button data-act="open-fulfill">Atender</button></td>
               </tr>`;
             }).join('') + '</tbody></table>'
           : (onlyMine
               ? '<p class="hello">Nenhuma solicitação designada a você. Troque o filtro para ver toda a fila.</p>'
-              : '<p class="hello">Nenhuma solicitação aguardando atendimento.</p>');
+              : '<p class="hello">Nenhuma solicitação aprovada aguardando atendimento.</p>');
+        if (whOpenId && whCache[whOpenId]) renderFulfill(whCache[whOpenId]);
+        else { $('wh-fulfill').hidden = true; whOpenId = null; }
       } catch (err) { $('wh-queue-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
-    $('wh-filter').addEventListener('change', () => LOADERS['wh-queue']());
-    $('wh-queue-list').addEventListener('click', async (ev) => {
-      const btn = ev.target.closest('button[data-act="fulfill"]');
-      if (!btn) return;
-      const row = btn.closest('tr');
-      const locationId = row.querySelector('.wh-fulfill-loc').value;
-      if (!locationId) { toast('Crie um local de estoque primeiro.', 'error'); return; }
-      if (!confirm('Atender esta solicitação? Itens com saldo serão baixados; itens sem saldo seguem para rota de compra.')) return;
+
+    /// atendimento: quantidade entregue por item; o que faltar vira solicitação de compra
+    function renderFulfill(r) {
+      whOpenId = r.id;
+      $('wh-fulfill').hidden = false;
+      $('wh-fulfill-title').textContent = `Atendimento da ${r.number} — ${r.requesterLabel}`;
+      $('wh-fulfill-items').innerHTML =
+        '<table><thead><tr><th>Produto</th><th>Pedido</th><th>Aprovado</th><th>Entregue agora</th></tr></thead><tbody>' +
+        r.items.map(i => `<tr data-item="${i.itemId}">
+          <td>${i.catalogCode ? '[' + escapeHtml(i.catalogCode) + '] ' : ''}${escapeHtml(i.description)}</td>
+          <td class="sub">${fmtInt(i.quantity)} ${escapeHtml(i.unitOfMeasure)}</td>
+          <td>${fmtInt(i.effectiveQuantity)} ${escapeHtml(i.unitOfMeasure)}</td>
+          <td><input type="number" class="wh-qty" min="0" step="0.01" max="${i.effectiveQuantity}"
+                     value="${i.effectiveQuantity}" style="width:100px" /></td>
+        </tr>`).join('') + '</tbody></table>';
+      $('wh-fulfill-hint').textContent =
+        'Deixe zero no que não tinha em estoque: o faltante vira uma solicitação de compra no nome de '
+        + r.requesterLabel + ', no centro ' + r.costCenter + '.';
+      $('wh-fulfill').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    $('wh-fulfill-close').addEventListener('click', () => { $('wh-fulfill').hidden = true; whOpenId = null; });
+    $('wh-fulfill-all').addEventListener('click', () => {
+      const r = whCache[whOpenId];
+      if (!r) return;
+      $('wh-fulfill-items').querySelectorAll('tr[data-item]').forEach((tr, idx) => {
+        tr.querySelector('.wh-qty').value = r.items[idx].effectiveQuantity;
+      });
+    });
+    $('wh-fulfill-save').addEventListener('click', async () => {
+      if (!whOpenId) return;
+      const items = [...$('wh-fulfill-items').querySelectorAll('tr[data-item]')]
+        .map(tr => ({ itemId: tr.dataset.item, quantity: parseFloat(tr.querySelector('.wh-qty').value) || 0 }));
       try {
-        await api(`/api/v1/material-requisitions/${row.dataset.id}/fulfill`, { method: 'POST', body: { locationId } });
-        toast('Solicitação atendida.', 'ok');
+        const mr = await api(`/api/v1/material-requisitions/${whOpenId}/fulfill`, { method: 'POST', body: { items } });
+        toast(mr.purchaseRequisitionNumber
+          ? `Atendimento registrado. O faltante virou a solicitação ${mr.purchaseRequisitionNumber}.`
+          : 'Atendimento registrado.', 'ok');
+        whOpenId = null;
+        $('wh-fulfill').hidden = true;
         LOADERS['wh-queue']();
       } catch (err) { toast(err.message, 'error'); }
     });
-
-    LOADERS['stock-entry'] = async () => {
-      $('loc-admin').hidden = !canManageLocations();
-      try { await loadLocations(); await loadItemOptions(); } catch (err) { toast(err.message, 'error'); }
-    };
-    $('entry-form').addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      try {
-        await api('/api/v1/inventory/entries', { method: 'POST', body: {
-          catalogItemId: $('we-item').value, locationId: $('we-loc').value,
-          quantity: parseFloat($('we-qty').value), origin: $('we-origin').value,
-          originReference: $('we-ref').value,
-        }});
-        toast('Entrada registrada com sucesso.', 'ok');
-        ev.target.reset();
-        goTo('stock-dash');
-      } catch (err) { toast(err.message, 'error'); }
-    });
-    $('loc-form').addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      try {
-        await api('/api/v1/inventory/locations', { method: 'POST', body: { code: $('wl-code').value, name: $('wl-name').value } });
-        toast('Local criado.', 'ok');
-        ev.target.reset();
-        loadLocations();
-      } catch (err) { toast(err.message, 'error'); }
+    $('wh-filter').addEventListener('change', () => LOADERS['wh-queue']());
+    $('wh-queue-list').addEventListener('click', (ev) => {
+      const btn = ev.target.closest('button[data-act="open-fulfill"]');
+      if (!btn) return;
+      renderFulfill(whCache[btn.closest('tr').dataset.id]);
     });
 
-    LOADERS['stock-issue'] = async () => {
-      try { await loadLocations(); await loadItemOptions(); } catch (err) { toast(err.message, 'error'); }
-    };
-    $('issue-form').addEventListener('submit', async (ev) => {
-      ev.preventDefault();
+    // ---- painel de atendimentos (no lugar do dashboard de estoque) ----
+    LOADERS['wh-panel'] = async () => {
       try {
-        await api('/api/v1/inventory/issues', { method: 'POST', body: {
-          catalogItemId: $('wi-item').value, locationId: $('wi-loc').value,
-          quantity: parseFloat($('wi-qty').value), originReference: $('wi-ref').value,
-        }});
-        toast('Saída registrada com sucesso.', 'ok');
-        ev.target.reset();
-        goTo('stock-dash');
-      } catch (err) { toast(err.message, 'error'); }
-    });
+        const d = await api('/api/v1/material-requisitions/panel');
+        const t = d.totals;
+        $('wh-kpis').innerHTML = [
+          ['Aguardando aprovação', t.aguardandoAprovacao, 'do responsável do centro'],
+          ['Em andamento', t.emAndamento, 'aprovadas, na fila do estoque'],
+          ['Concluídos', t.concluidos, 'atendidos integralmente'],
+          ['Parciais aguardando compra', t.parciais, 'o faltante virou solicitação'],
+        ].map(([label, valor, sub]) => `
+          <div class="kpi"><div class="l">${label}</div><div class="v">${fmtInt(valor)}</div>
+            <div class="d flat">${sub}</div></div>`).join('');
+
+        const linhas = (lista, extra) => lista.length
+          ? '<table><thead><tr><th>Solicitação</th><th>Solicitante</th><th>Centro</th><th>Itens</th>' +
+            `<th>${extra}</th></tr></thead><tbody>` +
+            lista.map(r => `<tr>
+              <td>${escapeHtml(r.number)}<div class="sub">${new Date(r.createdAt).toLocaleDateString('pt-BR')}</div></td>
+              <td>${escapeHtml(r.requesterLabel)}</td>
+              <td>${escapeHtml(r.costCenter)}</td>
+              <td>${escapeHtml(r.summary || '—')}</td>
+              <td>${r.purchaseRequisitionNumber
+                    ? 'falta ' + fmtInt(r.pending) + ' · SC ' + escapeHtml(r.purchaseRequisitionNumber)
+                    : (r.fulfilledByLabel ? escapeHtml(r.fulfilledByLabel) : (r.approvedAt ? 'aprovada' : '—'))}</td>
+            </tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nada por aqui. ✔</p>';
+
+        $('wh-panel-andamento').innerHTML = linhas(d.emAndamento, 'Situação');
+        $('wh-panel-parcial').innerHTML = linhas(d.parciais, 'Faltante');
+        $('wh-panel-concluido').innerHTML = linhas(d.concluidos, 'Atendido por');
+
+        const grupo = (lista, campo, titulo) => lista.length
+          ? `<table><thead><tr><th>${titulo}</th><th>Total</th><th>Em andamento</th><th>Concluídos</th><th>Parciais</th></tr></thead><tbody>` +
+            lista.map(g => `<tr><td>${escapeHtml(g[campo] || '—')}</td><td>${g.total}</td>
+              <td>${g.emAndamento}</td><td>${g.concluidos}</td><td>${g.parciais}</td></tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Sem dados ainda.</p>';
+        $('wh-panel-centro').innerHTML = grupo(d.porCentro, 'costCenter', 'Centro de custo');
+        $('wh-panel-solicitante').innerHTML = grupo(d.porSolicitante, 'requesterLabel', 'Solicitante');
+      } catch (err) { $('wh-kpis').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
 
     // ============ COMPRAS ============
     let buySuppliers = [];
@@ -2009,42 +1961,6 @@
     };
     const supOpts = () => buySuppliers.map(s => `<option value="${s.id}">${escapeHtml(s.tradeName || s.legalName)}</option>`).join('');
     async function loadSuppliers() { buySuppliers = (await api('/api/v1/suppliers/')).items; }
-
-    LOADERS['buy-demands'] = async () => {
-      try {
-        await loadSuppliers();
-        const { purchaseRouteItems } = await api('/api/v1/purchase-orders/demands');
-        $('buy-dem-route').innerHTML = purchaseRouteItems.length
-          ? '<table><thead><tr><th>Origem</th><th>Produto</th><th>Qtd</th><th>Emitir</th></tr></thead><tbody>' +
-            purchaseRouteItems.map(i => `
-              <tr data-cat="${i.catalogItemId}" data-desc="${escapeHtml(i.description)}" data-qty="${i.quantity}" data-unit="${escapeHtml(i.unitOfMeasure)}">
-                <td>${escapeHtml(i.materialRequisitionNumber)}<div class="sub">${escapeHtml(i.requesterLabel)} · CC: ${escapeHtml(i.costCenter)}</div></td>
-                <td>[${escapeHtml(i.catalogCode)}] ${escapeHtml(i.description)}</td>
-                <td>${i.quantity} ${escapeHtml(i.unitOfMeasure)}</td>
-                <td class="row-actions">
-                  <select class="buy-sup-sel">${supOpts()}</select>
-                  <button data-act="route-po" ${buySuppliers.length ? '' : 'disabled'}>Emitir pedido</button>
-                </td>
-              </tr>`).join('') + '</tbody></table>'
-          : '<p class="hello">Nenhum item aguardando compra vindo do almoxarifado.</p>';
-        if (!buySuppliers.length) $('buy-dem-route').innerHTML += '<p class="hello">Cadastre um fornecedor em Cadastros → Fornecedores para emitir pedidos.</p>';
-      } catch (err) { $('buy-dem-route').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
-    };
-    document.getElementById('view-buy-demands').addEventListener('click', async (ev) => {
-      const btn = ev.target.closest('button[data-act="route-po"]');
-      if (!btn) return;
-      const row = btn.closest('tr');
-      try {
-        const supplierId = row.querySelector('.buy-sup-sel').value;
-        if (!confirm('Emitir pedido de compra para este item?')) return;
-        await api('/api/v1/purchase-orders/', { method: 'POST', body: { supplierId, items: [{
-          description: row.dataset.desc, quantity: parseFloat(row.dataset.qty),
-          unitOfMeasure: row.dataset.unit, catalogItemId: row.dataset.cat,
-        }]}});
-        toast('Pedido de compra emitido.', 'ok');
-        goTo('buy-orders');
-      } catch (err) { toast(err.message, 'error'); }
-    });
 
     let poCache = {}, poOpenId = null;
 
@@ -3040,7 +2956,6 @@
     });
     ['sd-supplier', 'sd-buyer', 'sd-requester', 'sd-family', 'sd-cc', 'sd-region', 'sd-manager', 'sd-client']
       .forEach(id => $(id).addEventListener('change', () => LOADERS['supply-dash']()));
-    ['st-loc', 'st-family', 'st-months'].forEach(id => $(id).addEventListener('change', () => LOADERS['stock-dash']()));
 
     // ============ CADASTROS: CENTROS DE CUSTO ============
     async function loadCcDatalist() {

@@ -28,7 +28,8 @@ public class MaterialRequisitionService(AppDbContext db, CatalogService catalog,
     public async Task<List<MaterialRequisition>> ListAsync(Actor actor, bool queueOnly, CancellationToken ct = default)
     {
         var query = db.MaterialRequisitions.Include(r => r.Items).AsQueryable();
-        if (queueOnly) query = query.Where(r => r.Status == MaterialRequisitionStatus.Submitted);
+        // a fila do estoque só recebe o que o responsável do centro (Nível 1) aprovou
+        if (queueOnly) query = query.Where(r => r.Status == MaterialRequisitionStatus.Approved);
         else if (!CanSeeAll(actor.Role)) query = query.Where(r => r.RequesterId == actor.Id);
         return await query.OrderByDescending(r => r.CreatedAt).Take(100).ToListAsync(ct);
     }
@@ -80,43 +81,143 @@ public class MaterialRequisitionService(AppDbContext db, CatalogService catalog,
     /// Atendimento (rota mista por item, MMS-003): para cada item, se o disponível no local
     /// cobrir a quantidade, gera a saída vinculada; senão o item vai para rota de compra.
     /// </summary>
-    public async Task<(MaterialRequisition? mr, UserError? error)> FulfillAsync(
-        Actor actor, Guid id, Guid locationId, CancellationToken ct = default)
+    public record ApprovalLine(Guid ItemId, decimal Quantity);
+
+    /// <summary>
+    /// Aprovação do responsável do centro (Nível 1): libera a solicitação para o estoque e pode
+    /// reduzir a quantidade de cada item — a quantidade pedida pelo solicitante nunca muda.
+    /// </summary>
+    public async Task<(MaterialRequisition? mr, UserError? error)> ApproveAsync(
+        Actor actor, Guid id, IReadOnlyList<ApprovalLine>? lines, string? notes, CancellationToken ct = default)
     {
         var mr = await db.MaterialRequisitions.Include(r => r.Items).SingleOrDefaultAsync(r => r.Id == id, ct);
         if (mr is null) return (null, new("MR-ERR-404", "Solicitação não encontrada."));
         if (mr.Status != MaterialRequisitionStatus.Submitted)
-            return (null, new("MR-ERR-040", "A solicitação não está aguardando atendimento."));
+            return (null, new("MR-ERR-040", "A solicitação não está aguardando aprovação."));
+        if (await ApprovalScopeErrorAsync(actor, mr, ct) is { } scopeError) return (null, scopeError);
 
-        foreach (var item in mr.Items.Where(i => i.Status == MaterialItemStatus.Pending))
+        foreach (var item in mr.Items)
         {
-            var available = await inventory.AvailableAsync(item.CatalogItemId, locationId, ct);
-            if (available >= item.Quantity)
-            {
-                var (movement, issueError) = await inventory.RegisterIssueAsync(
-                    actor, item.CatalogItemId, locationId, item.Quantity,
-                    MovementOrigin.Fulfillment, mr.Number, mr.Id, ct);
-                if (issueError is not null) return (null, issueError);
-                item.Status = MaterialItemStatus.Fulfilled;
-                item.StockMovementId = movement!.Id;
-            }
-            else
-            {
-                item.Status = MaterialItemStatus.PurchaseRoute; // demanda para PR-001 (rota mista)
-            }
+            var line = lines?.FirstOrDefault(l => l.ItemId == item.Id);
+            var qty = line?.Quantity ?? item.Quantity;
+            if (qty < 0) return (null, new("MR-ERR-031", "Quantidade aprovada não pode ser negativa."));
+            if (qty > item.Quantity)
+                return (null, new("MR-ERR-031",
+                    $"{item.Description}: a quantidade aprovada não pode passar da pedida ({item.Quantity:0.##})."));
+            item.ApprovedQuantity = qty;
+        }
+        if (mr.Items.All(i => i.EffectiveQuantity == 0))
+            return (null, new("MR-ERR-031", "Aprove ao menos um item com quantidade maior que zero."));
+
+        mr.Status = MaterialRequisitionStatus.Approved;
+        mr.ApprovedById = actor.Id;
+        mr.ApprovedByLabel = actor.Label;
+        mr.ApprovedAt = clock.GetUtcNow();
+        mr.DecisionReason = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        Touch(mr);
+        await db.SaveChangesAsync(ct);
+        return (mr, null);
+    }
+
+    public async Task<(MaterialRequisition? mr, UserError? error)> RejectAsync(
+        Actor actor, Guid id, string? reason, CancellationToken ct = default)
+    {
+        var mr = await db.MaterialRequisitions.Include(r => r.Items).SingleOrDefaultAsync(r => r.Id == id, ct);
+        if (mr is null) return (null, new("MR-ERR-404", "Solicitação não encontrada."));
+        if (mr.Status != MaterialRequisitionStatus.Submitted)
+            return (null, new("MR-ERR-040", "A solicitação não está aguardando aprovação."));
+        if (await ApprovalScopeErrorAsync(actor, mr, ct) is { } scopeError) return (null, scopeError);
+        if (string.IsNullOrWhiteSpace(reason))
+            return (null, new("MR-ERR-030", "Informe a justificativa da recusa."));
+
+        mr.Status = MaterialRequisitionStatus.Rejected;
+        mr.DecisionReason = reason.Trim();
+        mr.ApprovedById = actor.Id;
+        mr.ApprovedByLabel = actor.Label;
+        mr.ApprovedAt = clock.GetUtcNow();
+        Touch(mr);
+        await db.SaveChangesAsync(ct);
+        return (mr, null);
+    }
+
+    /// <summary>Quem aprova é o responsável do centro de custo (Nível 1) — ou o administrador.</summary>
+    private async Task<UserError?> ApprovalScopeErrorAsync(Actor actor, MaterialRequisition mr, CancellationToken ct)
+    {
+        if (actor.IsAdmin) return null;
+        var cc = await db.CostCenters
+            .SingleOrDefaultAsync(c => c.Code.ToUpper() == mr.CostCenter.ToUpper() && c.Active, ct);
+        // centro sem responsável definido: qualquer aprovador destrava, para a fila não parar
+        if (cc?.ManagerUserId is null) return null;
+        return cc.ManagerUserId == actor.Id
+            ? null
+            : new("MR-ERR-002", $"Esta solicitação é aprovada por {cc.ManagerName ?? "o responsável do centro"}.");
+    }
+
+    public record FulfillLine(Guid ItemId, decimal Quantity);
+
+    /// <summary>
+    /// Atendimento do estoque: o responsável informa quanto entregou de cada item. O que faltar
+    /// vira solicitação de compra em nome do solicitante original, no mesmo centro de custo
+    /// (revisão do módulo de estoque, 2026-08-26). A posição de estoque fica no sistema de
+    /// almoxarifado da operação — aqui guardamos o atendimento.
+    /// </summary>
+    public async Task<(MaterialRequisition? mr, UserError? error)> FulfillAsync(
+        Actor actor, Guid id, IReadOnlyList<FulfillLine> lines, RequisitionService purchases,
+        CancellationToken ct = default)
+    {
+        var mr = await db.MaterialRequisitions.Include(r => r.Items).SingleOrDefaultAsync(r => r.Id == id, ct);
+        if (mr is null) return (null, new("MR-ERR-404", "Solicitação não encontrada."));
+        if (mr.Status != MaterialRequisitionStatus.Approved)
+            return (null, new("MR-ERR-040", "A solicitação não está liberada para atendimento."));
+
+        foreach (var item in mr.Items)
+        {
+            var entregue = lines.FirstOrDefault(l => l.ItemId == item.Id)?.Quantity ?? 0;
+            if (entregue < 0) return (null, new("MR-ERR-032", "Quantidade entregue não pode ser negativa."));
+            if (entregue > item.EffectiveQuantity)
+                return (null, new("MR-ERR-032",
+                    $"{item.Description}: entregue {entregue:0.##}, mas o aprovado é {item.EffectiveQuantity:0.##}."));
+            item.FulfilledQuantity = entregue;
+            item.Status = entregue >= item.EffectiveQuantity && entregue > 0 ? MaterialItemStatus.Fulfilled
+                : entregue > 0 ? MaterialItemStatus.PartiallyFulfilled
+                : MaterialItemStatus.PurchaseRoute;
         }
 
-        var fulfilled = mr.Items.Count(i => i.Status == MaterialItemStatus.Fulfilled);
-        mr.Status = fulfilled == mr.Items.Count ? MaterialRequisitionStatus.Fulfilled
-            : fulfilled > 0 ? MaterialRequisitionStatus.PartiallyFulfilled
+        // o que faltou vira uma SC no nome de quem pediu, para seguir a alçada do centro
+        var faltantes = mr.Items
+            .Where(i => i.EffectiveQuantity - i.FulfilledQuantity > 0)
+            .Select(i => new ItemInput("", i.EffectiveQuantity - i.FulfilledQuantity, i.UnitOfMeasure,
+                null, $"Faltante do atendimento {mr.Number}", i.CatalogItemId))
+            .ToList();
+        if (faltantes.Count > 0)
+        {
+            var requester = new Actor(mr.RequesterId, mr.RequesterLabel, Roles.Requester);
+            var (pr, prError) = await purchases.CreateAsync(requester,
+                $"Reposição do que faltou no atendimento {mr.Number}", mr.CostCenter, "NORMAL", null,
+                faltantes, "AVULSA", ct: ct);
+            if (prError is not null) return (null, prError);
+            var (submitted, submitError) = await purchases.SubmitAsync(requester, pr!.Id, ct);
+            if (submitError is not null) return (null, submitError);
+            mr.PurchaseRequisitionId = submitted!.Id;
+            mr.PurchaseRequisitionNumber = submitted.Number;
+        }
+
+        var atendidos = mr.Items.Count(i => i.FulfilledQuantity > 0);
+        mr.Status = faltantes.Count == 0 ? MaterialRequisitionStatus.Fulfilled
+            : atendidos > 0 ? MaterialRequisitionStatus.PartiallyFulfilled
             : MaterialRequisitionStatus.PurchaseRoute;
         mr.FulfilledBy = actor.Id;
         mr.FulfilledByLabel = actor.Label;
         mr.FulfilledAt = clock.GetUtcNow();
-        mr.UpdatedAt = mr.FulfilledAt.Value;
-        mr.Version += 1;
+        Touch(mr);
         await db.SaveChangesAsync(ct);
         return (mr, null);
+    }
+
+    private void Touch(MaterialRequisition mr)
+    {
+        mr.UpdatedAt = clock.GetUtcNow();
+        mr.Version += 1;
     }
 
     public async Task<(MaterialRequisition? mr, UserError? error)> CancelAsync(
@@ -127,8 +228,8 @@ public class MaterialRequisitionService(AppDbContext db, CatalogService catalog,
             return (null, new("MR-ERR-404", "Solicitação não encontrada."));
         if (mr.RequesterId != actor.Id && actor.Role != Roles.SystemAdministrator)
             return (null, new("MR-ERR-001", "Somente o solicitante pode cancelar."));
-        if (mr.Status != MaterialRequisitionStatus.Submitted)
-            return (null, new("MR-ERR-040", "Somente solicitações aguardando atendimento podem ser canceladas."));
+        if (mr.Status is not (MaterialRequisitionStatus.Submitted or MaterialRequisitionStatus.Approved))
+            return (null, new("MR-ERR-040", "Somente solicitações ainda não atendidas podem ser canceladas."));
         if (string.IsNullOrWhiteSpace(reason))
             return (null, new("MR-ERR-030", "Informe o motivo do cancelamento."));
 

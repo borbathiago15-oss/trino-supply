@@ -25,7 +25,11 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
         db.PurchaseOrders.Include(o => o.Items).Include(o => o.Invoices)
             .OrderByDescending(o => o.CreatedAt).Take(100).ToListAsync(ct);
 
-    /// <summary>Demandas do comprador: requisições aprovadas sem pedido + itens MR em rota de compra.</summary>
+    /// <summary>
+    /// Demandas do comprador: solicitações de compra ainda sem cotação nem pedido. O faltante do
+    /// almoxarifado deixou de aparecer aqui como item solto — desde a revisão do módulo de estoque
+    /// (2026-08-26) ele vira uma solicitação de compra própria, em nome de quem pediu o material.
+    /// </summary>
     public async Task<(List<PurchaseRequisition> approvedPrs, List<(MaterialRequisition mr, MaterialRequisitionItem item)> mrItems)>
         DemandsAsync(CancellationToken ct = default)
     {
@@ -40,16 +44,7 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
                         && !linkedPrIds.Contains(r.Id) && !quotedPrIds.Contains(r.Id))
             .OrderBy(r => r.DecidedAt).Take(100).ToListAsync(ct);
 
-        var mrs = await db.MaterialRequisitions.Include(r => r.Items)
-            .Where(r => r.Status != MaterialRequisitionStatus.Cancelled
-                        && r.Items.Any(i => i.Status == MaterialItemStatus.PurchaseRoute))
-            .OrderBy(r => r.CreatedAt).Take(100).ToListAsync(ct);
-        var mrItems = mrs
-            .SelectMany(mr => mr.Items
-                .Where(i => i.Status == MaterialItemStatus.PurchaseRoute)
-                .Select(i => (mr, i)))
-            .ToList();
-        return (prs, mrItems);
+        return (prs, []);
     }
 
     public async Task<(PurchaseOrder? order, UserError? error)> CreateAsync(

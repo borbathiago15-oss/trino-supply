@@ -959,30 +959,95 @@ static object MrView(MaterialRequisition r) => new
     id = r.Id, number = r.Number,
     status = r.Status switch
     {
-        MaterialRequisitionStatus.Submitted => "AGUARDANDO_ALMOXARIFADO",
+        MaterialRequisitionStatus.Submitted => "AGUARDANDO_APROVACAO",
+        MaterialRequisitionStatus.Approved => "AGUARDANDO_ALMOXARIFADO",
         MaterialRequisitionStatus.Fulfilled => "ATENDIDA",
         MaterialRequisitionStatus.PartiallyFulfilled => "ATENDIDA_PARCIAL",
         MaterialRequisitionStatus.PurchaseRoute => "ROTA_DE_COMPRA",
+        MaterialRequisitionStatus.Rejected => "RECUSADA",
         _ => "CANCELADA",
     },
     costCenter = r.CostCenter, notes = r.Notes,
     requesterId = r.RequesterId, requesterLabel = r.RequesterLabel,
     fulfilledByLabel = r.FulfilledByLabel, fulfilledAt = r.FulfilledAt, cancelReason = r.CancelReason,
+    approvedByLabel = r.ApprovedByLabel, approvedAt = r.ApprovedAt, decisionReason = r.DecisionReason,
+    purchaseRequisitionId = r.PurchaseRequisitionId, purchaseRequisitionNumber = r.PurchaseRequisitionNumber,
     assignedToId = r.AssignedToId, assignedToLabel = r.AssignedToLabel,
     assignedByLabel = r.AssignedByLabel, assignedAt = r.AssignedAt,
     items = r.Items.Select(i => new
     {
         itemId = i.Id, catalogCode = i.CatalogCode, description = i.Description,
         unitOfMeasure = i.UnitOfMeasure, quantity = i.Quantity,
+        approvedQuantity = i.ApprovedQuantity, effectiveQuantity = i.EffectiveQuantity,
+        fulfilledQuantity = i.FulfilledQuantity,
+        pendingQuantity = i.EffectiveQuantity - i.FulfilledQuantity,
         status = i.Status switch
         {
             MaterialItemStatus.Fulfilled => "ENTREGUE",
+            MaterialItemStatus.PartiallyFulfilled => "ENTREGUE_PARCIAL",
             MaterialItemStatus.PurchaseRoute => "ROTA_DE_COMPRA",
             _ => "PENDENTE",
         },
     }),
     createdAt = r.CreatedAt,
 };
+
+// Painel de atendimentos: substitui o dashboard de estoque (a posição de saldo fica no
+// sistema de almoxarifado da operação — revisão do módulo, 2026-08-26)
+app.MapGet("/api/v1/material-requisitions/panel", async (AppDbContext db, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!CanOperateStock(p) && !MaterialRequisitionService.CanSeeAll(RoleOf(p)))
+        return Error(ctx, 403, "MR-ERR-001", "Seu usuário não acessa o painel de atendimentos.");
+
+    var mrsAll = await db.MaterialRequisitions.Include(r => r.Items)
+        .OrderByDescending(r => r.CreatedAt).Take(500).ToListAsync();
+
+    object Bloco(IEnumerable<MaterialRequisition> fonte) => fonte.Select(r => new
+    {
+        id = r.Id, number = r.Number, costCenter = r.CostCenter, requesterLabel = r.RequesterLabel,
+        createdAt = r.CreatedAt, approvedAt = r.ApprovedAt, fulfilledAt = r.FulfilledAt,
+        fulfilledByLabel = r.FulfilledByLabel,
+        purchaseRequisitionNumber = r.PurchaseRequisitionNumber,
+        items = r.Items.Count,
+        pending = r.Items.Sum(i => i.EffectiveQuantity - i.FulfilledQuantity),
+        summary = string.Join(" · ", r.Items.Take(3).Select(i => $"{i.EffectiveQuantity:0.##}× {i.Description}")),
+    }).ToList();
+
+    var aguardando = mrsAll.Where(r => r.Status == MaterialRequisitionStatus.Submitted).ToList();
+    var andamento = mrsAll.Where(r => r.Status == MaterialRequisitionStatus.Approved).ToList();
+    var concluidos = mrsAll.Where(r => r.Status == MaterialRequisitionStatus.Fulfilled).ToList();
+    var parciais = mrsAll.Where(r => r.Status is MaterialRequisitionStatus.PartiallyFulfilled
+                                     or MaterialRequisitionStatus.PurchaseRoute).ToList();
+
+    return Ok(new
+    {
+        totals = new
+        {
+            aguardandoAprovacao = aguardando.Count, emAndamento = andamento.Count,
+            concluidos = concluidos.Count, parciais = parciais.Count,
+        },
+        aguardandoAprovacao = Bloco(aguardando),
+        emAndamento = Bloco(andamento),
+        concluidos = Bloco(concluidos.Take(50)),
+        parciais = Bloco(parciais),
+        porCentro = mrsAll.GroupBy(r => r.CostCenter).Select(g => new
+        {
+            costCenter = g.Key, total = g.Count(),
+            emAndamento = g.Count(r => r.Status == MaterialRequisitionStatus.Approved),
+            concluidos = g.Count(r => r.Status == MaterialRequisitionStatus.Fulfilled),
+            parciais = g.Count(r => r.Status is MaterialRequisitionStatus.PartiallyFulfilled
+                                    or MaterialRequisitionStatus.PurchaseRoute),
+        }).OrderByDescending(x => x.total).ToList(),
+        porSolicitante = mrsAll.GroupBy(r => r.RequesterLabel).Select(g => new
+        {
+            requesterLabel = g.Key, total = g.Count(),
+            emAndamento = g.Count(r => r.Status == MaterialRequisitionStatus.Approved),
+            concluidos = g.Count(r => r.Status == MaterialRequisitionStatus.Fulfilled),
+            parciais = g.Count(r => r.Status is MaterialRequisitionStatus.PartiallyFulfilled
+                                    or MaterialRequisitionStatus.PurchaseRoute),
+        }).OrderByDescending(x => x.total).ToList(),
+    }, ctx);
+}).RequireAuthorization().AddEndpointFilter(RequireModules(AppModules.Material, AppModules.Estoque));
 
 var mrs = app.MapGroup("/api/v1/material-requisitions").RequireAuthorization();
 mrs.AddEndpointFilter(RequireModules(AppModules.Material, AppModules.Estoque));
@@ -1012,13 +1077,40 @@ mrs.MapPost("/", async (CreateMaterialRequisitionRequest body, MaterialRequisiti
         : Results.Json(new { data = MrView(mr!), correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
 
-mrs.MapPost("/{id:guid}/fulfill", async (Guid id, FulfillRequest body, MaterialRequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
+// aprovação do responsável do centro (Nível 1), podendo ajustar a quantidade liberada
+mrs.MapPost("/{id:guid}/approve", async (Guid id, ApproveMaterialRequest body, MaterialRequisitionService svc,
+    ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", RoleOf(p));
+    var lines = (body.Items ?? []).Select(i => new MaterialRequisitionService.ApprovalLine(i.ItemId, i.Quantity)).ToList();
+    var (mr, error) = await svc.ApproveAsync(actor, id, lines, body.Notes);
+    return error is not null
+        ? Error(ctx, error.Code switch { "MR-ERR-404" => 404, "MR-ERR-040" => 409, "MR-ERR-002" => 403, _ => 422 },
+                error.Code, error.Message)
+        : Ok(MrView(mr!), ctx);
+});
+
+mrs.MapPost("/{id:guid}/reject", async (Guid id, ReasonRequest body, MaterialRequisitionService svc,
+    ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", RoleOf(p));
+    var (mr, error) = await svc.RejectAsync(actor, id, body.Reason);
+    return error is not null
+        ? Error(ctx, error.Code switch { "MR-ERR-404" => 404, "MR-ERR-040" => 409, "MR-ERR-002" => 403, _ => 422 },
+                error.Code, error.Message)
+        : Ok(MrView(mr!), ctx);
+});
+
+// atendimento do estoque: quantidade entregue por item; o que faltar vira solicitação de compra
+mrs.MapPost("/{id:guid}/fulfill", async (Guid id, FulfillRequest body, MaterialRequisitionService svc,
+    RequisitionService purchases, ClaimsPrincipal p, HttpContext ctx) =>
 {
     var role = RoleOf(p);
     if (!CanOperateStock(p))
-        return Error(ctx, 403, "MR-ERR-001", "Seu papel não atende solicitações.");
+        return Error(ctx, 403, "MR-ERR-001", "Seu usuário não atende solicitações de material.");
     var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
-    var (mr, error) = await svc.FulfillAsync(actor, id, body.LocationId);
+    var lines = (body.Items ?? []).Select(i => new MaterialRequisitionService.FulfillLine(i.ItemId, i.Quantity)).ToList();
+    var (mr, error) = await svc.FulfillAsync(actor, id, lines, purchases);
     return error is not null
         ? Error(ctx, error.Code switch { "MR-ERR-404" => 404, "MR-ERR-040" => 409, _ => 422 }, error.Code, error.Message)
         : Ok(MrView(mr!), ctx);
@@ -2103,6 +2195,8 @@ public record UpdateCatalogItemRequest(string? Description, string? Family, stri
     decimal? ReferencePrice, bool? Active, bool? StockControlled, decimal? MinimumQty, bool? ClearMinimum,
     List<ItemSupplierRequest>? Suppliers, bool? Purchasable, string? ProductType, string? CaNumber);
 public record CreateLocationRequest(string Code, string Name);
+public record MaterialLineRequest(Guid ItemId, decimal Quantity);
+public record ApproveMaterialRequest(List<MaterialLineRequest>? Items, string? Notes);
 public record ErpOrderRequest(string? ErpNumber, DateOnly? IssuedOn);
 public record InvoiceRequest(string? Number, DateOnly? IssuedOn, decimal? Value);
 public record DeliveryLineRequest(Guid ItemId, decimal Quantity);
@@ -2111,7 +2205,7 @@ public record EntryRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity
 public record IssueRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity, string OriginReference);
 public record MaterialItemRequest(Guid CatalogItemId, decimal Quantity);
 public record CreateMaterialRequisitionRequest(string CostCenter, string? Notes, List<MaterialItemRequest>? Items);
-public record FulfillRequest(Guid LocationId);
+public record FulfillRequest(List<MaterialLineRequest>? Items);
 public record CreateSupplierRequest(string LegalName, string? TradeName, string TaxId, string? Email, string? Phone);
 public record UpdateSupplierRequest(string? TradeName, string? Email, string? Phone, bool? Active);
 public record PoItemRequest(string Description, decimal Quantity, string? UnitOfMeasure, decimal? UnitPrice, Guid? CatalogItemId);

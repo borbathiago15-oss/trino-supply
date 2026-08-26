@@ -1292,6 +1292,8 @@ static object TicketView(TriageTicket t) => new
     kind = t.Kind, id = t.Id, number = t.Number, costCenter = t.CostCenter,
     requesterLabel = t.RequesterLabel, summary = t.Summary, estimatedValue = t.EstimatedValue,
     openedAt = t.OpenedAt, status = t.Status,
+    processStatus = t.Process?.Key, processStatusLabel = t.Process?.Label,
+    processStatusTone = t.Process?.Tone, processStatusHint = t.Process?.Explanation,
     assignedToId = t.AssignedToId, assignedToLabel = t.AssignedToLabel,
     assignedByLabel = t.AssignedByLabel, assignedAt = t.AssignedAt,
 };
@@ -1299,13 +1301,34 @@ static object TicketView(TriageTicket t) => new
 var triage = app.MapGroup("/api/v1/triage").RequireAuthorization();
 triage.AddEndpointFilter(RejectSupplierRole());
 
-triage.MapGet("/", async (TriageService svc, ClaimsPrincipal p, HttpContext ctx, string? filter) =>
+triage.MapGet("/", async (TriageService svc, ClaimsPrincipal p, HttpContext ctx,
+    string? filter, string? requester, string? assignee, string? status) =>
 {
     if (BuildActor(p) is not { } actor) return Error(ctx, 403, "TRI-ERR-900", "Seu papel não acessa a triagem.");
     var scope = (filter ?? "TODAS").Trim().ToUpperInvariant();
     if (scope != "MINHAS" && !TriageService.CanTriage(RoleOf(p)) && !PurchaseOrderService.CanManage(RoleOf(p)))
         return Error(ctx, 403, "TRI-ERR-900", "Seu papel não acessa o painel de demandas.");
-    return Ok(new { items = (await svc.ListAsync(actor, scope)).Select(TicketView) }, ctx);
+
+    var all = await svc.ListAsync(actor, scope);
+    // filtros da tela: solicitante, comprador responsável e situação do fluxo
+    var items = all.Where(t =>
+        (string.IsNullOrWhiteSpace(requester) || t.RequesterLabel == requester)
+        && (string.IsNullOrWhiteSpace(assignee)
+            || (assignee == "SEM" ? t.AssignedToId is null : t.AssignedToLabel == assignee))
+        && (string.IsNullOrWhiteSpace(status) || t.Process?.Key == status)).ToList();
+
+    return Ok(new
+    {
+        items = items.Select(TicketView),
+        total = all.Count,
+        requesters = all.Select(t => t.RequesterLabel).Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct().OrderBy(x => x),
+        assignees = all.Where(t => !string.IsNullOrWhiteSpace(t.AssignedToLabel))
+            .Select(t => t.AssignedToLabel!).Distinct().OrderBy(x => x),
+        statuses = all.Where(t => t.Process is not null)
+            .Select(t => new { key = t.Process!.Key, label = t.Process.Label })
+            .DistinctBy(x => x.key).OrderBy(x => x.label),
+    }, ctx);
 });
 
 triage.MapGet("/responsibles", async (TriageService svc, ClaimsPrincipal p, HttpContext ctx) =>

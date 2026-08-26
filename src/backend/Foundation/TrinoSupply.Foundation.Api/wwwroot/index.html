@@ -657,13 +657,30 @@
         <div class="panel">
           <div class="topbar" style="margin-bottom:8px">
             <h2 style="margin:0">Gestão de Solicitações</h2>
-            <select id="tri-filter" style="width:auto">
-              <option value="TODAS">Todas as demandas</option>
-              <option value="NAO_ATRIBUIDAS">Sem responsável</option>
-              <option value="MINHAS">Designadas a mim</option>
-            </select>
+            <span class="sub" id="tri-count"></span>
           </div>
-          <p class="hello">Toda solicitação de compra aprovada e toda solicitação de material entra aqui como um ticket: designe o responsável pela continuidade (comprador ou almoxarife).</p>
+          <div class="filters">
+            <div><label for="tri-filter">Escopo</label>
+              <select id="tri-filter">
+                <option value="TODAS">Todas as demandas</option>
+                <option value="NAO_ATRIBUIDAS">Sem responsável</option>
+                <option value="MINHAS">Designadas a mim</option>
+              </select></div>
+            <div><label for="tri-requester">Solicitante</label>
+              <select id="tri-requester"><option value="">Todos</option></select></div>
+            <div><label for="tri-assignee">Comprador / responsável</label>
+              <select id="tri-assignee"><option value="">Todos</option></select></div>
+            <div><label for="tri-status">Situação</label>
+              <select id="tri-status"><option value="">Todas</option></select></div>
+            <div><button type="button" class="secondary" id="tri-clear">Limpar filtros</button></div>
+          </div>
+          <p class="hello">Toda solicitação de compra e toda solicitação de material entra aqui: designe o responsável pela continuidade (comprador ou almoxarife) e acompanhe a situação de cada pedido.</p>
+          <p class="hello" id="tri-legend" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+            <span class="badge">Pendente</span><span class="badge warn">Em Cotação</span>
+            <span class="badge teal">Aguardando Aprovação</span><span class="badge on">Pedido Aprovado</span>
+            <span class="badge off">Pedido Rejeitado</span><span class="badge info">OC/Faturamento</span>
+            <span class="badge purple">Pedido Entregue</span><span class="badge orange">Pedido Cancelado/Parcial</span>
+          </p>
           <div id="tri-list" class="tablewrap"></div>
         </div>
       </section>
@@ -3135,6 +3152,14 @@
 
     // ============ GESTÃO DE SOLICITAÇÕES (tickets de demanda) ============
     let triResponsibles = [];
+    /// mantém a opção escolhida ao repovoar um filtro
+    function fillFilter(id, values, placeholder) {
+      const el = $(id), keep = el.value;
+      el.innerHTML = `<option value="">${placeholder}</option>` +
+        values.map(v => `<option value="${escapeHtml(v.value)}">${escapeHtml(v.label)}</option>`).join('');
+      if (keep && values.some(v => v.value === keep)) el.value = keep;
+    }
+
     LOADERS['triage'] = async () => {
       const filter = $('tri-filter').value || 'TODAS';
       const mayAssign = canTriage();
@@ -3142,7 +3167,18 @@
         try { triResponsibles = (await api('/api/v1/triage/responsibles')).items; } catch {}
       }
       try {
-        const { items } = await api('/api/v1/triage/?filter=' + filter);
+        const q = new URLSearchParams({ filter });
+        if ($('tri-requester').value) q.set('requester', $('tri-requester').value);
+        if ($('tri-assignee').value) q.set('assignee', $('tri-assignee').value);
+        if ($('tri-status').value) q.set('status', $('tri-status').value);
+        const data = await api('/api/v1/triage/?' + q.toString());
+        const { items } = data;
+        fillFilter('tri-requester', (data.requesters || []).map(r => ({ value: r, label: r })), 'Todos');
+        fillFilter('tri-assignee',
+          [{ value: 'SEM', label: '— sem responsável —' }].concat((data.assignees || []).map(a => ({ value: a, label: a }))),
+          'Todos');
+        fillFilter('tri-status', (data.statuses || []).map(x => ({ value: x.key, label: x.label })), 'Todas');
+        $('tri-count').textContent = `${items.length} de ${data.total} demanda(s)`;
         const options = (selected) => '<option value="">— sem responsável —</option>' +
           triResponsibles.map(r => `<option value="${r.id}" ${r.id === selected ? 'selected' : ''}>${escapeHtml(r.name)} (${ROLE_LABELS[r.role] || r.role})</option>`).join('');
         $('tri-list').innerHTML = items.length
@@ -3152,7 +3188,8 @@
                 <td>${escapeHtml(t.number)}<div class="sub">${t.kind === 'SC' ? 'Solicitação de compra' : 'Material'} · ${escapeHtml(t.requesterLabel)}</div></td>
                 <td>${escapeHtml(t.summary || '—')}<div class="sub">CC: ${escapeHtml(t.costCenter)}${t.openedAt ? ' · desde ' + new Date(t.openedAt).toLocaleDateString('pt-BR') : ''}</div></td>
                 <td>${t.estimatedValue != null ? money(t.estimatedValue) : '—'}</td>
-                <td><span class="badge ${t.assignedToId ? 'on' : 'dev'}">${escapeHtml(t.status)}</span></td>
+                <td><span class="badge ${t.processStatusTone || ''}" title="${escapeHtml(t.processStatusHint || '')}">${escapeHtml(t.processStatusLabel || t.status)}</span>
+                    <div class="sub">${escapeHtml(t.status)}</div></td>
                 <td>${mayAssign
                     ? `<select class="tri-assign" style="width:100%">${options(t.assignedToId)}</select>${t.assignedByLabel ? `<div class="sub">designado por ${escapeHtml(t.assignedByLabel)}</div>` : ''}`
                     : `${escapeHtml(t.assignedToLabel || '—')}${t.assignedByLabel ? `<div class="sub">por ${escapeHtml(t.assignedByLabel)}</div>` : ''}`}</td>
@@ -3160,7 +3197,13 @@
           : '<p class="hello">Nenhuma demanda neste filtro. ✔</p>';
       } catch (err) { $('tri-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
-    $('tri-filter').addEventListener('change', () => LOADERS['triage']());
+    ['tri-filter', 'tri-requester', 'tri-assignee', 'tri-status'].forEach(id =>
+      $(id).addEventListener('change', () => LOADERS['triage']()));
+    $('tri-clear').addEventListener('click', () => {
+      $('tri-filter').value = 'TODAS'; $('tri-requester').value = '';
+      $('tri-assignee').value = ''; $('tri-status').value = '';
+      LOADERS['triage']();
+    });
     $('tri-list').addEventListener('change', async (ev) => {
       const sel = ev.target.closest('.tri-assign');
       if (!sel) return;

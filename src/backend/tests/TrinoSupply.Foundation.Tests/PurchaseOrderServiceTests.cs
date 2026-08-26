@@ -223,4 +223,115 @@ public class PurchaseOrderServiceTests
         Assert.True(SupplierService.CanMaintain(Roles.PurchasingOfficer));
         Assert.False(SupplierService.CanMaintain(Roles.WarehouseOperator));
     }
+
+    // ---- OC do ERP, faturamento e entrega (revisão de telas 2026-08-26) ------
+    [Fact]
+    public async Task Oc_do_erp_exige_numero_e_guarda_a_data()
+    {
+        var w = await BuildAsync();
+        var (order, _) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null,
+            [new PoItemInput("Detergente neutro", 10, "UN", 3.5m, w.Detergente.Id)], null);
+
+        var (_, semNumero) = await w.Pos.RegisterErpOrderAsync(Carla, order!.Id, "  ", null);
+        Assert.Equal("PO-ERR-050", semNumero!.Code);
+
+        var (comOc, error) = await w.Pos.RegisterErpOrderAsync(Carla, order.Id, "663", new DateOnly(2026, 8, 20));
+        Assert.Null(error);
+        Assert.Equal("663", comOc!.ErpNumber);
+        Assert.Equal(new DateOnly(2026, 8, 20), comOc.ErpIssuedOn);
+    }
+
+    [Fact]
+    public async Task Faturamento_exige_oc_registrada_e_aceita_mais_de_uma_nota()
+    {
+        var w = await BuildAsync();
+        var (order, _) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null,
+            [new PoItemInput("Detergente neutro", 10, "UN", 3.5m, w.Detergente.Id)], null);
+
+        var (_, semOc) = await w.Pos.AddInvoiceAsync(Carla, order!.Id, "1001", null, null);
+        Assert.Equal("PO-ERR-052", semOc!.Code);
+
+        await w.Pos.RegisterErpOrderAsync(Carla, order.Id, "663", null);
+        var (nf1, e1) = await w.Pos.AddInvoiceAsync(Carla, order.Id, "1001", new DateOnly(2026, 8, 21), 20m);
+        var (nf2, e2) = await w.Pos.AddInvoiceAsync(Carla, order.Id, "1002", new DateOnly(2026, 8, 22), 15m);
+        Assert.Null(e1); Assert.Null(e2);
+        Assert.Equal(2, await w.Db.PurchaseOrderInvoices.CountAsync(i => i.OrderId == order.Id));
+        Assert.NotEqual(nf1!.Id, nf2!.Id);
+
+        var atualizado = await w.Db.PurchaseOrders.SingleAsync(o => o.Id == order.Id);
+        Assert.Equal(PurchaseOrderStatus.Invoiced, atualizado.Status);   // faturado, aguardando entrega
+    }
+
+    [Fact]
+    public async Task Entrega_parcial_mantem_o_saldo_pendente_e_a_total_encerra()
+    {
+        var w = await BuildAsync();
+        var (order, _) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null,
+            [new PoItemInput("Detergente neutro", 10, "UN", 3.5m, w.Detergente.Id)], null);
+        var itemId = order!.Items.Single().Id;
+
+        var (parcial, e1) = await w.Pos.RegisterDeliveryAsync(Otavio, order.Id, w.Local.Id,
+            [new PurchaseOrderService.ReceiptLine(itemId, 4)], closeRemaining: false, closeReason: null);
+        Assert.Null(e1);
+        Assert.Equal(PurchaseOrderStatus.PartiallyReceived, parcial!.Status);
+        Assert.Equal(4m, parcial.Items.Single().ReceivedQuantity);
+        Assert.True(parcial.HasPendingDelivery);
+
+        var (excesso, e2) = await w.Pos.RegisterDeliveryAsync(Otavio, order.Id, w.Local.Id,
+            [new PurchaseOrderService.ReceiptLine(itemId, 7)], false, null);
+        Assert.Equal("PO-ERR-055", e2!.Code);          // só faltavam 6
+        Assert.Null(excesso);
+
+        var (total, e3) = await w.Pos.RegisterDeliveryAsync(Otavio, order.Id, w.Local.Id,
+            [new PurchaseOrderService.ReceiptLine(itemId, 6)], false, null);
+        Assert.Null(e3);
+        Assert.Equal(PurchaseOrderStatus.Received, total!.Status);
+        Assert.NotNull(total.DeliveryCompletedAt);
+
+        // o estoque recebeu as duas entregas
+        var saldo = await w.Db.StockBalances.SingleAsync(b => b.CatalogItemId == w.Detergente.Id);
+        Assert.Equal(10m, saldo.TotalQty);
+    }
+
+    [Fact]
+    public async Task Encerrar_o_saldo_nao_entregue_exige_motivo_e_marca_parcial()
+    {
+        var w = await BuildAsync();
+        var (order, _) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null,
+            [new PoItemInput("Detergente neutro", 10, "UN", 3.5m, w.Detergente.Id)], null);
+        var itemId = order!.Items.Single().Id;
+        await w.Pos.RegisterDeliveryAsync(Otavio, order.Id, w.Local.Id,
+            [new PurchaseOrderService.ReceiptLine(itemId, 4)], false, null);
+
+        var (_, semMotivo) = await w.Pos.RegisterDeliveryAsync(Otavio, order.Id, w.Local.Id,
+            [], closeRemaining: true, closeReason: null);
+        Assert.Equal("PO-ERR-057", semMotivo!.Code);
+
+        var (encerrado, error) = await w.Pos.RegisterDeliveryAsync(Otavio, order.Id, w.Local.Id,
+            [], true, "fornecedor não entregará o restante");
+        Assert.Null(error);
+        Assert.Equal(PurchaseOrderStatus.PartiallyReceived, encerrado!.Status);
+        Assert.Equal("fornecedor não entregará o restante", encerrado.CancelReason);
+        Assert.NotNull(encerrado.DeliveryCompletedAt);
+    }
+
+    [Fact]
+    public void Status_do_processo_cobre_as_oito_situacoes_do_fluxo()
+    {
+        var pr = new PurchaseRequisition { Status = RequisitionStatus.Submitted };
+        Assert.Equal("PENDENTE", ProcessStatus.Of(pr, null, null).Key);
+        Assert.Equal("EM_COTACAO", ProcessStatus.Of(pr, new Quotation { Status = QuotationStatus.Open }, null).Key);
+        Assert.Equal("AGUARDANDO_APROVACAO",
+            ProcessStatus.Of(pr, new Quotation { Status = QuotationStatus.AwaitingDirector }, null).Key);
+        Assert.Equal("PEDIDO_APROVADO",
+            ProcessStatus.Of(pr, new Quotation { Status = QuotationStatus.ApprovedForIssue }, null).Key);
+        Assert.Equal("PEDIDO_REJEITADO",
+            ProcessStatus.Of(pr, new Quotation { Status = QuotationStatus.Rejected }, null).Key);
+        Assert.Equal("OC_FATURAMENTO",
+            ProcessStatus.Of(pr, null, new PurchaseOrder { Status = PurchaseOrderStatus.Invoiced }).Key);
+        Assert.Equal("PEDIDO_ENTREGUE",
+            ProcessStatus.Of(pr, null, new PurchaseOrder { Status = PurchaseOrderStatus.Received }).Key);
+        Assert.Equal("CANCELADO_PARCIAL",
+            ProcessStatus.Of(pr, null, new PurchaseOrder { Status = PurchaseOrderStatus.PartiallyReceived }).Key);
+    }
 }

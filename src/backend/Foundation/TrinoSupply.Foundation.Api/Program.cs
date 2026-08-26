@@ -459,8 +459,10 @@ static Actor? BuildActor(ClaimsPrincipal p)
     return actor.CanAccessModule ? actor : null;
 }
 
-static object PrView(PurchaseRequisition r, ApproverHint? approver = null) => new
+static object PrView(PurchaseRequisition r, ApproverHint? approver = null, ProcessStatusView? process = null) => new
 {
+    processStatus = process?.Key, processStatusLabel = process?.Label,
+    processStatusTone = process?.Tone, processStatusHint = process?.Explanation,
     id = r.Id,
     number = r.Number,
     kind = r.Kind,
@@ -511,6 +513,30 @@ static object PrView(PurchaseRequisition r, ApproverHint? approver = null) => ne
     updatedAt = r.UpdatedAt,
 };
 
+/// <summary>
+/// Situação única de cada solicitação (os oito status do fluxo de compras), juntando o que
+/// existe de cotação e de ordem de compra — a tela do solicitante mostra uma etiqueta só.
+/// </summary>
+static async Task<Dictionary<Guid, ProcessStatusView>> ProcessStatusMapAsync(
+    AppDbContext db, IReadOnlyCollection<PurchaseRequisition> prs)
+{
+    var map = new Dictionary<Guid, ProcessStatusView>();
+    if (prs.Count == 0) return map;
+    var ids = prs.Select(r => r.Id).ToList();
+    var quotations = await db.Quotations.Where(q => ids.Contains(q.SourcePrId))
+        .OrderByDescending(q => q.CreatedAt).ToListAsync();
+    var orders = await db.PurchaseOrders.Include(o => o.Items)
+        .Where(o => o.SourcePrId != null && ids.Contains(o.SourcePrId!.Value))
+        .OrderByDescending(o => o.CreatedAt).ToListAsync();
+    foreach (var pr in prs)
+    {
+        var q = quotations.FirstOrDefault(x => x.SourcePrId == pr.Id);
+        var o = orders.FirstOrDefault(x => x.SourcePrId == pr.Id);
+        map[pr.Id] = ProcessStatus.Of(pr, q, o);
+    }
+    return map;
+}
+
 static IResult PrError(HttpContext ctx, UserError e) => Error(ctx, e.Code switch
 {
     "PR-ERR-404" => 404,
@@ -523,7 +549,7 @@ static IResult PrError(HttpContext ctx, UserError e) => Error(ctx, e.Code switch
 var prs = app.MapGroup("/api/v1/purchase-requisitions").RequireAuthorization();
 prs.AddEndpointFilter(RequireModules(AppModules.Solicitacoes, AppModules.Aprovacao));
 
-prs.MapGet("/", async (RequisitionService svc, ClaimsPrincipal p, HttpContext ctx, string? status) =>
+prs.MapGet("/", async (RequisitionService svc, AppDbContext db, ClaimsPrincipal p, HttpContext ctx, string? status) =>
 {
     if (BuildActor(p) is not { } actor) return Error(ctx, 403, "PR-ERR-001", "Seu papel não acessa o módulo de requisições.");
     RequisitionStatus? filter = status?.ToUpperInvariant() switch
@@ -539,14 +565,17 @@ prs.MapGet("/", async (RequisitionService svc, ClaimsPrincipal p, HttpContext ct
     };
     var items = await svc.ListAsync(actor, filter);
     var hints = await svc.ApproverHintsAsync(items);
-    return Ok(new { items = items.Select(r => PrView(r, svc.HintFor(hints, r))) }, ctx);
+    var process = await ProcessStatusMapAsync(db, items);
+    return Ok(new { items = items.Select(r => PrView(r, svc.HintFor(hints, r), process.GetValueOrDefault(r.Id))) }, ctx);
 });
 
-prs.MapGet("/{id:guid}", async (Guid id, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
+prs.MapGet("/{id:guid}", async (Guid id, RequisitionService svc, AppDbContext db, ClaimsPrincipal p, HttpContext ctx) =>
 {
     if (BuildActor(p) is not { } actor) return Error(ctx, 403, "PR-ERR-001", "Seu papel não acessa o módulo de requisições.");
     var pr = await svc.GetAsync(actor, id);
-    return pr is null ? Error(ctx, 404, "PR-ERR-404", "Requisição não encontrada.") : Ok(PrView(pr), ctx);
+    if (pr is null) return Error(ctx, 404, "PR-ERR-404", "Requisição não encontrada.");
+    var process = await ProcessStatusMapAsync(db, [pr]);
+    return Ok(PrView(pr, null, process.GetValueOrDefault(pr.Id)), ctx);
 });
 
 prs.MapPost("/", async (CreateRequisitionRequest body, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
@@ -1057,6 +1086,8 @@ static object PoView(PurchaseOrder o) => new
     status = o.Status switch
     {
         PurchaseOrderStatus.Issued => "EMITIDO",
+        PurchaseOrderStatus.Invoiced => "FATURADO",
+        PurchaseOrderStatus.PartiallyReceived => "PARCIAL",
         PurchaseOrderStatus.Received => "RECEBIDO",
         _ => "CANCELADO",
     },
@@ -1066,9 +1097,20 @@ static object PoView(PurchaseOrder o) => new
     notes = o.Notes, totalValue = o.TotalValue,
     issuedByLabel = o.IssuedByLabel, receivedByLabel = o.ReceivedByLabel, receivedAt = o.ReceivedAt,
     cancelReason = o.CancelReason, createdAt = o.CreatedAt,
+    erpNumber = o.ErpNumber, erpIssuedOn = o.ErpIssuedOn,
+    erpDocumentId = o.ErpDocumentId, erpFileName = o.ErpFileName,
+    deliveryCompletedAt = o.DeliveryCompletedAt,
+    pendingDelivery = o.HasPendingDelivery,
+    invoices = o.Invoices.OrderBy(i => i.IssuedOn).Select(i => new
+    {
+        id = i.Id, number = i.Number, issuedOn = i.IssuedOn, value = i.Value,
+        documentId = i.DocumentId, fileName = i.FileName,
+        createdByLabel = i.CreatedByLabel, createdAt = i.CreatedAt,
+    }),
     items = o.Items.Select(i => new
     {
-        description = i.Description, unitOfMeasure = i.UnitOfMeasure, quantity = i.Quantity,
+        itemId = i.Id, description = i.Description, unitOfMeasure = i.UnitOfMeasure, quantity = i.Quantity,
+        receivedQuantity = i.ReceivedQuantity, pendingQuantity = i.Quantity - i.ReceivedQuantity,
         unitPrice = i.UnitPrice, catalogCode = i.CatalogCode, catalogItemId = i.CatalogItemId,
     }),
 };
@@ -1133,6 +1175,51 @@ pos.MapPost("/{id:guid}/receive", async (Guid id, ReceiveOrderRequest body, Purc
         return Error(ctx, 403, "PO-ERR-900", "Seu papel não registra recebimentos de pedido.");
     var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
     var (order, error) = await svc.ReceiveAsync(actor, id, body.LocationId);
+    return error is not null
+        ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, _ => 400 }, error.Code, error.Message)
+        : Ok(PoView(order!), ctx);
+});
+
+// OC feita no ERP: número, data e anexo — o sistema amarra a solicitação ao documento oficial
+pos.MapPost("/{id:guid}/erp-order", async (Guid id, ErpOrderRequest body, PurchaseOrderService svc,
+    ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!PurchaseOrderService.CanManage(role))
+        return Error(ctx, 403, "PO-ERR-900", "Seu papel não registra a OC do ERP.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var (order, error) = await svc.RegisterErpOrderAsync(actor, id, body.ErpNumber, body.IssuedOn);
+    return error is not null
+        ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, _ => 400 }, error.Code, error.Message)
+        : Ok(PoView(order!), ctx);
+});
+
+// Faturamento: uma OC pode ter mais de uma nota fiscal
+pos.MapPost("/{id:guid}/invoices", async (Guid id, InvoiceRequest body, PurchaseOrderService svc,
+    ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!PurchaseOrderService.CanManage(role))
+        return Error(ctx, 403, "PO-ERR-900", "Seu papel não lança faturamento.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var (invoice, error) = await svc.AddInvoiceAsync(actor, id, body.Number, body.IssuedOn, body.Value);
+    return error is not null
+        ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, _ => 400 }, error.Code, error.Message)
+        : Results.Json(new { data = new { id = invoice!.Id, number = invoice.Number, issuedOn = invoice.IssuedOn },
+                              correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+// Confirmação de entrega: total, parcial, ou encerrando o saldo que não vai chegar
+pos.MapPost("/{id:guid}/deliveries", async (Guid id, DeliveryRequest body, PurchaseOrderService svc,
+    ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!PurchaseOrderService.CanManage(role) && !CanOperateStock(p))
+        return Error(ctx, 403, "PO-ERR-900", "Seu usuário não confirma entregas.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var lines = (body.Items ?? []).Select(i => new PurchaseOrderService.ReceiptLine(i.ItemId, i.Quantity)).ToList();
+    var (order, error) = await svc.RegisterDeliveryAsync(
+        actor, id, body.LocationId, lines, body.CloseRemaining == true, body.CloseReason);
     return error is not null
         ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, _ => 400 }, error.Code, error.Message)
         : Ok(PoView(order!), ctx);
@@ -1692,6 +1779,39 @@ app.MapPost("/api/v1/quotations/{id:guid}/proposals/{proposalId:guid}/attachment
     return Ok(new { documentId = doc.Id, fileName = doc.FileName }, ctx);
 }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
 
+// ==== Anexos de OC do ERP e de nota fiscal ==================================
+app.MapPost("/api/v1/purchase-orders/{id:guid}/erp-order/attachment",
+    async (Guid id, HttpRequest request, AppDbContext db, TimeProvider clock, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!PurchaseOrderService.CanManage(RoleOf(p)))
+        return Error(ctx, 403, "PO-ERR-900", "Seu papel não anexa a OC do ERP.");
+    var order = await db.PurchaseOrders.SingleOrDefaultAsync(o => o.Id == id);
+    if (order is null) return Error(ctx, 404, "PO-ERR-404", "Pedido não encontrado.");
+    var (doc, error) = await StoreUploadAsync(request, db, clock, p, "PURCHASE_ORDER", order.Id);
+    if (error is not null) return Error(ctx, 400, error.Code, error.Message);
+    order.ErpDocumentId = doc!.Id;
+    order.ErpFileName = doc.FileName;
+    order.UpdatedAt = clock.GetUtcNow();
+    await db.SaveChangesAsync();
+    return Ok(new { documentId = doc.Id, fileName = doc.FileName }, ctx);
+}).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+
+app.MapPost("/api/v1/purchase-orders/{id:guid}/invoices/{invoiceId:guid}/attachment",
+    async (Guid id, Guid invoiceId, HttpRequest request, AppDbContext db, TimeProvider clock,
+           ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!PurchaseOrderService.CanManage(RoleOf(p)))
+        return Error(ctx, 403, "PO-ERR-900", "Seu papel não anexa notas fiscais.");
+    var invoice = await db.PurchaseOrderInvoices.SingleOrDefaultAsync(i => i.Id == invoiceId && i.OrderId == id);
+    if (invoice is null) return Error(ctx, 404, "PO-ERR-404", "Nota fiscal não encontrada neste pedido.");
+    var (doc, error) = await StoreUploadAsync(request, db, clock, p, "INVOICE", invoice.Id);
+    if (error is not null) return Error(ctx, 400, error.Code, error.Message);
+    invoice.DocumentId = doc!.Id;
+    invoice.FileName = doc.FileName;
+    await db.SaveChangesAsync();
+    return Ok(new { documentId = doc.Id, fileName = doc.FileName }, ctx);
+}).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+
 // ==== Anexos da solicitação de compra (PDF, imagem, planilha) ================
 app.MapPost("/api/v1/purchase-requisitions/{id:guid}/attachments",
     async (Guid id, HttpRequest request, RequisitionService svc, AppDbContext db,
@@ -1753,6 +1873,31 @@ app.MapDelete("/api/v1/purchase-requisitions/{id:guid}/attachments/{attachmentId
     await db.SaveChangesAsync();
     return Ok(new { removed = true }, ctx);
 }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+
+/// <summary>Guarda um upload no cofre de documentos, com as mesmas regras de tamanho e formato.</summary>
+static async Task<(StoredDocument? doc, UserError? error)> StoreUploadAsync(
+    HttpRequest request, AppDbContext db, TimeProvider clock, ClaimsPrincipal p,
+    string entityType, Guid entityId)
+{
+    if (!request.HasFormContentType) return (null, new("DOC-ERR-001", "Envie o arquivo como multipart/form-data."));
+    var form = await request.ReadFormAsync();
+    var file = form.Files.FirstOrDefault();
+    if (file is null || file.Length == 0) return (null, new("DOC-ERR-001", "Nenhum arquivo enviado."));
+    if (file.Length > StoredDocument.MaxSizeBytes) return (null, new("DOC-ERR-002", "Arquivo acima de 10 MB."));
+    if (!StoredDocument.AllowedContentTypes.Contains(file.ContentType))
+        return (null, new("DOC-ERR-003", "Formato não permitido: envie PDF, planilha (XLSX/XLS/CSV), imagem ou DOCX."));
+
+    using var ms = new MemoryStream();
+    await file.CopyToAsync(ms);
+    var doc = new StoredDocument
+    {
+        FileName = Path.GetFileName(file.FileName), ContentType = file.ContentType, SizeBytes = file.Length,
+        Content = ms.ToArray(), EntityType = entityType, EntityId = entityId,
+        UploadedByLabel = p.FindFirstValue("name") ?? "Suprimentos", UploadedAt = clock.GetUtcNow(),
+    };
+    db.StoredDocuments.Add(doc);
+    return (doc, null);
+}
 
 // ==== Documentos (download autorizado por papel/vínculo) =====================
 app.MapGet("/api/v1/documents/{id:guid}", async (Guid id, AppDbContext db, ClaimsPrincipal p, HttpContext ctx) =>
@@ -1927,6 +2072,10 @@ public record UpdateCatalogItemRequest(string? Description, string? Family, stri
     decimal? ReferencePrice, bool? Active, bool? StockControlled, decimal? MinimumQty, bool? ClearMinimum,
     List<ItemSupplierRequest>? Suppliers, bool? Purchasable, string? ProductType, string? CaNumber);
 public record CreateLocationRequest(string Code, string Name);
+public record ErpOrderRequest(string? ErpNumber, DateOnly? IssuedOn);
+public record InvoiceRequest(string? Number, DateOnly? IssuedOn, decimal? Value);
+public record DeliveryLineRequest(Guid ItemId, decimal Quantity);
+public record DeliveryRequest(Guid LocationId, List<DeliveryLineRequest>? Items, bool? CloseRemaining, string? CloseReason);
 public record EntryRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity, string OriginReference, string? Origin);
 public record IssueRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity, string OriginReference);
 public record MaterialItemRequest(Guid CatalogItemId, decimal Quantity);

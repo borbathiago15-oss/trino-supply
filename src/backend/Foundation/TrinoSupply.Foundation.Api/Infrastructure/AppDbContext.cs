@@ -31,6 +31,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ProcessEvent> ProcessEvents => Set<ProcessEvent>();
     public DbSet<StoredDocument> StoredDocuments => Set<StoredDocument>();
     public DbSet<RequisitionAttachment> RequisitionAttachments => Set<RequisitionAttachment>();
+    public DbSet<PurchaseOrderInvoice> PurchaseOrderInvoices => Set<PurchaseOrderInvoice>();
     public DbSet<CompanyProfile> CompanyProfiles => Set<CompanyProfile>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -368,6 +369,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(o => o.ReceivedByLabel).HasColumnName("received_by_label").HasMaxLength(200);
             e.Property(o => o.ReceivedAt).HasColumnName("received_at");
             e.Property(o => o.CancelReason).HasColumnName("cancel_reason").HasMaxLength(500);
+            e.Property(o => o.ErpNumber).HasColumnName("erp_number").HasMaxLength(60);
+            e.Property(o => o.ErpIssuedOn).HasColumnName("erp_issued_on");
+            e.Property(o => o.ErpDocumentId).HasColumnName("erp_document_id");
+            e.Property(o => o.ErpFileName).HasColumnName("erp_file_name").HasMaxLength(260);
+            e.Property(o => o.DeliveryCompletedAt).HasColumnName("delivery_completed_at");
+            e.Ignore(o => o.HasPendingDelivery);
             e.Property(o => o.CreatedAt).HasColumnName("created_at");
             e.Property(o => o.UpdatedAt).HasColumnName("updated_at");
             e.Property(o => o.Version).HasColumnName("version").IsConcurrencyToken();
@@ -377,6 +384,25 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasOne<Supplier>().WithMany().HasForeignKey(o => o.SupplierId);
             e.HasMany(o => o.Items).WithOne().HasForeignKey(i => i.OrderId)
                 .OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(o => o.Invoices).WithOne().HasForeignKey(i => i.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PurchaseOrderInvoice>(e =>
+        {
+            e.ToTable("purchase_order_invoice", "procurement");
+            e.HasKey(i => i.Id);
+            e.Property(i => i.Id).HasColumnName("id");
+            e.Property(i => i.OrderId).HasColumnName("order_id");
+            e.Property(i => i.Number).HasColumnName("number").HasMaxLength(60).IsRequired();
+            e.Property(i => i.IssuedOn).HasColumnName("issued_on");
+            e.Property(i => i.Value).HasColumnName("value").HasPrecision(18, 4);
+            e.Property(i => i.DocumentId).HasColumnName("document_id");
+            e.Property(i => i.FileName).HasColumnName("file_name").HasMaxLength(260);
+            e.Property(i => i.CreatedBy).HasColumnName("created_by");
+            e.Property(i => i.CreatedByLabel).HasColumnName("created_by_label").HasMaxLength(200);
+            e.Property(i => i.CreatedAt).HasColumnName("created_at");
+            e.HasIndex(i => i.OrderId);
         });
 
         modelBuilder.Entity<PurchaseOrderItem>(e =>
@@ -391,6 +417,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.UnitPrice).HasColumnName("unit_price").HasPrecision(18, 4);
             e.Property(i => i.CatalogItemId).HasColumnName("catalog_item_id");
             e.Property(i => i.CatalogCode).HasColumnName("catalog_code").HasMaxLength(50);
+            e.Property(i => i.ReceivedQuantity).HasColumnName("received_quantity").HasPrecision(18, 4);
             e.Property(i => i.CreatedAt).HasColumnName("created_at");
             e.HasIndex(i => i.OrderId);
         });

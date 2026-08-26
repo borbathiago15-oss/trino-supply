@@ -22,7 +22,7 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
     public static bool CanView(string role) => CanManage(role) || role == Roles.Auditor;
 
     public Task<List<PurchaseOrder>> ListAsync(CancellationToken ct = default) =>
-        db.PurchaseOrders.Include(o => o.Items)
+        db.PurchaseOrders.Include(o => o.Items).Include(o => o.Invoices)
             .OrderByDescending(o => o.CreatedAt).Take(100).ToListAsync(ct);
 
     /// <summary>Demandas do comprador: requisições aprovadas sem pedido + itens MR em rota de compra.</summary>
@@ -110,6 +110,148 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
     }
 
     /// <summary>Recebimento: entradas de estoque para itens de catálogo (PO-BR-005/006).</summary>
+    /// <summary>
+    /// Registra a OC feita no ERP (número, data e anexo ficam no endpoint de upload).
+    /// A data é a base do lead time "aprovação → OC" (revisão de telas 2026-08-26).
+    /// </summary>
+    public async Task<(PurchaseOrder? order, UserError? error)> RegisterErpOrderAsync(
+        Actor actor, Guid id, string? erpNumber, DateOnly? issuedOn, CancellationToken ct = default)
+    {
+        var order = await LoadAsync(id, ct);
+        if (order is null) return (null, new("PO-ERR-404", "Pedido não encontrado."));
+        if (order.Status == PurchaseOrderStatus.Cancelled)
+            return (null, new("PO-ERR-040", "Pedido cancelado não recebe OC."));
+        if (string.IsNullOrWhiteSpace(erpNumber))
+            return (null, new("PO-ERR-050", "Informe o número da OC gerada no ERP."));
+
+        order.ErpNumber = erpNumber.Trim();
+        order.ErpIssuedOn = issuedOn ?? DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        Touch(order);
+        await db.SaveChangesAsync(ct);
+        return (order, null);
+    }
+
+    /// <summary>Nota fiscal do faturamento: uma OC pode receber mais de uma.</summary>
+    public async Task<(PurchaseOrderInvoice? invoice, UserError? error)> AddInvoiceAsync(
+        Actor actor, Guid id, string? number, DateOnly? issuedOn, decimal? value, CancellationToken ct = default)
+    {
+        var order = await LoadAsync(id, ct);
+        if (order is null) return (null, new("PO-ERR-404", "Pedido não encontrado."));
+        if (order.Status == PurchaseOrderStatus.Cancelled)
+            return (null, new("PO-ERR-040", "Pedido cancelado não recebe faturamento."));
+        if (string.IsNullOrWhiteSpace(number))
+            return (null, new("PO-ERR-051", "Informe o número da nota fiscal."));
+        if (order.ErpNumber is null)
+            return (null, new("PO-ERR-052", "Registre primeiro a OC do ERP para depois lançar a nota fiscal."));
+        if (value is < 0) return (null, new("PO-ERR-053", "O valor da nota não pode ser negativo."));
+
+        var now = clock.GetUtcNow();
+        var invoice = new PurchaseOrderInvoice
+        {
+            OrderId = order.Id, Number = number.Trim(),
+            IssuedOn = issuedOn ?? DateOnly.FromDateTime(now.UtcDateTime),
+            Value = value, CreatedBy = actor.Id, CreatedByLabel = actor.Label, CreatedAt = now,
+        };
+        db.PurchaseOrderInvoices.Add(invoice);
+        if (order.Status == PurchaseOrderStatus.Issued) order.Status = PurchaseOrderStatus.Invoiced;
+        Touch(order);
+        await db.SaveChangesAsync(ct);
+        return (invoice, null);
+    }
+
+    public record ReceiptLine(Guid ItemId, decimal Quantity);
+
+    /// <summary>
+    /// Confirmação de entrega em três desfechos (revisão de telas 2026-08-26): total, parcial
+    /// (o que faltou continua pendente) ou cancelamento do saldo que não vai chegar.
+    /// </summary>
+    public async Task<(PurchaseOrder? order, UserError? error)> RegisterDeliveryAsync(
+        Actor actor, Guid id, Guid locationId, IReadOnlyList<ReceiptLine> lines,
+        bool closeRemaining, string? closeReason, CancellationToken ct = default)
+    {
+        var order = await LoadAsync(id, ct);
+        if (order is null) return (null, new("PO-ERR-404", "Pedido não encontrado."));
+        if (order.Status is PurchaseOrderStatus.Cancelled or PurchaseOrderStatus.Received)
+            return (null, new("PO-ERR-040", "Este pedido já foi encerrado."));
+        // saldo já encerrado: o que não chegou foi cancelado e o pedido não recebe mais entregas
+        if (order.DeliveryCompletedAt is not null)
+            return (null, new("PO-ERR-040", "A entrega deste pedido já foi encerrada."));
+
+        var received = new List<(PurchaseOrderItem item, decimal qty)>();
+        foreach (var line in lines.Where(l => l.Quantity > 0))
+        {
+            var item = order.Items.SingleOrDefault(i => i.Id == line.ItemId);
+            if (item is null) return (null, new("PO-ERR-054", "Item informado não pertence a este pedido."));
+            var pending = item.Quantity - item.ReceivedQuantity;
+            if (line.Quantity > pending)
+                return (null, new("PO-ERR-055",
+                    $"{item.Description}: chegaram {line.Quantity}, mas faltavam apenas {pending}."));
+            received.Add((item, line.Quantity));
+        }
+        if (received.Count == 0 && !closeRemaining)
+            return (null, new("PO-ERR-056", "Informe as quantidades que chegaram ou encerre o saldo pendente."));
+
+        var comCatalogo = received.Where(r => r.item.CatalogItemId is not null).ToList();
+        if (comCatalogo.Count > 0)
+        {
+            if (!await db.StorageLocations.AnyAsync(l => l.Id == locationId && l.Active, ct))
+                return (null, new("IV-ERR-060", "Local inválido ou inativo."));
+            var ids = comCatalogo.Select(r => r.item.CatalogItemId!.Value).Distinct().ToList();
+            var inactive = await db.CatalogItems
+                .Where(c => ids.Contains(c.Id) && !c.Active).Select(c => c.Code).ToListAsync(ct);
+            if (inactive.Count > 0)
+                return (null, new("IV-ERR-010", $"Itens inativos no catálogo: {string.Join(", ", inactive)} — regularize antes de receber."));
+
+            foreach (var (item, qty) in comCatalogo)
+            {
+                var (_, entryError) = await inventory.RegisterEntryAsync(
+                    actor, item.CatalogItemId!.Value, locationId, qty,
+                    MovementOrigin.Receiving, order.Number, ct);
+                if (entryError is not null) return (null, entryError);
+            }
+        }
+
+        var now = clock.GetUtcNow();
+        foreach (var (item, qty) in received) item.ReceivedQuantity += qty;
+
+        if (closeRemaining && order.HasPendingDelivery)
+        {
+            if (string.IsNullOrWhiteSpace(closeReason))
+                return (null, new("PO-ERR-057", "Informe o motivo do cancelamento do saldo não entregue."));
+            order.CancelReason = closeReason.Trim();
+            order.Status = order.Items.Any(i => i.ReceivedQuantity > 0)
+                ? PurchaseOrderStatus.PartiallyReceived      // parte chegou, o resto foi cancelado
+                : PurchaseOrderStatus.Cancelled;             // nada chegou
+            order.DeliveryCompletedAt = now;
+        }
+        else if (!order.HasPendingDelivery)
+        {
+            order.Status = PurchaseOrderStatus.Received;
+            order.DeliveryCompletedAt = now;
+        }
+        else
+        {
+            order.Status = PurchaseOrderStatus.PartiallyReceived;
+        }
+
+        order.ReceivedBy = actor.Id;
+        order.ReceivedByLabel = actor.Label;
+        order.ReceivedAt = now;
+        Touch(order);
+        await db.SaveChangesAsync(ct);
+        return (order, null);
+    }
+
+    private Task<PurchaseOrder?> LoadAsync(Guid id, CancellationToken ct) =>
+        db.PurchaseOrders.Include(o => o.Items).Include(o => o.Invoices)
+            .SingleOrDefaultAsync(o => o.Id == id, ct);
+
+    private void Touch(PurchaseOrder order)
+    {
+        order.UpdatedAt = clock.GetUtcNow();
+        order.Version += 1;
+    }
+
     public async Task<(PurchaseOrder? order, UserError? error)> ReceiveAsync(
         Actor actor, Guid id, Guid locationId, CancellationToken ct = default)
     {
@@ -153,8 +295,8 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
     {
         var order = await db.PurchaseOrders.Include(o => o.Items).SingleOrDefaultAsync(o => o.Id == id, ct);
         if (order is null) return (null, new("PO-ERR-404", "Pedido não encontrado."));
-        if (order.Status != PurchaseOrderStatus.Issued)
-            return (null, new("PO-ERR-040", "Somente pedidos emitidos podem ser cancelados."));
+        if (order.Status is PurchaseOrderStatus.Cancelled or PurchaseOrderStatus.Received)
+            return (null, new("PO-ERR-040", "Este pedido já foi encerrado."));
         if (string.IsNullOrWhiteSpace(reason))
             return (null, new("PO-ERR-041", "Informe o motivo do cancelamento."));
 

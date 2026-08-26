@@ -207,6 +207,11 @@
     .badge.dev { background: var(--warn-bg); color: var(--warn); }
     .badge.off { background: #fee2e2; color: var(--danger); }
     .badge.on { background: #dcfce7; color: var(--ok); }
+    .badge.warn { background: #fef3c7; color: #92400e; }
+    .badge.teal { background: #ccfbf1; color: #0f766e; }
+    .badge.info { background: #dbeafe; color: #1e40af; }
+    .badge.purple { background: #ede9fe; color: #6d28d9; }
+    .badge.orange { background: #ffedd5; color: #c2410c; }
     .tablewrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
     th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); padding: 8px 8px; border-bottom: 1px solid var(--border); }
@@ -705,7 +710,55 @@
       <section class="view" id="view-buy-orders">
         <div class="panel">
           <h2>Pedidos de Compra</h2>
+          <p class="hello">A OC é emitida no ERP: aqui você amarra o pedido ao número da OC, lança as notas fiscais e confirma a entrega.</p>
           <div id="buy-orders-list" class="tablewrap"></div>
+        </div>
+
+        <div class="panel" id="po-panel" hidden>
+          <div class="topbar" style="margin-bottom:8px">
+            <h2 style="margin:0" id="po-panel-title">Pedido</h2>
+            <button type="button" class="secondary" id="po-close">Fechar</button>
+          </div>
+
+          <h2>1 · Ordem de Compra (ERP)</h2>
+          <p class="hello" id="po-erp-current"></p>
+          <div class="grid2">
+            <div><label for="po-erp-number">Número da OC</label>
+              <input id="po-erp-number" placeholder="ex.: 663" /></div>
+            <div class="grid2">
+              <div><label for="po-erp-date">Data da OC</label><input id="po-erp-date" type="date" /></div>
+              <div><label for="po-erp-file">Anexo</label>
+                <input id="po-erp-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.docx" /></div>
+            </div>
+          </div>
+          <button type="button" id="po-erp-save" style="margin-top:10px">Registrar OC</button>
+
+          <h2>2 · Faturamento</h2>
+          <div id="po-invoices" class="tablewrap"></div>
+          <div class="grid2">
+            <div><label for="po-nf-number">Nota fiscal</label><input id="po-nf-number" placeholder="número da NF" /></div>
+            <div class="grid2">
+              <div><label for="po-nf-date">Data</label><input id="po-nf-date" type="date" /></div>
+              <div><label for="po-nf-value">Valor (R$)</label>
+                <input id="po-nf-value" type="number" min="0" step="0.01" placeholder="opcional" /></div>
+            </div>
+          </div>
+          <label for="po-nf-file">Anexo da nota <span class="sub">(opcional)</span></label>
+          <input id="po-nf-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.docx" />
+          <button type="button" id="po-nf-add" style="margin-top:10px">Lançar nota fiscal</button>
+
+          <h2>3 · Confirmação de entrega</h2>
+          <p class="hello">Informe o que chegou. O que faltar continua pendente; se não for mais chegar, encerre o saldo com o motivo.</p>
+          <div id="po-delivery-items" class="tablewrap"></div>
+          <div class="grid2">
+            <div><label for="po-loc">Local de estoque</label><select id="po-loc"></select></div>
+            <div><label for="po-close-reason">Motivo do cancelamento do saldo <span class="sub">(só ao encerrar)</span></label>
+              <input id="po-close-reason" placeholder="ex.: fornecedor não entregará o restante" /></div>
+          </div>
+          <div class="row-actions" style="margin-top:10px">
+            <button type="button" id="po-deliver">Confirmar entrega</button>
+            <button type="button" class="danger" id="po-close-remaining">Encerrar saldo não entregue</button>
+          </div>
         </div>
       </section>
 
@@ -1501,7 +1554,10 @@
     });
 
     function prRow(r, forApproval) {
-      const [label, cls] = STATUS_PR[r.status] || [r.status, ''];
+      // situação única do fluxo de compras (Pendente → Em Cotação → … → Entregue)
+      const [label, cls] = r.processStatusLabel
+        ? [r.processStatusLabel, r.processStatusTone || '']
+        : (STATUS_PR[r.status] || [r.status, '']);
       const reason = r.decisionReason ? `<div class="sub">Motivo: ${escapeHtml(r.decisionReason)} (${escapeHtml(r.decidedByLabel || '')})</div>` : '';
       // quem precisa aprovar (ou o que está travando a alçada)
       let flow = '';
@@ -1929,7 +1985,11 @@
 
     // ============ COMPRAS ============
     let buySuppliers = [];
-    const STATUS_PO = { EMITIDO: ['Emitido', ''], RECEBIDO: ['Recebido', 'on'], CANCELADO: ['Cancelado', 'off'] };
+    const STATUS_PO = {
+      EMITIDO: ['OC/Faturamento', 'info'], FATURADO: ['Faturado', 'info'],
+      PARCIAL: ['Entregue parcial', 'orange'], RECEBIDO: ['Pedido entregue', 'purple'],
+      CANCELADO: ['Cancelado', 'off'],
+    };
     const supOpts = () => buySuppliers.map(s => `<option value="${s.id}">${escapeHtml(s.tradeName || s.legalName)}</option>`).join('');
     async function loadSuppliers() { buySuppliers = (await api('/api/v1/suppliers/')).items; }
 
@@ -1969,53 +2029,158 @@
       } catch (err) { toast(err.message, 'error'); }
     });
 
+    let poCache = {}, poOpenId = null;
+
     LOADERS['buy-orders'] = async () => {
       try {
         try { await loadLocations(); } catch {}
         const { items } = await api('/api/v1/purchase-orders/');
+        poCache = Object.fromEntries(items.map(o => [o.id, o]));
         $('buy-orders-list').innerHTML = items.length
-          ? '<table><thead><tr><th>Número</th><th>Fornecedor</th><th>Itens</th><th>Total</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+          ? '<table><thead><tr><th>Pedido</th><th>OC (ERP)</th><th>Fornecedor</th><th>Itens</th><th>Total</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
             items.map(o => {
               const [label, cls] = STATUS_PO[o.status] || [o.status, ''];
-              const acts = (o.status === 'EMITIDO' && canBuy()
-                ? `<select class="buy-rec-loc">${whLocations.length ? whLocations.map(l => `<option value="${l.id}">${escapeHtml(l.code)}</option>`).join('') : '<option value="">(sem local)</option>'}</select>
-                   <button data-act="receive">Receber</button>
-                   <button class="danger" data-act="cancel-po">Cancelar</button>` : '')
-                + '<button class="secondary" data-act="pdf-po">PDF</button>';
-              const src = o.sourcePrNumber ? `<div class="sub">de ${escapeHtml(o.sourcePrNumber)}</div>` : '';
-              const rec = o.receivedByLabel ? `<div class="sub">Recebido por ${escapeHtml(o.receivedByLabel)}</div>` : '';
+              const entregue = o.items.reduce((a, i) => a + (i.receivedQuantity || 0), 0);
+              const total = o.items.reduce((a, i) => a + i.quantity, 0);
+              const oc = o.erpNumber
+                ? `<strong>${escapeHtml(o.erpNumber)}</strong><div class="sub">${o.erpIssuedOn || ''}` +
+                  (o.erpFileName ? ` · <a href="#" data-doc="${o.erpDocumentId}" data-act="download-doc">📎</a>` : '') + '</div>'
+                : '<span class="sub">a registrar</span>';
+              const nfs = (o.invoices || []).length
+                ? `<div class="sub">NF: ${o.invoices.map(i => escapeHtml(i.number)).join(', ')}</div>` : '';
               return `<tr data-id="${o.id}">
-                <td>${escapeHtml(o.number)}${src}</td>
-                <td>${escapeHtml(o.supplierName)}${rec}</td>
-                <td>${o.items.map(i => `${i.quantity}× ${i.catalogCode ? '[' + escapeHtml(i.catalogCode) + '] ' : ''}${escapeHtml(i.description)}`).join(' · ')}</td>
+                <td>${escapeHtml(o.number)}${o.sourcePrNumber ? `<div class="sub">de ${escapeHtml(o.sourcePrNumber)}</div>` : ''}</td>
+                <td>${oc}</td>
+                <td>${escapeHtml(o.supplierName)}${nfs}</td>
+                <td>${o.items.length} item(ns)<div class="sub">recebido ${fmtInt(entregue)} de ${fmtInt(total)}</div></td>
                 <td>${money(o.totalValue)}</td>
                 <td><span class="badge ${cls}">${label}</span>${o.cancelReason ? `<div class="sub">${escapeHtml(o.cancelReason)}</div>` : ''}</td>
-                <td class="row-actions">${acts}</td>
+                <td class="row-actions">
+                  <button data-act="open-po">Abrir</button>
+                  <button class="secondary" data-act="pdf-po">PDF</button>
+                </td>
               </tr>`;
             }).join('') + '</tbody></table>'
-          : '<p class="hello">Nenhum pedido de compra emitido ainda.</p>';
+          : '<p class="hello">Nenhum pedido de compra ainda. Eles nascem do processo de cotação aprovado.</p>';
+        if (poOpenId && poCache[poOpenId]) renderPoPanel(poCache[poOpenId]);
       } catch (err) { $('buy-orders-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
+
+    /// painel de gestão do pedido: OC do ERP, notas fiscais e confirmação de entrega
+    function renderPoPanel(o) {
+      poOpenId = o.id;
+      $('po-panel').hidden = false;
+      $('po-panel-title').textContent = `Pedido ${o.number} — ${o.supplierName}`;
+      $('po-erp-current').innerHTML = o.erpNumber
+        ? `OC <strong>${escapeHtml(o.erpNumber)}</strong> de ${o.erpIssuedOn || '—'}` +
+          (o.erpFileName ? ` · <a href="#" data-doc="${o.erpDocumentId}" data-act="download-doc">${escapeHtml(o.erpFileName)}</a>` : '')
+        : 'Nenhuma OC registrada ainda — informe o número gerado no ERP.';
+      $('po-erp-number').value = o.erpNumber || '';
+      $('po-erp-date').value = o.erpIssuedOn || '';
+
+      $('po-invoices').innerHTML = (o.invoices || []).length
+        ? '<table><thead><tr><th>NF</th><th>Data</th><th>Valor</th><th>Anexo</th><th>Lançada por</th></tr></thead><tbody>' +
+          o.invoices.map(i => `<tr>
+            <td>${escapeHtml(i.number)}</td><td>${i.issuedOn || '—'}</td>
+            <td>${i.value != null ? money(i.value) : '—'}</td>
+            <td>${i.fileName ? `<a href="#" data-doc="${i.documentId}" data-act="download-doc">${escapeHtml(i.fileName)}</a>` : '—'}</td>
+            <td class="sub">${escapeHtml(i.createdByLabel || '')}</td></tr>`).join('') + '</tbody></table>'
+        : '<p class="hello">Nenhuma nota fiscal lançada. Uma OC pode ter mais de uma.</p>';
+
+      // encerrado = entrega concluída ou saldo cancelado; aí o pedido não recebe mais nada
+      const encerrado = !!o.deliveryCompletedAt || ['RECEBIDO', 'CANCELADO'].includes(o.status);
+      $('po-delivery-items').innerHTML = '<table><thead><tr><th>Item</th><th>Pedido</th><th>Recebido</th><th>Falta</th><th>Chegou agora</th></tr></thead><tbody>' +
+        o.items.map(i => `<tr data-item="${i.itemId}">
+          <td>${i.catalogCode ? '[' + escapeHtml(i.catalogCode) + '] ' : ''}${escapeHtml(i.description)}</td>
+          <td>${fmtInt(i.quantity)} ${escapeHtml(i.unitOfMeasure)}</td>
+          <td>${fmtInt(i.receivedQuantity)}</td>
+          <td>${fmtInt(i.pendingQuantity)}</td>
+          <td><input type="number" class="po-qty" min="0" step="0.01" max="${i.pendingQuantity}"
+                     placeholder="0" style="width:90px" ${i.pendingQuantity > 0 && !encerrado ? '' : 'disabled'} /></td>
+        </tr>`).join('') + '</tbody></table>';
+      $('po-loc').innerHTML = whLocations.length
+        ? whLocations.map(l => `<option value="${l.id}">${escapeHtml(l.code)} — ${escapeHtml(l.name)}</option>`).join('')
+        : '<option value="">(nenhum local cadastrado)</option>';
+      $('po-deliver').disabled = encerrado;
+      $('po-close-remaining').disabled = encerrado;
+      $('po-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    $('po-close').addEventListener('click', () => { $('po-panel').hidden = true; poOpenId = null; });
+
+    $('po-erp-save').addEventListener('click', async () => {
+      if (!poOpenId) return;
+      try {
+        await api(`/api/v1/purchase-orders/${poOpenId}/erp-order`, { method: 'POST', body: {
+          erpNumber: $('po-erp-number').value, issuedOn: $('po-erp-date').value || null,
+        }});
+        const file = $('po-erp-file').files[0];
+        if (file) await sendFile(`/api/v1/purchase-orders/${poOpenId}/erp-order/attachment`, file);
+        $('po-erp-file').value = '';
+        toast('OC registrada.', 'ok');
+        LOADERS['buy-orders']();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    $('po-nf-add').addEventListener('click', async () => {
+      if (!poOpenId) return;
+      try {
+        const nf = await api(`/api/v1/purchase-orders/${poOpenId}/invoices`, { method: 'POST', body: {
+          number: $('po-nf-number').value, issuedOn: $('po-nf-date').value || null,
+          value: $('po-nf-value').value ? parseFloat($('po-nf-value').value) : null,
+        }});
+        const file = $('po-nf-file').files[0];
+        if (file) await sendFile(`/api/v1/purchase-orders/${poOpenId}/invoices/${nf.id}/attachment`, file);
+        $('po-nf-number').value = ''; $('po-nf-value').value = ''; $('po-nf-file').value = '';
+        toast('Nota fiscal lançada.', 'ok');
+        LOADERS['buy-orders']();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
+    async function enviarEntrega(closeRemaining) {
+      if (!poOpenId) return;
+      const items = [...$('po-delivery-items').querySelectorAll('tr[data-item]')]
+        .map(tr => ({ itemId: tr.dataset.item, quantity: parseFloat(tr.querySelector('.po-qty').value) || 0 }))
+        .filter(i => i.quantity > 0);
+      if (!items.length && !closeRemaining) { toast('Informe o que chegou.', 'error'); return; }
+      if (closeRemaining && !$('po-close-reason').value.trim()) {
+        toast('Informe o motivo do cancelamento do saldo.', 'error'); return;
+      }
+      try {
+        await api(`/api/v1/purchase-orders/${poOpenId}/deliveries`, { method: 'POST', body: {
+          locationId: $('po-loc').value || null, items,
+          closeRemaining, closeReason: $('po-close-reason').value || null,
+        }});
+        $('po-close-reason').value = '';
+        toast(closeRemaining ? 'Saldo encerrado.' : 'Entrega registrada.', 'ok');
+        LOADERS['buy-orders']();
+      } catch (err) { toast(err.message, 'error'); }
+    }
+    $('po-deliver').addEventListener('click', () => enviarEntrega(false));
+    $('po-close-remaining').addEventListener('click', () => enviarEntrega(true));
+
+    /// upload simples com o token da sessão
+    async function sendFile(url, file) {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(url, { method: 'POST', headers: { Authorization: 'Bearer ' + store.access }, body: fd });
+      if (!res.ok) throw new Error('Não consegui enviar ' + file.name + '.');
+    }
+
     $('buy-orders-list').addEventListener('click', async (ev) => {
+      const link = ev.target.closest('a[data-act="download-doc"]');
+      if (link) { ev.preventDefault(); downloadDoc(link.dataset.doc); return; }
       const btn = ev.target.closest('button[data-act]');
       if (!btn) return;
       const row = btn.closest('tr');
       try {
         if (btn.dataset.act === 'pdf-po') { await openPoPdf(row.dataset.id); return; }
-        if (btn.dataset.act === 'receive') {
-          const locationId = row.querySelector('.buy-rec-loc').value;
-          if (!locationId) { toast('Crie um local de estoque em Estoque → Entrada primeiro.', 'error'); return; }
-          if (!confirm('Confirmar o recebimento? Itens de catálogo entram no estoque.')) return;
-          await api(`/api/v1/purchase-orders/${row.dataset.id}/receive`, { method: 'POST', body: { locationId } });
-          toast('Pedido recebido — estoque atualizado.', 'ok');
-        } else {
-          const reason = prompt('Motivo do cancelamento (obrigatório):');
-          if (!reason) return;
-          await api(`/api/v1/purchase-orders/${row.dataset.id}/cancel`, { method: 'POST', body: { reason } });
-          toast('Pedido cancelado.', 'ok');
-        }
-        LOADERS['buy-orders']();
+        if (btn.dataset.act === 'open-po') { renderPoPanel(poCache[row.dataset.id]); return; }
       } catch (err) { toast(err.message, 'error'); }
+    });
+    $('po-panel').addEventListener('click', (ev) => {
+      const link = ev.target.closest('a[data-act="download-doc"]');
+      if (link) { ev.preventDefault(); downloadDoc(link.dataset.doc); }
     });
 
     // ============ CADASTROS: USUÁRIOS ============
@@ -3209,9 +3374,9 @@
       if (canMgrApprove() && q.status === 'AGUARDANDO_GERENTE') actions.push('decision:manager');
       if (canDirApprove() && q.status === 'AGUARDANDO_DIRETOR') actions.push('decision:director');
       if (conduct && q.status === 'APROVADO_PARA_EMISSAO')
-        actions.push('<button data-act="issue-po">Emitir Ordem de Compra</button>');
+        actions.push('<button data-act="issue-po">Encaminhar para Ordem de Compra</button>');
       if (q.status === 'OC_EMITIDA' && q.purchaseOrderId)
-        actions.push(`<button data-act="po-pdf">Gerar / Baixar PDF da OC ${escapeHtml(q.purchaseOrderNumber)}</button>`);
+        actions.push(`<button class="secondary" data-act="go-po">Registrar OC do ERP em ${escapeHtml(q.purchaseOrderNumber)}</button>`);
       if (conduct && !['OC_EMITIDA', 'REJEITADO', 'CANCELADA'].includes(q.status))
         actions.push('<button class="danger" data-act="cancel-rfq">Cancelar processo</button>');
 
@@ -3347,13 +3512,13 @@
           toast('Decisão registrada.', 'ok');
           rfqCache[q.id] = q; renderRfqDetail(q);
         } else if (act === 'issue-po') {
-          const notes = prompt('Observações da Ordem de Compra (opcional):') || null;
-          if (!confirm('Emitir a Ordem de Compra com os dados da proposta vencedora?')) return;
+          const notes = prompt('Observações para o pedido (opcional):') || null;
+          if (!confirm('Encaminhar para Ordem de Compra com os dados da proposta vencedora?\n\nA OC é emitida no ERP; aqui você registra o número, a data e o anexo em Compras → Pedidos de Compra.')) return;
           const order = await api(`/api/v1/quotations/${rfqOpenId}/issue-po`, { method: 'POST', body: { notes } });
-          toast(`Ordem de compra ${order.number} emitida.`, 'ok');
+          toast(`Pedido ${order.number} criado. Registre a OC do ERP em Pedidos de Compra.`, 'ok');
           await refreshRfqDetail();
-        } else if (act === 'po-pdf') {
-          await openPoPdf(rfqCache[rfqOpenId].purchaseOrderId);
+        } else if (act === 'go-po') {
+          goTo('buy-orders');
         } else if (act === 'download-doc') {
           ev.preventDefault();
           const res = await fetch('/api/v1/documents/' + btn.dataset.doc, { headers: { Authorization: 'Bearer ' + store.access } });

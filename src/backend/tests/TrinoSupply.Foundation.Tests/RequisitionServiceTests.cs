@@ -166,15 +166,24 @@ public class RequisitionServiceTests
     [Fact]
     public async Task Edicao_e_itens_sao_bloqueados_durante_a_aprovacao()
     {
-        var (svc, _, _) = Build();
+        var (svc, db, _) = Build();
         var pr = await DraftAsync(svc, Ana, Notebook);
         await svc.SubmitAsync(Ana, pr.Id);
 
+        // enviada e ainda sem comprador: o solicitante continua dono da solicitação
         var (_, edit) = await svc.UpdateHeaderAsync(Ana, pr.Id, "Nova justificativa", null, null, null, false);
-        var (_, addItem) = await svc.AddItemAsync(Ana, pr.Id, Notebook);
+        Assert.Null(edit);
 
-        Assert.Equal("PR-ERR-040", edit!.Code);
-        Assert.Equal("PR-ERR-040", addItem!.Code);
+        // designada ao comprador: a partir daí o processo é dele
+        var saved = await db.Requisitions.SingleAsync(r => r.Id == pr.Id);
+        saved.AssignedToId = Guid.NewGuid();
+        saved.AssignedToLabel = "Wladson";
+        await db.SaveChangesAsync();
+
+        var (_, afterAssign) = await svc.UpdateHeaderAsync(Ana, pr.Id, "Outra justificativa", null, null, null, false);
+        var (_, addItem) = await svc.AddItemAsync(Ana, pr.Id, Notebook);
+        Assert.Equal("PR-ERR-041", afterAssign!.Code);
+        Assert.Equal("PR-ERR-041", addItem!.Code);
     }
 
     [Fact]
@@ -229,10 +238,11 @@ public class RequisitionServiceTests
 
         var byOther = await svc.DeleteDraftAsync(outro, pr.Id);
         await svc.SubmitAsync(Ana, pr.Id);
-        var afterSubmit = await svc.DeleteDraftAsync(Ana, pr.Id);
 
+        // enviada e sem comprador: o titular ainda pode excluir (revisão de telas 2026-08-26)
+        var afterSubmit = await svc.DeleteDraftAsync(Ana, pr.Id);
+        Assert.Null(afterSubmit);
         Assert.NotNull(byOther);              // fora do escopo do outro solicitante ⇒ 404
-        Assert.Equal("PR-ERR-040", afterSubmit!.Code);
         Assert.NotNull(await db.Requisitions.SingleAsync(r => r.Id == pr.Id)); // nunca some fisicamente
     }
 }

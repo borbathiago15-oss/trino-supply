@@ -426,9 +426,7 @@
               <div class="grid2">
                 <div><label for="pru-priority">Prioridade</label>
                   <select id="pru-priority">
-                    <option value="LOW">Baixa</option>
                     <option value="NORMAL" selected>Normal</option>
-                    <option value="HIGH">Alta</option>
                     <option value="URGENT">Urgente</option>
                   </select>
                 </div>
@@ -436,15 +434,8 @@
               </div>
             </div>
             <div class="grid2">
-              <div><label for="pru-type">Tipo SC</label>
-                <select id="pru-type">
-                  <option value="">Selecione…</option>
-                  <option>MATERIAL</option>
-                  <option>SERVIÇO</option>
-                  <option>MANUTENÇÃO</option>
-                  <option>INVESTIMENTO</option>
-                  <option>CONSUMO INTERNO</option>
-                </select>
+              <div><label for="pru-type">Família do produto</label>
+                <select id="pru-type"><option value="">Selecione a família…</option></select>
               </div>
               <div><label for="pru-cc">Centro de Custo</label><select id="pru-cc" class="cc-select" required></select></div>
             </div>
@@ -454,6 +445,8 @@
             </div>
             <label for="pru-notes">Observação Interna</label>
             <textarea id="pru-notes" rows="3" style="width:100%;padding:10px 12px;font-size:13.5px;border:1px solid var(--border);border-radius:8px"></textarea>
+            <label for="pru-files">Anexos <span class="sub">(PDF, imagem ou planilha — pode escolher mais de um)</span></label>
+            <input id="pru-files" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.docx" />
             <button type="submit" class="full">Criar rascunho da SC</button>
           </form>
         </div>
@@ -658,7 +651,7 @@
       <section class="view" id="view-triage">
         <div class="panel">
           <div class="topbar" style="margin-bottom:8px">
-            <h2 style="margin:0">Painel de demandas</h2>
+            <h2 style="margin:0">Gestão de Solicitações</h2>
             <select id="tri-filter" style="width:auto">
               <option value="TODAS">Todas as demandas</option>
               <option value="NAO_ATRIBUIDAS">Sem responsável</option>
@@ -675,7 +668,7 @@
         <div id="rfq-lists">
           <div class="panel">
             <h2>Fila de Suprimentos — solicitações aguardando cotação</h2>
-            <p class="hello">As aprovadas podem ser cotadas agora; as retidas mostram de quem está a aprovação pendente. O comprador responsável vem da Triagem de Demandas.</p>
+            <p class="hello">As aprovadas podem ser cotadas agora; as retidas mostram de quem está a aprovação pendente. O comprador responsável vem de Compras → Gestão de Solicitações.</p>
             <div id="rfq-queue" class="tablewrap"></div>
           </div>
           <div class="panel">
@@ -937,14 +930,7 @@
               <input id="ci-fispq" type="file" accept=".pdf,.png,.jpg,.jpeg,.docx" />
               <p class="hello" id="ci-fispq-current" style="margin:4px 0 0"></p>
             </div>
-            <label>Uso do produto <span class="sub">(pode ser os dois)</span></label>
-            <div class="checks">
-              <label><input type="checkbox" id="ci-stock" /> Item de almoxarifado <span class="sub">(saldo controlado)</span></label>
-              <label><input type="checkbox" id="ci-purchasable" checked /> Disponível para compra <span class="sub">(SC e cotação)</span></label>
-            </div>
-            <label for="ci-min">Estoque mínimo <span class="sub">(itens de almoxarifado)</span></label>
-            <input id="ci-min" type="number" min="0" step="0.01" placeholder="dispara a reposição" />
-            <label>Fornecedores deste produto <span class="sub">(não precisam estar cadastrados na plataforma)</span></label>
+            <label>Fornecedores deste produto <span class="sub">(escolha do cadastro de fornecedores; use "Outro" para quem ainda não está lá)</span></label>
             <div id="ci-suppliers"></div>
             <button type="button" class="secondary" id="ci-add-sup" style="margin-top:6px">+ Adicionar fornecedor</button>
             <datalist id="cat-families"></datalist>
@@ -963,13 +949,8 @@
             <div><label for="imp-type">Tipo de produto</label><select id="imp-type"></select></div>
             <div class="grid2">
               <div><label for="imp-unit">Unidade padrão</label><input id="imp-unit" placeholder="UN" /></div>
-              <div><label for="imp-min">Estoque mínimo</label><input id="imp-min" type="number" min="0" step="0.01" placeholder="opcional" /></div>
+              <div></div>
             </div>
-          </div>
-          <label>Uso dos produtos importados</label>
-          <div class="checks">
-            <label><input type="checkbox" id="imp-stock" /> Item de almoxarifado</label>
-            <label><input type="checkbox" id="imp-purchasable" checked /> Disponível para compra</label>
           </div>
           <label>Grade de tamanhos <span class="sub">(EPI e Fardamento: cada tamanho vira um item, ex.: 12003-P)</span></label>
           <div class="row-actions" style="margin-bottom:6px">
@@ -1095,7 +1076,9 @@
     const canCreatePr = () => ['Requester', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
     const canDecidePr = () => ['Approver', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
     const canRequestMr = () => ['Requester', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
-    const canWarehouse = () => ['WarehouseOperator', 'WarehouseSupervisor', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
+    // quem opera o almoxarifado é quem recebeu o módulo (papéis de almoxarifado saíram do cadastro)
+    const canWarehouse = () => hasModule('ESTOQUE')
+      || ['WarehouseOperator', 'WarehouseSupervisor', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
     const canBuy = () => ['PurchasingOfficer', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
     const canMaintainCatalog = () => ['SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
     const canTriage = () => ['PurchasingOfficer', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
@@ -1132,7 +1115,7 @@
         ]},
       ]},
       { title: 'Compras', module: 'COMPRAS', items: [
-        { id: 'triage', label: 'Triagem de Demandas', show: () => canTriage() || canBuy() || canWarehouse() },
+        { id: 'triage', label: 'Gestão de Solicitações', show: () => canTriage() || canBuy() || canWarehouse() },
         { id: 'quotations', label: 'Cotações / Processos', show: () => canViewRfq() },
         { id: 'buy-demands', label: 'Demandas do Almoxarifado', show: canBuy },
         { id: 'buy-orders', label: 'Pedidos de Compra', show: () => true },
@@ -1157,7 +1140,7 @@
       'stock-dash': 'Dashboard de Estoque', 'wh-queue': 'Fila de Atendimento',
       'stock-entry': 'Entrada de Estoque', 'stock-issue': 'Saída de Estoque',
       'buy-demands': 'Demandas de Compra', 'buy-orders': 'Pedidos de Compra',
-      triage: 'Triagem de Demandas',
+      triage: 'Gestão de Solicitações',
       users: 'Cadastro de Usuários', suppliers: 'Cadastro de Fornecedores', products: 'Cadastro de Produtos',
       families: 'Famílias de Produtos',
       'supply-dash': 'Dashboard de Suprimentos', 'cost-centers': 'Centros de Custo',
@@ -1372,18 +1355,48 @@
             <div><label>Unid.</label><input class="it-unit" placeholder="UN" style="width:100%" /></div>
             <div class="grid2">
               <div><label>Qtde</label><input class="it-qty" type="number" min="0.01" step="0.01" required value="1" /></div>
-              <div><label>Preço unit.</label><input class="it-price" type="number" min="0" step="0.01" placeholder="opc." /></div>
+              <div><label>&nbsp;</label>
+                <button type="button" class="danger it-remove" style="width:100%">Excluir item</button></div>
             </div>
           </div>
         </div>`;
       div.querySelector('.it-prod').addEventListener('change', (ev) => {
         const p = prodByLabel[ev.target.value];
-        if (p) { div.querySelector('.it-unit').value = p.unitOfMeasure; if (p.referencePrice != null) div.querySelector('.it-price').value = p.referencePrice; }
+        if (p) div.querySelector('.it-unit').value = p.unitOfMeasure;
+      });
+      div.querySelector('.it-remove').addEventListener('click', () => {
+        const rows = $('pru-items').querySelectorAll('.pru-item-row');
+        if (rows.length === 1) { toast('A SC precisa de ao menos um item.', 'error'); return; }
+        div.remove();
       });
       return div;
     }
+    /// envia os anexos escolhidos no formulário depois que a SC ganha id
+    async function uploadPrAttachments(prId, fileList) {
+      const files = [...(fileList || [])];
+      let sent = 0;
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append('file', file);
+        try {
+          const res = await fetch(`/api/v1/purchase-requisitions/${prId}/attachments`,
+            { method: 'POST', headers: { Authorization: 'Bearer ' + store.access }, body: fd });
+          if (res.ok) sent++;
+          else toast(`Não consegui anexar ${file.name}.`, 'error');
+        } catch { toast(`Não consegui anexar ${file.name}.`, 'error'); }
+      }
+      return sent;
+    }
+
     LOADERS['pr-new-unit'] = async () => {
       await Promise.all([loadProductPicker(), loadDeliveryLocations(), loadCompanyDatalist(), loadCcDatalist()]);
+      try {
+        const { families } = await api('/api/v1/items/families');
+        const keep = $('pru-type').value;
+        $('pru-type').innerHTML = '<option value="">Selecione a família…</option>' +
+          families.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('');
+        if (keep) $('pru-type').value = keep;
+      } catch { /* sem catálogo ainda: o campo fica vazio */ }
       if (!$('pru-items').children.length) $('pru-items').appendChild(pruItemRow());
     };
     $('pru-add-item').addEventListener('click', () => $('pru-items').appendChild(pruItemRow()));
@@ -1398,17 +1411,17 @@
           catalogItemId: p ? p.id : null,
           unitOfMeasure: row.querySelector('.it-unit').value || null,
           quantity: parseFloat(row.querySelector('.it-qty').value),
-          estimatedUnitPrice: row.querySelector('.it-price').value ? parseFloat(row.querySelector('.it-price').value) : null,
         };
       }).filter(i => i.description || i.catalogItemId);
       try {
-        await api('/api/v1/purchase-requisitions/', { method: 'POST', body: {
+        const created = await api('/api/v1/purchase-requisitions/', { method: 'POST', body: {
           justification: $('pru-just').value, costCenter: $('pru-cc').value,
           priority: $('pru-priority').value, neededBy: $('pru-needed').value || null, items, kind: 'AVULSA',
           needType: $('pru-type').value || null, deliveryLocation: $('pru-delivery').value || null,
           company: $('pru-company').value || null, internalNotes: $('pru-notes').value || null,
         }});
-        toast('SC criada como rascunho. Revise em "Meus Pedidos" e envie para aprovação.', 'ok');
+        const anexos = await uploadPrAttachments(created.id, $('pru-files').files);
+        toast(`SC criada como rascunho${anexos ? ` com ${anexos} anexo(s)` : ''}. Revise em "Meus Pedidos" e envie.`, 'ok');
         ev.target.reset(); $('pru-items').innerHTML = ''; $('pru-items').appendChild(pruItemRow());
         goTo('pr-mine');
       } catch (err) { toast(err.message, 'error'); }
@@ -1420,14 +1433,18 @@
         ? families.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('')
         : '<option value="">(catálogo vazio — cadastre produtos primeiro)</option>';
     }
+    /// grade de escolha de itens: tamanho e C.A. vêm do cadastro e a quantidade começa vazia
+    /// (revisão de telas 2026-08-26 — o solicitante digita só o que precisa)
     function familyTable(items, pickClass, checkClass, qtyClass) {
-      return '<table><thead><tr><th></th><th>Produto</th><th>Unid.</th><th>Qtd</th></tr></thead><tbody>' +
+      return '<table><thead><tr><th></th><th>Produto</th><th>Tam.</th><th>C.A.</th><th>Unid.</th><th>Qtd</th></tr></thead><tbody>' +
         items.map(i => `
           <tr class="${pickClass}" data-id="${i.id}">
             <td><input type="checkbox" class="${checkClass}" aria-label="Selecionar ${escapeHtml(i.description)}" /></td>
             <td>${escapeHtml(i.description)}<div class="sub">${escapeHtml(i.code)}</div></td>
+            <td>${escapeHtml(i.size || '—')}</td>
+            <td>${i.caNumber ? escapeHtml(i.caNumber) : '<span class="sub">—</span>'}</td>
             <td>${escapeHtml(i.unitOfMeasure)}</td>
-            <td><input type="number" class="${qtyClass}" min="0.01" step="0.01" value="1" style="width:80px" /></td>
+            <td><input type="number" class="${qtyClass}" min="0.01" step="0.01" placeholder="0" style="width:80px" /></td>
           </tr>`).join('') + '</tbody></table>';
     }
     // ---- Solicitação em Lote: grade com saldo, previsão, consumo e cobertura ----
@@ -1502,20 +1519,27 @@
           : '<div class="sub">Compra aprovada na alçada.</div>';
       }
       const itemsTxt = r.items.map(i => `${i.quantity}× ${i.catalogCode ? '[' + escapeHtml(i.catalogCode) + '] ' : ''}${escapeHtml(i.description)}`).join(' · ');
+      const anexos = (r.attachments || []).length
+        ? '<div class="sub">📎 ' + r.attachments.map(a =>
+            `<a href="#" data-doc="${a.documentId}" data-act="download-doc">${escapeHtml(a.fileName)}</a>`).join(' · ') + '</div>'
+        : '';
       const acts = [];
       if (forApproval) {
         acts.push('<button data-act="approve">Aprovar</button>',
                   '<button class="secondary" data-act="return">Devolver</button>',
                   '<button class="danger" data-act="reject">Rejeitar</button>');
       } else if (r.requesterId === currentUser.id) {
-        if (['DRAFT', 'RETURNED'].includes(r.status)) acts.push('<button data-act="submit">Enviar p/ aprovação</button>',
-          '<button class="secondary" data-act="edit">Editar</button>');
-        if (r.status === 'DRAFT') acts.push('<button class="danger" data-act="delete">Excluir</button>');
-        if (['DRAFT', 'RETURNED', 'IN_APPROVAL'].includes(r.status)) acts.push('<button class="danger" data-act="cancel">Cancelar</button>');
+        // a SC segue para cotação, não direto para aprovação; e o solicitante manda nela
+        // enquanto não houver comprador designado (revisão de telas 2026-08-26)
+        if (['DRAFT', 'RETURNED'].includes(r.status)) acts.push('<button data-act="submit">Enviar solicitação</button>');
+        const podeMexer = ['DRAFT', 'RETURNED'].includes(r.status)
+          || (r.status === 'SUBMITTED' && !r.assignedToLabel);
+        if (podeMexer) acts.push('<button class="secondary" data-act="edit">Editar</button>',
+          '<button class="danger" data-act="delete">Excluir</button>');
       }
       return `<tr data-id="${r.id}">
         <td>${escapeHtml(r.number)}<div class="sub">${forApproval ? escapeHtml(r.requesterLabel) : 'ciclo ' + r.cycle}${r.kind === 'CATALOGO' ? ' · lote' : ' · SC'}</div></td>
-        <td>${escapeHtml(r.justification)}<div class="sub">${itemsTxt}</div><div class="sub">CC: ${escapeHtml(r.costCenter)}${r.neededBy ? ' · até ' + r.neededBy : ''}</div>${flow}${reason}</td>
+        <td>${escapeHtml(r.justification)}<div class="sub">${itemsTxt}</div><div class="sub">CC: ${escapeHtml(r.costCenter)}${r.neededBy ? ' · até ' + r.neededBy : ''}</div>${anexos}${flow}${reason}</td>
         <td>${money(r.totalEstimatedValue)}</td>
         <td><span class="badge ${cls}">${label}</span></td>
         <td class="row-actions">${acts.join('')}</td>
@@ -1612,7 +1636,18 @@
       }
       return true;
     }
+    /// baixa um documento guardado (anexo de SC, FISPQ, proposta) respeitando o token
+    async function downloadDoc(id) {
+      try {
+        const res = await fetch('/api/v1/documents/' + id, { headers: { Authorization: 'Bearer ' + store.access } });
+        if (!res.ok) throw new Error('Falha ao baixar o documento.');
+        window.open(URL.createObjectURL(await res.blob()), '_blank');
+      } catch (err) { toast(err.message, 'error'); }
+    }
+
     $('pr-list').addEventListener('click', async (ev) => {
+      const link = ev.target.closest('a[data-act="download-doc"]');
+      if (link) { ev.preventDefault(); downloadDoc(link.dataset.doc); return; }
       const btn = ev.target.closest('button[data-act]');
       if (!btn) return;
       const id = btn.closest('tr').dataset.id;
@@ -1648,20 +1683,22 @@
     async function loadMrCatItems() {
       const family = $('mr-family').value;
       if (!family) { $('mr-cat-list').innerHTML = ''; return; }
-      const { items } = await api('/api/v1/items/?stock=true&family=' + encodeURIComponent(family));
+      const { items } = await api('/api/v1/items/?family=' + encodeURIComponent(family));
       $('mr-cat-list').innerHTML = items.length
         ? familyTable(items, 'mr-pick', 'mp-check', 'mp-qty')
-        : '<p class="hello">Nenhum item de almoxarifado nesta família. Marque o produto como <strong>Item de almoxarifado</strong> em Cadastros → Produtos.</p>';
+        : '<p class="hello">Nenhum produto cadastrado nesta família.</p>';
     }
     LOADERS['mr-new'] = async () => { await fillFamilies('mr-family'); loadMrCatItems(); };
     $('mr-family').addEventListener('change', loadMrCatItems);
 
     $('mr-form').addEventListener('submit', async (ev) => {
       ev.preventDefault();
-      const items = [...document.querySelectorAll('.mr-pick')]
-        .filter(r => r.querySelector('.mp-check').checked)
-        .map(r => ({ catalogItemId: r.dataset.id, quantity: parseFloat(r.querySelector('.mp-qty').value) || 1 }));
-      if (!items.length) { toast('Marque ao menos um produto da lista.', 'error'); return; }
+      const marcados = [...document.querySelectorAll('.mr-pick')].filter(r => r.querySelector('.mp-check').checked);
+      const items = marcados
+        .map(r => ({ catalogItemId: r.dataset.id, quantity: parseFloat(r.querySelector('.mp-qty').value) }))
+        .filter(i => i.quantity > 0);
+      if (!marcados.length) { toast('Marque ao menos um produto da lista.', 'error'); return; }
+      if (items.length < marcados.length) { toast('Informe a quantidade dos itens marcados.', 'error'); return; }
       try {
         await api('/api/v1/material-requisitions/', { method: 'POST', body: {
           costCenter: $('mr-cc').value, notes: $('mr-notes').value || null, items,
@@ -1814,7 +1851,7 @@
               const mine = r.assignedToId && currentUser && r.assignedToId === currentUser.id;
               const resp = r.assignedToLabel
                 ? `<strong>${escapeHtml(r.assignedToLabel)}</strong>${mine ? '<div class="sub">designada a você</div>' : ''}${r.assignedByLabel ? `<div class="sub">por ${escapeHtml(r.assignedByLabel)}</div>` : ''}`
-                : '<span class="sub">sem responsável (Triagem de Demandas)</span>';
+                : '<span class="sub">sem responsável (Gestão de Solicitações)</span>';
               return `
               <tr data-id="${r.id}">
                 <td>${escapeHtml(r.number)}<div class="sub">CC: ${escapeHtml(r.costCenter)}</div></td>
@@ -2028,7 +2065,11 @@
         ]);
         ccOptionsCache = ccData.items || [];
         usersCache = Object.fromEntries(data.items.map(u => [u.id, u]));
-        $('nu-role').innerHTML = data.roles.map(r => `<option value="${r}">${ROLE_LABELS[r] || r}</option>`).join('');
+        // papéis de almoxarifado saíram da lista: quem opera o estoque recebe o módulo
+        // "Estoque / Almoxarifado" (revisão de telas 2026-08-26)
+        const ocultos = ['WarehouseOperator', 'WarehouseSupervisor', 'SupplyManager'];
+        $('nu-role').innerHTML = data.roles.filter(r => !ocultos.includes(r))
+          .map(r => `<option value="${r}">${ROLE_LABELS[r] || r}</option>`).join('');
         const dirName = (id) => (usersCache[id] && usersCache[id].name) || '';
         const rows = data.items.map(u => `
           <tr data-id="${u.id}">
@@ -2276,10 +2317,9 @@
       fd.append('file', file);
       fd.append('family', $('imp-family').value);
       if ($('imp-type').value) fd.append('productType', $('imp-type').value);
-      fd.append('stockControlled', $('imp-stock').checked ? 'true' : 'false');
-      fd.append('purchasable', $('imp-purchasable').checked ? 'true' : 'false');
+      fd.append('stockControlled', 'true');
+      fd.append('purchasable', 'true');
       if ($('imp-unit').value) fd.append('unit', $('imp-unit').value);
-      if ($('imp-min').value) fd.append('minimumQty', $('imp-min').value);
       if ($('imp-sizes').value) fd.append('sizes', $('imp-sizes').value);
       fd.append('commit', commit ? 'true' : 'false');
 
@@ -2354,11 +2394,16 @@
       div.style = 'border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:6px';
       div.innerHTML = `
         <div class="grid2">
-          <div><label>Fornecedor</label><input class="cs-name" placeholder="razão social ou nome de mercado" /></div>
+          <div><label>Fornecedor <span class="sub">(do cadastro de fornecedores)</span></label>
+            <select class="cs-pick"></select></div>
           <div class="grid2">
-            <div><label>CNPJ/CPF <span class="sub">(opcional)</span></label><input class="cs-tax" placeholder="só números" /></div>
+            <div><label>CNPJ/CPF</label><input class="cs-tax" placeholder="preenchido pelo cadastro" /></div>
             <div><label>Contato</label><input class="cs-contact" placeholder="telefone, e-mail ou vendedor" /></div>
           </div>
+        </div>
+        <div class="cs-manual" hidden>
+          <label>Nome do fornecedor <span class="sub">(fora do cadastro)</span></label>
+          <input class="cs-name" placeholder="razão social ou nome de mercado" />
         </div>
         <div class="grid2">
           <div><label>Código no fornecedor</label><input class="cs-code" placeholder="opcional" /></div>
@@ -2369,6 +2414,23 @@
         </div>
         <label>Observação</label>
         <input class="cs-notes" placeholder="opcional — condição, prazo, embalagem…" />`;
+      const pick = div.querySelector('.cs-pick');
+      pick.innerHTML = '<option value="">Selecione o fornecedor…</option>' +
+        catSuppliers.map(f => `<option value="${f.id}">${escapeHtml(f.legalName || f.tradeName || '')}</option>`).join('') +
+        '<option value="__outro">Outro — não cadastrado</option>';
+      const applyPick = () => {
+        const manual = pick.value === '__outro';
+        div.querySelector('.cs-manual').hidden = !manual;
+        const f = catSuppliers.find(x => x.id === pick.value);
+        if (f) {
+          div.querySelector('.cs-name').value = f.legalName || f.tradeName || '';
+          if (!div.querySelector('.cs-tax').value) div.querySelector('.cs-tax').value = f.taxId || '';
+          if (!div.querySelector('.cs-contact').value) div.querySelector('.cs-contact').value = f.email || f.phone || '';
+        }
+        if (manual) div.querySelector('.cs-name').focus();
+      };
+      pick.addEventListener('change', applyPick);
+      if (!catSuppliers.length) { pick.value = '__outro'; div.querySelector('.cs-manual').hidden = false; }
       if (sup) {
         div.querySelector('.cs-name').value = sup.supplierName || '';
         div.querySelector('.cs-tax').value = sup.taxId || '';
@@ -2376,9 +2438,19 @@
         div.querySelector('.cs-code').value = sup.supplierItemCode || '';
         div.querySelector('.cs-price').value = sup.lastPrice != null ? sup.lastPrice : '';
         div.querySelector('.cs-notes').value = sup.notes || '';
+        const known = sup.supplierId && catSuppliers.some(x => x.id === sup.supplierId);
+        pick.value = known ? sup.supplierId : '__outro';
+        div.querySelector('.cs-manual').hidden = !!known;
       }
       div.querySelector('.cs-remove').addEventListener('click', () => div.remove());
       return div;
+    }
+
+    /// fornecedores cadastrados, para vincular ao produto em vez de redigitar
+    let catSuppliers = [];
+    async function loadCatSuppliers() {
+      try { catSuppliers = (await api('/api/v1/suppliers/')).items.filter(s => s.active !== false); }
+      catch { catSuppliers = []; }
     }
     async function uploadFispq(itemId, file) {
       const fd = new FormData();
@@ -2399,6 +2471,8 @@
     }
     function collectItemSuppliers() {
       return [...document.querySelectorAll('.ci-sup-row')].map(row => ({
+        supplierId: row.querySelector('.cs-pick').value && row.querySelector('.cs-pick').value !== '__outro'
+          ? row.querySelector('.cs-pick').value : null,
         supplierName: row.querySelector('.cs-name').value.trim(),
         taxId: row.querySelector('.cs-tax').value || null,
         contact: row.querySelector('.cs-contact').value || null,
@@ -2419,9 +2493,6 @@
         $('ci-code').value = i.code; loadFamilyOptions(i.family); $('ci-family').value = i.family;
         $('ci-desc').value = i.description; $('ci-unit').value = i.unitOfMeasure || '';
         $('ci-price').value = i.referencePrice != null ? i.referencePrice : '';
-        $('ci-stock').checked = !!i.stockControlled;
-        $('ci-purchasable').checked = i.purchasable !== false;
-        $('ci-min').value = i.minimumQty != null ? i.minimumQty : '';
         loadProductTypes(i.productType || '');
         $('ci-ca').value = i.caNumber || '';
         $('ci-fispq-current').innerHTML = i.fispqDocumentId
@@ -2430,7 +2501,6 @@
         renderItemSuppliers(i.suppliers);
       } else {
         $('cat-form').reset(); renderItemSuppliers([]);
-        $('ci-purchasable').checked = true;
         $('ci-fispq-current').textContent = '';
         loadProductTypes('');
       }
@@ -2453,9 +2523,7 @@
           <td>${escapeHtml(i.code)}</td>
           <td>${escapeHtml(i.description)}<div class="sub">${escapeHtml(i.unitOfMeasure)}</div></td>
           <td>${escapeHtml(i.family)}</td>
-          <td>${[i.stockControlled ? '<span class="badge on">ESTOQUE</span>' : '',
-                 i.purchasable !== false ? '<span class="badge">COMPRA</span>' : ''].join(' ')}
-              ${i.stockControlled && i.minimumQty != null ? `<div class="sub">mín. ${i.minimumQty}</div>` : ''}</td>
+          <td>${escapeHtml(i.size || '—')}</td>
           <td><div class="sub">${escapeHtml(i.productTypeLabel || '—')}</div>
               ${i.caNumber ? `<div class="sub">C.A. ${escapeHtml(i.caNumber)}</div>` : ''}
               ${i.fispqDocumentId ? `<div class="sub">📎 <a href="#" data-doc="${i.fispqDocumentId}" data-act="download-doc">FISPQ</a></div>` : ''}
@@ -2490,7 +2558,7 @@
           (family ? ` em ${family}` : '') + (q ? ` para “${q}”` : '');
         const shown = items.slice(0, CAT_PAGE);
         $('cat-list').innerHTML = items.length
-          ? '<table><thead><tr><th>Código</th><th>Produto</th><th>Família</th><th>Uso</th><th>Tipo / conformidade</th><th>Fornecedores</th><th>Preço ref.</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+          ? '<table><thead><tr><th>Código</th><th>Produto</th><th>Família</th><th>Tam.</th><th>Tipo / conformidade</th><th>Fornecedores</th><th>Preço ref.</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
             shown.map(catRow).join('') + '</tbody></table>' +
             (items.length > shown.length
               ? `<p class="hello">Mostrando os ${shown.length} primeiros de ${items.length}. Refine a busca para achar o produto certo.</p>`
@@ -2525,7 +2593,7 @@
       $('cat-new').hidden = !canEdit;
       $('cat-import-toggle').hidden = !canEdit;
       if (!editingCatId) { $('cat-admin').hidden = true; $('cat-import').hidden = true; }
-      await Promise.all([loadFamilyOptions(), loadProductTypes()]);
+      await Promise.all([loadFamilyOptions(), loadProductTypes(), loadCatSuppliers()]);
       syncImportOptions();
       await loadCatalogSummary();
       if (!editingCatId) setCatFormMode(null);
@@ -2582,9 +2650,8 @@
     $('cat-form').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       try {
-        const stockControlled = $('ci-stock').checked;
-        const purchasable = $('ci-purchasable').checked;
-        const minimumQty = $('ci-min').value ? parseFloat($('ci-min').value) : null;
+        // uso e estoque mínimo saíram da tela: todo produto vale para almoxarifado e compra
+        const stockControlled = true, purchasable = true;
         const suppliers = collectItemSuppliers();
         const productType = $('ci-type').value || null;
         const caNumber = $('ci-ca').value || null;
@@ -2599,7 +2666,7 @@
             description: $('ci-desc').value, family: $('ci-family').value,
             unitOfMeasure: $('ci-unit').value || null,
             referencePrice: $('ci-price').value ? parseFloat($('ci-price').value) : null,
-            stockControlled, purchasable, minimumQty, clearMinimum: minimumQty === null, suppliers,
+            stockControlled, purchasable, suppliers,
             productType, caNumber,
           }});
           if (fispqFile) await uploadFispq(editingCatId, fispqFile);
@@ -2611,7 +2678,7 @@
             code: $('ci-code').value || null, description: $('ci-desc').value, family: $('ci-family').value,
             unitOfMeasure: $('ci-unit').value || null,
             referencePrice: $('ci-price').value ? parseFloat($('ci-price').value) : null,
-            stockControlled, purchasable, minimumQty, suppliers, productType, caNumber,
+            stockControlled, purchasable, suppliers, productType, caNumber,
           }});
           if (fispqFile) await uploadFispq(created.id, fispqFile);
           toast(`Produto ${created.code} adicionado ao catálogo.`, 'ok');
@@ -2901,7 +2968,7 @@
       } catch (err) { toast(err.message, 'error'); }
     });
 
-    // ============ TRIAGEM DE DEMANDAS (tickets) ============
+    // ============ GESTÃO DE SOLICITAÇÕES (tickets de demanda) ============
     let triResponsibles = [];
     LOADERS['triage'] = async () => {
       const filter = $('tri-filter').value || 'TODAS';
@@ -3003,7 +3070,7 @@
               const mine = r.assignedToId && currentUser && r.assignedToId === currentUser.id;
               const responsible = r.assignedToLabel
                 ? `<strong>${escapeHtml(r.assignedToLabel)}</strong>${mine ? '<div class="sub">designada a você</div>' : ''}`
-                : '<span class="sub">designe em Compras → Triagem de Demandas</span>';
+                : '<span class="sub">designe em Compras → Gestão de Solicitações</span>';
               const action = r.blockReason
                 ? `<span class="badge dev">RETIDA NA APROVAÇÃO</span><div class="sub">${escapeHtml(r.blockReason)}</div>`
                 : conduct ? `

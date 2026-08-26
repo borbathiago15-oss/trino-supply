@@ -32,6 +32,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<StoredDocument> StoredDocuments => Set<StoredDocument>();
     public DbSet<RequisitionAttachment> RequisitionAttachments => Set<RequisitionAttachment>();
     public DbSet<PurchaseOrderInvoice> PurchaseOrderInvoices => Set<PurchaseOrderInvoice>();
+    public DbSet<Domain.CostCenterApprover> CostCenterApprovers => Set<Domain.CostCenterApprover>();
     public DbSet<CompanyProfile> CompanyProfiles => Set<CompanyProfile>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -313,6 +314,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(a => a.RequisitionId);
         });
 
+        modelBuilder.Entity<Domain.CostCenterApprover>(e =>
+        {
+            e.ToTable("cost_center_approver");
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Id).HasColumnName("id");
+            e.Property(a => a.CostCenterId).HasColumnName("cost_center_id");
+            e.Property(a => a.UserId).HasColumnName("user_id");
+            e.Property(a => a.UserName).HasColumnName("user_name").HasMaxLength(200);
+            e.Property(a => a.Level).HasColumnName("level");
+            e.Property(a => a.CreatedAt).HasColumnName("created_at");
+            e.HasIndex(a => new { a.CostCenterId, a.Level });
+        });
+
         modelBuilder.Entity<CostCenter>(e =>
         {
             e.ToTable("cost_center"); // schema foundation (master data mínimo)
@@ -331,6 +345,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(c => c.CreatedBy).HasColumnName("created_by");
             e.Property(c => c.Version).HasColumnName("version");
             e.HasIndex(c => c.Code).IsUnique();
+            e.HasMany(c => c.Approvers).WithOne().HasForeignKey(a => a.CostCenterId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Supplier>(e =>

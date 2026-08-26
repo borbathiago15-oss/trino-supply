@@ -12,8 +12,9 @@ public class CostCenter
     public string Name { get; set; } = string.Empty;
     public string? Region { get; set; }                     // regional (ex.: NORDESTE, SP-CAPITAL)
     public Guid? CompanyId { get; set; }                    // CNPJ do grupo responsável por este CC
-    public Guid? ManagerUserId { get; set; }                // gerente responsável (vínculo com usuário — alçadas)
+    public Guid? ManagerUserId { get; set; }                // vínculo antigo: gerente responsável
     public string? ManagerName { get; set; }                // snapshot do nome do gerente
+    public List<CostCenterApprover> Approvers { get; set; } = [];   // alçadas por nível (1 e 2)
     public string? ClientName { get; set; }                 // cliente/contrato atendido
     public bool Active { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }

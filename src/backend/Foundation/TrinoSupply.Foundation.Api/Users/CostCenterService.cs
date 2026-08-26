@@ -12,14 +12,15 @@ public class CostCenterService(AppDbContext db, TimeProvider clock)
 
     public Task<List<CostCenter>> ListAsync(bool includeInactive, CancellationToken ct = default)
     {
-        var q = db.CostCenters.AsQueryable();
+        var q = db.CostCenters.Include(c => c.Approvers).AsQueryable();
         if (!includeInactive) q = q.Where(c => c.Active);
         return q.OrderBy(c => c.Code).Take(1000).ToListAsync(ct);
     }
 
     public async Task<(CostCenter? cc, UserError? error)> CreateAsync(
         Guid actorId, string? code, string name, string? region, Guid? managerUserId, string? client,
-        Guid? companyId = null, CancellationToken ct = default)
+        Guid? companyId = null, IReadOnlyList<Guid>? level1 = null, IReadOnlyList<Guid>? level2 = null,
+        CancellationToken ct = default)
     {
         if (name.Trim().Length < 3) return (null, new("CC-ERR-012", "Informe o nome do centro de custo."));
         var regionClean = Clean(region)?.ToUpperInvariant();
@@ -55,8 +56,40 @@ public class CostCenterService(AppDbContext db, TimeProvider clock)
             CreatedBy = actorId,
         };
         db.CostCenters.Add(cc);
+        if (await ReplaceApproversAsync(cc, level1, level2, ct) is { } approverError) return (null, approverError);
         await db.SaveChangesAsync(ct);
         return (cc, null);
+    }
+
+    /// <summary>
+    /// Alçadas do centro: quem aprova no Nível 1 e no Nível 2. Qualquer pessoa do nível resolve
+    /// a etapa (revisão de telas 2026-08-26). Passar null mantém a lista como está.
+    /// </summary>
+    private async Task<UserError?> ReplaceApproversAsync(
+        CostCenter cc, IReadOnlyList<Guid>? level1, IReadOnlyList<Guid>? level2, CancellationToken ct)
+    {
+        foreach (var (ids, level) in new[] { (level1, ApprovalLevels.Level1), (level2, ApprovalLevels.Level2) })
+        {
+            if (ids is null) continue;
+            var atuais = cc.Approvers.Where(a => a.Level == level).ToList();
+            if (atuais.Count > 0)
+            {
+                db.CostCenterApprovers.RemoveRange(atuais);
+                foreach (var a in atuais) cc.Approvers.Remove(a);
+            }
+            foreach (var userId in ids.Distinct())
+            {
+                var user = await db.Users.SingleOrDefaultAsync(u => u.Id == userId && u.Active, ct);
+                if (user is null)
+                    return new("CC-ERR-015", $"Aprovador do Nível {level} inválido: escolha usuários ativos.");
+                db.CostCenterApprovers.Add(new CostCenterApprover
+                {
+                    CostCenterId = cc.Id, UserId = user.Id, UserName = user.Name,
+                    Level = level, CreatedAt = clock.GetUtcNow(),
+                });
+            }
+        }
+        return null;
     }
 
     /// <summary>Código automático: 2–3 letras da regional (sem acentos; "CC" sem regional) + sequência.</summary>
@@ -78,9 +111,10 @@ public class CostCenterService(AppDbContext db, TimeProvider clock)
 
     public async Task<(CostCenter? cc, UserError? error)> UpdateAsync(
         Guid id, string? name, string? region, Guid? managerUserId, string? client, bool? active,
-        Guid? companyId = null, CancellationToken ct = default)
+        Guid? companyId = null, IReadOnlyList<Guid>? level1 = null, IReadOnlyList<Guid>? level2 = null,
+        CancellationToken ct = default)
     {
-        var cc = await db.CostCenters.SingleOrDefaultAsync(c => c.Id == id, ct);
+        var cc = await db.CostCenters.Include(c => c.Approvers).SingleOrDefaultAsync(c => c.Id == id, ct);
         if (cc is null) return (null, new("CC-ERR-404", "Centro de custo não encontrado."));
         if (name is not null && name.Trim().Length >= 3) cc.Name = name.Trim();
         if (region is not null) cc.Region = Clean(region)?.ToUpperInvariant();
@@ -99,6 +133,7 @@ public class CostCenterService(AppDbContext db, TimeProvider clock)
         }
         if (client is not null) cc.ClientName = Clean(client);
         if (active is not null) cc.Active = active.Value;
+        if (await ReplaceApproversAsync(cc, level1, level2, ct) is { } approverError) return (null, approverError);
         cc.UpdatedAt = clock.GetUtcNow();
         cc.Version += 1;
         await db.SaveChangesAsync(ct);

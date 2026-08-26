@@ -792,11 +792,23 @@
             </div>
             <p class="hello" style="margin:4px 0 0">O <strong>código é gerado automaticamente</strong> a partir da regional (ex.: BAH-001).</p>
             <div class="grid2">
-              <div><label for="ncc-manager">Gerente responsável (usuário)</label><select id="ncc-manager"></select></div>
+              <div><label for="ncc-manager">Gerente responsável (usuário) <span class="sub">(dimensão dos dashboards)</span></label><select id="ncc-manager"></select></div>
               <div><label for="ncc-company">CNPJ de compras (empresa do grupo)</label><select id="ncc-company"></select></div>
             </div>
             <label for="ncc-client">Cliente</label>
             <input id="ncc-client" placeholder="opcional — cliente/contrato atendido" />
+            <label style="margin-top:14px">Quem aprova neste centro <span class="sub">(marque as pessoas; qualquer uma delas resolve a etapa)</span></label>
+            <div class="grid2">
+              <div>
+                <label class="sub" style="font-weight:600">Nível 1 — libera a solicitação <span class="sub" style="font-weight:400">(aprovadores e gestores)</span></label>
+                <div class="checks" id="ncc-level1" style="grid-template-columns:1fr"></div>
+              </div>
+              <div>
+                <label class="sub" style="font-weight:600">Nível 2 — libera a compra <span class="sub" style="font-weight:400">(diretoria)</span></label>
+                <div class="checks" id="ncc-level2" style="grid-template-columns:1fr"></div>
+              </div>
+            </div>
+            <p class="hello" style="margin:6px 0 0">Sem ninguém marcado, o centro segue como hoje: Nível 1 com o gerente responsável e Nível 2 com o diretor vinculado a ele.</p>
             <button type="submit" class="full" id="cc-form-submit">Cadastrar centro de custo</button>
             <button type="button" class="secondary full" id="cc-form-cancel" style="margin-top:8px" hidden>Cancelar edição</button>
           </form>
@@ -2974,7 +2986,25 @@
     }
     let ccCache = {};
     let companiesCache = [];
+    let ccUsersCache = [];     // usuários ativos, para marcar as alçadas do centro
     let editingCcId = null;
+    /// alçadas do centro: uma lista de gente por nível, em vez de uma pessoa só
+    const APPROVER_ROLES = {
+      'ncc-level1': ['Approver', 'SupplyManager', 'SystemAdministrator'],
+      'ncc-level2': ['Director', 'SystemAdministrator'],
+    };
+    function renderApproverChecks(level1, level2) {
+      for (const [boxId, marcados] of [['ncc-level1', level1], ['ncc-level2', level2]]) {
+        // quem já está marcado continua na lista, mesmo que o papel tenha mudado depois
+        const gente = ccUsersCache.filter(u => APPROVER_ROLES[boxId].includes(u.role) || marcados.includes(u.id));
+        $(boxId).innerHTML = gente.length
+          ? gente.map(u => `
+            <label><input type="checkbox" class="${boxId}-chk" value="${u.id}" ${marcados.includes(u.id) ? 'checked' : ''} /> ${escapeHtml(u.name)} <span class="sub">(${escapeHtml(ROLE_LABELS[u.role] || u.role)})</span></label>`).join('')
+          : '<p class="hello" style="margin:0">Nenhum usuário com esse papel — cadastre em Cadastros → Usuários.</p>';
+      }
+    }
+    const approverIds = (boxId) =>
+      [...document.querySelectorAll(`.${boxId}-chk:checked`)].map(el => el.value);
     function setCcFormMode(c) {
       editingCcId = c ? c.id : null;
       $('cc-form-title').textContent = c ? `Editar centro de custo — ${c.code}` : 'Novo centro de custo';
@@ -2985,12 +3015,14 @@
         $('ncc-manager').value = c.managerUserId || '';
         $('ncc-company').value = c.companyId || '';
         $('ncc-client').value = c.clientName || '';
-      } else { $('cc-form').reset(); }
+        renderApproverChecks((c.level1 || []).map(a => a.userId), (c.level2 || []).map(a => a.userId));
+      } else { $('cc-form').reset(); renderApproverChecks([], []); }
     }
     LOADERS['cost-centers'] = async () => {
       try {
         try {
           const { items: users } = await api('/api/v1/users/pickers');
+          ccUsersCache = users;
           const keepM = $('ncc-manager').value;
           $('ncc-manager').innerHTML = '<option value="">Selecione o gerente…</option>' +
             users.map(u => `<option value="${u.id}">${escapeHtml(u.name)} (${ROLE_LABELS[u.role] || u.role})</option>`).join('');
@@ -3007,12 +3039,15 @@
         const { items } = await api('/api/v1/cost-centers/?all=true');
         ccCache = Object.fromEntries(items.map(c => [c.id, c]));
         const compName = (id) => { const c = companiesCache.find(x => x.id === id); return c ? c.legalName : '—'; };
+        const approverNames = (list) => (list || []).map(a => a.name).join(', ');
         $('cc-list').innerHTML = items.length
-          ? '<table><thead><tr><th>Código</th><th>Nome</th><th>Regional</th><th>Gerente</th><th>CNPJ de compras</th><th>Cliente</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+          ? '<table><thead><tr><th>Código</th><th>Nome</th><th>Regional</th><th>Gerente</th><th>Nível 1</th><th>Nível 2</th><th>CNPJ de compras</th><th>Cliente</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
             items.map(c => `
               <tr data-id="${c.id}">
                 <td>${escapeHtml(c.code)}</td><td>${escapeHtml(c.name)}</td>
                 <td>${escapeHtml(c.region || '—')}</td><td>${escapeHtml(c.managerName || '—')}</td>
+                <td><div class="sub">${escapeHtml(approverNames(c.level1) || 'gerente responsável')}</div></td>
+                <td><div class="sub">${escapeHtml(approverNames(c.level2) || 'diretor vinculado')}</div></td>
                 <td><div class="sub">${escapeHtml(c.companyId ? compName(c.companyId) : '—')}</div></td>
                 <td>${escapeHtml(c.clientName || '—')}</td>
                 <td><span class="badge ${c.active ? 'on' : 'off'}">${c.active ? 'ATIVO' : 'INATIVO'}</span></td>
@@ -3049,6 +3084,8 @@
         managerUserId: $('ncc-manager').value || null,
         clientName: $('ncc-client').value || null,
         companyId: $('ncc-company').value || null,
+        level1UserIds: approverIds('ncc-level1'),
+        level2UserIds: approverIds('ncc-level2'),
       };
       try {
         if (editingCcId) {

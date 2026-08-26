@@ -1227,6 +1227,14 @@ pos.MapGet("/", async (PurchaseOrderService svc, ClaimsPrincipal p, HttpContext 
     return Ok(new { items = (await svc.ListAsync()).Select(PoView) }, ctx);
 });
 
+pos.MapGet("/{id:guid}", async (Guid id, PurchaseOrderService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!PurchaseOrderService.CanView(RoleOf(p)))
+        return Error(ctx, 403, "PO-ERR-900", "Seu papel não acessa pedidos de compra.");
+    var order = await svc.GetAsync(id);
+    return order is null ? Error(ctx, 404, "PO-ERR-404", "Pedido não encontrado.") : Ok(PoView(order), ctx);
+});
+
 pos.MapGet("/demands", async (PurchaseOrderService svc, ClaimsPrincipal p, HttpContext ctx) =>
 {
     if (!PurchaseOrderService.CanManage(RoleOf(p)))
@@ -1542,7 +1550,7 @@ static string QStatusLabel(QuotationStatus s) => s switch
     QuotationStatus.AwaitingManager => "AGUARDANDO_GERENTE",
     QuotationStatus.AwaitingDirector => "AGUARDANDO_DIRETOR",
     QuotationStatus.ApprovedForIssue => "APROVADO_PARA_EMISSAO",
-    QuotationStatus.PoIssued => "OC_EMITIDA",
+    QuotationStatus.PoIssued => "OC_REGISTRADA",
     QuotationStatus.Rejected => "REJEITADO",
     _ => "CANCELADA",
 };
@@ -1551,7 +1559,8 @@ static object ProposalView(Proposal p, Quotation q) => new
 {
     id = p.Id, supplierId = p.SupplierId, supplierName = p.SupplierName,
     version = p.VersionNumber, totalValue = p.TotalValue, deliveryDays = p.DeliveryDays,
-    paymentTerms = p.PaymentTerms, freightValue = p.FreightValue, validUntil = p.ValidUntil,
+    paymentTerms = p.PaymentTerms, paymentDays = p.PaymentDays,
+    freightValue = p.FreightValue, validUntil = p.ValidUntil,
     discountValue = p.DiscountValue, currency = p.Currency,
     notes = p.Notes, submittedVia = p.SubmittedVia, submittedByLabel = p.SubmittedByLabel,
     submittedAt = p.SubmittedAt, attachmentDocumentId = p.AttachmentDocumentId,
@@ -1589,6 +1598,12 @@ static object QuotationView(Quotation q) => new
     managerApproval = q.ManagerApprovedAt is null ? null : new { byLabel = q.ManagerApprovedByLabel, at = q.ManagerApprovedAt },
     directorApproval = q.DirectorApprovedAt is null ? null : new { byLabel = q.DirectorApprovedByLabel, at = q.DirectorApprovedAt },
     purchaseOrderId = q.PurchaseOrderId, purchaseOrderNumber = q.PurchaseOrderNumber,
+    saving = q.NegotiatedValue is null ? null : new
+    {
+        baselineValue = q.BaselineValue, closedValue = q.NegotiatedValue,
+        value = q.SavingValue, percent = q.SavingPercent,
+        notes = q.NegotiationNotes, byLabel = q.NegotiatedByLabel, at = q.NegotiatedAt,
+    },
 };
 
 var rfq = app.MapGroup("/api/v1/quotations").RequireAuthorization();
@@ -1704,7 +1719,7 @@ rfq.MapPost("/{id:guid}/proposals", async (Guid id, InternalProposalRequest body
     if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não registra propostas.");
     var input = new ProposalInput(body.DeliveryDays, body.PaymentTerms, body.FreightValue, body.ValidUntil, body.Notes,
         (body.Items ?? []).Select(i => new ProposalItemInput(i.QuotationItemId, i.UnitPrice, i.Quantity)).ToList(),
-        body.DiscountValue, body.Currency);
+        body.DiscountValue, body.Currency, body.PaymentDays);
     var (proposal, error) = await svc.SubmitProposalAsync(id, body.SupplierId, input, "INTERNO", p.FindFirstValue("name") ?? "Usuário");
     if (error is not null) return Error(ctx, error.Code == "RFQ-ERR-020" ? 409 : 400, error.Code, error.Message);
     var q = await svc.GetAsync(id);
@@ -1754,14 +1769,27 @@ rfq.MapPost("/{id:guid}/director-decision", async (Guid id, QuotationDecisionReq
         : Ok(QuotationView(q!), ctx);
 });
 
-rfq.MapPost("/{id:guid}/issue-po", async (Guid id, IssuePoRequest body, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+// a OC é fechada no SENIOR: aqui o comprador registra o número dela e o processo segue
+rfq.MapPost("/{id:guid}/register-po", async (Guid id, RegisterPoRequest body, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
 {
     var role = RoleOf(p);
-    if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não emite ordens de compra.");
+    if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não registra ordens de compra.");
     var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
-    var (order, error) = await svc.IssuePurchaseOrderAsync(actor, id, body.Notes);
-    return error is not null ? Error(ctx, 409, error.Code, error.Message)
+    var (order, error) = await svc.RegisterErpPurchaseOrderAsync(actor, id, body.ErpNumber, body.IssuedOn, body.Notes);
+    return error is not null ? Error(ctx, error.Code == "RFQ-ERR-041" ? 422 : 409, error.Code, error.Message)
         : Results.Json(new { data = PoView(order!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+// ganho de negociação: valor fechado (ou desconto em %) vira nova versão da proposta + saving
+rfq.MapPost("/{id:guid}/negotiation", async (Guid id, NegotiationRequest body, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não negocia propostas.");
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var (_, error) = await svc.RegisterNegotiationAsync(actor, id, body.SupplierId, body.ClosedValue, body.DiscountPercent, body.Notes);
+    if (error is not null) return Error(ctx, error.Code == "RFQ-ERR-020" ? 409 : 422, error.Code, error.Message);
+    var q = await svc.GetAsync(id);
+    return Ok(QuotationView(q!), ctx);
 });
 
 rfq.MapPost("/{id:guid}/cancel", async (Guid id, ReasonRequest body, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
@@ -2218,7 +2246,7 @@ public record ApproveMaterialRequest(List<MaterialLineRequest>? Items, string? N
 public record ErpOrderRequest(string? ErpNumber, DateOnly? IssuedOn);
 public record InvoiceRequest(string? Number, DateOnly? IssuedOn, decimal? Value);
 public record DeliveryLineRequest(Guid ItemId, decimal Quantity);
-public record DeliveryRequest(Guid LocationId, List<DeliveryLineRequest>? Items, bool? CloseRemaining, string? CloseReason);
+public record DeliveryRequest(Guid? LocationId, List<DeliveryLineRequest>? Items, bool? CloseRemaining, string? CloseReason);
 public record EntryRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity, string OriginReference, string? Origin);
 public record IssueRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity, string OriginReference);
 public record MaterialItemRequest(Guid CatalogItemId, decimal Quantity);
@@ -2240,10 +2268,12 @@ public record CreateQuotationRequest(Guid PrId, string? Kind, DateOnly? Deadline
 public record InviteSuppliersRequest(List<Guid>? SupplierIds);
 public record ProposalItemRequest(Guid QuotationItemId, decimal UnitPrice, decimal? Quantity);
 public record InternalProposalRequest(Guid SupplierId, int? DeliveryDays, string? PaymentTerms, decimal? FreightValue,
-    DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items, decimal? DiscountValue, string? Currency);
+    DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items, decimal? DiscountValue, string? Currency,
+    int? PaymentDays = null);
 public record SelectWinnerRequest(Guid ProposalId, List<string>? Criteria, string Justification);
 public record QuotationDecisionRequest(string Decision, string? Reason);
-public record IssuePoRequest(string? Notes);
+public record RegisterPoRequest(string? ErpNumber, DateOnly? IssuedOn, string? Notes);
+public record NegotiationRequest(Guid SupplierId, decimal? ClosedValue, decimal? DiscountPercent, string? Notes);
 public record PortalLoginRequest(string TaxId, string AccessKey);
 public record PortalProposalRequest(int? DeliveryDays, string? PaymentTerms, decimal? FreightValue, DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items);
 public record CompanyProfileRequest(string LegalName, string Address, string? District, string City, string State, string Zip, string TaxId, string? StateRegistration, string? Phone, string? Email, string? DeliveryAddress, string? DeliveryTaxId, string? StandardClauses, string? PaymentPolicy);

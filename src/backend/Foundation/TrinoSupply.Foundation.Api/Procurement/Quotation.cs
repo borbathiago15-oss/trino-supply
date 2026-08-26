@@ -19,7 +19,7 @@ public enum QuotationStatus : short
     AwaitingManager = 3,  // FORNECEDOR SELECIONADO → AGUARDANDO APROVAÇÃO GERENCIAL
     AwaitingDirector = 4, // AGUARDANDO APROVAÇÃO DIRETORIA
     ApprovedForIssue = 5, // APROVADO PARA EMISSÃO DA OC
-    PoIssued = 6,         // OC EMITIDA
+    PoIssued = 6,         // OC REGISTRADA (número vindo do ERP SENIOR)
     Rejected = 7,         // REJEITADO (motivo obrigatório)
     Cancelled = 8,        // CANCELADA (motivo obrigatório)
 }
@@ -54,6 +54,16 @@ public class Quotation
     public string? DirectorApprovedByLabel { get; set; }
     public DateTimeOffset? DirectorApprovedAt { get; set; }
     public string? DecisionReason { get; set; }             // último motivo de ajuste/rejeição/cancelamento
+
+    // ganho de negociação (revisão de telas 2026-08-26): o comprador negocia com o vencedor
+    // e o sistema guarda quanto a negociação economizou em relação à primeira proposta dele
+    public decimal? BaselineValue { get; set; }              // 1ª proposta do fornecedor escolhido
+    public decimal? NegotiatedValue { get; set; }            // valor fechado depois da negociação
+    public decimal? SavingValue { get; set; }                // baseline − fechado
+    public decimal? SavingPercent { get; set; }
+    public string? NegotiationNotes { get; set; }
+    public string? NegotiatedByLabel { get; set; }
+    public DateTimeOffset? NegotiatedAt { get; set; }
 
     public Guid? PurchaseOrderId { get; set; }
     public string? PurchaseOrderNumber { get; set; }
@@ -104,7 +114,8 @@ public class Proposal
     public int VersionNumber { get; set; } = 1;
     public decimal TotalValue { get; set; }
     public int? DeliveryDays { get; set; }
-    public string? PaymentTerms { get; set; }
+    public string? PaymentTerms { get; set; }                  // condição (ex.: 30/60 dias, à vista)
+    public int? PaymentDays { get; set; }                      // prazo para pagamento, em dias
     public decimal? FreightValue { get; set; }
     public decimal? DiscountValue { get; set; }               // desconto negociado (mapa de cotação)
     public string Currency { get; set; } = "BRL";             // moeda da proposta

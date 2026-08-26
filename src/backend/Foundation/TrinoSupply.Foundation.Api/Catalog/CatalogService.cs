@@ -104,6 +104,26 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
             .OrderBy(i => i.Family).ThenBy(i => i.Description).Take(500).ToListAsync(ct);
     }
 
+    /// <summary>
+    /// Números do catálogo para a tela de cadastro, que passou a ser por busca: sem isso
+    /// a tela precisaria baixar o acervo inteiro só para dizer quantos produtos existem.
+    /// </summary>
+    public async Task<CatalogSummary> SummaryAsync(CancellationToken ct = default)
+    {
+        var total = await db.CatalogItems.CountAsync(ct);
+        var active = await db.CatalogItems.CountAsync(i => i.Active, ct);
+        var pending = await db.CatalogItems.CountAsync(i => i.Active &&
+            ((i.ProductType == ProductTypes.Quimicos && i.FispqDocumentId == null)
+             || ((i.ProductType == ProductTypes.Epi || i.ProductType == ProductTypes.Epc)
+                 && (i.CaNumber == null || i.CaNumber == ""))), ct);
+        var grouped = await db.CatalogItems.Where(i => i.Active)
+            .GroupBy(i => i.Family)
+            .Select(g => new { Family = g.Key, Count = g.Count() })
+            .OrderBy(f => f.Family).ToListAsync(ct);
+        var families = grouped.Select(f => new CatalogFamilyCount(f.Family, f.Count)).ToList();
+        return new CatalogSummary(total, active, total - active, pending, families);
+    }
+
     public async Task<(CatalogItem? item, UserError? error)> CreateAsync(
         Guid actorId, string? code, string description, string family, string? unit, decimal? referencePrice,
         bool stockControlled = false, decimal? minimumQty = null,
@@ -304,3 +324,6 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         return (found, null);
     }
 }
+
+public record CatalogFamilyCount(string Family, int Count);
+public record CatalogSummary(int Total, int Active, int Inactive, int CompliancePending, IReadOnlyList<CatalogFamilyCount> Families);

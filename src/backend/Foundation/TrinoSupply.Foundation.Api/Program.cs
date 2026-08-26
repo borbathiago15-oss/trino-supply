@@ -233,6 +233,17 @@ catalogGroup.MapGet("/families", async (CatalogService svc, ClaimsPrincipal p, H
     return Ok(new { families = await svc.FamiliesAsync(onlyActive: !CatalogService.CanMaintain(role)) }, ctx);
 });
 
+// números do catálogo (a tela de produtos é por busca e não baixa o acervo inteiro)
+catalogGroup.MapGet("/summary", async (CatalogService svc, HttpContext ctx) =>
+{
+    var s = await svc.SummaryAsync();
+    return Ok(new
+    {
+        total = s.Total, active = s.Active, inactive = s.Inactive, compliancePending = s.CompliancePending,
+        families = s.Families.Select(f => new { family = f.Family, count = f.Count }),
+    }, ctx);
+});
+
 catalogGroup.MapGet("/", async (CatalogService svc, ClaimsPrincipal p, HttpContext ctx, string? family, string? q, bool? all, bool? stock) =>
 {
     var role = p.FindFirstValue(ClaimTypes.Role) ?? "";

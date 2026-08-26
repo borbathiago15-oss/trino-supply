@@ -28,6 +28,11 @@
       --s4: #eda100;  /* amarelo */
       --s5: #e34948;  /* vermelho */
       --s0: #94a3b8;  /* neutro */
+      /* marca — DS-001 (cores amostradas do asset oficial de logo) */
+      --brand-navy: #031430;
+      --brand-navy-2: #0a2450;
+      --brand-red: #c20007;
+      --brand-silver: #a1aab5;
     }
     * { box-sizing: border-box; margin: 0; }
     body {
@@ -35,18 +40,94 @@
       background: linear-gradient(160deg, #0f172a 0%, #1e293b 60%, #1d4ed8 140%);
       min-height: 100vh; color: var(--text);
     }
-    body.login-mode { display: flex; align-items: flex-start; justify-content: center; padding: 32px 16px; }
+    body.login-mode { display: block; padding: 0; background: var(--brand-navy); }
     body.app-mode { background: var(--surface-muted); }
 
-    .card {
-      background: var(--surface); border-radius: var(--radius);
-      box-shadow: 0 20px 60px rgba(2, 6, 23, .45);
-      width: 100%; max-width: 440px; padding: 36px 32px;
+    /* ---- tela de login: institucional à esquerda, acesso à direita ---- */
+    .login-shell { display: grid; grid-template-columns: 1.1fr .9fr; min-height: 100vh; }
+    body.app-mode .login-shell { display: none; }
+
+    .login-aside {
+      position: relative; overflow: hidden; color: #e8edf6;
+      background: radial-gradient(120% 95% at 12% 0%, var(--brand-navy-2) 0%, #04142f 55%, #020c1e 100%);
+      padding: 56px clamp(28px, 4.5vw, 72px);
+      display: flex; flex-direction: column; justify-content: center; gap: 44px;
     }
-    .brand { text-align: center; margin-bottom: 26px; }
-    .brand .mark { font-size: 26px; font-weight: 800; letter-spacing: -.5px; }
-    .brand .mark span { color: var(--brand); }
-    .brand .tag { color: var(--text-muted); font-size: 13px; margin-top: 4px; }
+    /* malha discreta de conexões — só CSS, sem imagem de fundo */
+    .login-aside::before {
+      content: ''; position: absolute; inset: 0; pointer-events: none;
+      background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
+      background-size: 58px 58px;
+      -webkit-mask-image: radial-gradient(85% 70% at 28% 18%, #000 0%, transparent 78%);
+      mask-image: radial-gradient(85% 70% at 28% 18%, #000 0%, transparent 78%);
+    }
+    .login-aside > * { position: relative; max-width: 520px; width: 100%; }
+    .login-aside > .lg-group { margin-top: auto; }
+    .lg-logo { width: min(360px, 78%); height: auto; display: block; }
+    .lg-kicker {
+      margin-top: 20px; font-size: 12px; font-weight: 700; letter-spacing: 2.4px;
+      text-transform: uppercase; color: var(--brand-silver);
+    }
+    .lg-lead { margin-top: 12px; max-width: 46ch; font-size: 15.5px; line-height: 1.6; color: #cfd9e8; }
+
+    .lg-flow { display: flex; flex-direction: column; gap: 2px; }
+    .lg-flow-title {
+      font-size: 11px; font-weight: 700; letter-spacing: 1.6px; text-transform: uppercase;
+      color: #7c8ba5; margin-bottom: 10px;
+    }
+    .lg-step { display: flex; align-items: center; gap: 12px; font-size: 14px; color: #d7e0ee; }
+    .lg-step .ico {
+      flex: 0 0 34px; height: 34px; display: grid; place-items: center;
+      border: 1px solid rgba(255,255,255,.16); border-radius: 10px;
+      background: rgba(255,255,255,.04); color: #b9c6da;
+    }
+    .lg-step svg { width: 18px; height: 18px; }
+    .lg-step:last-child .ico { border-color: rgba(194,0,7,.55); color: #ff6b6b; }
+    .lg-link { width: 34px; display: grid; place-items: center; }
+    .lg-link i { display: block; width: 1px; height: 14px; background: linear-gradient(rgba(255,255,255,.30), rgba(255,255,255,.06)); }
+
+    .lg-group { border-top: 1px solid rgba(255,255,255,.12); padding-top: 16px; }
+    .lg-group-mark { font-size: 13px; font-weight: 800; letter-spacing: 3px; color: #fff; }
+    .lg-group-mark::after {
+      content: ''; display: block; width: 42px; height: 2px; margin-top: 6px; background: var(--brand-red);
+    }
+    .lg-group-txt { display: block; margin-top: 10px; font-size: 13px; color: #93a2ba; max-width: 44ch; }
+
+    .login-panel {
+      background: var(--surface); display: flex; align-items: center; justify-content: center;
+      padding: 40px clamp(20px, 4vw, 56px);
+    }
+    .card { width: 100%; max-width: 400px; }
+    .card h1 { font-size: 22px; font-weight: 700; letter-spacing: -.2px; margin-bottom: 6px; }
+    .card h1::before {
+      content: ''; display: block; width: 34px; height: 3px; border-radius: 2px;
+      background: var(--brand-red); margin-bottom: 16px;
+    }
+    .card label { margin: 16px 0 6px; }
+    .card input { padding: 13px 14px; font-size: 15px; }
+    .card .full { margin-top: 22px; padding: 14px; font-size: 15px; }
+    .lg-sub { font-size: 13.5px; color: var(--text-muted); margin: 0 0 4px; }
+    .lg-pass { position: relative; }
+    .lg-pass input { padding-right: 84px; }
+    .lg-eye {
+      position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+      background: none; color: var(--brand); border: 0; padding: 6px 10px;
+      font-size: 12.5px; font-weight: 700; border-radius: 6px; cursor: pointer;
+    }
+    .lg-eye:hover { background: var(--surface-muted); }
+    .lg-help { margin-top: 16px; font-size: 12.5px; line-height: 1.5; color: var(--text-muted); }
+    .lg-group-mini { display: none; margin-top: 16px; font-size: 12.5px; color: var(--text-muted); }
+    .lg-note { display: flex; align-items: center; gap: 7px; justify-content: center; }
+    .lg-note i {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none;
+      box-shadow: 0 0 0 3px rgba(21,128,61,.14);
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .login-aside > *, .card { animation: lg-in .45s ease both; }
+      .card { animation-delay: .06s; }
+      @keyframes lg-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    }
     h1 { font-size: 17px; margin-bottom: 18px; font-weight: 600; }
     h2 { font-size: 14px; margin: 22px 0 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
     h2:first-child { margin-top: 0; }
@@ -172,6 +253,33 @@
     #toast.ok { display: block; background: var(--ok-bg); color: var(--ok); border: 1px solid #bbf7d0; }
     #toast.error { display: block; background: var(--danger-bg); color: var(--danger); border: 1px solid #fecaca; }
 
+    /* login em telas menores: institucional vira faixa compacta no topo */
+    @media (max-width: 980px) {
+      .login-shell { grid-template-columns: 1fr; min-height: 100vh; }
+      .login-aside { padding: 28px 24px 24px; gap: 20px; }
+      .lg-logo { width: min(280px, 70%); }
+      .lg-lead { font-size: 14.5px; }
+      .lg-flow { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 6px; }
+      .lg-flow-title { width: 100%; margin-bottom: 2px; }
+      .lg-step { font-size: 12.5px; gap: 7px; }
+      .lg-step .ico { flex-basis: 26px; height: 26px; border-radius: 8px; }
+      .lg-step svg { width: 14px; height: 14px; }
+      .lg-link { width: 12px; }
+      .lg-link i { width: 10px; height: 1px; background: rgba(255,255,255,.22); }
+      .login-panel { padding: 28px 20px 40px; }
+      .card { max-width: 460px; }
+    }
+    @media (max-width: 560px) {
+      /* no celular a faixa institucional encolhe para o formulário caber na primeira tela */
+      .login-aside .lg-lead, .login-aside .lg-group { display: none; }
+      .lg-group-mini { display: block; }
+      .login-aside { padding: 22px 18px 20px; background: linear-gradient(180deg, var(--brand-navy-2), #04142f); }
+      .lg-logo { width: min(240px, 82%); }
+      .lg-kicker { margin-top: 14px; font-size: 11px; letter-spacing: 2px; }
+      .lg-lead { font-size: 13.5px; }
+      .lg-group-txt { font-size: 12px; }
+    }
+
     @media (max-width: 820px) {
       .shell { flex-direction: column; }
       .sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 4px; padding: 12px; }
@@ -188,22 +296,61 @@
   <div id="toast"></div>
 
   <!-- ===================== LOGIN ===================== -->
-  <main class="card" id="login-card">
-    <div class="brand">
-      <div class="mark">TRINO <span>SUPPLY</span></div>
-      <div class="tag">Enterprise Supply Management</div>
-    </div>
-    <section id="login-view">
-      <h1>Entrar na plataforma</h1>
-      <form id="login-form" autocomplete="on">
-        <label for="email">E-mail</label>
-        <input id="email" type="email" name="email" required autocomplete="username" />
-        <label for="password">Senha</label>
-        <input id="password" type="password" name="password" required autocomplete="current-password" />
-        <button id="submit" type="submit" class="full">Entrar</button>
-      </form>
-      <div id="login-msg" class="msg error" role="alert" aria-live="polite"></div>
-      <div class="footer">Trino Supply · acesso restrito e auditado</div>
+  <main class="login-shell" id="login-card">
+
+    <!-- lado institucional: marca, propósito e ciclo de suprimentos -->
+    <section class="login-aside">
+      <div>
+        <img class="lg-logo" src="assets/brand/trino-supply-logo.png" width="640" height="204"
+             alt="Trino Supply — Gestão Inteligente de Suprimentos" />
+        <p class="lg-kicker">Enterprise Supply Management</p>
+        <p class="lg-lead">Uma plataforma integrada para gestão de suprimentos, compras,
+          fornecedores, contratos e estoque.</p>
+      </div>
+
+      <div class="lg-flow" role="list" aria-label="Ciclo de suprimentos atendido pela plataforma">
+        <div class="lg-flow-title" aria-hidden="true">Do pedido ao resultado</div>
+        <div class="lg-step" role="listitem"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6"/><path d="M20 20l-3.6-3.6"/></svg></span><span>Necessidade</span></div>
+        <div class="lg-link" aria-hidden="true"><i></i></div>
+        <div class="lg-step" role="listitem"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V7z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 16h5"/></svg></span><span>Solicitação</span></div>
+        <div class="lg-link" aria-hidden="true"><i></i></div>
+        <div class="lg-step" role="listitem"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h2.2l2 9.1a1 1 0 0 0 1 .8h7.5a1 1 0 0 0 1-.8L19 8H6.4"/><circle cx="10" cy="19" r="1.4"/><circle cx="16.5" cy="19" r="1.4"/></svg></span><span>Compra</span></div>
+        <div class="lg-link" aria-hidden="true"><i></i></div>
+        <div class="lg-step" role="listitem"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h10v9H3z"/><path d="M13 10h3.6L20 13v3h-7z"/><circle cx="7" cy="18" r="1.5"/><circle cx="17" cy="18" r="1.5"/></svg></span><span>Recebimento</span></div>
+        <div class="lg-link" aria-hidden="true"><i></i></div>
+        <div class="lg-step" role="listitem"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h6v6H4zM14 10h6v6h-6zM9 3h6v6H9z"/></svg></span><span>Estoque</span></div>
+        <div class="lg-link" aria-hidden="true"><i></i></div>
+        <div class="lg-step" role="listitem"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h16"/><path d="M6 15l4.2-4.2 3 3L18 8"/><path d="M18 11V8h-3"/></svg></span><span>Resultado</span></div>
+      </div>
+
+      <div class="lg-group">
+        <span class="lg-group-mark">GRUPO TRINO</span>
+        <span class="lg-group-txt">O Trino Supply é a plataforma corporativa de suprimentos do Grupo Trino.</span>
+      </div>
+    </section>
+
+    <!-- painel de acesso -->
+    <section class="login-panel">
+      <div class="card" id="login-view">
+        <h1>Acesse sua conta</h1>
+        <p class="lg-sub">Entre com o e-mail corporativo cadastrado pelo administrador.</p>
+        <form id="login-form" autocomplete="on">
+          <label for="email">E-mail</label>
+          <input id="email" type="email" name="email" required autocomplete="username"
+                 inputmode="email" placeholder="nome@empresa.com.br" />
+          <label for="password">Senha</label>
+          <div class="lg-pass">
+            <input id="password" type="password" name="password" required autocomplete="current-password" />
+            <button type="button" class="lg-eye" id="toggle-pass" aria-controls="password"
+                    aria-pressed="false">Mostrar</button>
+          </div>
+          <button id="submit" type="submit" class="full">Entrar</button>
+        </form>
+        <div id="login-msg" class="msg error" role="alert" aria-live="polite"></div>
+        <p class="lg-help">Esqueceu a senha? Solicite a redefinição ao administrador do sistema.</p>
+        <p class="lg-group-mini">Plataforma corporativa de suprimentos do <strong>GRUPO TRINO</strong>.</p>
+        <div class="footer lg-note"><i aria-hidden="true"></i> Ambiente corporativo · acesso restrito e auditado</div>
+      </div>
     </section>
   </main>
 
@@ -1121,6 +1268,16 @@
       $('login-card').style.display = '';
     }
 
+    // mostrar/ocultar senha — só troca o type do campo, sem tocar no envio
+    $('toggle-pass').addEventListener('click', () => {
+      const field = $('password'), btn = $('toggle-pass');
+      const show = field.type === 'password';
+      field.type = show ? 'text' : 'password';
+      btn.textContent = show ? 'Ocultar' : 'Mostrar';
+      btn.setAttribute('aria-pressed', String(show));
+      btn.setAttribute('aria-label', show ? 'Ocultar senha' : 'Mostrar senha');
+      field.focus();
+    });
     $('login-form').addEventListener('submit', async (ev) => {
       ev.preventDefault();
       $('login-msg').dataset.show = 'false';

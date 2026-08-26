@@ -127,6 +127,7 @@
 |----|-----------|--------|--------|---------|
 | DS-001 | Brand & Logo | 1.0.0 | 🟢 Approved | `docs/05-design-system/README.md` |
 | DS-ASSET-001 | Logo oficial — área de login (PNG 1448×1086) | 1.0.0 | 🟢 Approved | `docs/05-design-system/assets/logo/trino-supply-logo-login.png` |
+| DS-ASSET-002 | Logo oficial — versão web da tela de login (PNG 640×204, recorte do DS-ASSET-001 com fundo transparente, 43 KB) | 1.0.0 | 🟢 Approved | `src/backend/Foundation/TrinoSupply.Foundation.Api/wwwroot/assets/brand/trino-supply-logo.png` |
 
 ---
 
@@ -169,7 +170,7 @@
 | Mecanismo de pseudonimização LGPD compatível com cadeia de hash (cofre selado vs. HMAC com chave rotacionada) | FD-001-06, seção 6 | Em análise — exigirá ADR antes da v2 do Audit Service |
 | Períodos de orçamento com teto por ciclo (requisições de compra dentro de ciclo orçamentário com limite por período — inspiração validada em análise de ERPs open source, 2026-08-23) | Análise de continuidade (sessão 2026-08-23); PR-001-01 (centro de custo) | Em análise — módulo/extensão fora da ordem oficial de roadmap: exigirá ADR própria (ADR-012, consequência 4) antes de qualquer documento |
 | Divergência de numeração das regras IV-BR: o catálogo MMS-004-02 e os documentos MMS-004-07/08/09 (e, por consequência, 10–17) usam esquemas de códigos IV-BR/IV-ERR/TC-IV distintos para as mesmas regras | Detectada na produção do pacote MMS-004 (2026-08-23) | Em análise — exigirá revisão de reconciliação (1.1.0) do MMS-004-02 ou dos MMS-004-07/08/09 para restabelecer a rastreabilidade única |
-| DS-001 e DS-ASSET-001 (Brand & Logo) registrados como Approved, mas os arquivos `docs/05-design-system/*` nunca existiram no repositório git — a tela de login usa marca tipográfica provisória | Detectada na implementação do Foundation (2026-08-23) | Em análise — recuperar/recriar os artefatos do design system e comitá-los, ou revisar o registry; enquanto isso os registros DS-001/DS-ASSET-001 não têm lastro |
+| DS-001 e DS-ASSET-001 (Brand & Logo) registrados como Approved sem os arquivos no repositório — a tela de login usava marca tipográfica provisória | Detectada na implementação do Foundation (2026-08-23) | ✅ Resolvida (2026-08-26) — o asset oficial está no repositório e a tela de login passou a usá-lo (DS-ASSET-002, versão web). Falta apenas a versão para fundos claros prevista no DS-001 §4.2 |
 | SUP-001 e PO-001 implementados a partir de specs MVP consolidadas (documento único 0.1.0) — desdobramento no pacote padrão de 17 documentos pendente | Conclusão do ciclo de compras (2026-08-24) | Em aberto — produzir pacotes completos na fase de refinamento |
 | Envio real de e-mail ao fornecedor no convite da cotação — convite é gerado e registrado, envio manual até o Notification Center (FD-001-05) ser implementado | RFQ-001 §9 (2026-08-24) | Em aberto |
 

@@ -83,7 +83,17 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseDefaultFiles();
-app.UseStaticFiles();
+// o SPA é um arquivo só: o navegador precisa revalidar o HTML a cada carga, senão
+// uma versão antiga fica presa no cache depois do deploy (assets seguem cacheáveis)
+var staticFiles = new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        if (ctx.File.Name.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+            ctx.Context.Response.Headers.CacheControl = "no-cache, must-revalidate";
+    },
+};
+app.UseStaticFiles(staticFiles);
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -2137,10 +2147,13 @@ app.MapGet("/api/v1/purchase-orders/{id:guid}/pdf", async (Guid id, AppDbContext
     return Results.File(pdf, "application/pdf", $"{order.Number}.pdf");
 }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
 
-app.MapGet("/portal", (IWebHostEnvironment env) =>
-    Results.File(Path.Combine(env.WebRootPath, "portal.html"), "text/html")).AllowAnonymous();
+app.MapGet("/portal", (IWebHostEnvironment env, HttpContext ctx) =>
+{
+    ctx.Response.Headers.CacheControl = "no-cache, must-revalidate";
+    return Results.File(Path.Combine(env.WebRootPath, "portal.html"), "text/html");
+}).AllowAnonymous();
 
-app.MapFallbackToFile("index.html");
+app.MapFallbackToFile("index.html", staticFiles);
 
 app.Run();
 

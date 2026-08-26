@@ -8,7 +8,7 @@ namespace TrinoSupply.Foundation.Api.Procurement;
 public record ProposalInput(
     int? DeliveryDays, string? PaymentTerms, decimal? FreightValue, DateOnly? ValidUntil,
     string? Notes, IReadOnlyList<ProposalItemInput> Items,
-    decimal? DiscountValue = null, string? Currency = null);
+    decimal? DiscountValue = null, string? Currency = null, int? PaymentDays = null);
 /// <summary>SC já designada a um comprador, mas ainda retida na aprovação.</summary>
 public record QueueBlocked(PurchaseRequisition Pr, string Reason);
 
@@ -165,8 +165,9 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
                 SupplierName = s.TradeName ?? s.LegalName, TaxId = s.TaxId,
                 InvitedBy = actor.Id, InvitedByLabel = actor.Label, InvitedAt = clock.GetUtcNow(),
             };
-            db.QuotationSuppliers.Add(invite); // Add explícito: chave pré-gerada em pai já rastreado
-            q.Suppliers.Add(invite);
+            // Add explícito (chave pré-gerada em pai já rastreado); o EF liga o convite à cotação
+            // sozinho — adicionar à coleção aqui deixava o fornecedor duplicado na resposta
+            db.QuotationSuppliers.Add(invite);
             AddEvent(q, "FORNECEDOR_CONVIDADO", $"Fornecedor {s.TradeName ?? s.LegalName} convidado.", actor);
         }
         await TouchAndSaveAsync(q, ct);
@@ -203,6 +204,7 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
             VersionNumber = version,
             DeliveryDays = input.DeliveryDays,
             PaymentTerms = string.IsNullOrWhiteSpace(input.PaymentTerms) ? null : input.PaymentTerms.Trim(),
+            PaymentDays = input.PaymentDays,
             FreightValue = input.FreightValue,
             DiscountValue = input.DiscountValue,
             Currency = string.IsNullOrWhiteSpace(input.Currency) ? "BRL" : input.Currency.Trim().ToUpperInvariant(),
@@ -233,6 +235,74 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
         return (proposal, null);
     }
 
+    // ---- negociação e ganho (saving) ----------------------------------------
+    /// <summary>
+    /// Registra o resultado da negociação com um fornecedor: o comprador informa o valor
+    /// fechado (ou o desconto em %) e o sistema grava uma nova versão da proposta e o ganho
+    /// em relação à primeira proposta daquele fornecedor.
+    /// </summary>
+    public async Task<(Proposal? proposal, UserError? error)> RegisterNegotiationAsync(
+        Actor actor, Guid id, Guid supplierId, decimal? closedValue, decimal? discountPercent,
+        string? notes, CancellationToken ct = default)
+    {
+        var q = await GetAsync(id, ct);
+        if (q is null) return (null, new("RFQ-ERR-404", "Cotação não encontrada."));
+        if (q.Status is not (QuotationStatus.Open or QuotationStatus.Analysis) || q.WinnerSupplierId is not null)
+            return (null, new("RFQ-ERR-020", "A negociação é registrada antes da escolha do fornecedor."));
+
+        var versoes = q.Proposals.Where(p => p.SupplierId == supplierId).OrderBy(p => p.VersionNumber).ToList();
+        if (versoes.Count == 0)
+            return (null, new("RFQ-ERR-021", "Registre a proposta deste fornecedor antes de negociar."));
+        var atual = versoes[^1];
+
+        var fechado = closedValue;
+        if (fechado is null)
+        {
+            if (discountPercent is null or <= 0)
+                return (null, new("RFQ-ERR-022", "Informe o valor fechado ou o desconto negociado (%)."));
+            if (discountPercent >= 100)
+                return (null, new("RFQ-ERR-022", "O desconto negociado precisa ser menor que 100%."));
+            fechado = Math.Round(atual.TotalValue * (1 - discountPercent.Value / 100m), 2);
+        }
+        if (fechado <= 0)
+            return (null, new("RFQ-ERR-022", "O valor fechado precisa ser maior que zero."));
+        if (fechado > atual.TotalValue)
+            return (null, new("RFQ-ERR-022",
+                $"O valor fechado ({fechado:0.00}) é maior que a proposta atual ({atual.TotalValue:0.00}): isso não é um ganho de negociação."));
+
+        // a nova versão repete itens e frete e concentra a negociação no desconto
+        var bruto = atual.Items.Sum(i => i.UnitPrice * i.Quantity) + (atual.FreightValue ?? 0);
+        var input = new ProposalInput(
+            atual.DeliveryDays, atual.PaymentTerms, atual.FreightValue, atual.ValidUntil,
+            string.IsNullOrWhiteSpace(notes) ? atual.Notes : notes.Trim(),
+            atual.Items.Select(i => new ProposalItemInput(i.QuotationItemId, i.UnitPrice, i.Quantity)).ToList(),
+            bruto - fechado.Value, atual.Currency, atual.PaymentDays);
+        var (nova, error) = await SubmitProposalAsync(q.Id, supplierId, input, "NEGOCIACAO", actor.Label, ct);
+        if (error is not null) return (null, error);
+
+        var primeira = versoes[0].TotalValue;
+        q.NegotiationNotes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
+        q.NegotiatedByLabel = actor.Label;
+        q.NegotiatedAt = clock.GetUtcNow();
+        ApplySaving(q, nova!);
+        AddEvent(q, "NEGOCIACAO_REGISTRADA",
+            $"Negociação com {nova!.SupplierName}: de {primeira:0.00} para {nova.TotalValue:0.00} " +
+            $"(ganho de {primeira - nova.TotalValue:0.00}).", actor, null, null, q.NegotiationNotes);
+        await TouchAndSaveAsync(q, ct);
+        return (nova, null);
+    }
+
+    /// <summary>Ganho da negociação: primeira proposta do fornecedor menos o valor fechado com ele.</summary>
+    private void ApplySaving(Quotation q, Proposal fechada)
+    {
+        var primeira = q.Proposals.Where(p => p.SupplierId == fechada.SupplierId)
+            .OrderBy(p => p.VersionNumber).First().TotalValue;
+        q.BaselineValue = primeira;
+        q.NegotiatedValue = fechada.TotalValue;
+        q.SavingValue = primeira - fechada.TotalValue;
+        q.SavingPercent = primeira > 0 ? Math.Round((primeira - fechada.TotalValue) / primeira * 100m, 2) : 0m;
+    }
+
     // ---- encerramento p/ análise --------------------------------------------
     public Task<(Quotation? q, UserError? error)> CloseForAnalysisAsync(Actor actor, Guid id, CancellationToken ct = default) =>
         TransitionAsync(actor, id, QuotationStatus.Open, QuotationStatus.Analysis, "COTACAO_ENCERRADA",
@@ -258,6 +328,7 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
 
         q.WinnerSupplierId = proposal.SupplierId;
         q.WinnerProposalId = proposal.Id;
+        ApplySaving(q, proposal);
         q.SelectionCriteria = string.IsNullOrWhiteSpace(criteria) ? null : criteria.Trim();
         q.SelectionJustification = justification.Trim();
         q.SelectedBy = actor.Id;
@@ -375,7 +446,7 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
                     q.Status = QuotationStatus.ApprovedForIssue;
                     await MarkSourcePrApprovedAsync(q, actor, ct);
                     AddEvent(q, "DIRETOR_APROVOU",
-                        "Diretoria aprovou. Processo APROVADO PARA EMISSÃO DA OC — tarefa disponível para Suprimentos.",
+                        "Aprovador 02 (Nível 2) aprovou. Processo aguardando o comprador registrar a OC fechada no SENIOR.",
                         actor, from, q.Status, reason);
                 }
                 else
@@ -385,7 +456,7 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
                     q.ManagerApprovedAt = clock.GetUtcNow();
                     q.Status = QuotationStatus.AwaitingDirector;
                     AddEvent(q, "GERENTE_APROVOU",
-                        "Aprovação gerencial concedida. Processo encaminhado à diretoria.",
+                        "Aprovador 01 (Nível 1) aprovou. Processo encaminhado ao Nível 2.",
                         actor, from, q.Status, reason);
                 }
                 break;
@@ -412,14 +483,25 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
         return (q, null);
     }
 
-    // ---- emissão da OC (RFQ-BR-007; PO-BR-005 na entrega) --------------------
-    public async Task<(PurchaseOrder? order, UserError? error)> IssuePurchaseOrderAsync(
-        Actor actor, Guid id, string? notes, CancellationToken ct = default)
+    // ---- registro da OC fechada no ERP (SENIOR) -----------------------------
+    /// <summary>
+    /// A OC não é mais emitida aqui: ela é fechada no SENIOR (que conversa com o financeiro) e o
+    /// comprador registra o número dela no processo, dando origem ao pedido que recebe o
+    /// faturamento e a entrega (revisão de telas 2026-08-26).
+    /// </summary>
+    public async Task<(PurchaseOrder? order, UserError? error)> RegisterErpPurchaseOrderAsync(
+        Actor actor, Guid id, string? erpNumber, DateOnly? issuedOn, string? notes, CancellationToken ct = default)
     {
         var q = await GetAsync(id, ct);
         if (q is null) return (null, new("RFQ-ERR-404", "Cotação não encontrada."));
         if (q.Status != QuotationStatus.ApprovedForIssue)
-            return (null, new("RFQ-ERR-040", "A OC só pode ser emitida com o processo APROVADO PARA EMISSÃO."));
+            return (null, new("RFQ-ERR-040", "A OC só é registrada depois das duas aprovações."));
+        var numero = erpNumber?.Trim();
+        if (string.IsNullOrWhiteSpace(numero))
+            return (null, new("RFQ-ERR-041", "Informe o número da OC fechada no SENIOR."));
+        if (numero.Length > 30) return (null, new("RFQ-ERR-041", "O número da OC tem no máximo 30 caracteres."));
+        if (await db.PurchaseOrders.AnyAsync(o => o.Number == numero, ct))
+            return (null, new("RFQ-ERR-041", $"A OC {numero} já está registrada em outro processo."));
         var proposal = q.Proposals.Single(p => p.Id == q.WinnerProposalId);
         var supplier = await db.Suppliers.SingleOrDefaultAsync(s => s.Id == q.WinnerSupplierId, ct);
         if (supplier is null || !supplier.Active)
@@ -428,7 +510,9 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
         var now = clock.GetUtcNow();
         var order = new PurchaseOrder
         {
-            Number = $"PO-{now.Year}-{await NextPoSeqAsync(ct):000000}",
+            Number = numero,
+            ErpNumber = numero,
+            ErpIssuedOn = issuedOn ?? DateOnly.FromDateTime(now.UtcDateTime),
             SupplierId = supplier.Id,
             SupplierName = supplier.TradeName ?? supplier.LegalName,
             SourcePrId = q.SourcePrId,
@@ -455,7 +539,8 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
                 CreatedAt = now,
             });
         }
-        order.TotalValue = order.Items.Sum(i => (i.UnitPrice ?? 0) * i.Quantity) + (proposal.FreightValue ?? 0);
+        order.TotalValue = order.Items.Sum(i => (i.UnitPrice ?? 0) * i.Quantity) + (proposal.FreightValue ?? 0)
+            - (proposal.DiscountValue ?? 0);
         if (order.Items.Count == 0 || order.TotalValue <= 0)
             return (null, new("RFQ-ERR-040", "A OC precisa de itens e valor."));
         db.PurchaseOrders.Add(order);
@@ -464,8 +549,8 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
         q.Status = QuotationStatus.PoIssued;
         q.PurchaseOrderId = order.Id;
         q.PurchaseOrderNumber = order.Number;
-        AddEvent(q, "OC_EMITIDA",
-            $"Ordem de compra {order.Number} emitida para {order.SupplierName} — total {order.TotalValue:0.00}.",
+        AddEvent(q, "OC_REGISTRADA",
+            $"OC {order.Number} do SENIOR registrada para {order.SupplierName} — total {order.TotalValue:0.00}.",
             actor, from, q.Status);
         await TouchAndSaveAsync(q, ct);
         return (order, null);
@@ -533,12 +618,4 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
             .SingleAsync(ct);
     }
 
-    private async Task<long> NextPoSeqAsync(CancellationToken ct)
-    {
-        if (!db.Database.IsRelational())
-            return await db.PurchaseOrders.LongCountAsync(ct) + 1;
-        return await db.Database
-            .SqlQueryRaw<long>("SELECT nextval('procurement.po_number_seq') AS \"Value\"")
-            .SingleAsync(ct);
-    }
 }

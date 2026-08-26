@@ -482,6 +482,13 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(q => q.CreatedAt).HasColumnName("created_at");
             e.Property(q => q.UpdatedAt).HasColumnName("updated_at");
             e.Property(q => q.Version).HasColumnName("version").IsConcurrencyToken();
+            e.Property(q => q.BaselineValue).HasColumnName("baseline_value").HasPrecision(18, 4);
+            e.Property(q => q.NegotiatedValue).HasColumnName("negotiated_value").HasPrecision(18, 4);
+            e.Property(q => q.SavingValue).HasColumnName("saving_value").HasPrecision(18, 4);
+            e.Property(q => q.SavingPercent).HasColumnName("saving_percent").HasPrecision(9, 4);
+            e.Property(q => q.NegotiationNotes).HasColumnName("negotiation_notes").HasMaxLength(1000);
+            e.Property(q => q.NegotiatedByLabel).HasColumnName("negotiated_by_label").HasMaxLength(200);
+            e.Property(q => q.NegotiatedAt).HasColumnName("negotiated_at");
             e.HasIndex(q => q.Number).IsUnique(); // RFQ-BR-002
             e.HasIndex(q => new { q.Status, q.CreatedAt });
             e.HasIndex(q => q.SourcePrId);
@@ -532,6 +539,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(p => p.TotalValue).HasColumnName("total_value").HasPrecision(18, 4);
             e.Property(p => p.DeliveryDays).HasColumnName("delivery_days");
             e.Property(p => p.PaymentTerms).HasColumnName("payment_terms").HasMaxLength(200);
+            e.Property(p => p.PaymentDays).HasColumnName("payment_days");
             e.Property(p => p.FreightValue).HasColumnName("freight_value").HasPrecision(18, 4);
             e.Property(p => p.DiscountValue).HasColumnName("discount_value").HasPrecision(18, 4);
             e.Property(p => p.Currency).HasColumnName("currency").HasMaxLength(3);

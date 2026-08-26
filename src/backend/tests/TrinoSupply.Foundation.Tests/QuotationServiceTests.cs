@@ -265,27 +265,34 @@ public class QuotationServiceTests
     }
 
     [Fact]
-    public async Task OC_nao_pode_ser_emitida_sem_as_duas_aprovacoes()
+    public async Task OC_nao_pode_ser_registrada_sem_as_duas_aprovacoes()
     {
         var w = await BuildAsync();
         var q = await UpToAnalysisAsync(w);
         var winner = q.Proposals.First(p => p.SupplierId == w.Alfa.Id);
         await w.Rfq.SelectWinnerAsync(Carla, q.Id, winner.Id, "Preço", "Menor preço.");
 
-        var (_, tooEarly) = await w.Rfq.IssuePurchaseOrderAsync(Carla, q.Id, null);
+        var (_, tooEarly) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, "663", null, null);
         Assert.Equal("RFQ-ERR-040", tooEarly!.Code);
     }
 
     [Fact]
-    public async Task Fluxo_completo_emite_OC_com_dados_da_proposta_vencedora_e_timeline()
+    public async Task Fluxo_completo_registra_a_OC_do_SENIOR_com_os_dados_da_proposta_e_timeline()
     {
         var w = await BuildAsync();
         var q = await UpToApprovedAsync(w);
 
-        var (order, error) = await w.Rfq.IssuePurchaseOrderAsync(Carla, q.Id, "Entregar no almoxarifado central.");
+        var (semNumero, faltaNumero) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, "  ", null, null);
+        Assert.Null(semNumero);
+        Assert.Equal("RFQ-ERR-041", faltaNumero!.Code);
+
+        var (order, error) = await w.Rfq.RegisterErpPurchaseOrderAsync(
+            Carla, q.Id, "663", new DateOnly(2026, 8, 26), "Entregar no almoxarifado central.");
 
         Assert.Null(error);
-        Assert.StartsWith("PO-2026-", order!.Number);
+        Assert.Equal("663", order!.Number);                      // o número é o da OC fechada no SENIOR
+        Assert.Equal("663", order.ErpNumber);
+        Assert.Equal(new DateOnly(2026, 8, 26), order.ErpIssuedOn);
         Assert.Equal(922.73m, order.TotalValue);                 // 857,65 + 65,08 (modelo OC 663)
         Assert.Equal("28 dias", order.PaymentTerms);
         Assert.Equal(q.Number, order.QuotationNumber);
@@ -297,11 +304,62 @@ public class QuotationServiceTests
 
         var types = (await w.Rfq.TimelineAsync(q.Id)).Select(e => e.EventType).ToList();
         foreach (var expected in new[] { "COTACAO_ABERTA", "FORNECEDOR_CONVIDADO", "PROPOSTA_RECEBIDA",
-                 "COTACAO_ENCERRADA", "FORNECEDOR_SELECIONADO", "GERENTE_APROVOU", "DIRETOR_APROVOU", "OC_EMITIDA" })
+                 "COTACAO_ENCERRADA", "FORNECEDOR_SELECIONADO", "GERENTE_APROVOU", "DIRETOR_APROVOU", "OC_REGISTRADA" })
             Assert.Contains(expected, types);
 
-        var (_, again) = await w.Rfq.IssuePurchaseOrderAsync(Carla, q.Id, null);
+        var (_, again) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, "664", null, null);
         Assert.Equal("RFQ-ERR-040", again!.Code); // nunca duas OCs do mesmo processo
+    }
+
+    [Fact]
+    public async Task Numero_de_OC_ja_registrado_em_outro_processo_e_recusado()
+    {
+        var w = await BuildAsync();
+        var q = await UpToApprovedAsync(w);
+        // a OC 663 já veio do SENIOR para outra compra
+        w.Db.PurchaseOrders.Add(new PurchaseOrder
+        {
+            Number = "663", ErpNumber = "663", SupplierId = w.Beta.Id, SupplierName = "Beta",
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await w.Db.SaveChangesAsync();
+
+        var (duplicado, duplicada) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, "663", null, null);
+        Assert.Null(duplicado);
+        Assert.Equal("RFQ-ERR-041", duplicada!.Code);
+    }
+
+    [Fact]
+    public async Task Negociacao_registra_o_ganho_sobre_a_primeira_proposta()
+    {
+        var w = await BuildAsync();
+        var q = await UpToAnalysisAsync(w);
+        var alfa = q.Proposals.First(p => p.SupplierId == w.Alfa.Id);
+        var original = alfa.TotalValue;                            // 922,73
+
+        var (acima, erroAcima) = await w.Rfq.RegisterNegotiationAsync(
+            Carla, q.Id, w.Alfa.Id, original + 10, null, null);
+        Assert.Null(acima);
+        Assert.Equal("RFQ-ERR-022", erroAcima!.Code);              // valor maior não é ganho
+
+        var (nova, error) = await w.Rfq.RegisterNegotiationAsync(
+            Carla, q.Id, w.Alfa.Id, null, 5m, "5% após negociação de prazo");
+        Assert.Null(error);
+        Assert.Equal(2, nova!.VersionNumber);
+        Assert.Equal(Math.Round(original * 0.95m, 2), nova.TotalValue);
+
+        var comGanho = await w.Rfq.GetAsync(q.Id);
+        Assert.Equal(original, comGanho!.BaselineValue);
+        Assert.Equal(nova.TotalValue, comGanho.NegotiatedValue);
+        Assert.Equal(original - nova.TotalValue, comGanho.SavingValue);
+        Assert.Equal(5m, comGanho.SavingPercent);
+        Assert.Contains("NEGOCIACAO_REGISTRADA", (await w.Rfq.TimelineAsync(q.Id)).Select(e => e.EventType));
+
+        // a escolha do vencedor mantém o ganho apurado contra a primeira proposta dele
+        var atual = comGanho.Proposals.Where(p => p.SupplierId == w.Alfa.Id).OrderByDescending(p => p.VersionNumber).First();
+        var (escolhida, erroEscolha) = await w.Rfq.SelectWinnerAsync(Carla, q.Id, atual.Id, "Preço", "Melhor proposta após negociação.");
+        Assert.Null(erroEscolha);
+        Assert.Equal(original - nova.TotalValue, escolhida!.SavingValue);
     }
 
     [Fact]
@@ -311,7 +369,7 @@ public class QuotationServiceTests
         var q = await UpToApprovedAsync(w);
         await w.Sup.UpdateAsync(w.Alfa.Id, null, null, null, active: false);
 
-        var (_, error) = await w.Rfq.IssuePurchaseOrderAsync(Carla, q.Id, null);
+        var (_, error) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, "663", null, null);
 
         Assert.Equal("RFQ-ERR-040", error!.Code);
     }

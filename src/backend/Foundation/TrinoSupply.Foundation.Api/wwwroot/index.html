@@ -636,13 +636,17 @@
       </section>
 
       <!-- Compras: cotações / processos -->
+      <!-- Compras: fila de solicitações aguardando abertura de cotação -->
+      <section class="view" id="view-rfq-queue">
+        <div class="panel">
+          <h2>Solicitações aguardando cotação</h2>
+          <p class="hello">As aprovadas podem ser cotadas agora; as retidas mostram de quem está a aprovação pendente. O comprador responsável vem de Compras → Gestão de Solicitações.</p>
+          <div id="rfq-queue" class="tablewrap"></div>
+        </div>
+      </section>
+
       <section class="view" id="view-quotations">
         <div id="rfq-lists">
-          <div class="panel">
-            <h2>Fila de Suprimentos — solicitações aguardando cotação</h2>
-            <p class="hello">As aprovadas podem ser cotadas agora; as retidas mostram de quem está a aprovação pendente. O comprador responsável vem de Compras → Gestão de Solicitações.</p>
-            <div id="rfq-queue" class="tablewrap"></div>
-          </div>
           <div class="panel">
             <div class="topbar" style="margin-bottom:8px">
               <h2 style="margin:0">Processos de cotação</h2>
@@ -650,10 +654,10 @@
                 <option value="">Todos</option>
                 <option value="COTACAO_ABERTA">Cotações em aberto / aguardando propostas</option>
                 <option value="EM_ANALISE">Propostas recebidas / em análise</option>
-                <option value="AGUARDANDO_GERENTE">Aguardando Gerente</option>
-                <option value="AGUARDANDO_DIRETOR">Aguardando Diretor</option>
-                <option value="APROVADO_PARA_EMISSAO">Aguardando emissão de OC</option>
-                <option value="OC_EMITIDA">OCs emitidas</option>
+                <option value="AGUARDANDO_GERENTE">Aguardando Aprovador 01 (Nível 1)</option>
+                <option value="AGUARDANDO_DIRETOR">Aguardando Aprovador 02 (Nível 2)</option>
+                <option value="APROVADO_PARA_EMISSAO">Aprovados — aguardando registro da OC</option>
+                <option value="OC_REGISTRADA">OC registrada (SENIOR)</option>
                 <option value="REJEITADO">Rejeitados</option>
                 <option value="CANCELADA">Cancelados</option>
               </select>
@@ -670,7 +674,7 @@
       <section class="view" id="view-buy-orders">
         <div class="panel">
           <h2>Pedidos de Compra</h2>
-          <p class="hello">A OC é emitida no ERP: aqui você amarra o pedido ao número da OC, lança as notas fiscais e confirma a entrega.</p>
+          <p class="hello">A O.C. é fechada no SENIOR e registrada no próprio processo de cotação. Esta tela é o histórico dos pedidos — dá para lançar faturamento, confirmar entrega e completar o registro de pedidos antigos.</p>
           <div id="buy-orders-list" class="tablewrap"></div>
         </div>
 
@@ -1137,7 +1141,10 @@
       ]},
       { title: 'Compras', module: 'COMPRAS', items: [
         { id: 'triage', label: 'Gestão de Solicitações', show: () => canTriage() || canBuy() || canWarehouse() },
-        { id: 'quotations', label: 'Cotações / Processos', show: () => canViewRfq() },
+        { label: 'Cotações', children: [
+          { id: 'rfq-queue', label: 'Abrir Cotação', show: () => canViewRfq() },
+          { id: 'quotations', label: 'Processos de Cotação', show: () => canViewRfq() },
+        ]},
         { id: 'buy-orders', label: 'Pedidos de Compra', show: () => true },
       ]},
       { title: 'Cadastros', items: [
@@ -1158,12 +1165,13 @@
       'pr-mine': 'Meus Pedidos', 'pr-approvals': 'Central de Aprovação',
       'mr-new': 'Solicitar Material', 'mr-mine': 'Minhas Solicitações',
       'wh-queue': 'Fila de Atendimento', 'wh-panel': 'Painel de Atendimentos',
+      'rfq-queue': 'Abrir Cotação',
       'buy-orders': 'Pedidos de Compra',
       triage: 'Gestão de Solicitações',
       users: 'Cadastro de Usuários', suppliers: 'Cadastro de Fornecedores', products: 'Cadastro de Produtos',
       families: 'Famílias de Produtos',
       'supply-dash': 'Dashboard de Suprimentos', 'cost-centers': 'Centros de Custo',
-      quotations: 'Cotações / Processos de Compra', company: 'Empresas do Grupo (CNPJs)',
+      quotations: 'Processos de Cotação', company: 'Empresas do Grupo (CNPJs)',
     };
     const LOADERS = {};
     let currentView = 'supply-dash';
@@ -1221,7 +1229,7 @@
       document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === currentView));
     }
 
-    function goTo(view) {
+    function goTo(view, after) {
       if (!document.getElementById('view-' + view)) view = 'supply-dash';
       currentView = view;
       const path = navPathOf(view);
@@ -1230,7 +1238,8 @@
       $('view-' + view).classList.add('active');
       renderNav();
       $('page-title').textContent = TITLES[view] || 'Trino Supply';
-      LOADERS[view]?.();
+      const carregando = LOADERS[view]?.();
+      if (after) Promise.resolve(carregando).then(after).catch(() => {});
     }
     $('nav').addEventListener('click', (ev) => {
       const group = ev.target.closest('.nav-group');
@@ -1710,8 +1719,7 @@
       if (!btn) return;
       if (btn.dataset.act === 'review-rfq') {
         const id = btn.closest('tr').dataset.q;
-        goTo('quotations');
-        setTimeout(() => openRfq(id), 400);
+        goTo('quotations', () => openRfq(id));
         return;
       }
       // aprovação (Nível 1) da solicitação de material, com quantidade liberada por item
@@ -3192,10 +3200,10 @@
     const RFQ_STATUS = {
       COTACAO_ABERTA: ['Aguardando propostas', ''],
       EM_ANALISE: ['Em análise', 'dev'],
-      AGUARDANDO_GERENTE: ['Aguardando Gerente', 'dev'],
-      AGUARDANDO_DIRETOR: ['Aguardando Diretor', 'dev'],
-      APROVADO_PARA_EMISSAO: ['Aprovado p/ emissão da OC', 'on'],
-      OC_EMITIDA: ['OC emitida', 'on'],
+      AGUARDANDO_GERENTE: ['Aguardando Aprovador 01', 'dev'],
+      AGUARDANDO_DIRETOR: ['Aguardando Aprovador 02', 'dev'],
+      APROVADO_PARA_EMISSAO: ['Aprovado — registrar OC', 'teal'],
+      OC_REGISTRADA: ['OC registrada', 'on'],
       REJEITADO: ['Rejeitado', 'off'],
       CANCELADA: ['Cancelada', 'off'],
     };
@@ -3236,10 +3244,7 @@
       } catch (err) { toast(err.message, 'error'); }
     }
 
-    LOADERS['quotations'] = async () => {
-      $('rfq-detail').hidden = true;
-      $('rfq-lists').hidden = false;
-      $('rfq-queue-wrap')?.remove;
+    LOADERS['rfq-queue'] = async () => {
       try {
         const conduct = canConductRfq();
         const queue = (await api('/api/v1/quotations/queue')).items;
@@ -3266,7 +3271,13 @@
               </tr>`;
             }).join('') + '</tbody></table>'
           : '<p class="hello">Nenhuma solicitação aguardando cotação. ✔</p>';
+      } catch (err) { $('rfq-queue').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
 
+    LOADERS['quotations'] = async () => {
+      $('rfq-detail').hidden = true;
+      $('rfq-lists').hidden = false;
+      try {
         const { items } = await api('/api/v1/quotations/');
         rfqCache = Object.fromEntries(items.map(q => [q.id, q]));
         const filter = $('rfq-filter').value;
@@ -3343,12 +3354,61 @@
         linha('Validade da proposta', p => p.validUntil || '—') +
         linha('Moeda', p => escapeHtml(p.currency || 'BRL')) +
         linha('Condição de pagamento', p => escapeHtml(p.paymentTerms || '—')) +
+        linha('Prazo para pagamento', p => p.paymentDays != null ? p.paymentDays + ' dias' : '—') +
         linha('Prazo de entrega', p => p.deliveryDays != null ? p.deliveryDays + ' dias' : '—') +
         linha('Observação', p => escapeHtml(p.notes || '—')) +
         linha('Anexo', p => p.attachmentDocumentId
           ? `<a href="#" data-doc="${p.attachmentDocumentId}" data-act="download-doc">${escapeHtml(p.attachmentFileName || 'anexo')}</a>`
           : '—') +
         '</table>';
+    }
+
+    /// O.C. fechada no SENIOR + faturamento + entrega, dentro do próprio processo de cotação.
+    function processOrderPanel(o, conduct) {
+      const dt = (d) => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
+      const faturado = (o.invoices || []).reduce((t, i) => t + (i.value || 0), 0);
+      let html = `<h2>O.C., faturamento e entrega</h2>
+        <div class="alert-card info" style="cursor:default"><span>
+          <strong>O.C. ${escapeHtml(o.number)} · ${escapeHtml(o.supplierName)}</strong>
+          <div class="sub">Emitida em ${dt(o.erpIssuedOn)} · total ${money(o.totalValue)}${o.deliveryDays != null ? ' · prazo de entrega ' + o.deliveryDays + ' dias' : ''}${o.paymentTerms ? ' · ' + escapeHtml(o.paymentTerms) : ''}` +
+        (o.erpDocumentId ? ` · <a href="#" data-doc="${o.erpDocumentId}" data-act="download-doc">${escapeHtml(o.erpFileName || 'anexo da OC')}</a>` : '') +
+        `</div></span></div>`;
+
+      html += '<h2>Faturamento</h2>';
+      html += (o.invoices || []).length
+        ? '<div class="tablewrap"><table><thead><tr><th>Nota fiscal</th><th>Data de faturamento</th><th>Valor</th><th>Anexo</th></tr></thead><tbody>' +
+          o.invoices.map(i => `<tr><td>${escapeHtml(i.number)}</td><td>${dt(i.issuedOn)}</td><td>${money(i.value || 0)}</td>
+            <td>${i.documentId ? `<a href="#" data-doc="${i.documentId}" data-act="download-doc">${escapeHtml(i.fileName || 'nota')}</a>` : '—'}</td></tr>`).join('') +
+          `</tbody></table></div><p class="hello">Total faturado: <strong>${money(faturado)}</strong> de ${money(o.totalValue)}.</p>`
+        : '<p class="hello">Nenhuma nota lançada ainda.</p>';
+      if (conduct) {
+        html += `<div class="grid2">
+            <div><label for="rfq-nf-number">Nota fiscal</label><input id="rfq-nf-number" placeholder="número da NF" /></div>
+            <div class="grid2">
+              <div><label for="rfq-nf-date">Data de faturamento</label><input id="rfq-nf-date" type="date" /></div>
+              <div><label for="rfq-nf-value">Valor (R$)</label><input id="rfq-nf-value" type="number" min="0" step="0.01" /></div>
+            </div>
+          </div>
+          <label for="rfq-nf-file">Anexo da nota <span class="sub">(opcional)</span></label>
+          <input id="rfq-nf-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.docx" />
+          <button data-act="rfq-invoice" style="margin-top:10px">Lançar faturamento</button>`;
+      }
+
+      html += '<h2>Entrega</h2>';
+      html += o.deliveryCompletedAt
+        ? `<p class="hello">Entrega encerrada em <strong>${dt(o.deliveryCompletedAt)}</strong>${o.cancelReason ? ' · saldo cancelado: “' + escapeHtml(o.cancelReason) + '”' : ''}.</p>`
+        : '<p class="hello">Informe o que chegou. O que faltar continua pendente até a próxima entrega.</p>';
+      html += '<div class="tablewrap"><table><thead><tr><th>Item</th><th>Pedido</th><th>Entregue</th><th>Pendente</th>' +
+        (conduct && !o.deliveryCompletedAt ? '<th>Chegou agora</th>' : '') + '</tr></thead><tbody>' +
+        o.items.map(i => `<tr><td>${escapeHtml(i.description)}</td><td>${i.quantity} ${escapeHtml(i.unitOfMeasure || '')}</td>
+          <td>${i.receivedQuantity}</td><td>${i.pendingQuantity > 0 ? `<span class="badge warn">${i.pendingQuantity}</span>` : '<span class="badge on">0</span>'}</td>` +
+          (conduct && !o.deliveryCompletedAt
+            ? `<td><input class="rfq-recv" data-item="${i.itemId}" type="number" min="0" max="${i.pendingQuantity}" step="0.01" style="width:100px" ${i.pendingQuantity > 0 ? '' : 'disabled'} /></td>`
+            : '') + '</tr>').join('') + '</tbody></table></div>';
+      if (conduct && !o.deliveryCompletedAt)
+        html += `<label style="margin-top:8px"><input type="checkbox" id="rfq-close-remaining" style="width:auto" /> encerrar o saldo que não vai chegar</label>
+          <button data-act="rfq-delivery" style="margin-top:8px">Registrar entrega</button>`;
+      return html;
     }
 
     function renderRfqDetail(q) {
@@ -3399,7 +3459,7 @@
             <div><label>Fornecedor</label><select id="ip-supplier">${q.suppliers.map(s => `<option value="${s.supplierId}">${escapeHtml(s.supplierName)}</option>`).join('')}</select></div>
             <div class="grid2">
               <div><label>Prazo entrega (dias)</label><input id="ip-delivery" type="number" min="0" /></div>
-              <div><label>Cond. pagamento</label><input id="ip-payment" placeholder="ex.: 28 dias" /></div>
+              <div><label>Cond. pagamento</label><input id="ip-payment" placeholder="ex.: 30/60 dias" /></div>
             </div>
           </div>
           <div class="grid2">
@@ -3408,11 +3468,18 @@
               <div><label>Desconto (R$)</label><input id="ip-discount" type="number" min="0" step="0.01" /></div>
             </div>
             <div class="grid2">
+              <div><label>Prazo p/ pagamento (dias)</label><input id="ip-paydays" type="number" min="0" placeholder="ex.: 28" /></div>
               <div><label>Validade da proposta</label><input id="ip-valid" type="date" /></div>
+            </div>
+          </div>
+          <div class="grid2">
+            <div class="grid2">
               <div><label>Moeda</label>
                 <select id="ip-currency"><option value="BRL">Real (BRL)</option>
                   <option value="USD">Dólar (USD)</option><option value="EUR">Euro (EUR)</option></select></div>
+              <div></div>
             </div>
+            <div></div>
           </div>
           <label>Observação da proposta</label>
           <input id="ip-notes" placeholder="ex.: condição especial, prazo de embalagem…" />
@@ -3428,6 +3495,33 @@
       }
       html += '</div>';
 
+      // negociação com o fornecedor e ganho registrado (saving)
+      html += '<div class="panel"><h2>Negociação e ganho</h2>';
+      if (q.saving) {
+        const ganho = q.saving.value || 0;
+        html += `<div class="alert-card ${ganho > 0 ? 'ok' : 'info'}" style="cursor:default"><span>
+          <strong>Ganho de negociação: ${money(ganho)}${q.saving.percent ? ` (${q.saving.percent}%)` : ''}</strong>
+          <div class="sub">Primeira proposta ${money(q.saving.baselineValue)} → fechado ${money(q.saving.closedValue)}${q.saving.byLabel ? ' · negociado por ' + escapeHtml(q.saving.byLabel) : ''}${q.saving.notes ? ' · “' + escapeHtml(q.saving.notes) + '”' : ''}</div>
+        </span></div>`;
+      } else {
+        html += '<p class="hello">Nenhuma negociação registrada. O ganho é medido contra a primeira proposta do fornecedor.</p>';
+      }
+      if (conduct && ['COTACAO_ABERTA', 'EM_ANALISE'].includes(q.status) && latest.length) {
+        html += `<div class="grid2" style="margin-top:8px">
+            <div><label for="ng-supplier">Fornecedor negociado</label>
+              <select id="ng-supplier">${latest.map(p => `<option value="${p.supplierId}">${escapeHtml(p.supplierName)} — proposta atual ${money(p.totalValue)}</option>`).join('')}</select></div>
+            <div class="grid2">
+              <div><label for="ng-value">Valor fechado (R$)</label><input id="ng-value" type="number" min="0" step="0.01" placeholder="ex.: 95000" /></div>
+              <div><label for="ng-percent">ou desconto (%)</label><input id="ng-percent" type="number" min="0" max="99.99" step="0.01" placeholder="ex.: 5" /></div>
+            </div>
+          </div>
+          <label for="ng-notes">O que foi negociado</label>
+          <input id="ng-notes" placeholder="ex.: 5% de desconto após negociação de prazo" />
+          <button data-act="negotiate" style="margin-top:8px">Registrar negociação</button>
+          <p class="hello" style="margin:6px 0 0">O valor fechado entra como uma nova versão da proposta e o mapa passa a comparar por ele.</p>`;
+      }
+      html += '</div>';
+
       // ações do processo
       const actions = [];
       if (conduct && q.status === 'COTACAO_ABERTA')
@@ -3437,17 +3531,14 @@
       }
       if (canMgrApprove() && q.status === 'AGUARDANDO_GERENTE') actions.push('decision:manager');
       if (canDirApprove() && q.status === 'AGUARDANDO_DIRETOR') actions.push('decision:director');
-      if (conduct && q.status === 'APROVADO_PARA_EMISSAO')
-        actions.push('<button data-act="issue-po">Encaminhar para Ordem de Compra</button>');
-      if (q.status === 'OC_EMITIDA' && q.purchaseOrderId)
-        actions.push(`<button class="secondary" data-act="go-po">Registrar OC do ERP em ${escapeHtml(q.purchaseOrderNumber)}</button>`);
-      if (conduct && !['OC_EMITIDA', 'REJEITADO', 'CANCELADA'].includes(q.status))
+      if (conduct && q.status === 'APROVADO_PARA_EMISSAO') actions.push('register-po-form');
+      if (conduct && !['OC_REGISTRADA', 'REJEITADO', 'CANCELADA'].includes(q.status))
         actions.push('<button class="danger" data-act="cancel-rfq">Cancelar processo</button>');
 
       html += '<div class="panel"><h2>Ações da etapa atual</h2>';
       if (q.selection) html += `<p class="hello">Fornecedor selecionado por <strong>${escapeHtml(q.selection.byLabel)}</strong> — critérios: ${escapeHtml(q.selection.criteria || '—')} · justificativa: “${escapeHtml(q.selection.justification)}”</p>`;
-      if (q.managerApproval) html += `<p class="hello">Aprovação gerencial: <strong>${escapeHtml(q.managerApproval.byLabel)}</strong></p>`;
-      if (q.directorApproval) html += `<p class="hello">Aprovação da diretoria: <strong>${escapeHtml(q.directorApproval.byLabel)}</strong></p>`;
+      if (q.managerApproval) html += `<p class="hello">Aprovador 01 (Nível 1): <strong>${escapeHtml(q.managerApproval.byLabel)}</strong></p>`;
+      if (q.directorApproval) html += `<p class="hello">Aprovador 02 (Nível 2): <strong>${escapeHtml(q.directorApproval.byLabel)}</strong></p>`;
       for (const a of actions) {
         if (a === 'winner-form') {
           html += `<h2>Escolher fornecedor vencedor</h2>
@@ -3462,6 +3553,21 @@
             <label for="rfq-just">Justificativa da escolha (obrigatória)</label>
             <input id="rfq-just" placeholder="Por que este fornecedor vence?" />
             <button data-act="select-winner" style="margin-top:10px">Confirmar escolha e enviar ao Gerente</button>`;
+        } else if (a === 'register-po-form') {
+          const vencedora = q.proposals.find(p => p.isWinner);
+          html += `<h2>Registrar a O.C. fechada no SENIOR</h2>
+            <p class="hello">A OC é fechada no SENIOR, que conversa com o financeiro. Aqui você registra o número dela${vencedora ? ` — fornecedor <strong>${escapeHtml(vencedora.supplierName)}</strong>, total ${money(vencedora.totalValue)}` : ''}.</p>
+            <div class="grid2">
+              <div><label for="rp-number">Número da O.C. (SENIOR)</label><input id="rp-number" placeholder="ex.: 663" /></div>
+              <div class="grid2">
+                <div><label for="rp-date">Data da O.C.</label><input id="rp-date" type="date" /></div>
+                <div><label for="rp-file">Anexo da O.C.</label>
+                  <input id="rp-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.docx" /></div>
+              </div>
+            </div>
+            <label for="rp-notes">Observação (opcional)</label>
+            <input id="rp-notes" placeholder="ex.: entrega parcelada combinada com o fornecedor" />
+            <button data-act="register-po" style="margin-top:10px">Registrar O.C. e seguir para faturamento</button>`;
         } else if (a.startsWith('decision:')) {
           const stage = a.split(':')[1];
           html += `<div class="row-actions" style="margin-top:8px">
@@ -3474,11 +3580,20 @@
       if (!actions.length) html += '<p class="hello">Nenhuma ação disponível para o seu papel nesta etapa.</p>';
       html += '</div>';
 
+      // etapa final: OC registrada, faturamento e entrega — tudo dentro do processo
+      if (q.purchaseOrderId)
+        html += '<div class="panel" id="rfq-po"><h2>O.C., faturamento e entrega</h2><p class="hello">Carregando…</p></div>';
+
       html += '<div class="panel"><h2>Histórico do processo (timeline)</h2><div id="rfq-timeline"><p class="hello">Carregando…</p></div></div>';
 
       $('rfq-lists').hidden = true;
       $('rfq-detail').hidden = false;
       $('rfq-detail').innerHTML = html;
+      if (q.purchaseOrderId)
+        api('/api/v1/purchase-orders/' + q.purchaseOrderId)
+          .then(order => { $('rfq-po').innerHTML = processOrderPanel(order, conduct); })
+          .catch(err => { $('rfq-po').innerHTML = '<h2>O.C., faturamento e entrega</h2><p class="hello">' + escapeHtml(err.message) + '</p>'; });
+
       api(`/api/v1/quotations/${q.id}/timeline`).then(({ items }) => {
         $('rfq-timeline').innerHTML = items.length
           ? items.map(e => `
@@ -3497,7 +3612,7 @@
       renderRfqDetail(q);
     }
 
-    document.getElementById('view-quotations').addEventListener('click', async (ev) => {
+    const onRfqClick = async (ev) => {
       const btn = ev.target.closest('[data-act]');
       if (!btn) return;
       const act = btn.dataset.act;
@@ -3508,9 +3623,8 @@
           const deadline = row.querySelector('.rfq-deadline').value || null;
           const q = await api('/api/v1/quotations/', { method: 'POST', body: { prId: row.dataset.pr, kind, deadline } });
           toast(`Cotação ${q.number} aberta.`, 'ok');
-          rfqCache[q.id] = q;
           await loadSuppliers();
-          renderRfqDetail(q);
+          goTo('quotations', () => { rfqCache[q.id] = q; renderRfqDetail(q); });
         } else if (act === 'open-detail') {
           await loadSuppliers().catch(() => {});
           rfqOpenId = btn.closest('tr').dataset.id;
@@ -3534,6 +3648,7 @@
             supplierId,
             deliveryDays: $('ip-delivery').value ? parseInt($('ip-delivery').value) : null,
             paymentTerms: $('ip-payment').value || null,
+            paymentDays: $('ip-paydays').value ? parseInt($('ip-paydays').value) : null,
             freightValue: $('ip-freight').value ? parseFloat($('ip-freight').value) : null,
             discountValue: $('ip-discount').value ? parseFloat($('ip-discount').value) : null,
             currency: $('ip-currency').value || 'BRL',
@@ -3578,14 +3693,58 @@
           const q = await api(`/api/v1/quotations/${rfqOpenId}/${path}`, { method: 'POST', body: { decision, reason } });
           toast('Decisão registrada.', 'ok');
           rfqCache[q.id] = q; renderRfqDetail(q);
-        } else if (act === 'issue-po') {
-          const notes = prompt('Observações para o pedido (opcional):') || null;
-          if (!confirm('Encaminhar para Ordem de Compra com os dados da proposta vencedora?\n\nA OC é emitida no ERP; aqui você registra o número, a data e o anexo em Compras → Pedidos de Compra.')) return;
-          const order = await api(`/api/v1/quotations/${rfqOpenId}/issue-po`, { method: 'POST', body: { notes } });
-          toast(`Pedido ${order.number} criado. Registre a OC do ERP em Pedidos de Compra.`, 'ok');
+        } else if (act === 'negotiate') {
+          const valor = $('ng-value').value ? parseFloat($('ng-value').value) : null;
+          const perc = $('ng-percent').value ? parseFloat($('ng-percent').value) : null;
+          if (valor == null && perc == null) { toast('Informe o valor fechado ou o desconto negociado.', 'error'); return; }
+          const q = await api(`/api/v1/quotations/${rfqOpenId}/negotiation`, { method: 'POST', body: {
+            supplierId: $('ng-supplier').value, closedValue: valor, discountPercent: perc, notes: $('ng-notes').value || null,
+          }});
+          toast('Negociação registrada — ganho calculado sobre a primeira proposta.', 'ok');
+          rfqCache[q.id] = q; renderRfqDetail(q);
+        } else if (act === 'register-po') {
+          const numero = $('rp-number').value.trim();
+          if (!numero) { toast('Informe o número da O.C. fechada no SENIOR.', 'error'); return; }
+          const order = await api(`/api/v1/quotations/${rfqOpenId}/register-po`, { method: 'POST', body: {
+            erpNumber: numero, issuedOn: $('rp-date').value || null, notes: $('rp-notes').value || null,
+          }});
+          const file = $('rp-file').files[0];
+          if (file) {
+            try { await sendFile(`/api/v1/purchase-orders/${order.id}/erp-order/attachment`, file); }
+            catch (e) { toast('O.C. registrada, mas o anexo falhou: ' + e.message, 'error'); }
+          }
+          toast(`O.C. ${order.number} registrada. Agora lance o faturamento e a entrega.`, 'ok');
           await refreshRfqDetail();
-        } else if (act === 'go-po') {
-          goTo('buy-orders');
+        } else if (act === 'rfq-invoice') {
+          const numero = $('rfq-nf-number').value.trim();
+          const valor = $('rfq-nf-value').value ? parseFloat($('rfq-nf-value').value) : null;
+          if (!numero || valor == null) { toast('Informe o número e o valor da nota fiscal.', 'error'); return; }
+          const poId = rfqCache[rfqOpenId].purchaseOrderId;
+          const nf = await api(`/api/v1/purchase-orders/${poId}/invoices`, { method: 'POST', body: {
+            number: numero, issuedOn: $('rfq-nf-date').value || null, value: valor,
+          }});
+          const file = $('rfq-nf-file').files[0];
+          if (file) {
+            try { await sendFile(`/api/v1/purchase-orders/${poId}/invoices/${nf.id}/attachment`, file); }
+            catch (e) { toast('Nota lançada, mas o anexo falhou: ' + e.message, 'error'); }
+          }
+          toast('Faturamento lançado.', 'ok');
+          await refreshRfqDetail();
+        } else if (act === 'rfq-delivery') {
+          const linhas = [...document.querySelectorAll('.rfq-recv')]
+            .filter(i => i.value).map(i => ({ itemId: i.dataset.item, quantity: parseFloat(i.value) }));
+          if (!linhas.length) { toast('Informe o que foi entregue.', 'error'); return; }
+          const encerrar = $('rfq-close-remaining').checked;
+          let motivo = null;
+          if (encerrar) {
+            motivo = prompt('Por que o saldo não virá? (obrigatório)');
+            if (!motivo) return;
+          }
+          await api(`/api/v1/purchase-orders/${rfqCache[rfqOpenId].purchaseOrderId}/deliveries`, { method: 'POST', body: {
+            items: linhas, closeRemaining: encerrar, closeReason: motivo,
+          }});
+          toast('Entrega registrada.', 'ok');
+          await refreshRfqDetail();
         } else if (act === 'download-doc') {
           ev.preventDefault();
           const res = await fetch('/api/v1/documents/' + btn.dataset.doc, { headers: { Authorization: 'Bearer ' + store.access } });
@@ -3599,7 +3758,9 @@
           LOADERS['quotations']();
         }
       } catch (err) { toast(err.message, 'error'); }
-    });
+    };
+    $('view-quotations').addEventListener('click', onRfqClick);
+    $('view-rfq-queue').addEventListener('click', onRfqClick);
 
     // ============ CADASTROS: EMPRESAS DO GRUPO (CNPJs) + PADRÃO DA OC ============
     let empCache = {};

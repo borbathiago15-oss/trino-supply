@@ -25,6 +25,10 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
         db.PurchaseOrders.Include(o => o.Items).Include(o => o.Invoices)
             .OrderByDescending(o => o.CreatedAt).Take(100).ToListAsync(ct);
 
+    public Task<PurchaseOrder?> GetAsync(Guid id, CancellationToken ct = default) =>
+        db.PurchaseOrders.Include(o => o.Items).Include(o => o.Invoices)
+            .SingleOrDefaultAsync(o => o.Id == id, ct);
+
     /// <summary>
     /// Demandas do comprador: solicitações de compra ainda sem cotação nem pedido. O faltante do
     /// almoxarifado deixou de aparecer aqui como item solto — desde a revisão do módulo de estoque
@@ -161,7 +165,7 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
     /// (o que faltou continua pendente) ou cancelamento do saldo que não vai chegar.
     /// </summary>
     public async Task<(PurchaseOrder? order, UserError? error)> RegisterDeliveryAsync(
-        Actor actor, Guid id, Guid locationId, IReadOnlyList<ReceiptLine> lines,
+        Actor actor, Guid id, Guid? locationId, IReadOnlyList<ReceiptLine> lines,
         bool closeRemaining, string? closeReason, CancellationToken ct = default)
     {
         var order = await LoadAsync(id, ct);
@@ -186,10 +190,14 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
         if (received.Count == 0 && !closeRemaining)
             return (null, new("PO-ERR-056", "Informe as quantidades que chegaram ou encerre o saldo pendente."));
 
-        var comCatalogo = received.Where(r => r.item.CatalogItemId is not null).ToList();
+        // o saldo de estoque vive no sistema do almoxarifado: só lançamos entrada quando o
+        // local é informado (tela de Pedidos de Compra); no processo de cotação a entrega é só registro
+        var comCatalogo = locationId is null
+            ? []
+            : received.Where(r => r.item.CatalogItemId is not null).ToList();
         if (comCatalogo.Count > 0)
         {
-            if (!await db.StorageLocations.AnyAsync(l => l.Id == locationId && l.Active, ct))
+            if (!await db.StorageLocations.AnyAsync(l => l.Id == locationId!.Value && l.Active, ct))
                 return (null, new("IV-ERR-060", "Local inválido ou inativo."));
             var ids = comCatalogo.Select(r => r.item.CatalogItemId!.Value).Distinct().ToList();
             var inactive = await db.CatalogItems
@@ -200,7 +208,7 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
             foreach (var (item, qty) in comCatalogo)
             {
                 var (_, entryError) = await inventory.RegisterEntryAsync(
-                    actor, item.CatalogItemId!.Value, locationId, qty,
+                    actor, item.CatalogItemId!.Value, locationId!.Value, qty,
                     MovementOrigin.Receiving, order.Number, ct);
                 if (entryError is not null) return (null, entryError);
             }

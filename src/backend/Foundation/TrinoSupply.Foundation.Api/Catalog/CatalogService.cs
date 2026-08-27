@@ -189,6 +189,20 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         return (key, null);
     }
 
+    /// <summary>Guarda a foto do produto (documento já gravado em StoredDocument).</summary>
+    public async Task<(CatalogItem? item, UserError? error)> AttachImageAsync(
+        Guid id, Guid documentId, string fileName, CancellationToken ct = default)
+    {
+        var item = await db.CatalogItems.Include(i => i.Suppliers).SingleOrDefaultAsync(i => i.Id == id, ct);
+        if (item is null) return (null, new("IC-ERR-404", "Item não encontrado."));
+        item.ImageDocumentId = documentId;
+        item.ImageFileName = fileName;
+        item.UpdatedAt = clock.GetUtcNow();
+        item.Version += 1;
+        await db.SaveChangesAsync(ct);
+        return (item, null);
+    }
+
     /// <summary>Código automático: 3 letras da família (sem acento) + sequência — ex.: MAT-001.</summary>
     private async Task<string> GenerateCodeAsync(string family, CancellationToken ct)
     {

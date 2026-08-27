@@ -224,6 +224,7 @@ static object CatalogView(CatalogItem i) => new
     stockControlled = i.StockControlled, purchasable = i.Purchasable, minimumQty = i.MinimumQty,
     productType = i.ProductType, productTypeLabel = i.ProductType is null ? null : ProductTypes.LabelOf(i.ProductType),
     baseCode = i.BaseCode, size = i.Size,
+    imageDocumentId = i.ImageDocumentId, imageFileName = i.ImageFileName,
     // o C.A. é do par produto+fornecedor: a mesma bota tem um C.A. no fornecedor X e outro no Y
     compliancePending = ProductTypes.RequiresCa(i.ProductType)
                         && !i.Suppliers.Any(s => !string.IsNullOrWhiteSpace(s.CaNumber)),
@@ -334,6 +335,37 @@ app.MapGet("/api/v1/product-types", (HttpContext ctx) => Ok(new
         requiresCa = ProductTypes.RequiresCa(t.Key),
     }),
 }, ctx)).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+
+// foto do produto (multipart): miniatura na lista e imagem ampliada ao clicar
+app.MapPost("/api/v1/items/{id:guid}/image", async (Guid id, HttpRequest request, AppDbContext db,
+    CatalogService svc, TimeProvider clock, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!CatalogService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.Produtos))
+        return Error(ctx, 403, "IC-ERR-900", "Seu usuário não mantém o catálogo.");
+    var item = await db.CatalogItems.SingleOrDefaultAsync(i => i.Id == id);
+    if (item is null) return Error(ctx, 404, "IC-ERR-404", "Item não encontrado.");
+    if (!request.HasFormContentType) return Error(ctx, 400, "DOC-ERR-001", "Envie o arquivo como multipart/form-data.");
+    var form = await request.ReadFormAsync();
+    var file = form.Files.FirstOrDefault();
+    if (file is null || file.Length == 0) return Error(ctx, 400, "DOC-ERR-001", "Nenhum arquivo enviado.");
+    if (file.Length > StoredDocument.MaxSizeBytes) return Error(ctx, 400, "DOC-ERR-002", "Arquivo acima de 10 MB.");
+    if (file.ContentType is not ("image/png" or "image/jpeg" or "image/webp"))
+        return Error(ctx, 400, "DOC-ERR-003", "A foto do produto precisa ser PNG, JPG ou WEBP.");
+
+    using var ms = new MemoryStream();
+    await file.CopyToAsync(ms);
+    var doc = new StoredDocument
+    {
+        FileName = Path.GetFileName(file.FileName), ContentType = file.ContentType, SizeBytes = file.Length,
+        Content = ms.ToArray(), EntityType = "PRODUTO_IMAGEM", EntityId = item.Id,
+        UploadedByLabel = p.FindFirstValue("name") ?? "Cadastro", UploadedAt = clock.GetUtcNow(),
+    };
+    db.StoredDocuments.Add(doc);
+    await db.SaveChangesAsync();
+    var (updated, error) = await svc.AttachImageAsync(id, doc.Id, doc.FileName);
+    return error is not null ? Error(ctx, 400, error.Code, error.Message)
+        : Ok(new { documentId = doc.Id, fileName = doc.FileName, item = CatalogView(updated!) }, ctx);
+}).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
 
 // ---- famílias de produtos (cadastro próprio: evita a mesma família escrita de vários jeitos)
 static object FamilyView(ProductFamily f) => new

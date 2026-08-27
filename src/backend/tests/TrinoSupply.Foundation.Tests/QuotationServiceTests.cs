@@ -103,6 +103,42 @@ public class QuotationServiceTests
         await w.Db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Contrato de parceria: o fornecedor tem produtos com preço, prazo de pagamento e prazo
+    /// de entrega fixos, e o contrato só vale dentro da vigência (revisão de cadastro 2026-08-27).
+    /// </summary>
+    [Fact]
+    public async Task Contrato_de_parceria_guarda_preco_e_prazos_e_respeita_a_vigencia()
+    {
+        var w = await BuildAsync();
+        var hoje = new DateOnly(2026, 8, 27);
+
+        var (semItens, erroVigencia) = await w.Sup.SaveContractAsync(
+            w.Alfa.Id, "CT-2026-014", hoje, hoje.AddDays(-1), null, []);
+        Assert.Null(semItens);
+        Assert.Equal("SUP-ERR-020", erroVigencia!.Code);
+
+        var (_, erroPreco) = await w.Sup.SaveContractAsync(w.Alfa.Id, "CT-2026-014", hoje, hoje.AddMonths(6), null,
+            [new SupplierService.ContractItemInput(null, "Martelete rebatedor MRP 900", "MRP-900", "UN", 0m, null, null, null, null)]);
+        Assert.Equal("SUP-ERR-022", erroPreco!.Code);
+
+        var (comContrato, error) = await w.Sup.SaveContractAsync(w.Alfa.Id, "CT-2026-014", hoje, hoje.AddMonths(6), "reajuste anual",
+            [new SupplierService.ContractItemInput(null, "Martelete rebatedor MRP 900", "MRP-900", "UN", 820m, "30/60 dias", 28, 10, null)]);
+        Assert.Null(error);
+        var linha = Assert.Single(comContrato!.ContractItems);
+        Assert.Equal(820m, linha.UnitPrice);
+        Assert.Equal(28, linha.PaymentDays);
+        Assert.Equal(10, linha.DeliveryDays);
+        Assert.True(comContrato.ContractIsCurrent(hoje));
+        Assert.False(comContrato.ContractIsCurrent(hoje.AddYears(1)));   // fora da vigência
+
+        // lista vazia encerra o contrato: o fornecedor volta a ser cotado normalmente
+        var (encerrado, semErro) = await w.Sup.SaveContractAsync(w.Alfa.Id, null, null, null, null, []);
+        Assert.Null(semErro);
+        Assert.Empty(encerrado!.ContractItems);
+        Assert.False(encerrado.ContractIsCurrent(hoje));
+    }
+
     [Fact]
     public async Task Alcadas_do_centro_valem_sobre_o_vinculo_antigo_nos_dois_niveis()
     {

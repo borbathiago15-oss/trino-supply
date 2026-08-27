@@ -1154,6 +1154,20 @@ static object SupplierView(Supplier s) => new
 {
     id = s.Id, legalName = s.LegalName, tradeName = s.TradeName, taxId = s.TaxId,
     email = s.Email, phone = s.Phone, active = s.Active,
+    // contrato de parceria: produtos com preço e prazos fixos enquanto valer
+    contract = new
+    {
+        number = s.ContractNumber, validFrom = s.ContractValidFrom, validUntil = s.ContractValidUntil,
+        notes = s.ContractNotes,
+        current = s.ContractIsCurrent(DateOnly.FromDateTime(DateTime.UtcNow)),
+        items = s.ContractItems.OrderBy(i => i.Description).Select(i => new
+        {
+            id = i.Id, catalogItemId = i.CatalogItemId, catalogCode = i.CatalogCode,
+            description = i.Description, unitOfMeasure = i.UnitOfMeasure, unitPrice = i.UnitPrice,
+            paymentTerms = i.PaymentTerms, paymentDays = i.PaymentDays, deliveryDays = i.DeliveryDays,
+            notes = i.Notes,
+        }),
+    },
 };
 
 var sup = app.MapGroup("/api/v1/suppliers").RequireAuthorization();
@@ -1174,6 +1188,21 @@ sup.MapPost("/", async (CreateSupplierRequest body, SupplierService svc, ClaimsP
     var (supplier, error) = await svc.CreateAsync(ActorId(p), body.LegalName, body.TradeName, body.TaxId, body.Email, body.Phone);
     return error is not null ? Error(ctx, 400, error.Code, error.Message)
         : Results.Json(new { data = SupplierView(supplier!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+// contrato de parceria: vigência + produtos com preço, prazo de pagamento e entrega fixos
+sup.MapPut("/{id:guid}/contract", async (Guid id, SupplierContractRequest body, SupplierService svc,
+    ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!SupplierService.CanMaintain(RoleOf(p)))
+        return Error(ctx, 403, "SUP-ERR-900", "Seu papel não mantém contratos de fornecedor.");
+    var items = body.Items?.Select(i => new SupplierService.ContractItemInput(
+        i.CatalogItemId, i.Description, i.CatalogCode, i.UnitOfMeasure, i.UnitPrice,
+        i.PaymentTerms, i.PaymentDays, i.DeliveryDays, i.Notes)).ToList();
+    var (supplier, error) = await svc.SaveContractAsync(
+        id, body.Number, body.ValidFrom, body.ValidUntil, body.Notes, items);
+    return error is not null ? Error(ctx, error.Code == "SUP-ERR-404" ? 404 : 422, error.Code, error.Message)
+        : Ok(SupplierView(supplier!), ctx);
 });
 
 // gera a chave do Portal do Fornecedor (mostrada uma única vez; persiste só o hash)
@@ -1592,7 +1621,7 @@ static object QuotationView(Quotation q) => new
     createdByLabel = q.CreatedByLabel, createdAt = q.CreatedAt, decisionReason = q.DecisionReason,
     items = q.Items.OrderBy(i => i.Sequence).Select(i => new
     {
-        id = i.Id, sequence = i.Sequence, catalogCode = i.CatalogCode,
+        id = i.Id, sequence = i.Sequence, catalogItemId = i.CatalogItemId, catalogCode = i.CatalogCode,
         description = i.Description, quantity = i.Quantity, unitOfMeasure = i.UnitOfMeasure,
     }),
     suppliers = q.Suppliers.Select(s => new
@@ -2280,6 +2309,10 @@ public record IssueRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity
 public record MaterialItemRequest(Guid CatalogItemId, decimal Quantity);
 public record CreateMaterialRequisitionRequest(string CostCenter, string? Notes, List<MaterialItemRequest>? Items);
 public record FulfillRequest(List<MaterialLineRequest>? Items);
+public record SupplierContractItemRequest(Guid? CatalogItemId, string? Description, string? CatalogCode,
+    string? UnitOfMeasure, decimal UnitPrice, string? PaymentTerms, int? PaymentDays, int? DeliveryDays, string? Notes);
+public record SupplierContractRequest(string? Number, DateOnly? ValidFrom, DateOnly? ValidUntil, string? Notes,
+    List<SupplierContractItemRequest>? Items);
 public record CreateSupplierRequest(string LegalName, string? TradeName, string TaxId, string? Email, string? Phone);
 public record UpdateSupplierRequest(string? TradeName, string? Email, string? Phone, bool? Active);
 public record PoItemRequest(string Description, decimal Quantity, string? UnitOfMeasure, decimal? UnitPrice, Guid? CatalogItemId);

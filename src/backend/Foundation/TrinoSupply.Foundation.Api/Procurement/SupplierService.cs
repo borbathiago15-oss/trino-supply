@@ -15,7 +15,7 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
 
     public Task<List<Supplier>> ListAsync(bool includeInactive, CancellationToken ct = default)
     {
-        var q = db.Suppliers.AsQueryable();
+        var q = db.Suppliers.Include(s => s.ContractItems).AsQueryable();
         if (!includeInactive) q = q.Where(s => s.Active);
         return q.OrderBy(s => s.LegalName).Take(500).ToListAsync(ct);
     }
@@ -64,6 +64,78 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
         await db.SaveChangesAsync(ct);
         return (supplier, null);
     }
+
+    // ---- contrato de parceria (produtos com preço e prazos fixos) -----------
+    public record ContractItemInput(Guid? CatalogItemId, string? Description, string? CatalogCode,
+        string? UnitOfMeasure, decimal UnitPrice, string? PaymentTerms, int? PaymentDays, int? DeliveryDays,
+        string? Notes);
+
+    /// <summary>
+    /// Regrava o contrato do fornecedor: vigência e a lista de produtos contratados.
+    /// Passar a lista vazia encerra o contrato (o fornecedor volta a ser cotado normalmente).
+    /// </summary>
+    public async Task<(Supplier? supplier, UserError? error)> SaveContractAsync(
+        Guid id, string? number, DateOnly? validFrom, DateOnly? validUntil, string? notes,
+        IReadOnlyList<ContractItemInput>? items, CancellationToken ct = default)
+    {
+        var supplier = await db.Suppliers.Include(s => s.ContractItems).SingleOrDefaultAsync(s => s.Id == id, ct);
+        if (supplier is null) return (null, new("SUP-ERR-404", "Fornecedor não encontrado."));
+        if (validFrom is not null && validUntil is not null && validUntil < validFrom)
+            return (null, new("SUP-ERR-020", "A vigência do contrato termina antes de começar."));
+
+        supplier.ContractNumber = Clean(number);
+        supplier.ContractValidFrom = validFrom;
+        supplier.ContractValidUntil = validUntil;
+        supplier.ContractNotes = Clean(notes);
+
+        if (items is not null)
+        {
+            var catalogIds = items.Where(i => i.CatalogItemId is not null).Select(i => i.CatalogItemId!.Value).Distinct().ToList();
+            var catalog = await db.CatalogItems.Where(c => catalogIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id, ct);
+            var novos = new List<SupplierContractItem>();
+            var now = clock.GetUtcNow();
+            foreach (var input in items)
+            {
+                var doCatalogo = input.CatalogItemId is not null && catalog.TryGetValue(input.CatalogItemId.Value, out var c) ? c : null;
+                if (input.CatalogItemId is not null && doCatalogo is null)
+                    return (null, new("SUP-ERR-021", "Produto do contrato não existe no catálogo."));
+                var descricao = Clean(input.Description) ?? doCatalogo?.Description;
+                if (string.IsNullOrWhiteSpace(descricao))
+                    return (null, new("SUP-ERR-021", "Informe o produto de cada linha do contrato."));
+                if (input.UnitPrice <= 0)
+                    return (null, new("SUP-ERR-022", $"O preço contratado de '{descricao}' precisa ser maior que zero."));
+                if (input.PaymentDays is < 0 or > 365 || input.DeliveryDays is < 0 or > 365)
+                    return (null, new("SUP-ERR-023", "Os prazos do contrato vão de 0 a 365 dias."));
+                novos.Add(new SupplierContractItem
+                {
+                    SupplierId = supplier.Id,
+                    CatalogItemId = input.CatalogItemId,
+                    Description = descricao,
+                    CatalogCode = Clean(input.CatalogCode) ?? doCatalogo?.Code,
+                    UnitOfMeasure = Clean(input.UnitOfMeasure) ?? doCatalogo?.UnitOfMeasure ?? "UN",
+                    UnitPrice = input.UnitPrice,
+                    PaymentTerms = Clean(input.PaymentTerms),
+                    PaymentDays = input.PaymentDays,
+                    DeliveryDays = input.DeliveryDays,
+                    Notes = Clean(input.Notes),
+                    CreatedAt = now,
+                });
+            }
+            if (supplier.ContractItems.Count > 0)
+            {
+                db.SupplierContractItems.RemoveRange(supplier.ContractItems);
+                supplier.ContractItems.Clear();
+            }
+            db.SupplierContractItems.AddRange(novos);
+        }
+
+        supplier.UpdatedAt = clock.GetUtcNow();
+        supplier.Version += 1;
+        await db.SaveChangesAsync(ct);
+        return (await db.Suppliers.Include(s => s.ContractItems).SingleAsync(s => s.Id == id, ct), null);
+    }
+
+    private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
     // ---- Portal do Fornecedor (RFQ-001 §5) ----------------------------------
     /// <summary>Gera nova chave de acesso ao portal; retorna a chave em claro UMA vez (persistido só o hash).</summary>

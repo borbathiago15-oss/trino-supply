@@ -241,6 +241,12 @@
     .kpi .d { font-size: 12px; font-weight: 700; margin-top: 2px; }
     .kpi .d.up { color: var(--ok); } .kpi .d.down { color: var(--danger); } .kpi .d.flat { color: var(--text-muted); }
     .kpi.warn { border-left: 4px solid #ca8a04; } .kpi.bad { border-left: 4px solid var(--danger); }
+    /* cartão que abre a lista por trás do número */
+    .kpi.clickable { cursor: pointer; text-align: left; width: 100%; font: inherit; color: inherit;
+                     background: var(--surface); padding: 12px 14px; transition: border-color .12s, box-shadow .12s; }
+    .kpi.clickable:hover { border-color: var(--brand); box-shadow: 0 2px 10px rgba(15,23,42,.08); }
+    .kpi.clickable .go { font-size: 11px; font-weight: 700; color: var(--brand); margin-top: 6px; }
+    .kpi.clickable.on { border-color: var(--brand); box-shadow: inset 0 0 0 1px var(--brand); }
     .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px 10px; align-items: end; }
     .filters label { margin: 0 0 3px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); }
     .filters select, .filters input { padding: 7px 9px; font-size: 13px; }
@@ -591,15 +597,29 @@
       <!-- Estoque: painel de atendimentos (no lugar do dashboard de estoque) -->
       <section class="view" id="view-wh-panel">
         <div class="kpis" id="wh-kpis"></div>
-        <div class="panel">
-          <h2>Atendimentos em andamento</h2>
+        <p class="hello" id="wh-panel-hint" style="margin:-6px 0 12px">Clique em um cartão para ver a lista por trás do número.</p>
+        <div class="panel" id="wh-sec-aguardando">
+          <div class="topbar" style="margin-bottom:8px">
+            <h2 style="margin:0">Aguardando aprovação do centro</h2>
+            <button type="button" class="secondary" data-goto="pr-approvals">Ir para a Central de Aprovação</button>
+          </div>
+          <div id="wh-panel-aguardando" class="tablewrap"></div>
+        </div>
+        <div class="panel" id="wh-sec-andamento">
+          <div class="topbar" style="margin-bottom:8px">
+            <h2 style="margin:0">Atendimentos em andamento</h2>
+            <button type="button" class="secondary" data-goto="wh-queue">Ir para a Fila de Atendimento</button>
+          </div>
           <div id="wh-panel-andamento" class="tablewrap"></div>
         </div>
-        <div class="panel">
-          <h2>Concluídos parcialmente — aguardando a compra do faltante</h2>
+        <div class="panel" id="wh-sec-parcial">
+          <div class="topbar" style="margin-bottom:8px">
+            <h2 style="margin:0">Concluídos parcialmente — aguardando a compra do faltante</h2>
+            <button type="button" class="secondary" data-goto="quotations">Ver os processos de compra</button>
+          </div>
           <div id="wh-panel-parcial" class="tablewrap"></div>
         </div>
-        <div class="panel">
+        <div class="panel" id="wh-sec-concluido">
           <h2>Atendimentos concluídos</h2>
           <div id="wh-panel-concluido" class="tablewrap"></div>
         </div>
@@ -1997,18 +2017,44 @@
     });
 
     // ---- painel de atendimentos (no lugar do dashboard de estoque) ----
+    /// cartão aberto no Painel de Atendimentos (vazio = mostra tudo)
+    let whPanelAberto = null;
+    const WH_BLOCOS = ['aguardando', 'andamento', 'parcial', 'concluido'];
+    function aplicarFiltroWhPanel() {
+      for (const bloco of WH_BLOCOS)
+        $('wh-sec-' + bloco).hidden = whPanelAberto !== null && whPanelAberto !== bloco;
+      document.querySelectorAll('#wh-kpis .kpi').forEach(k =>
+        k.classList.toggle('on', k.dataset.bloco === whPanelAberto));
+      $('wh-panel-hint').textContent = whPanelAberto
+        ? 'Mostrando só este cartão — clique nele de novo para ver todos.'
+        : 'Clique em um cartão para ver a lista por trás do número.';
+      if (whPanelAberto) $('wh-sec-' + whPanelAberto).scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    $('wh-kpis').addEventListener('click', (ev) => {
+      const card = ev.target.closest('.kpi[data-bloco]');
+      if (!card) return;
+      whPanelAberto = whPanelAberto === card.dataset.bloco ? null : card.dataset.bloco;
+      aplicarFiltroWhPanel();
+    });
+    $('view-wh-panel').addEventListener('click', (ev) => {
+      const ir = ev.target.closest('button[data-goto]');
+      if (ir) goTo(ir.dataset.goto);
+    });
+
     LOADERS['wh-panel'] = async () => {
       try {
         const d = await api('/api/v1/material-requisitions/panel');
         const t = d.totals;
         $('wh-kpis').innerHTML = [
-          ['Aguardando aprovação', t.aguardandoAprovacao, 'do responsável do centro'],
-          ['Em andamento', t.emAndamento, 'aprovadas, na fila do estoque'],
-          ['Concluídos', t.concluidos, 'atendidos integralmente'],
-          ['Parciais aguardando compra', t.parciais, 'o faltante virou solicitação'],
-        ].map(([label, valor, sub]) => `
-          <div class="kpi"><div class="l">${label}</div><div class="v">${fmtInt(valor)}</div>
-            <div class="d flat">${sub}</div></div>`).join('');
+          ['aguardando', 'Aguardando aprovação', t.aguardandoAprovacao, 'do responsável do centro'],
+          ['andamento', 'Em andamento', t.emAndamento, 'aprovadas, na fila do estoque'],
+          ['concluido', 'Concluídos', t.concluidos, 'atendidos integralmente'],
+          ['parcial', 'Parciais aguardando compra', t.parciais, 'o faltante virou solicitação'],
+        ].map(([bloco, label, valor, sub]) => `
+          <button type="button" class="kpi clickable" data-bloco="${bloco}">
+            <div class="l">${label}</div><div class="v">${fmtInt(valor)}</div>
+            <div class="d flat">${sub}</div>
+            <div class="go">ver a lista →</div></button>`).join('');
 
         const linhas = (lista, extra) => lista.length
           ? '<table><thead><tr><th>Solicitação</th><th>Solicitante</th><th>Centro</th><th>Itens</th>' +
@@ -2020,13 +2066,17 @@
               <td>${escapeHtml(r.summary || '—')}</td>
               <td>${r.purchaseRequisitionNumber
                     ? 'falta ' + fmtInt(r.pending) + ' · SC ' + escapeHtml(r.purchaseRequisitionNumber)
-                    : (r.fulfilledByLabel ? escapeHtml(r.fulfilledByLabel) : (r.approvedAt ? 'aprovada' : '—'))}</td>
+                    : (r.fulfilledByLabel ? escapeHtml(r.fulfilledByLabel)
+                       : (r.approvedAt ? 'aprovada em ' + new Date(r.approvedAt).toLocaleDateString('pt-BR')
+                          : 'aguardando o Nível 1 do centro'))}</td>
             </tr>`).join('') + '</tbody></table>'
           : '<p class="hello">Nada por aqui. ✔</p>';
 
+        $('wh-panel-aguardando').innerHTML = linhas(d.aguardandoAprovacao, 'Situação');
         $('wh-panel-andamento').innerHTML = linhas(d.emAndamento, 'Situação');
         $('wh-panel-parcial').innerHTML = linhas(d.parciais, 'Faltante');
         $('wh-panel-concluido').innerHTML = linhas(d.concluidos, 'Atendido por');
+        aplicarFiltroWhPanel();
 
         const grupo = (lista, campo, titulo) => lista.length
           ? `<table><thead><tr><th>${titulo}</th><th>Total</th><th>Em andamento</th><th>Concluídos</th><th>Parciais</th></tr></thead><tbody>` +

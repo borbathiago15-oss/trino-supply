@@ -180,6 +180,92 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
             })
             .OrderByDescending(x => x.value).Take(20).ToList();
 
+        // ---- prazos do processo: meta da família × realizado (slide 4) ----------
+        var famList = await db.ProductFamilies.Where(f => f.Active).ToListAsync(ct);
+        var prIds = prs.Select(r => r.Id).ToList();
+        var quotes = await db.Quotations
+            .Where(q => prIds.Contains(q.SourcePrId))
+            .Select(q => new { q.Id, q.SourcePrId, q.CreatedAt, q.DirectorApprovedAt, q.PurchaseOrderId,
+                               q.SavingValue, q.BaselineValue, q.NegotiatedValue, q.NegotiatedByLabel, q.Number })
+            .ToListAsync(ct);
+        var poIds = quotes.Where(q => q.PurchaseOrderId != null).Select(q => q.PurchaseOrderId!.Value).ToList();
+        var poDates = (await db.PurchaseOrders.Where(o => poIds.Contains(o.Id))
+                .Select(o => new { o.Id, o.CreatedAt, o.DeliveryCompletedAt, o.SupplierName }).ToListAsync(ct))
+            .ToDictionary(x => x.Id, x => x);
+
+        // cada solicitação entrega seus tempos às famílias dos itens dela
+        var etapas = new Dictionary<string, List<double>[]>(StringComparer.OrdinalIgnoreCase);
+        void Registrar(string familia, int etapa, double dias)
+        {
+            if (!etapas.TryGetValue(familia, out var listas))
+                etapas[familia] = listas = [new(), new(), new(), new()];
+            if (dias >= 0) listas[etapa].Add(dias);
+        }
+        foreach (var pr in prs)
+        {
+            var familias = pr.Items.Select(i => FamilyOf(i.CatalogItemId)).Where(f => f is not null)
+                .Select(f => f!).Distinct().ToList();
+            if (familias.Count == 0) familias = ["SEM FAMÍLIA"];
+            var q = quotes.FirstOrDefault(x => x.SourcePrId == pr.Id);
+            var po = q?.PurchaseOrderId is not null && poDates.TryGetValue(q.PurchaseOrderId.Value, out var o) ? o : null;
+            foreach (var f in familias)
+            {
+                if (pr.SubmittedAt is not null && q is not null)
+                    Registrar(f, 0, (q.CreatedAt - pr.SubmittedAt.Value).TotalDays);
+                if (q?.DirectorApprovedAt is not null)
+                    Registrar(f, 1, (q.DirectorApprovedAt.Value - q.CreatedAt).TotalDays);
+                if (q?.DirectorApprovedAt is not null && po is not null)
+                    Registrar(f, 2, (po.CreatedAt - q.DirectorApprovedAt.Value).TotalDays);
+                if (po?.DeliveryCompletedAt is not null)
+                    Registrar(f, 3, (po.DeliveryCompletedAt.Value - po.CreatedAt).TotalDays);
+            }
+        }
+        static double? Media(List<double> v) => v.Count > 0 ? Math.Round(v.Average(), 1) : null;
+        var leadTimes = famList
+            .Where(f => family is null || string.Equals(f.Name, family, StringComparison.OrdinalIgnoreCase))
+            .Select(f =>
+            {
+                etapas.TryGetValue(f.Name, out var m);
+                var reais = new[] { Media(m?[0] ?? []), Media(m?[1] ?? []), Media(m?[2] ?? []), Media(m?[3] ?? []) };
+                var metas = new int?[] { f.LeadRequestToQuote, f.LeadQuoteToApproval, f.LeadApprovalToPo, f.LeadPoToDelivery };
+                return new
+                {
+                    family = f.Name,
+                    stages = new[] { "Solicitação → cotação", "Cotação → aprovação", "Aprovação → O.C.", "O.C. → entrega" }
+                        .Select((rotulo, i) => new
+                        {
+                            stage = rotulo, target = metas[i], actual = reais[i],
+                            late = metas[i] is not null && reais[i] is not null && reais[i] > metas[i],
+                        }).ToList(),
+                    targetTotal = f.LeadTotal,
+                    actualTotal = reais.Any(v => v is not null)
+                        ? Math.Round(reais.Where(v => v is not null).Sum(v => v!.Value), 1) : (double?)null,
+                };
+            })
+            .Where(x => x.targetTotal is not null || x.stages.Any(e => e.actual is not null))
+            .OrderBy(x => x.family).ToList();
+
+        // ---- ganho de negociação (saving) ---------------------------------------
+        var comSaving = quotes.Where(q => q.SavingValue > 0).ToList();
+        var saving = new
+        {
+            total = comSaving.Sum(q => q.SavingValue ?? 0),
+            baseline = comSaving.Sum(q => q.BaselineValue ?? 0),
+            closed = comSaving.Sum(q => q.NegotiatedValue ?? 0),
+            processes = comSaving.Count,
+            percent = comSaving.Sum(q => q.BaselineValue ?? 0) > 0
+                ? Math.Round(comSaving.Sum(q => q.SavingValue ?? 0) / comSaving.Sum(q => q.BaselineValue ?? 0) * 100m, 1)
+                : 0m,
+            items = comSaving.OrderByDescending(q => q.SavingValue).Take(10).Select(q => new
+            {
+                number = q.Number,
+                supplier = q.PurchaseOrderId is not null && poDates.TryGetValue(q.PurchaseOrderId.Value, out var o)
+                    ? o.SupplierName : null,
+                baseline = q.BaselineValue, closed = q.NegotiatedValue,
+                value = q.SavingValue, byLabel = q.NegotiatedByLabel,
+            }).ToList(),
+        };
+
         // ---- opções de filtro (para os selects da UI) ---------------------------
         var filterOptions = new
         {
@@ -197,7 +283,7 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
             clients = ccByCode.Values.Where(c => c.ClientName != null).Select(c => c.ClientName!).Distinct().OrderBy(x => x).ToList(),
         };
 
-        return new { from, to, kpis, months, rankings, supplierTable, filterOptions };
+        return new { from, to, kpis, months, rankings, supplierTable, leadTimes, saving, filterOptions };
     }
 
     /// <summary>

@@ -371,7 +371,19 @@ app.MapPost("/api/v1/items/{id:guid}/image", async (Guid id, HttpRequest request
 static object FamilyView(ProductFamily f) => new
 {
     id = f.Id, name = f.Name, notes = f.Notes, active = f.Active,
+    // prazos-meta do processo, em dias: o dashboard compara com o realizado
+    leadRequestToQuote = f.LeadRequestToQuote, leadQuoteToApproval = f.LeadQuoteToApproval,
+    leadApprovalToPo = f.LeadApprovalToPo, leadPoToDelivery = f.LeadPoToDelivery,
+    leadTotal = f.LeadTotal,
 };
+
+// prazos por etapa só chegam ao serviço quando algum deles vem no corpo
+static CatalogService.FamilyLeadTimes? LeadOf(IFamilyLeadTimes body) =>
+    body.ApplyLeadTimes != true && body.LeadRequestToQuote is null && body.LeadQuoteToApproval is null
+        && body.LeadApprovalToPo is null && body.LeadPoToDelivery is null
+        ? null
+        : new(body.LeadRequestToQuote, body.LeadQuoteToApproval, body.LeadApprovalToPo, body.LeadPoToDelivery,
+              body.ApplyLeadTimes == true);
 
 var families = app.MapGroup("/api/v1/product-families").RequireAuthorization();
 families.AddEndpointFilter(RejectSupplierRole());
@@ -386,7 +398,7 @@ families.MapPost("/", async (ProductFamilyRequest body, CatalogService svc, Clai
 {
     if (!CatalogService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.Produtos))
         return Error(ctx, 403, "IC-ERR-900", "Seu usuário não mantém o catálogo.");
-    var (family, error) = await svc.CreateFamilyAsync(ActorId(p), body.Name ?? "", body.Notes);
+    var (family, error) = await svc.CreateFamilyAsync(ActorId(p), body.Name ?? "", body.Notes, LeadOf(body));
     return error is not null ? Error(ctx, error.Code == "IC-ERR-021" ? 409 : 400, error.Code, error.Message)
         : Results.Json(new { data = FamilyView(family!), correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
@@ -395,7 +407,7 @@ families.MapPatch("/{id:guid}", async (Guid id, UpdateProductFamilyRequest body,
 {
     if (!CatalogService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.Produtos))
         return Error(ctx, 403, "IC-ERR-900", "Seu usuário não mantém o catálogo.");
-    var (family, error) = await svc.UpdateFamilyAsync(id, body.Name, body.Notes, body.Active);
+    var (family, error) = await svc.UpdateFamilyAsync(id, body.Name, body.Notes, body.Active, LeadOf(body));
     return error is not null ? Error(ctx, error.Code == "IC-ERR-404" ? 404 : 400, error.Code, error.Message)
         : Ok(FamilyView(family!), ctx);
 });
@@ -2232,8 +2244,21 @@ public record ResetPasswordRequest(string NewPassword);
 public record ItemRequest(string? Description, decimal Quantity, string? UnitOfMeasure, decimal? EstimatedUnitPrice, string? Notes, Guid? CatalogItemId);
 public record CreateRequisitionRequest(string Justification, string CostCenter, string? Priority, DateOnly? NeededBy, List<ItemRequest>? Items, string? Kind,
     string? NeedType, string? DeliveryLocation, string? Company, string? InternalNotes);
-public record ProductFamilyRequest(string? Name, string? Notes);
-public record UpdateProductFamilyRequest(string? Name, string? Notes, bool? Active);
+public interface IFamilyLeadTimes
+{
+    int? LeadRequestToQuote { get; }
+    int? LeadQuoteToApproval { get; }
+    int? LeadApprovalToPo { get; }
+    int? LeadPoToDelivery { get; }
+    /// <summary>Formulário das famílias: manda as quatro etapas, então vazio limpa a meta.</summary>
+    bool? ApplyLeadTimes { get; }
+}
+public record ProductFamilyRequest(string? Name, string? Notes,
+    int? LeadRequestToQuote = null, int? LeadQuoteToApproval = null,
+    int? LeadApprovalToPo = null, int? LeadPoToDelivery = null, bool? ApplyLeadTimes = null) : IFamilyLeadTimes;
+public record UpdateProductFamilyRequest(string? Name, string? Notes, bool? Active,
+    int? LeadRequestToQuote = null, int? LeadQuoteToApproval = null,
+    int? LeadApprovalToPo = null, int? LeadPoToDelivery = null, bool? ApplyLeadTimes = null) : IFamilyLeadTimes;
 public record ItemSupplierRequest(string? SupplierName, string? TaxId, string? Contact,
     string? SupplierItemCode, decimal? LastPrice, string? Notes, Guid? SupplierId = null,
     string? CaNumber = null);

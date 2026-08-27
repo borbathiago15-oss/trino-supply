@@ -70,6 +70,13 @@ public class ProductFamily
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = string.Empty;   // único, caixa alta (ex.: MATERIAL DE LIMPEZA)
     public string? Notes { get; set; }
+
+    // prazos-meta do processo, em dias corridos (slide 4): o dashboard compara meta × realizado
+    public int? LeadRequestToQuote { get; set; }    // solicitação → cotação
+    public int? LeadQuoteToApproval { get; set; }   // cotação → aprovação
+    public int? LeadApprovalToPo { get; set; }      // aprovação → O.C.
+    public int? LeadPoToDelivery { get; set; }      // O.C. → entrega
+    public int? LeadTotal => LeadRequestToQuote + LeadQuoteToApproval + LeadApprovalToPo + LeadPoToDelivery;
     public bool Active { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

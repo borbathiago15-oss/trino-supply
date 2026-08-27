@@ -99,6 +99,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(f => f.Id).HasColumnName("id");
             e.Property(f => f.Name).HasColumnName("name").HasMaxLength(120).IsRequired();
             e.Property(f => f.Notes).HasColumnName("notes").HasMaxLength(300);
+            e.Property(f => f.LeadRequestToQuote).HasColumnName("lead_request_to_quote");
+            e.Property(f => f.LeadQuoteToApproval).HasColumnName("lead_quote_to_approval");
+            e.Property(f => f.LeadApprovalToPo).HasColumnName("lead_approval_to_po");
+            e.Property(f => f.LeadPoToDelivery).HasColumnName("lead_po_to_delivery");
+            e.Ignore(f => f.LeadTotal);
             e.Property(f => f.Active).HasColumnName("active");
             e.Property(f => f.CreatedAt).HasColumnName("created_at");
             e.Property(f => f.UpdatedAt).HasColumnName("updated_at");

@@ -27,8 +27,29 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         return q.OrderBy(f => f.Name).Take(300).ToListAsync(ct);
     }
 
+    /// <summary>
+    /// Prazos-meta do processo (dias corridos) que o dashboard compara com o realizado.
+    /// <paramref name="ReplaceAll"/> = o formulário mandou as quatro etapas: o que vier vazio
+    /// limpa a meta. Sem ele, só as etapas informadas mudam (nada é apagado por engano).
+    /// </summary>
+    public record FamilyLeadTimes(int? RequestToQuote, int? QuoteToApproval, int? ApprovalToPo, int? PoToDelivery,
+        bool ReplaceAll = false);
+
+    private static UserError? ApplyLeadTimes(ProductFamily family, FamilyLeadTimes? lead)
+    {
+        if (lead is null) return null;
+        foreach (var dias in new[] { lead.RequestToQuote, lead.QuoteToApproval, lead.ApprovalToPo, lead.PoToDelivery })
+            if (dias is < 0 or > 365)
+                return new("IC-ERR-026", "Os prazos por etapa vão de 0 a 365 dias.");
+        if (lead.ReplaceAll || lead.RequestToQuote is not null) family.LeadRequestToQuote = lead.RequestToQuote;
+        if (lead.ReplaceAll || lead.QuoteToApproval is not null) family.LeadQuoteToApproval = lead.QuoteToApproval;
+        if (lead.ReplaceAll || lead.ApprovalToPo is not null) family.LeadApprovalToPo = lead.ApprovalToPo;
+        if (lead.ReplaceAll || lead.PoToDelivery is not null) family.LeadPoToDelivery = lead.PoToDelivery;
+        return null;
+    }
+
     public async Task<(ProductFamily? family, UserError? error)> CreateFamilyAsync(
-        Guid actorId, string name, string? notes, CancellationToken ct = default)
+        Guid actorId, string name, string? notes, FamilyLeadTimes? lead = null, CancellationToken ct = default)
     {
         var clean = (name ?? "").Trim().ToUpperInvariant();
         if (clean.Length < 3) return (null, new("IC-ERR-020", "Informe o nome da família (mín. 3 caracteres)."));
@@ -37,6 +58,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
 
         var now = clock.GetUtcNow();
         var family = new ProductFamily { Name = clean, Notes = Clean(notes), CreatedAt = now, UpdatedAt = now, CreatedBy = actorId };
+        if (ApplyLeadTimes(family, lead) is { } leadError) return (null, leadError);
         db.ProductFamilies.Add(family);
         await db.SaveChangesAsync(ct);
         return (family, null);
@@ -44,7 +66,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
 
     /// <summary>Renomear a família também renomeia os produtos que a usam (a identidade é o nome).</summary>
     public async Task<(ProductFamily? family, UserError? error)> UpdateFamilyAsync(
-        Guid id, string? name, string? notes, bool? active, CancellationToken ct = default)
+        Guid id, string? name, string? notes, bool? active, FamilyLeadTimes? lead = null, CancellationToken ct = default)
     {
         var family = await db.ProductFamilies.SingleOrDefaultAsync(f => f.Id == id, ct);
         if (family is null) return (null, new("IC-ERR-404", "Família não encontrada."));
@@ -68,6 +90,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
                     db.ProductFamilies.Remove(family);
                     if (notes is not null) existing.Notes = Clean(notes);
                     if (active is not null) existing.Active = active.Value;
+                    if (ApplyLeadTimes(existing, lead) is { } mergeError) return (null, mergeError);
                     existing.UpdatedAt = clock.GetUtcNow();
                     await db.SaveChangesAsync(ct);
                     return (existing, null);
@@ -77,6 +100,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         }
         if (notes is not null) family.Notes = Clean(notes);
         if (active is not null) family.Active = active.Value;
+        if (ApplyLeadTimes(family, lead) is { } leadError) return (null, leadError);
         family.UpdatedAt = clock.GetUtcNow();
         await db.SaveChangesAsync(ct);
         return (family, null);

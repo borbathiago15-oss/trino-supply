@@ -222,6 +222,13 @@
     .row-actions select { width: auto; padding: 5px 8px; font-size: 12px; }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
     .hello { font-size: 14px; color: var(--text-muted); }
+    /* foto do produto: miniatura na lista, ampliada em um visor no clique */
+    .thumb { width: 46px; height: 46px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border);
+             cursor: zoom-in; background: var(--surface-muted); display: block; }
+    .lightbox { position: fixed; inset: 0; background: rgba(15,23,42,.82); display: flex; align-items: center;
+                justify-content: center; padding: 24px; z-index: 60; cursor: zoom-out; }
+    .lightbox img { max-width: min(900px, 92vw); max-height: 88vh; border-radius: 12px; background: #fff; }
+    .lightbox .cap { position: absolute; bottom: 18px; color: #fff; font-size: 13px; }
     .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; margin-top: 6px; }
     .checks label { display: flex; align-items: center; gap: 8px; font-weight: 500; margin: 0; font-size: 13.5px; }
     .checks input { width: auto; }
@@ -948,6 +955,9 @@
               <div><label for="ci-unit">Unidade</label><input id="ci-unit" placeholder="UN" /></div>
               <div><label for="ci-price">Preço ref. (R$)</label><input id="ci-price" type="number" min="0" step="0.01" placeholder="opcional" /></div>
             </div>
+            <label for="ci-image">Foto do produto <span class="sub">(PNG, JPG ou WEBP — aparece como miniatura na lista)</span></label>
+            <input id="ci-image" type="file" accept="image/png,image/jpeg,image/webp" />
+            <p class="hello" id="ci-image-current" style="margin:4px 0 0"></p>
             <label for="ci-type">Tipo de produto</label>
             <select id="ci-type"></select>
             <p class="hello" id="ci-ca-hint" style="margin:4px 0 0" hidden>EPI e EPC exigem o <strong>C.A.</strong>: informe o número em cada fornecedor abaixo — o mesmo produto costuma ter um C.A. por fornecedor.</p>
@@ -1690,6 +1700,34 @@
       return true;
     }
     /// baixa um documento guardado (anexo de SC, proposta, OC) respeitando o token
+    /// as fotos vêm do endpoint de documentos (com token), então viram object URL uma vez só
+    const docUrlCache = {};
+    async function docUrl(id) {
+      if (docUrlCache[id]) return docUrlCache[id];
+      const res = await fetch('/api/v1/documents/' + id, { headers: { Authorization: 'Bearer ' + store.access } });
+      if (!res.ok) throw new Error('Falha ao carregar a imagem.');
+      return (docUrlCache[id] = URL.createObjectURL(await res.blob()));
+    }
+    /// preenche as miniaturas já renderizadas (uma busca de produtos traz poucas linhas)
+    async function fillThumbs(root) {
+      for (const img of (root || document).querySelectorAll('img.thumb[data-doc]:not([src])')) {
+        try { img.src = await docUrl(img.dataset.doc); } catch { img.replaceWith('—'); }
+      }
+    }
+    /// visor da foto ampliada — fecha no clique ou no Esc
+    async function openImage(docId, caption) {
+      try {
+        const box = document.createElement('div');
+        box.className = 'lightbox';
+        box.innerHTML = `<img alt="${escapeHtml(caption || '')}" /><div class="cap">${escapeHtml(caption || '')}</div>`;
+        box.querySelector('img').src = await docUrl(docId);
+        const fechar = () => { box.remove(); document.removeEventListener('keydown', onKey); };
+        const onKey = (e) => { if (e.key === 'Escape') fechar(); };
+        box.addEventListener('click', fechar);
+        document.addEventListener('keydown', onKey);
+        document.body.appendChild(box);
+      } catch (err) { toast(err.message, 'error'); }
+    }
     async function downloadDoc(id) {
       try {
         const res = await fetch('/api/v1/documents/' + id, { headers: { Authorization: 'Bearer ' + store.access } });
@@ -2348,6 +2386,10 @@
             ? '<option value="">Selecione a família…</option>' +
               items.map(f => `<option value="${escapeHtml(f.name)}">${escapeHtml(f.name)}</option>`).join('')
             : '<option value="">(cadastre em Cadastros → Famílias de Produtos)</option>';
+          // produto de uma família ainda não cadastrada continua editável: a família dele entra na lista
+          if (selected && !items.some(f => f.name === selected))
+            sel.insertAdjacentHTML('beforeend',
+              `<option value="${escapeHtml(selected)}">${escapeHtml(selected)} (fora do cadastro de famílias)</option>`);
           if (selected) sel.value = selected;
         }
       } catch {}
@@ -2601,9 +2643,14 @@
         $('ci-desc').value = i.description; $('ci-unit').value = i.unitOfMeasure || '';
         $('ci-price').value = i.referencePrice != null ? i.referencePrice : '';
         loadProductTypes(i.productType || '');
+        $('ci-image-current').innerHTML = i.imageDocumentId
+          ? `Foto atual: <img class="thumb" style="display:inline-block;vertical-align:middle;margin-left:6px" data-doc="${i.imageDocumentId}" alt="${escapeHtml(i.description)}" /> — envie outra para substituir.`
+          : 'Nenhuma foto enviada ainda.';
+        fillThumbs($('ci-image-current'));
         renderItemSuppliers(i.suppliers);
       } else {
         $('cat-form').reset(); renderItemSuppliers([]);
+        $('ci-image-current').textContent = '';
         loadProductTypes('');
       }
     }
@@ -2622,6 +2669,9 @@
     function catRow(i) {
       return `
         <tr data-id="${i.id}">
+          <td>${i.imageDocumentId
+            ? `<img class="thumb" data-doc="${i.imageDocumentId}" alt="${escapeHtml(i.description)}" title="Clique para ampliar" />`
+            : '<span class="sub">—</span>'}</td>
           <td>${escapeHtml(i.code)}</td>
           <td>${escapeHtml(i.description)}<div class="sub">${escapeHtml(i.unitOfMeasure)}</div></td>
           <td>${escapeHtml(i.family)}</td>
@@ -2660,12 +2710,13 @@
           (family ? ` em ${family}` : '') + (q ? ` para “${q}”` : '');
         const shown = items.slice(0, CAT_PAGE);
         $('cat-list').innerHTML = items.length
-          ? '<table><thead><tr><th>Código</th><th>Produto</th><th>Família</th><th>Tam.</th><th>Tipo / conformidade</th><th>Fornecedores</th><th>Preço ref.</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+          ? '<table><thead><tr><th>Foto</th><th>Código</th><th>Produto</th><th>Família</th><th>Tam.</th><th>Tipo / conformidade</th><th>Fornecedores</th><th>Preço ref.</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
             shown.map(catRow).join('') + '</tbody></table>' +
             (items.length > shown.length
               ? `<p class="hello">Mostrando os ${shown.length} primeiros de ${items.length}. Refine a busca para achar o produto certo.</p>`
               : '')
           : '<p class="hello">Nenhum produto encontrado com esse critério.</p>';
+        fillThumbs($('cat-list'));
       } catch (err) { $('cat-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     }
 
@@ -2722,6 +2773,8 @@
     $('ci-add-sup').addEventListener('click', () => $('ci-suppliers').appendChild(itemSupplierRow()));
     $('ci-type').addEventListener('change', applyTypeRules);
     $('cat-list').addEventListener('click', async (ev) => {
+      const foto = ev.target.closest('img.thumb[data-doc]');
+      if (foto) { openImage(foto.dataset.doc, foto.alt); return; }
       const link = ev.target.closest('a[data-act="download-doc"]');
       if (!link) return;
       ev.preventDefault();
@@ -2730,6 +2783,10 @@
         if (!res.ok) throw new Error('Falha ao baixar o documento.');
         window.open(URL.createObjectURL(await res.blob()), '_blank');
       } catch (err) { toast(err.message, 'error'); }
+    });
+    $('ci-image-current').addEventListener('click', (ev) => {
+      const foto = ev.target.closest('img.thumb[data-doc]');
+      if (foto) openImage(foto.dataset.doc, foto.alt);
     });
     $('cat-form-cancel').addEventListener('click', () => { setCatFormMode(null); $('cat-admin').hidden = true; });
     $('cat-list').addEventListener('click', async (ev) => {
@@ -2756,6 +2813,7 @@
         const stockControlled = true, purchasable = true;
         const suppliers = collectItemSuppliers();
         const productType = $('ci-type').value || null;
+        const imageFile = $('ci-image').files[0];
         const typeInfo = productTypes.find(x => x.key === productType);
         // EPI/EPC: o C.A. é por fornecedor, então basta um fornecedor com o número informado
         if (typeInfo && typeInfo.requiresCa && !suppliers.some(f => f.caNumber)) {
@@ -2769,6 +2827,7 @@
             referencePrice: $('ci-price').value ? parseFloat($('ci-price').value) : null,
             stockControlled, purchasable, suppliers, productType,
           }});
+          if (imageFile) await sendFile(`/api/v1/items/${editingCatId}/image`, imageFile);
           toast('Produto atualizado.', 'ok');
           setCatFormMode(null);
           $('cat-admin').hidden = true;
@@ -2779,6 +2838,7 @@
             referencePrice: $('ci-price').value ? parseFloat($('ci-price').value) : null,
             stockControlled, purchasable, suppliers, productType,
           }});
+          if (imageFile) await sendFile(`/api/v1/items/${created.id}/image`, imageFile);
           toast(`Produto ${created.code} adicionado ao catálogo.`, 'ok');
           const keepFamily = $('ci-family').value;
           ev.target.reset();

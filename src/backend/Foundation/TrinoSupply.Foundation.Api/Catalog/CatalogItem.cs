@@ -27,6 +27,10 @@ public class CatalogItem
     public string? Size { get; set; }
     // o C.A. saiu do produto e passou para o fornecedor (CatalogItemSupplier.CaNumber):
     // a mesma bota com biqueira tem um C.A. no fornecedor X e outro no fornecedor Y.
+
+    /// <summary>Foto do produto — miniatura na lista, ampliada ao clicar (revisão de telas).</summary>
+    public Guid? ImageDocumentId { get; set; }
+    public string? ImageFileName { get; set; }
     public bool Active { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

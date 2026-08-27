@@ -79,6 +79,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.ProductType).HasColumnName("product_type").HasMaxLength(30);
             e.Property(i => i.BaseCode).HasColumnName("base_code").HasMaxLength(50);
             e.Property(i => i.Size).HasColumnName("size").HasMaxLength(10);
+            e.Property(i => i.ImageDocumentId).HasColumnName("image_document_id");
+            e.Property(i => i.ImageFileName).HasColumnName("image_file_name").HasMaxLength(300);
             e.Property(i => i.Active).HasColumnName("active");
             e.Property(i => i.CreatedAt).HasColumnName("created_at");
             e.Property(i => i.UpdatedAt).HasColumnName("updated_at");

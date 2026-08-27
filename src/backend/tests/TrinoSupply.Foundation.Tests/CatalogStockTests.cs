@@ -94,35 +94,48 @@ public class CatalogStockTests
         Assert.Null(item.Suppliers.Single(s => s.SupplierName == "Comercial Beta").TaxId);
     }
 
-    // ---- tipo de produto e conformidade (FISPQ / C.A.) -----------------------
+    // ---- tipo de produto e conformidade (C.A. por fornecedor) ----------------
 
+    /// <summary>
+    /// O C.A. é do par produto+fornecedor: a mesma bota com biqueira tem um C.A. no
+    /// fornecedor X e outro no fornecedor Y (revisão de cadastro 2026-08-27).
+    /// </summary>
     [Fact]
-    public async Task Epi_sem_ca_e_recusado_e_com_ca_e_aceito()
+    public async Task Mesmo_epi_guarda_um_ca_por_fornecedor()
     {
         var svc = Build(out _);
-        var (_, error) = await svc.CreateAsync(Actor, null, "Capacete classe B", "EPI", "UN", 30m,
-            productType: ProductTypes.Epi);
-        Assert.Equal("IC-ERR-023", error!.Code);
+        var (item, error) = await svc.CreateAsync(Actor, null, "Bota com biqueira", "EPI", "PAR", 90m,
+            productType: ProductTypes.Epi,
+            suppliers:
+            [
+                new ItemSupplierInput("Fornecedor X", null, null, null, 88m, null, null, "31469"),
+                new ItemSupplierInput("Fornecedor Y", null, null, null, 92m, null, null, "42780"),
+            ]);
+        Assert.Null(error);
 
-        var (item, ok) = await svc.CreateAsync(Actor, null, "Capacete classe B", "EPI", "UN", 30m,
-            productType: ProductTypes.Epi, caNumber: "31469");
-        Assert.Null(ok);
-        Assert.Equal("31469", item!.CaNumber);
-        Assert.Equal(ProductTypes.Epi, item.ProductType);
+        var cas = item!.Suppliers.OrderBy(f => f.SupplierName).Select(f => (f.SupplierName, f.CaNumber)).ToList();
+        Assert.Equal([("Fornecedor X", "31469"), ("Fornecedor Y", "42780")], cas);
+
+        var (resolved, none) = await svc.ResolveForRequisitionAsync([item.Id]);
+        Assert.Null(none);
+        Assert.Single(resolved!);
     }
 
     [Fact]
-    public async Task Quimico_sem_fispq_nao_pode_ser_solicitado()
+    public async Task Epi_sem_ca_em_nenhum_fornecedor_nao_circula()
     {
         var svc = Build(out _);
-        var (item, _) = await svc.CreateAsync(Actor, null, "Soda cáustica 1kg", "QUIMICOS", "KG", 25m,
-            productType: ProductTypes.Quimicos);
-        Assert.NotNull(item);
+        var (item, error) = await svc.CreateAsync(Actor, null, "Capacete classe B", "EPI", "UN", 30m,
+            productType: ProductTypes.Epi,
+            suppliers: [new ItemSupplierInput("Fornecedor sem C.A.", null, null, null, null, null)]);
+        Assert.Null(error);   // o cadastro entra; o bloqueio é na hora de solicitar
 
-        var (_, error) = await svc.ResolveForRequisitionAsync([item!.Id]);
-        Assert.Equal("IC-ERR-024", error!.Code);
+        var (_, semCa) = await svc.ResolveForRequisitionAsync([item!.Id]);
+        Assert.Equal("IC-ERR-023", semCa!.Code);
 
-        await svc.AttachFispqAsync(item.Id, Guid.NewGuid(), "fispq-soda.pdf");
+        // basta um fornecedor com o C.A. informado para o item voltar a circular
+        await svc.UpdateAsync(item.Id, null, null, null, null, null,
+            suppliers: [new ItemSupplierInput("Fornecedor X", null, null, null, null, null, null, "31469")]);
         var (resolved, none) = await svc.ResolveForRequisitionAsync([item.Id]);
         Assert.Null(none);
         Assert.Single(resolved!);

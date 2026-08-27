@@ -950,15 +950,7 @@
             </div>
             <label for="ci-type">Tipo de produto</label>
             <select id="ci-type"></select>
-            <div id="ci-ca-wrap" hidden>
-              <label for="ci-ca">Número do C.A. <span class="sub">(Certificado de Aprovação — obrigatório em EPI e EPC)</span></label>
-              <input id="ci-ca" placeholder="ex.: 12345" />
-            </div>
-            <div id="ci-fispq-wrap" hidden>
-              <label for="ci-fispq">FISPQ <span class="sub">(obrigatória em produto químico — PDF ou imagem)</span></label>
-              <input id="ci-fispq" type="file" accept=".pdf,.png,.jpg,.jpeg,.docx" />
-              <p class="hello" id="ci-fispq-current" style="margin:4px 0 0"></p>
-            </div>
+            <p class="hello" id="ci-ca-hint" style="margin:4px 0 0" hidden>EPI e EPC exigem o <strong>C.A.</strong>: informe o número em cada fornecedor abaixo — o mesmo produto costuma ter um C.A. por fornecedor.</p>
             <label>Fornecedores deste produto <span class="sub">(escolha do cadastro de fornecedores; use "Outro" para quem ainda não está lá)</span></label>
             <div id="ci-suppliers"></div>
             <button type="button" class="secondary" id="ci-add-sup" style="margin-top:6px">+ Adicionar fornecedor</button>
@@ -1461,6 +1453,9 @@
         ? families.map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`).join('')
         : '<option value="">(catálogo vazio — cadastre produtos primeiro)</option>';
     }
+    /// C.A. do produto: como cada fornecedor tem o seu, mostramos todos os que existem
+    const caList = (i) => (i.suppliers || []).filter(f => f.caNumber)
+      .map(f => `${f.caNumber} (${f.supplierName})`).join(' · ');
     /// grade de escolha de itens: tamanho e C.A. vêm do cadastro e a quantidade começa vazia
     /// (revisão de telas 2026-08-26 — o solicitante digita só o que precisa)
     function familyTable(items, pickClass, checkClass, qtyClass) {
@@ -1470,7 +1465,7 @@
             <td><input type="checkbox" class="${checkClass}" aria-label="Selecionar ${escapeHtml(i.description)}" /></td>
             <td>${escapeHtml(i.description)}<div class="sub">${escapeHtml(i.code)}</div></td>
             <td>${escapeHtml(i.size || '—')}</td>
-            <td>${i.caNumber ? escapeHtml(i.caNumber) : '<span class="sub">—</span>'}</td>
+            <td>${caList(i) ? `<span class="sub">${escapeHtml(caList(i))}</span>` : '<span class="sub">—</span>'}</td>
             <td>${escapeHtml(i.unitOfMeasure)}</td>
             <td><input type="number" class="${qtyClass}" min="0.01" step="0.01" placeholder="0" style="width:80px" /></td>
           </tr>`).join('') + '</tbody></table>';
@@ -1694,7 +1689,7 @@
       }
       return true;
     }
-    /// baixa um documento guardado (anexo de SC, FISPQ, proposta) respeitando o token
+    /// baixa um documento guardado (anexo de SC, proposta, OC) respeitando o token
     async function downloadDoc(id) {
       try {
         const res = await fetch('/api/v1/documents/' + id, { headers: { Authorization: 'Bearer ' + store.access } });
@@ -2496,14 +2491,13 @@
       if (selected) sel.value = selected;
       applyTypeRules();
     }
-    /// mostra C.A. (EPI/EPC) ou FISPQ (químico) conforme o tipo escolhido
+    /// EPI/EPC pedem C.A.: o campo aparece em cada fornecedor do produto
     function applyTypeRules() {
       const key = $('ci-type') ? $('ci-type').value : '';
       const t = productTypes.find(x => x.key === key);
-      const needsCa = !!(t && t.requiresCa), needsFispq = !!(t && t.requiresFispq);
-      $('ci-ca-wrap').hidden = !needsCa;
-      $('ci-ca').required = needsCa;
-      $('ci-fispq-wrap').hidden = !needsFispq;
+      // o C.A. é do fornecedor: aqui só avisamos que EPI/EPC precisa dele
+      $('ci-ca-hint').hidden = !(t && t.requiresCa);
+      document.querySelectorAll('.cs-ca-wrap').forEach(el => { el.hidden = !(t && t.requiresCa); });
     }
 
     function itemSupplierRow(sup) {
@@ -2530,6 +2524,10 @@
             <div><label>&nbsp;</label><button type="button" class="danger cs-remove" style="width:100%">Remover</button></div>
           </div>
         </div>
+        <div class="cs-ca-wrap" hidden>
+          <label>C.A. deste fornecedor <span class="sub">(Certificado de Aprovação — cada fornecedor tem o seu)</span></label>
+          <input class="cs-ca" placeholder="ex.: 12345" />
+        </div>
         <label>Observação</label>
         <input class="cs-notes" placeholder="opcional — condição, prazo, embalagem…" />`;
       const pick = div.querySelector('.cs-pick');
@@ -2555,12 +2553,15 @@
         div.querySelector('.cs-contact').value = sup.contact || '';
         div.querySelector('.cs-code').value = sup.supplierItemCode || '';
         div.querySelector('.cs-price').value = sup.lastPrice != null ? sup.lastPrice : '';
+        div.querySelector('.cs-ca').value = sup.caNumber || '';
         div.querySelector('.cs-notes').value = sup.notes || '';
         const known = sup.supplierId && catSuppliers.some(x => x.id === sup.supplierId);
         pick.value = known ? sup.supplierId : '__outro';
         div.querySelector('.cs-manual').hidden = !!known;
       }
       div.querySelector('.cs-remove').addEventListener('click', () => div.remove());
+      const tipo = productTypes.find(x => x.key === ($('ci-type') ? $('ci-type').value : ''));
+      div.querySelector('.cs-ca-wrap').hidden = !(tipo && tipo.requiresCa);
       return div;
     }
 
@@ -2569,19 +2570,6 @@
     async function loadCatSuppliers() {
       try { catSuppliers = (await api('/api/v1/suppliers/')).items.filter(s => s.active !== false); }
       catch { catSuppliers = []; }
-    }
-    async function uploadFispq(itemId, file) {
-      const fd = new FormData();
-      fd.append('file', file);
-      const res = await fetch(`/api/v1/items/${itemId}/fispq`, {
-        method: 'POST', headers: { Authorization: 'Bearer ' + store.access }, body: fd,
-      });
-      if (!res.ok) {
-        let msg = 'Falha ao anexar a FISPQ.';
-        try { const j = await res.json(); msg = (j.error && j.error.message) || msg; } catch {}
-        throw new Error(msg);
-      }
-      return res.json();
     }
     function renderItemSuppliers(list) {
       $('ci-suppliers').innerHTML = '';
@@ -2596,6 +2584,7 @@
         contact: row.querySelector('.cs-contact').value || null,
         supplierItemCode: row.querySelector('.cs-code').value || null,
         lastPrice: row.querySelector('.cs-price').value ? parseFloat(row.querySelector('.cs-price').value) : null,
+        caNumber: row.querySelector('.cs-ca').value || null,
         notes: row.querySelector('.cs-notes').value || null,
       })).filter(x => x.supplierName);
     }
@@ -2612,14 +2601,9 @@
         $('ci-desc').value = i.description; $('ci-unit').value = i.unitOfMeasure || '';
         $('ci-price').value = i.referencePrice != null ? i.referencePrice : '';
         loadProductTypes(i.productType || '');
-        $('ci-ca').value = i.caNumber || '';
-        $('ci-fispq-current').innerHTML = i.fispqDocumentId
-          ? `FISPQ anexada: <a href="#" data-doc="${i.fispqDocumentId}" data-act="download-doc">${escapeHtml(i.fispqFileName || 'arquivo')}</a> — envie outra para substituir.`
-          : 'Nenhuma FISPQ anexada ainda.';
         renderItemSuppliers(i.suppliers);
       } else {
         $('cat-form').reset(); renderItemSuppliers([]);
-        $('ci-fispq-current').textContent = '';
         loadProductTypes('');
       }
     }
@@ -2643,9 +2627,9 @@
           <td>${escapeHtml(i.family)}</td>
           <td>${escapeHtml(i.size || '—')}</td>
           <td><div class="sub">${escapeHtml(i.productTypeLabel || '—')}</div>
-              ${i.caNumber ? `<div class="sub">C.A. ${escapeHtml(i.caNumber)}</div>` : ''}
-              ${i.fispqDocumentId ? `<div class="sub">📎 <a href="#" data-doc="${i.fispqDocumentId}" data-act="download-doc">FISPQ</a></div>` : ''}
-              ${i.compliancePending ? '<div class="sub" style="color:var(--s5)">⚠ pendência de conformidade</div>' : ''}</td>
+              ${(i.suppliers || []).filter(f => f.caNumber).map(f =>
+                `<div class="sub">C.A. ${escapeHtml(f.caNumber)} · ${escapeHtml(f.supplierName)}</div>`).join('')}
+              ${i.compliancePending ? '<div class="sub" style="color:var(--s5)">⚠ sem C.A. em nenhum fornecedor</div>' : ''}</td>
           <td><div class="sub">${(i.suppliers || []).map(x => escapeHtml(x.supplierName)).join(' · ') || '—'}</div></td>
           <td>${i.referencePrice != null ? money(i.referencePrice) : '—'}</td>
           <td><span class="badge ${i.active ? 'on' : 'off'}">${i.active ? 'ATIVO' : 'INATIVO'}</span></td>
@@ -2701,7 +2685,7 @@
         $('cat-families').innerHTML = s.families.map(f => `<option value="${escapeHtml(f.family)}">`).join('');
         $('cat-summary').innerHTML = `<strong>${s.active}</strong> produto(s) ativo(s)` +
           (s.inactive ? ` · ${s.inactive} inativo(s)` : '') +
-          (s.compliancePending ? ` · <span style="color:var(--s5)">${s.compliancePending} com pendência de C.A./FISPQ</span>` : '') +
+          (s.compliancePending ? ` · <span style="color:var(--s5)">${s.compliancePending} sem C.A. de fornecedor</span>` : '') +
           ' — busque pelo código ou pela descrição para ver e editar um produto.';
       } catch (err) { $('cat-summary').textContent = err.message; }
     }
@@ -2772,11 +2756,10 @@
         const stockControlled = true, purchasable = true;
         const suppliers = collectItemSuppliers();
         const productType = $('ci-type').value || null;
-        const caNumber = $('ci-ca').value || null;
-        const fispqFile = $('ci-fispq').files[0];
         const typeInfo = productTypes.find(x => x.key === productType);
-        if (typeInfo && typeInfo.requiresFispq && !fispqFile && !(editingCatId && catCache[editingCatId] && catCache[editingCatId].fispqDocumentId)) {
-          toast('Produto químico exige a FISPQ anexada.', 'error');
+        // EPI/EPC: o C.A. é por fornecedor, então basta um fornecedor com o número informado
+        if (typeInfo && typeInfo.requiresCa && !suppliers.some(f => f.caNumber)) {
+          toast('EPI e EPC exigem o C.A.: informe o número em pelo menos um fornecedor do produto.', 'error');
           return;
         }
         if (editingCatId) {
@@ -2784,10 +2767,8 @@
             description: $('ci-desc').value, family: $('ci-family').value,
             unitOfMeasure: $('ci-unit').value || null,
             referencePrice: $('ci-price').value ? parseFloat($('ci-price').value) : null,
-            stockControlled, purchasable, suppliers,
-            productType, caNumber,
+            stockControlled, purchasable, suppliers, productType,
           }});
-          if (fispqFile) await uploadFispq(editingCatId, fispqFile);
           toast('Produto atualizado.', 'ok');
           setCatFormMode(null);
           $('cat-admin').hidden = true;
@@ -2796,9 +2777,8 @@
             code: $('ci-code').value || null, description: $('ci-desc').value, family: $('ci-family').value,
             unitOfMeasure: $('ci-unit').value || null,
             referencePrice: $('ci-price').value ? parseFloat($('ci-price').value) : null,
-            stockControlled, purchasable, suppliers, productType, caNumber,
+            stockControlled, purchasable, suppliers, productType,
           }});
-          if (fispqFile) await uploadFispq(created.id, fispqFile);
           toast(`Produto ${created.code} adicionado ao catálogo.`, 'ok');
           const keepFamily = $('ci-family').value;
           ev.target.reset();

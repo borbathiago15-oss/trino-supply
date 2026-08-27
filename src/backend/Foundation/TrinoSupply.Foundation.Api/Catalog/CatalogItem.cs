@@ -25,11 +25,8 @@ public class CatalogItem
     public string? BaseCode { get; set; }
     /// <summary>Tamanho da variante (P, M, G, GG, XG, XXG ou numérico 35–46).</summary>
     public string? Size { get; set; }
-    /// <summary>Número do C.A. (Certificado de Aprovação) — obrigatório em EPI e EPC.</summary>
-    public string? CaNumber { get; set; }
-    /// <summary>FISPQ (Ficha de Informações de Segurança) — obrigatória em produto químico.</summary>
-    public Guid? FispqDocumentId { get; set; }
-    public string? FispqFileName { get; set; }
+    // o C.A. saiu do produto e passou para o fornecedor (CatalogItemSupplier.CaNumber):
+    // a mesma bota com biqueira tem um C.A. no fornecedor X e outro no fornecedor Y.
     public bool Active { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
@@ -53,6 +50,8 @@ public class CatalogItemSupplier
     public string? Contact { get; set; }                       // telefone, e-mail ou vendedor
     public string? SupplierItemCode { get; set; }              // código do produto no fornecedor
     public decimal? LastPrice { get; set; }                    // última referência de preço
+    /// <summary>C.A. (Certificado de Aprovação) deste fornecedor para o produto — EPI/EPC.</summary>
+    public string? CaNumber { get; set; }
     public string? Notes { get; set; }
     public Guid? SupplierId { get; set; }                      // vínculo opcional com o cadastro oficial
     public DateTimeOffset CreatedAt { get; set; }
@@ -74,8 +73,8 @@ public class ProductFamily
 }
 
 /// <summary>
-/// Tipos de produto do catálogo. O tipo define exigências de conformidade:
-/// químico exige FISPQ anexada; EPI e EPC exigem o número do C.A.
+/// Tipos de produto do catálogo. O tipo define a exigência de conformidade: EPI e EPC só
+/// circulam com o C.A. informado em pelo menos um fornecedor do produto (NR-06).
 /// </summary>
 public static class ProductTypes
 {
@@ -112,9 +111,6 @@ public static class ProductTypes
     public static bool IsValid(string key) => All.Any(t => t.Key == key);
     public static string LabelOf(string? key) => All.FirstOrDefault(t => t.Key == key).Label ?? key ?? "—";
 
-    /// <summary>EPI e EPC só operam com o C.A. informado (NR-06).</summary>
+    /// <summary>EPI e EPC só operam com o C.A. informado em algum fornecedor (NR-06).</summary>
     public static bool RequiresCa(string? key) => key is Epi or Epc;
-
-    /// <summary>Produto químico só opera com a FISPQ anexada (NR-26 / GHS).</summary>
-    public static bool RequiresFispq(string? key) => key == Quimicos;
 }

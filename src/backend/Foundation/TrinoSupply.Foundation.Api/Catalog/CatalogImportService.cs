@@ -114,9 +114,7 @@ public class CatalogImportService(AppDbContext db, TimeProvider clock)
         }
 
         if (ProductTypes.RequiresCa(type) && toCreate.Count > 0)
-            warnings.Add("EPI/EPC exigem o número do C.A.: os itens entram com pendência de conformidade e só poderão ser solicitados depois que o C.A. for informado no cadastro de cada um.");
-        if (ProductTypes.RequiresFispq(type) && toCreate.Count > 0)
-            warnings.Add("Produto químico exige FISPQ: os itens entram com pendência e só poderão ser solicitados depois que a ficha for anexada no cadastro de cada um.");
+            warnings.Add("EPI/EPC exigem o C.A.: os itens entram com pendência e só poderão ser solicitados depois que o C.A. for informado no fornecedor do produto — o mesmo produto tem um C.A. por fornecedor.");
         if (defaultSizes.Count > 0)
             warnings.Add($"Grade aplicada: {string.Join(", ", defaultSizes)} — cada tamanho vira um item com código próprio (ex.: {result.FirstOrDefault(r => r.Status == "NOVO")?.Code ?? "12003-P"}).");
 

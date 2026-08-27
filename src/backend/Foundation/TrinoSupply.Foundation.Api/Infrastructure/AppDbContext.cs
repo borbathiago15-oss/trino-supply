@@ -79,9 +79,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.ProductType).HasColumnName("product_type").HasMaxLength(30);
             e.Property(i => i.BaseCode).HasColumnName("base_code").HasMaxLength(50);
             e.Property(i => i.Size).HasColumnName("size").HasMaxLength(10);
-            e.Property(i => i.CaNumber).HasColumnName("ca_number").HasMaxLength(30);
-            e.Property(i => i.FispqDocumentId).HasColumnName("fispq_document_id");
-            e.Property(i => i.FispqFileName).HasColumnName("fispq_file_name").HasMaxLength(300);
             e.Property(i => i.Active).HasColumnName("active");
             e.Property(i => i.CreatedAt).HasColumnName("created_at");
             e.Property(i => i.UpdatedAt).HasColumnName("updated_at");
@@ -118,6 +115,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(s => s.Contact).HasColumnName("contact").HasMaxLength(200);
             e.Property(s => s.SupplierItemCode).HasColumnName("supplier_item_code").HasMaxLength(60);
             e.Property(s => s.LastPrice).HasColumnName("last_price").HasPrecision(18, 4);
+            e.Property(s => s.CaNumber).HasColumnName("ca_number").HasMaxLength(30);
             e.Property(s => s.Notes).HasColumnName("notes").HasMaxLength(500);
             e.Property(s => s.SupplierId).HasColumnName("supplier_id");
             e.Property(s => s.CreatedAt).HasColumnName("created_at");

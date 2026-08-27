@@ -223,14 +223,14 @@ static object CatalogView(CatalogItem i) => new
     unitOfMeasure = i.UnitOfMeasure, referencePrice = i.ReferencePrice, active = i.Active,
     stockControlled = i.StockControlled, purchasable = i.Purchasable, minimumQty = i.MinimumQty,
     productType = i.ProductType, productTypeLabel = i.ProductType is null ? null : ProductTypes.LabelOf(i.ProductType),
-    caNumber = i.CaNumber, fispqDocumentId = i.FispqDocumentId, fispqFileName = i.FispqFileName,
     baseCode = i.BaseCode, size = i.Size,
-    compliancePending = (ProductTypes.RequiresFispq(i.ProductType) && i.FispqDocumentId is null)
-                        || (ProductTypes.RequiresCa(i.ProductType) && string.IsNullOrWhiteSpace(i.CaNumber)),
+    // o C.A. é do par produto+fornecedor: a mesma bota tem um C.A. no fornecedor X e outro no Y
+    compliancePending = ProductTypes.RequiresCa(i.ProductType)
+                        && !i.Suppliers.Any(s => !string.IsNullOrWhiteSpace(s.CaNumber)),
     suppliers = i.Suppliers.OrderBy(s => s.SupplierName).Select(s => new
     {
         id = s.Id, supplierId = s.SupplierId, supplierName = s.SupplierName, taxId = s.TaxId, contact = s.Contact,
-        supplierItemCode = s.SupplierItemCode, lastPrice = s.LastPrice, notes = s.Notes,
+        supplierItemCode = s.SupplierItemCode, lastPrice = s.LastPrice, caNumber = s.CaNumber, notes = s.Notes,
     }),
 };
 
@@ -332,40 +332,8 @@ app.MapGet("/api/v1/product-types", (HttpContext ctx) => Ok(new
     {
         key = t.Key, label = t.Label,
         requiresCa = ProductTypes.RequiresCa(t.Key),
-        requiresFispq = ProductTypes.RequiresFispq(t.Key),
     }),
 }, ctx)).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
-
-// FISPQ do produto químico (multipart) — sem ela o item não pode ser solicitado
-app.MapPost("/api/v1/items/{id:guid}/fispq", async (Guid id, HttpRequest request, AppDbContext db,
-    CatalogService svc, TimeProvider clock, ClaimsPrincipal p, HttpContext ctx) =>
-{
-    if (!CatalogService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.Produtos))
-        return Error(ctx, 403, "IC-ERR-900", "Seu usuário não mantém o catálogo.");
-    var item = await db.CatalogItems.SingleOrDefaultAsync(i => i.Id == id);
-    if (item is null) return Error(ctx, 404, "IC-ERR-404", "Item não encontrado.");
-    if (!request.HasFormContentType) return Error(ctx, 400, "DOC-ERR-001", "Envie o arquivo como multipart/form-data.");
-    var form = await request.ReadFormAsync();
-    var file = form.Files.FirstOrDefault();
-    if (file is null || file.Length == 0) return Error(ctx, 400, "DOC-ERR-001", "Nenhum arquivo enviado.");
-    if (file.Length > StoredDocument.MaxSizeBytes) return Error(ctx, 400, "DOC-ERR-002", "Arquivo acima de 10 MB.");
-    if (!StoredDocument.AllowedContentTypes.Contains(file.ContentType))
-        return Error(ctx, 400, "DOC-ERR-003", "Formato não permitido: envie a FISPQ em PDF, imagem ou documento Office.");
-
-    using var ms = new MemoryStream();
-    await file.CopyToAsync(ms);
-    var doc = new StoredDocument
-    {
-        FileName = Path.GetFileName(file.FileName), ContentType = file.ContentType, SizeBytes = file.Length,
-        Content = ms.ToArray(), EntityType = "FISPQ", EntityId = item.Id,
-        UploadedByLabel = p.FindFirstValue("name") ?? "Cadastro", UploadedAt = clock.GetUtcNow(),
-    };
-    db.StoredDocuments.Add(doc);
-    await db.SaveChangesAsync();
-    var (updated, error) = await svc.AttachFispqAsync(id, doc.Id, doc.FileName);
-    return error is not null ? Error(ctx, 400, error.Code, error.Message)
-        : Ok(new { documentId = doc.Id, fileName = doc.FileName, item = CatalogView(updated!) }, ctx);
-}).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
 
 // ---- famílias de produtos (cadastro próprio: evita a mesma família escrita de vários jeitos)
 static object FamilyView(ProductFamily f) => new
@@ -421,10 +389,11 @@ catalogGroup.MapPost("/", async (CreateCatalogItemRequest body, CatalogService s
     if (!ModulesOf(p).Contains(AppModules.Produtos))
         return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para o cadastro de produtos.");
     var suppliers = body.Suppliers?.Select(x => new ItemSupplierInput(
-        x.SupplierName ?? "", x.TaxId, x.Contact, x.SupplierItemCode, x.LastPrice, x.Notes, x.SupplierId)).ToList();
+        x.SupplierName ?? "", x.TaxId, x.Contact, x.SupplierItemCode, x.LastPrice, x.Notes, x.SupplierId,
+        x.CaNumber)).ToList();
     var (item, error) = await svc.CreateAsync(ActorId(p), body.Code, body.Description, body.Family,
         body.UnitOfMeasure, body.ReferencePrice, body.StockControlled ?? true, body.MinimumQty, suppliers,
-        body.Purchasable ?? true, body.ProductType, body.CaNumber);
+        body.Purchasable ?? true, body.ProductType);
     return error is not null
         ? Error(ctx, error.Code == "IC-ERR-010" ? 409 : 400, error.Code, error.Message)
         : Results.Json(new { data = CatalogView(item!), correlationId = CorrelationId(ctx) }, statusCode: 201);
@@ -438,10 +407,11 @@ catalogGroup.MapPatch("/{id:guid}", async (Guid id, UpdateCatalogItemRequest bod
     if (!ModulesOf(p).Contains(AppModules.Produtos))
         return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para o cadastro de produtos.");
     var suppliers = body.Suppliers?.Select(x => new ItemSupplierInput(
-        x.SupplierName ?? "", x.TaxId, x.Contact, x.SupplierItemCode, x.LastPrice, x.Notes, x.SupplierId)).ToList();
+        x.SupplierName ?? "", x.TaxId, x.Contact, x.SupplierItemCode, x.LastPrice, x.Notes, x.SupplierId,
+        x.CaNumber)).ToList();
     var (item, error) = await svc.UpdateAsync(id, body.Description, body.Family, body.UnitOfMeasure,
         body.ReferencePrice, body.Active, body.StockControlled, body.MinimumQty, body.ClearMinimum == true, suppliers,
-        body.Purchasable, body.ProductType, body.CaNumber);
+        body.Purchasable, body.ProductType);
     return error is not null
         ? Error(ctx, error.Code == "IC-ERR-404" ? 404 : 400, error.Code, error.Message)
         : Ok(CatalogView(item!), ctx);
@@ -2233,13 +2203,14 @@ public record CreateRequisitionRequest(string Justification, string CostCenter, 
 public record ProductFamilyRequest(string? Name, string? Notes);
 public record UpdateProductFamilyRequest(string? Name, string? Notes, bool? Active);
 public record ItemSupplierRequest(string? SupplierName, string? TaxId, string? Contact,
-    string? SupplierItemCode, decimal? LastPrice, string? Notes, Guid? SupplierId = null);
+    string? SupplierItemCode, decimal? LastPrice, string? Notes, Guid? SupplierId = null,
+    string? CaNumber = null);
 public record CreateCatalogItemRequest(string? Code, string Description, string Family, string? UnitOfMeasure,
     decimal? ReferencePrice, bool? StockControlled, decimal? MinimumQty, List<ItemSupplierRequest>? Suppliers,
-    bool? Purchasable, string? ProductType, string? CaNumber);
+    bool? Purchasable, string? ProductType);
 public record UpdateCatalogItemRequest(string? Description, string? Family, string? UnitOfMeasure,
     decimal? ReferencePrice, bool? Active, bool? StockControlled, decimal? MinimumQty, bool? ClearMinimum,
-    List<ItemSupplierRequest>? Suppliers, bool? Purchasable, string? ProductType, string? CaNumber);
+    List<ItemSupplierRequest>? Suppliers, bool? Purchasable, string? ProductType);
 public record CreateLocationRequest(string Code, string Name);
 public record MaterialLineRequest(Guid ItemId, decimal Quantity);
 public record ApproveMaterialRequest(List<MaterialLineRequest>? Items, string? Notes);

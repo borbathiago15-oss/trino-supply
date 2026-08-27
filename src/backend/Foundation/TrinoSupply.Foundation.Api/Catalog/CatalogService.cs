@@ -11,7 +11,8 @@ namespace TrinoSupply.Foundation.Api.Catalog;
 /// </summary>
 /// <summary>Fornecedor informado no cadastro do produto (não precisa estar cadastrado na plataforma).</summary>
 public record ItemSupplierInput(string SupplierName, string? TaxId, string? Contact,
-    string? SupplierItemCode, decimal? LastPrice, string? Notes, Guid? SupplierId = null);
+    string? SupplierItemCode, decimal? LastPrice, string? Notes, Guid? SupplierId = null,
+    string? CaNumber = null);
 
 public class CatalogService(AppDbContext db, TimeProvider clock)
 {
@@ -112,10 +113,9 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
     {
         var total = await db.CatalogItems.CountAsync(ct);
         var active = await db.CatalogItems.CountAsync(i => i.Active, ct);
-        var pending = await db.CatalogItems.CountAsync(i => i.Active &&
-            ((i.ProductType == ProductTypes.Quimicos && i.FispqDocumentId == null)
-             || ((i.ProductType == ProductTypes.Epi || i.ProductType == ProductTypes.Epc)
-                 && (i.CaNumber == null || i.CaNumber == ""))), ct);
+        var pending = await db.CatalogItems.CountAsync(i => i.Active
+            && (i.ProductType == ProductTypes.Epi || i.ProductType == ProductTypes.Epc)
+            && !i.Suppliers.Any(f => f.CaNumber != null && f.CaNumber != ""), ct);
         var grouped = await db.CatalogItems.Where(i => i.Active)
             .GroupBy(i => i.Family)
             .Select(g => new { Family = g.Key, Count = g.Count() })
@@ -128,7 +128,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         Guid actorId, string? code, string description, string family, string? unit, decimal? referencePrice,
         bool stockControlled = true, decimal? minimumQty = null,
         IReadOnlyList<ItemSupplierInput>? suppliers = null, bool purchasable = true,
-        string? productType = null, string? caNumber = null, CancellationToken ct = default)
+        string? productType = null, CancellationToken ct = default)
     {
         code = (code ?? "").Trim().ToUpperInvariant();
         family = family.Trim().ToUpperInvariant();
@@ -137,7 +137,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         if (referencePrice is < 0) return (null, new("IC-ERR-015", "O preço de referência não pode ser negativo."));
         if (minimumQty is < 0) return (null, new("IC-ERR-016", "O estoque mínimo não pode ser negativo."));
         if (await FamilyErrorAsync(family, ct) is { } familyError) return (null, familyError);
-        var (typeKey, typeError) = NormalizeType(productType, caNumber);
+        var (typeKey, typeError) = NormalizeType(productType);
         if (typeError is not null) return (null, typeError);
 
         if (code.Length == 0) code = await GenerateCodeAsync(family, ct);   // regra automática pela família
@@ -157,7 +157,6 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
             Purchasable = purchasable,
             MinimumQty = minimumQty,
             ProductType = typeKey,
-            CaNumber = Clean(caNumber),
             CreatedAt = now,
             UpdatedAt = now,
             CreatedBy = actorId,
@@ -180,30 +179,14 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
             : new("IC-ERR-022", $"Família \"{family}\" não cadastrada — cadastre em Cadastros → Famílias de Produtos.");
     }
 
-    /// <summary>Valida o tipo do produto e as exigências que ele traz (C.A. em EPI/EPC).</summary>
-    private static (string? key, UserError? error) NormalizeType(string? productType, string? caNumber)
+    /// <summary>Valida o tipo do produto (o C.A. é conferido no fornecedor, não aqui).</summary>
+    private static (string? key, UserError? error) NormalizeType(string? productType)
     {
         var key = string.IsNullOrWhiteSpace(productType) ? null : productType.Trim().ToUpperInvariant();
         if (key is null) return (null, null);
         if (!ProductTypes.IsValid(key))
             return (null, new("IC-ERR-025", "Tipo de produto inválido."));
-        if (ProductTypes.RequiresCa(key) && string.IsNullOrWhiteSpace(caNumber))
-            return (null, new("IC-ERR-023", "EPI e EPC exigem o número do C.A. (Certificado de Aprovação)."));
         return (key, null);
-    }
-
-    /// <summary>Anexa a FISPQ ao produto químico (documento já gravado em StoredDocument).</summary>
-    public async Task<(CatalogItem? item, UserError? error)> AttachFispqAsync(
-        Guid id, Guid documentId, string fileName, CancellationToken ct = default)
-    {
-        var item = await db.CatalogItems.SingleOrDefaultAsync(i => i.Id == id, ct);
-        if (item is null) return (null, new("IC-ERR-404", "Item não encontrado."));
-        item.FispqDocumentId = documentId;
-        item.FispqFileName = fileName;
-        item.UpdatedAt = clock.GetUtcNow();
-        item.Version += 1;
-        await db.SaveChangesAsync(ct);
-        return (item, null);
     }
 
     /// <summary>Código automático: 3 letras da família (sem acento) + sequência — ex.: MAT-001.</summary>
@@ -235,6 +218,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
                 Contact = Clean(s.Contact),
                 SupplierItemCode = Clean(s.SupplierItemCode),
                 LastPrice = s.LastPrice is < 0 ? null : s.LastPrice,
+                CaNumber = Clean(s.CaNumber),
                 Notes = Clean(s.Notes),
                 CreatedAt = now,
             };
@@ -254,7 +238,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         Guid id, string? description, string? family, string? unit, decimal? referencePrice, bool? active,
         bool? stockControlled = null, decimal? minimumQty = null, bool clearMinimum = false,
         IReadOnlyList<ItemSupplierInput>? suppliers = null, bool? purchasable = null,
-        string? productType = null, string? caNumber = null, CancellationToken ct = default)
+        string? productType = null, CancellationToken ct = default)
     {
         var item = await db.CatalogItems.Include(i => i.Suppliers).SingleOrDefaultAsync(i => i.Id == id, ct);
         if (item is null) return (null, new("IC-ERR-404", "Item não encontrado."));
@@ -278,12 +262,11 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         }
         if (stockControlled is not null) item.StockControlled = stockControlled.Value;
         if (purchasable is not null) item.Purchasable = purchasable.Value;
-        if (productType is not null || caNumber is not null)
+        if (productType is not null)
         {
-            var (typeKey, typeError) = NormalizeType(productType ?? item.ProductType, caNumber ?? item.CaNumber);
+            var (typeKey, typeError) = NormalizeType(productType);
             if (typeError is not null) return (null, typeError);
             item.ProductType = typeKey;
-            if (caNumber is not null) item.CaNumber = Clean(caNumber);
         }
         if (clearMinimum) item.MinimumQty = null;
         else if (minimumQty is not null)
@@ -305,18 +288,18 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
     {
         if (ids.Count == 0) return (new Dictionary<Guid, CatalogItem>(), null);
-        var found = await db.CatalogItems.Where(i => ids.Contains(i.Id)).ToDictionaryAsync(i => i.Id, ct);
+        var found = await db.CatalogItems.Include(i => i.Suppliers)
+            .Where(i => ids.Contains(i.Id)).ToDictionaryAsync(i => i.Id, ct);
         foreach (var id in ids)
         {
             if (!found.TryGetValue(id, out var item))
                 return (null, new("PR-ERR-022", "Item do catálogo inexistente."));
             if (!item.Active)
                 return (null, new("PR-ERR-022", $"O item '{item.Description}' está inativo no catálogo e não pode ser solicitado."));
-            // conformidade: químico sem FISPQ e EPI/EPC sem C.A. não circulam
-            if (ProductTypes.RequiresFispq(item.ProductType) && item.FispqDocumentId is null)
-                return (null, new("IC-ERR-024", $"O produto químico '{item.Description}' está sem FISPQ anexada — regularize o cadastro antes de solicitá-lo."));
-            if (ProductTypes.RequiresCa(item.ProductType) && string.IsNullOrWhiteSpace(item.CaNumber))
-                return (null, new("IC-ERR-023", $"O item '{item.Description}' ({ProductTypes.LabelOf(item.ProductType)}) está sem o número do C.A. — regularize o cadastro antes de solicitá-lo."));
+            // conformidade: EPI/EPC só circula com o C.A. de pelo menos um fornecedor (NR-06)
+            if (ProductTypes.RequiresCa(item.ProductType)
+                && !item.Suppliers.Any(f => !string.IsNullOrWhiteSpace(f.CaNumber)))
+                return (null, new("IC-ERR-023", $"O item '{item.Description}' ({ProductTypes.LabelOf(item.ProductType)}) está sem o C.A. de nenhum fornecedor — informe o C.A. no fornecedor antes de solicitá-lo."));
         }
         return (found, null);
     }

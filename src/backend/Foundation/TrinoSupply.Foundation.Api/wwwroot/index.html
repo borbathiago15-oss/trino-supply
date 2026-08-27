@@ -789,6 +789,26 @@
             <button type="button" class="secondary full" id="sup-form-cancel" style="margin-top:8px" hidden>Cancelar edição</button>
           </form>
         </div>
+        <div class="panel" id="sup-contract" hidden>
+          <div class="topbar" style="margin-bottom:8px">
+            <h2 style="margin:0" id="sup-contract-title">Contrato de parceria</h2>
+            <button type="button" class="secondary" id="sup-contract-close">Fechar</button>
+          </div>
+          <p class="hello">Produtos com <strong>preço, prazo de pagamento e prazo de entrega fixos</strong> enquanto o contrato valer. O comprador preenche a proposta desse fornecedor com um clique, sem renegociar.</p>
+          <div class="grid2">
+            <div><label for="sc-number">Número do contrato</label><input id="sc-number" placeholder="ex.: CT-2026-014" /></div>
+            <div class="grid2">
+              <div><label for="sc-from">Início da vigência</label><input id="sc-from" type="date" /></div>
+              <div><label for="sc-until">Fim da vigência</label><input id="sc-until" type="date" /></div>
+            </div>
+          </div>
+          <label for="sc-notes">Observação do contrato</label>
+          <input id="sc-notes" placeholder="opcional — condições gerais combinadas" />
+          <label style="margin-top:12px">Produtos contratados</label>
+          <div id="sc-items"></div>
+          <button type="button" class="secondary" id="sc-add" style="margin-top:6px">+ Adicionar produto</button>
+          <button type="button" class="full" id="sc-save" style="margin-top:10px">Salvar contrato</button>
+        </div>
       </section>
 
       <!-- Cadastros: centros de custo -->
@@ -2320,20 +2340,119 @@
         $('bs-trade').value = s.tradeName || ''; $('bs-email').value = s.email || ''; $('bs-phone').value = s.phone || '';
       } else { $('sup-form').reset(); }
     }
+    // ---- contrato de parceria do fornecedor ----------------------------------
+    let contractSupId = null;
+    let contractCatalog = [];   // produtos para o seletor das linhas do contrato
+    function contractRow(item) {
+      const div = document.createElement('div');
+      div.className = 'sc-row';
+      div.style = 'border:1px solid var(--border);border-radius:8px;padding:8px;margin-top:6px';
+      div.innerHTML = `
+        <div class="grid2">
+          <div><label>Produto</label><select class="sc-item"></select></div>
+          <div class="grid2">
+            <div><label>Preço contratado (R$)</label><input class="sc-price" type="number" min="0" step="0.01" /></div>
+            <div><label>&nbsp;</label><button type="button" class="danger sc-remove" style="width:100%">Remover</button></div>
+          </div>
+        </div>
+        <div class="grid2">
+          <div><label>Condição de pagamento</label><input class="sc-terms" placeholder="ex.: 30/60 dias" /></div>
+          <div class="grid2">
+            <div><label>Prazo p/ pagamento (dias)</label><input class="sc-paydays" type="number" min="0" max="365" /></div>
+            <div><label>Prazo de entrega (dias)</label><input class="sc-delivery" type="number" min="0" max="365" /></div>
+          </div>
+        </div>
+        <label>Observação</label>
+        <input class="sc-notes" placeholder="opcional — lote mínimo, embalagem…" />`;
+      const pick = div.querySelector('.sc-item');
+      pick.innerHTML = '<option value="">Selecione o produto…</option>' +
+        contractCatalog.map(c => `<option value="${c.id}">${escapeHtml(c.code)} — ${escapeHtml(c.description)}</option>`).join('');
+      if (item) {
+        if (item.catalogItemId && contractCatalog.some(c => c.id === item.catalogItemId)) pick.value = item.catalogItemId;
+        else if (item.description) {
+          pick.insertAdjacentHTML('beforeend', `<option value="__livre">${escapeHtml(item.description)} (fora do catálogo)</option>`);
+          pick.value = '__livre';
+          div.dataset.description = item.description;
+        }
+        div.querySelector('.sc-price').value = item.unitPrice ?? '';
+        div.querySelector('.sc-terms').value = item.paymentTerms || '';
+        div.querySelector('.sc-paydays').value = item.paymentDays ?? '';
+        div.querySelector('.sc-delivery').value = item.deliveryDays ?? '';
+        div.querySelector('.sc-notes').value = item.notes || '';
+      }
+      div.querySelector('.sc-remove').addEventListener('click', () => div.remove());
+      return div;
+    }
+    async function openContract(supplier) {
+      contractSupId = supplier.id;
+      if (!contractCatalog.length) {
+        try { contractCatalog = (await api('/api/v1/items/')).items; } catch { contractCatalog = []; }
+      }
+      const c = supplier.contract || {};
+      $('sup-contract-title').textContent = `Contrato de parceria — ${supplier.legalName}`;
+      $('sc-number').value = c.number || '';
+      $('sc-from').value = c.validFrom || '';
+      $('sc-until').value = c.validUntil || '';
+      $('sc-notes').value = c.notes || '';
+      $('sc-items').innerHTML = '';
+      (c.items || []).forEach(i => $('sc-items').appendChild(contractRow(i)));
+      if (!(c.items || []).length) $('sc-items').appendChild(contractRow());
+      $('sup-contract').hidden = false;
+      $('sup-contract-title').scrollIntoView({ behavior: 'smooth' });
+    }
+    $('sc-add').addEventListener('click', () => $('sc-items').appendChild(contractRow()));
+    $('sup-contract-close').addEventListener('click', () => { $('sup-contract').hidden = true; contractSupId = null; });
+    $('sc-save').addEventListener('click', async () => {
+      if (!contractSupId) return;
+      const num = (id, el) => el.querySelector(id).value === '' ? null : parseInt(el.querySelector(id).value);
+      const items = [...document.querySelectorAll('.sc-row')].map(row => {
+        const pick = row.querySelector('.sc-item').value;
+        const produto = contractCatalog.find(c => c.id === pick);
+        return {
+          catalogItemId: produto ? produto.id : null,
+          description: produto ? produto.description : (row.dataset.description || null),
+          catalogCode: produto ? produto.code : null,
+          unitOfMeasure: produto ? produto.unitOfMeasure : null,
+          unitPrice: row.querySelector('.sc-price').value ? parseFloat(row.querySelector('.sc-price').value) : 0,
+          paymentTerms: row.querySelector('.sc-terms').value || null,
+          paymentDays: num('.sc-paydays', row),
+          deliveryDays: num('.sc-delivery', row),
+          notes: row.querySelector('.sc-notes').value || null,
+        };
+      }).filter(x => x.catalogItemId || x.description);
+      try {
+        await api(`/api/v1/suppliers/${contractSupId}/contract`, { method: 'PUT', body: {
+          number: $('sc-number').value || null,
+          validFrom: $('sc-from').value || null,
+          validUntil: $('sc-until').value || null,
+          notes: $('sc-notes').value || null,
+          items,
+        }});
+        toast(items.length ? 'Contrato salvo.' : 'Contrato encerrado — o fornecedor volta a ser cotado normalmente.', 'ok');
+        $('sup-contract').hidden = true; contractSupId = null;
+        LOADERS['suppliers']();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
     LOADERS['suppliers'] = async () => {
       try {
         const { items } = await api('/api/v1/suppliers/?all=true');
         supCache = Object.fromEntries(items.map(s => [s.id, s]));
         $('sup-list').innerHTML = items.length
-          ? '<table><thead><tr><th>Fornecedor</th><th>CNPJ/CPF</th><th>Contato</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+          ? '<table><thead><tr><th>Fornecedor</th><th>CNPJ/CPF</th><th>Contato</th><th>Contrato</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
             items.map(s => `
               <tr data-id="${s.id}">
                 <td>${escapeHtml(s.legalName)}${s.tradeName ? `<div class="sub">${escapeHtml(s.tradeName)}</div>` : ''}</td>
                 <td>${escapeHtml(s.taxId)}</td>
                 <td>${escapeHtml(s.email || '')}${s.phone ? `<div class="sub">${escapeHtml(s.phone)}</div>` : ''}</td>
+                <td>${(s.contract && s.contract.items.length)
+                  ? `<span class="badge ${s.contract.current ? 'on' : 'off'}">${s.contract.current ? 'VIGENTE' : 'FORA DA VIGÊNCIA'}</span>
+                     <div class="sub">${s.contract.items.length} produto(s)${s.contract.validUntil ? ' · até ' + new Date(s.contract.validUntil).toLocaleDateString('pt-BR') : ''}</div>`
+                  : '<span class="sub">sem contrato</span>'}</td>
                 <td><span class="badge ${s.active ? 'on' : 'off'}">${s.active ? 'ATIVO' : 'INATIVO'}</span></td>
                 <td class="row-actions">
                   <button class="secondary" data-act="edit-sup">Editar</button>
+                  <button class="secondary" data-act="contract">Contrato</button>
                   <button class="secondary" data-act="portal-key">Chave do portal</button>
                   <button class="${s.active ? 'danger' : 'secondary'}" data-act="toggle-sup">${s.active ? 'Inativar' : 'Reativar'}</button>
                 </td>
@@ -2351,6 +2470,10 @@
         if (btn.dataset.act === 'edit-sup') {
           setSupFormMode(supCache[id]);
           $('sup-form-title').scrollIntoView({ behavior: 'smooth' });
+          return;
+        }
+        if (btn.dataset.act === 'contract') {
+          openContract(supCache[id]);
           return;
         }
         if (btn.dataset.act === 'portal-key') {
@@ -3530,7 +3653,9 @@
           q.suppliers.map(s => `
             <tr><td>${escapeHtml(s.supplierName)}</td><td>${escapeHtml(s.taxId)}</td>
             <td class="sub">${new Date(s.invitedAt).toLocaleDateString('pt-BR')} por ${escapeHtml(s.invitedByLabel)}</td>
-            <td>${s.hasProposal ? '<span class="badge on">RECEBIDA</span>' : '<span class="badge dev">AGUARDANDO</span>'}</td>
+            <td>${s.hasProposal ? '<span class="badge on">RECEBIDA</span>' : '<span class="badge dev">AGUARDANDO</span>'}
+              ${(buySuppliers.find(f => f.id === s.supplierId) || {}).contract?.current
+                ? '<div class="sub">contrato de parceria vigente</div>' : ''}</td>
             <td class="row-actions"><button class="secondary" data-act="copy-invite">Copiar convite</button></td></tr>`).join('') + '</tbody></table></div>'
         : '<p class="hello">Nenhum fornecedor convidado ainda.</p>';
       if (conduct && ['COTACAO_ABERTA', 'EM_ANALISE'].includes(q.status))
@@ -3584,7 +3709,10 @@
           <label for="ip-file" style="margin-top:10px">Cotação recebida (PDF, planilha ou imagem)</label>
           <input id="ip-file" type="file" accept=".pdf,.xlsx,.xls,.csv,.docx,.png,.jpg,.jpeg" />
           <p class="hello" style="margin:4px 0 0">Anexe o orçamento que o fornecedor enviou por e-mail — fica arquivado no processo, disponível na comparação e na aprovação. Até 10 MB.</p>
-          <button data-act="internal-proposal" style="margin-top:8px">Registrar proposta</button>`;
+          <div class="row-actions" style="margin-top:8px">
+            <button data-act="internal-proposal">Registrar proposta</button>
+            <button class="secondary" data-act="fill-from-contract">Preencher pelo contrato de parceria</button>
+          </div>`;
       }
       html += '</div>';
 
@@ -3732,6 +3860,30 @@
           const text = inviteText(rfqCache[rfqOpenId]);
           try { await navigator.clipboard.writeText(text); toast('Convite copiado — cole no e-mail do fornecedor.', 'ok'); }
           catch { prompt('Copie o convite:', text); }
+        } else if (act === 'fill-from-contract') {
+          const q = rfqCache[rfqOpenId];
+          const forn = buySuppliers.find(f => f.id === $('ip-supplier').value);
+          const contrato = forn && forn.contract;
+          if (!contrato || !contrato.items.length) { toast('Este fornecedor não tem contrato de parceria cadastrado.', 'error'); return; }
+          if (!contrato.current) { toast('O contrato deste fornecedor está fora da vigência.', 'error'); return; }
+          let preenchidos = 0, primeiro = null;
+          for (const campo of document.querySelectorAll('.ip-price')) {
+            const item = q.items.find(i => i.id === campo.dataset.item);
+            const linha = contrato.items.find(c =>
+              (item.catalogItemId && c.catalogItemId === item.catalogItemId) ||
+              (c.catalogCode && item.catalogCode && c.catalogCode === item.catalogCode));
+            if (!linha) continue;
+            campo.value = linha.unitPrice;
+            preenchidos++; primeiro = primeiro || linha;
+          }
+          if (!preenchidos) { toast('Nenhum item desta cotação está no contrato deste fornecedor.', 'error'); return; }
+          if (primeiro) {
+            if (primeiro.deliveryDays != null) $('ip-delivery').value = primeiro.deliveryDays;
+            if (primeiro.paymentTerms) $('ip-payment').value = primeiro.paymentTerms;
+            if (primeiro.paymentDays != null) $('ip-paydays').value = primeiro.paymentDays;
+            $('ip-notes').value = `Condições do contrato de parceria${contrato.number ? ' ' + contrato.number : ''}`;
+          }
+          toast(`${preenchidos} item(ns) preenchido(s) pelo contrato — confira e registre a proposta.`, 'ok');
         } else if (act === 'internal-proposal') {
           const items = [...document.querySelectorAll('.ip-price')]
             .filter(i => i.value).map(i => ({ quotationItemId: i.dataset.item, unitPrice: parseFloat(i.value), quantity: null }));

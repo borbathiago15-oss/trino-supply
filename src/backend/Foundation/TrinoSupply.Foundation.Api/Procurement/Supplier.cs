@@ -19,4 +19,39 @@ public class Supplier
     public DateTimeOffset UpdatedAt { get; set; }
     public Guid CreatedBy { get; set; }
     public int Version { get; set; } = 1;
+
+    // ---- contrato de parceria ----------------------------------------------
+    /// <summary>Número/identificação do contrato de parceria com este fornecedor.</summary>
+    public string? ContractNumber { get; set; }
+    public DateOnly? ContractValidFrom { get; set; }
+    public DateOnly? ContractValidUntil { get; set; }
+    public string? ContractNotes { get; set; }
+    /// <summary>Produtos com preço e prazos fixos enquanto o contrato valer.</summary>
+    public List<SupplierContractItem> ContractItems { get; set; } = [];
+
+    /// <summary>Contrato válido na data: dentro da vigência (quando informada) e com itens.</summary>
+    public bool ContractIsCurrent(DateOnly today) =>
+        ContractItems.Count > 0
+        && (ContractValidFrom is null || today >= ContractValidFrom)
+        && (ContractValidUntil is null || today <= ContractValidUntil);
+}
+
+/// <summary>
+/// Produto do contrato de parceria: preço, prazo de pagamento e prazo de entrega fixos,
+/// para o comprador não precisar renegociar o que já está contratado.
+/// </summary>
+public class SupplierContractItem
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid SupplierId { get; set; }
+    public Guid? CatalogItemId { get; set; }              // produto do catálogo (quando existir)
+    public string Description { get; set; } = string.Empty;  // snapshot da descrição
+    public string? CatalogCode { get; set; }
+    public string UnitOfMeasure { get; set; } = "UN";
+    public decimal UnitPrice { get; set; }
+    public string? PaymentTerms { get; set; }             // condição (ex.: 30/60 dias)
+    public int? PaymentDays { get; set; }                 // prazo para pagamento, em dias
+    public int? DeliveryDays { get; set; }                // prazo de entrega, em dias
+    public string? Notes { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
 }

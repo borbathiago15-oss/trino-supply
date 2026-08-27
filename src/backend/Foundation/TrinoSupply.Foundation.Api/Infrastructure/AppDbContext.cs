@@ -19,6 +19,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Materials.MaterialRequisition> MaterialRequisitions => Set<Materials.MaterialRequisition>();
     public DbSet<Materials.MaterialRequisitionItem> MaterialRequisitionItems => Set<Materials.MaterialRequisitionItem>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
+    public DbSet<SupplierContractItem> SupplierContractItems => Set<SupplierContractItem>();
     public DbSet<CostCenter> CostCenters => Set<CostCenter>();
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
@@ -370,8 +371,32 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(s => s.UpdatedAt).HasColumnName("updated_at");
             e.Property(s => s.CreatedBy).HasColumnName("created_by");
             e.Property(s => s.Version).HasColumnName("version");
+            e.Property(s => s.ContractNumber).HasColumnName("contract_number").HasMaxLength(60);
+            e.Property(s => s.ContractValidFrom).HasColumnName("contract_valid_from");
+            e.Property(s => s.ContractValidUntil).HasColumnName("contract_valid_until");
+            e.Property(s => s.ContractNotes).HasColumnName("contract_notes").HasMaxLength(500);
             e.HasIndex(s => s.TaxId).IsUnique(); // SUP-BR-001
             e.HasIndex(s => new { s.Active, s.LegalName });
+            e.HasMany(s => s.ContractItems).WithOne().HasForeignKey(i => i.SupplierId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SupplierContractItem>(e =>
+        {
+            e.ToTable("supplier_contract_item", "procurement");
+            e.HasKey(i => i.Id);
+            e.Property(i => i.Id).HasColumnName("id");
+            e.Property(i => i.SupplierId).HasColumnName("supplier_id");
+            e.Property(i => i.CatalogItemId).HasColumnName("catalog_item_id");
+            e.Property(i => i.Description).HasColumnName("description").HasMaxLength(500).IsRequired();
+            e.Property(i => i.CatalogCode).HasColumnName("catalog_code").HasMaxLength(50);
+            e.Property(i => i.UnitOfMeasure).HasColumnName("unit_of_measure").HasMaxLength(10);
+            e.Property(i => i.UnitPrice).HasColumnName("unit_price").HasPrecision(18, 4);
+            e.Property(i => i.PaymentTerms).HasColumnName("payment_terms").HasMaxLength(200);
+            e.Property(i => i.PaymentDays).HasColumnName("payment_days");
+            e.Property(i => i.DeliveryDays).HasColumnName("delivery_days");
+            e.Property(i => i.Notes).HasColumnName("notes").HasMaxLength(500);
+            e.Property(i => i.CreatedAt).HasColumnName("created_at");
+            e.HasIndex(i => new { i.SupplierId, i.CatalogItemId });
         });
 
         modelBuilder.Entity<PurchaseOrder>(e =>

@@ -23,6 +23,10 @@ public class Supplier
     // ---- contrato de parceria ----------------------------------------------
     /// <summary>Número/identificação do contrato de parceria com este fornecedor.</summary>
     public string? ContractNumber { get; set; }
+    /// <summary>Teto financeiro do contrato (V2-P2); as O.C.s abatem o saldo.</summary>
+    public decimal? ContractValueLimit { get; set; }
+    /// <summary>Consumo do contrato na vigência — derivado, preenchido na leitura (não mapeado).</summary>
+    public decimal? ContractConsumed { get; set; }
     public DateOnly? ContractValidFrom { get; set; }
     public DateOnly? ContractValidUntil { get; set; }
     public string? ContractNotes { get; set; }

@@ -398,6 +398,95 @@ public class QuotationServiceTests
         Assert.Equal("RFQ-ERR-041", duplicada!.Code);
     }
 
+    /// <summary>V2-P2: total da proposta soma impostos e outros custos.</summary>
+    [Fact]
+    public async Task Total_da_proposta_soma_impostos_e_outros_custos()
+    {
+        var w = await BuildAsync();
+        var (q, _) = await w.Rfq.CreateFromPrAsync(Carla, w.Pr.Id, QuotationKind.Purchase, null, null);
+        await w.Rfq.InviteSuppliersAsync(Carla, q!.Id, [w.Alfa.Id]);
+        var input = new ProposalInput(10, "30 dias", 50m, null, null,
+            q.Items.OrderBy(i => i.Sequence).Zip(new[] { 100m, 10m })
+                .Select(x => new ProposalItemInput(x.First.Id, x.Second, null)).ToList(),
+            DiscountValue: 20m, TaxValue: 15m, OtherCosts: 5m);
+        var (proposal, error) = await w.Rfq.SubmitProposalAsync(q.Id, w.Alfa.Id, input, "INTERNO", "Carla");
+        Assert.Null(error);
+        // itens 100 + 10 = 110; + frete 50 + impostos 15 + outros 5 − desconto 20 = 160
+        Assert.Equal(160m, proposal!.TotalValue);
+        Assert.Equal(15m, proposal.TaxValue);
+        Assert.Equal(5m, proposal.OtherCosts);
+    }
+
+    /// <summary>V2-P2: saving de referência congelado no registro da O.C. (× último preço pago).</summary>
+    [Fact]
+    public async Task Registro_da_OC_congela_o_saving_de_referencia_contra_o_ultimo_preco_pago()
+    {
+        var w = await BuildAsync();
+        // item de catálogo para ter histórico de preço
+        var catalog = new CatalogService(w.Db, new FixedTimeProvider(DateTimeOffset.UtcNow));
+        var (item, _) = await catalog.CreateAsync(Carla.Id, "REF-001", "Tinta epóxi 20L", "MANUTENCAO", "LT", 400m);
+
+        // pedido antigo pago a 400 (histórico)
+        var antigo = new PurchaseOrder
+        {
+            Number = "OLD-1", SupplierId = w.Beta.Id, SupplierName = "Beta",
+            CreatedAt = DateTimeOffset.UtcNow.AddMonths(-2), UpdatedAt = DateTimeOffset.UtcNow.AddMonths(-2),
+        };
+        antigo.Items.Add(new PurchaseOrderItem
+        {
+            OrderId = antigo.Id, Description = "Tinta epóxi 20L", Quantity = 10, UnitPrice = 400m,
+            CatalogItemId = item!.Id, CatalogCode = item.Code, CreatedAt = antigo.CreatedAt,
+        });
+        w.Db.PurchaseOrders.Add(antigo);
+        await w.Db.SaveChangesAsync();
+
+        // processo novo comprando o mesmo item a 380
+        var (pr, _) = await new RequisitionService(w.Db, new FakeNumbers(), catalog, new FixedTimeProvider(DateTimeOffset.UtcNow))
+            .CreateAsync(Ana, "Pintura", "CC-01", "NORMAL", null,
+                [new ItemInput("Tinta epóxi 20L", 20, "LT", 400m, null, item.Id)]);
+        await w.Prs.SubmitAsync(Ana, pr!.Id);
+        await w.Prs.ApproveAsync(Bruno, pr.Id, null);
+        var (q, _) = await w.Rfq.CreateFromPrAsync(Carla, pr.Id, QuotationKind.Purchase, null, null);
+        await w.Rfq.InviteSuppliersAsync(Carla, q!.Id, [w.Alfa.Id]);
+        await w.Rfq.SubmitProposalAsync(q.Id, w.Alfa.Id,
+            new ProposalInput(10, null, 0, null, null,
+                [new ProposalItemInput(q.Items.Single().Id, 380m, null)]), "INTERNO", "Carla");
+        await w.Rfq.CloseForAnalysisAsync(Carla, q.Id);
+        q = (await w.Rfq.GetAsync(q.Id))!;
+        await w.Rfq.SelectWinnerAsync(Carla, q.Id, q.Proposals.Single().Id, "Preço", "Único.");
+        await w.Rfq.ManagerDecisionAsync(Gustavo, q.Id, "APROVAR", null);
+        await w.Rfq.DirectorDecisionAsync(Diana, q.Id, "APROVAR", null);
+
+        var (order, error) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, "REF-OC", null, null);
+        Assert.Null(error);
+        var linha = order!.Items.Single();
+        Assert.Equal(400m, linha.LastPaidUnitPrice);
+        Assert.Equal((400m - 380m) * 20, linha.ReferenceSaving);   // 400 congelado no registro
+    }
+
+    /// <summary>V2-P2: O.C. acima do teto do contrato exige justificativa (CT-ERR-010).</summary>
+    [Fact]
+    public async Task OC_acima_do_teto_do_contrato_exige_justificativa()
+    {
+        var w = await BuildAsync();
+        // o relógio do serviço é fixo em 2026-08-24: a vigência precisa cobrir essa data
+        var hoje = new DateOnly(2026, 8, 24);
+        await w.Sup.SaveContractAsync(w.Alfa.Id, "CT-100", hoje.AddDays(-1), hoje.AddMonths(6), null,
+            [new SupplierService.ContractItemInput(null, "Martelete rebatedor MRP 900", null, "UN", 850m, null, null, null, null)],
+            valueLimit: 500m);   // teto proposital abaixo do total do pedido (922,73)
+
+        var q = await UpToApprovedAsync(w);
+        var (bloqueado, teto) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, "CT-OC-1", null, null);
+        Assert.Null(bloqueado);
+        Assert.Equal("CT-ERR-010", teto!.Code);
+
+        var (order, ok) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, "CT-OC-1", null, null,
+            "compra emergencial autorizada pela diretoria");
+        Assert.Null(ok);
+        Assert.NotNull(order);
+        Assert.Contains("CONTRATO_TETO_EXCEDIDO", (await w.Rfq.TimelineAsync(q.Id)).Select(e => e.EventType));
+    }
+
     [Fact]
     public async Task Negociacao_registra_o_ganho_sobre_a_primeira_proposta()
     {

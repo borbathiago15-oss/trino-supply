@@ -520,6 +520,60 @@ public class QuotationServiceTests
         Assert.Equal(original - nova.TotalValue, escolhida!.SavingValue);
     }
 
+    /// <summary>V2-P2: prospect participa da cotação, mas a seleção exige homologado (SUP-ERR-030).</summary>
+    [Fact]
+    public async Task Fornecedor_nao_homologado_participa_mas_nao_e_selecionado()
+    {
+        var w = await BuildAsync();
+        // Alfa vira prospect (novo na praça); Beta segue homologado (grandfathering)
+        await w.Sup.SetHomologationAsync(w.Alfa.Id, "PROSPECT");
+
+        var q = await UpToAnalysisAsync(w);   // Alfa foi convidado e propôs normalmente
+        var deAlfa = q.Proposals.First(p => p.SupplierId == w.Alfa.Id);
+        var (naoSelecionado, bloqueio) = await w.Rfq.SelectWinnerAsync(Carla, q.Id, deAlfa.Id, "Preço", "Menor preço.");
+        Assert.Null(naoSelecionado);
+        Assert.Equal("SUP-ERR-030", bloqueio!.Code);
+        Assert.Contains("PROSPECT", bloqueio.Message);
+
+        // homologou: a seleção passa
+        await w.Sup.SetHomologationAsync(w.Alfa.Id, "HOMOLOGADO");
+        var (ok, nenhum) = await w.Rfq.SelectWinnerAsync(Carla, q.Id, deAlfa.Id, "Preço", "Menor preço.");
+        Assert.Null(nenhum);
+        Assert.Equal(QuotationStatus.AwaitingManager, ok!.Status);
+    }
+
+    /// <summary>V2-P2: certidão vencida restringe automaticamente quem tem certidões cadastradas.</summary>
+    [Fact]
+    public async Task Certidao_vencida_restringe_o_fornecedor_na_selecao()
+    {
+        var w = await BuildAsync();
+        var hoje = new DateOnly(2026, 8, 24);   // relógio fixo do serviço
+        await w.Sup.AddDocumentAsync(w.Alfa.Id, "CND_FEDERAL", null, hoje.AddDays(-1),
+            Guid.NewGuid(), "cnd.pdf", "Carla");
+
+        var q = await UpToAnalysisAsync(w);
+        var deAlfa = q.Proposals.First(p => p.SupplierId == w.Alfa.Id);
+        var (_, restrito) = await w.Rfq.SelectWinnerAsync(Carla, q.Id, deAlfa.Id, "Preço", "Menor preço.");
+        Assert.Equal("SUP-ERR-030", restrito!.Code);
+        Assert.Contains("RESTRITO", restrito.Message);
+
+        // fornecedor sem NENHUMA certidão cadastrada não é punido (Beta segue selecionável)
+        var deBeta = q.Proposals.First(p => p.SupplierId == w.Beta.Id);
+        var (okBeta, nenhum) = await w.Rfq.SelectWinnerAsync(Carla, q.Id, deBeta.Id, "Preço", "Beta sem certidões cadastradas.");
+        Assert.Null(nenhum);
+        Assert.NotNull(okBeta);
+
+        // bloqueado não é nem convidado
+        await w.Sup.SetHomologationAsync(w.Beta.Id, "BLOQUEADO");
+        var (pr2, _) = await w.Prs.CreateAsync(Ana, "Outra compra", "CC-01", "NORMAL", null,
+            [new ItemInput("Chave de fenda", 1, "UN", 20, null)]);
+        await w.Prs.SubmitAsync(Ana, pr2!.Id);
+        await w.Prs.ApproveAsync(Bruno, pr2.Id, null);
+        var (q2, _) = await w.Rfq.CreateFromPrAsync(Carla, pr2.Id, QuotationKind.Purchase, null, null);
+        var (_, convite) = await w.Rfq.InviteSuppliersAsync(Carla, q2!.Id, [w.Beta.Id]);
+        Assert.Equal("RFQ-ERR-010", convite!.Code);
+    }
+
     [Fact]
     public async Task OC_bloqueada_para_fornecedor_que_ficou_inativo()
     {

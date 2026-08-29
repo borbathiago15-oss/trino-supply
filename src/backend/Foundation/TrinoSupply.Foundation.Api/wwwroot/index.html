@@ -868,6 +868,43 @@
           <button type="button" class="secondary" id="sc-add" style="margin-top:6px">+ Adicionar produto</button>
           <button type="button" class="full" id="sc-save" style="margin-top:10px">Salvar contrato</button>
         </div>
+        <div class="panel" id="sup-homolog" hidden>
+          <div class="topbar" style="margin-bottom:8px">
+            <h2 style="margin:0" id="sup-homolog-title">Homologação</h2>
+            <button type="button" class="secondary" id="sup-homolog-close">Fechar</button>
+          </div>
+          <p class="hello">PROSPECT e EM HOMOLOGAÇÃO participam de cotações e enviam propostas, mas <strong>só HOMOLOGADO pode ser escolhido vencedor</strong>. Certidão vencida restringe o fornecedor automaticamente; BLOQUEADO não recebe convite.</p>
+          <div class="grid2">
+            <div><label for="sh-status">Situação da homologação <span class="sub">(gestor de suprimentos)</span></label>
+              <select id="sh-status">
+                <option value="PROSPECT">Prospect</option>
+                <option value="EM_HOMOLOGACAO">Em homologação</option>
+                <option value="HOMOLOGADO">Homologado</option>
+                <option value="RESTRITO">Restrito</option>
+                <option value="BLOQUEADO">Bloqueado</option>
+              </select></div>
+            <div><label>&nbsp;</label><button type="button" id="sh-save" style="width:100%">Salvar situação</button></div>
+          </div>
+          <h2>Certidões e documentos</h2>
+          <div id="sh-docs" class="tablewrap"></div>
+          <div class="grid2">
+            <div><label for="sh-doc-type">Tipo</label>
+              <select id="sh-doc-type">
+                <option value="CND_FEDERAL">CND Federal</option>
+                <option value="FGTS">Certificado de regularidade do FGTS</option>
+                <option value="CNDT">CNDT (débitos trabalhistas)</option>
+                <option value="CONTRATO_SOCIAL">Contrato social</option>
+                <option value="OUTRO">Outro documento</option>
+              </select></div>
+            <div class="grid2">
+              <div><label for="sh-doc-until">Válida até</label><input id="sh-doc-until" type="date" /></div>
+              <div><label for="sh-doc-file">Arquivo</label><input id="sh-doc-file" type="file" accept=".pdf,.png,.jpg,.jpeg,.docx" /></div>
+            </div>
+          </div>
+          <label for="sh-doc-label">Descrição <span class="sub">(para "Outro documento")</span></label>
+          <input id="sh-doc-label" placeholder="opcional" />
+          <button type="button" id="sh-doc-add" style="margin-top:10px">Anexar documento</button>
+        </div>
       </section>
 
       <!-- Cadastros: centros de custo -->
@@ -2536,17 +2573,95 @@
       } catch (err) { toast(err.message, 'error'); }
     });
 
+    // ---- homologação e certidões do fornecedor (V2-P2) -----------------------
+    const HOMOLOG = {
+      PROSPECT: ['Prospect', 'dev'], EM_HOMOLOGACAO: ['Em homologação', 'teal'],
+      HOMOLOGADO: ['Homologado', 'on'], RESTRITO: ['Restrito', 'warn'], BLOQUEADO: ['Bloqueado', 'off'],
+    };
+    function homologBadge(s) {
+      const efetiva = s.effectiveHomologation || s.homologationStatus || 'HOMOLOGADO';
+      const [label, cls] = HOMOLOG[efetiva] || [efetiva, ''];
+      const restritoPorDoc = efetiva === 'RESTRITO' && s.homologationStatus === 'HOMOLOGADO';
+      return `<span class="badge ${cls}" title="${restritoPorDoc ? 'Restrito automático: certidão vencida' : ''}">${label}</span>` +
+        (restritoPorDoc ? '<div class="sub">certidão vencida</div>' : '');
+    }
+    let homologSupId = null;
+    const DOC_TYPES = { CND_FEDERAL: 'CND Federal', FGTS: 'FGTS', CNDT: 'CNDT', CONTRATO_SOCIAL: 'Contrato social', OUTRO: 'Outro' };
+    function renderHomolog(s) {
+      homologSupId = s.id;
+      $('sup-homolog-title').textContent = `Homologação — ${s.legalName}`;
+      $('sh-status').value = s.homologationStatus || 'HOMOLOGADO';
+      $('sh-docs').innerHTML = (s.documents || []).length
+        ? '<table><thead><tr><th>Documento</th><th>Arquivo</th><th>Válida até</th><th>Situação</th><th></th></tr></thead><tbody>' +
+          s.documents.map(d => `<tr data-doc="${d.id}">
+            <td>${escapeHtml(DOC_TYPES[d.type] || d.type)}${d.label ? `<div class="sub">${escapeHtml(d.label)}</div>` : ''}</td>
+            <td><a href="#" data-doc-file="${d.documentId}">${escapeHtml(d.fileName)}</a></td>
+            <td>${d.validUntil ? new Date(d.validUntil).toLocaleDateString('pt-BR') : '<span class="sub">sem validade</span>'}</td>
+            <td>${d.expired ? '<span class="badge off">VENCIDA</span>'
+                 : d.expiringDays != null && d.expiringDays <= 30 ? `<span class="badge warn">vence em ${d.expiringDays}d</span>`
+                 : d.validUntil ? '<span class="badge on">VÁLIDA</span>' : '—'}</td>
+            <td class="row-actions"><button class="danger" data-act="doc-del">Remover</button></td>
+          </tr>`).join('') + '</tbody></table>'
+        : '<p class="hello">Nenhuma certidão anexada. Sem certidões cadastradas o fornecedor não é restringido automaticamente.</p>';
+      $('sup-homolog').hidden = false;
+      $('sup-homolog-title').scrollIntoView({ behavior: 'smooth' });
+    }
+    $('sup-homolog-close').addEventListener('click', () => { $('sup-homolog').hidden = true; homologSupId = null; });
+    $('sh-save').addEventListener('click', async () => {
+      if (!homologSupId) return;
+      try {
+        const s = await api(`/api/v1/suppliers/${homologSupId}/homologation`, { method: 'PATCH', body: { status: $('sh-status').value } });
+        toast('Situação de homologação salva.', 'ok');
+        supCache[s.id] = s; renderHomolog(s); LOADERS['suppliers']();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+    $('sh-doc-add').addEventListener('click', async () => {
+      if (!homologSupId) return;
+      const file = $('sh-doc-file').files[0];
+      if (!file) { toast('Escolha o arquivo da certidão.', 'error'); return; }
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('type', $('sh-doc-type').value);
+        if ($('sh-doc-until').value) fd.append('validUntil', $('sh-doc-until').value);
+        if ($('sh-doc-label').value) fd.append('label', $('sh-doc-label').value);
+        const res = await fetch(`/api/v1/suppliers/${homologSupId}/documents`, {
+          method: 'POST', headers: { Authorization: 'Bearer ' + store.access }, body: fd,
+        });
+        if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error((j.error && j.error.message) || 'Falha ao anexar.'); }
+        toast('Documento anexado.', 'ok');
+        $('sh-doc-file').value = ''; $('sh-doc-until').value = ''; $('sh-doc-label').value = '';
+        const { items } = await api('/api/v1/suppliers/?all=true');
+        supCache = Object.fromEntries(items.map(x => [x.id, x]));
+        renderHomolog(supCache[homologSupId]); LOADERS['suppliers']();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+    $('sh-docs').addEventListener('click', async (ev) => {
+      const link = ev.target.closest('a[data-doc-file]');
+      if (link) { ev.preventDefault(); downloadDoc(link.dataset.docFile); return; }
+      const btn = ev.target.closest('button[data-act="doc-del"]');
+      if (!btn || !homologSupId) return;
+      try {
+        await api(`/api/v1/suppliers/${homologSupId}/documents/${btn.closest('tr').dataset.doc}`, { method: 'DELETE' });
+        toast('Documento removido.', 'ok');
+        const { items } = await api('/api/v1/suppliers/?all=true');
+        supCache = Object.fromEntries(items.map(x => [x.id, x]));
+        renderHomolog(supCache[homologSupId]); LOADERS['suppliers']();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+
     LOADERS['suppliers'] = async () => {
       try {
         const { items } = await api('/api/v1/suppliers/?all=true');
         supCache = Object.fromEntries(items.map(s => [s.id, s]));
         $('sup-list').innerHTML = items.length
-          ? '<table><thead><tr><th>Fornecedor</th><th>CNPJ/CPF</th><th>Contato</th><th>Contrato</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+          ? '<table><thead><tr><th>Fornecedor</th><th>CNPJ/CPF</th><th>Contato</th><th>Homologação</th><th>Contrato</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
             items.map(s => `
               <tr data-id="${s.id}">
                 <td>${escapeHtml(s.legalName)}${s.tradeName ? `<div class="sub">${escapeHtml(s.tradeName)}</div>` : ''}</td>
                 <td>${escapeHtml(s.taxId)}</td>
                 <td>${escapeHtml(s.email || '')}${s.phone ? `<div class="sub">${escapeHtml(s.phone)}</div>` : ''}</td>
+                <td>${homologBadge(s)}</td>
                 <td>${(s.contract && s.contract.items.length)
                   ? `<span class="badge ${s.contract.current ? 'on' : 'off'}">${s.contract.current ? 'VIGENTE' : 'FORA DA VIGÊNCIA'}</span>
                      <div class="sub">${s.contract.items.length} produto(s)${s.contract.validUntil ? ' · até ' + new Date(s.contract.validUntil).toLocaleDateString('pt-BR') : ''}</div>`
@@ -2555,6 +2670,7 @@
                 <td class="row-actions">
                   <button class="secondary" data-act="edit-sup">Editar</button>
                   <button class="secondary" data-act="contract">Contrato</button>
+                  <button class="secondary" data-act="homolog">Homologação</button>
                   <button class="secondary" data-act="portal-key">Chave do portal</button>
                   <button class="${s.active ? 'danger' : 'secondary'}" data-act="toggle-sup">${s.active ? 'Inativar' : 'Reativar'}</button>
                 </td>
@@ -2576,6 +2692,10 @@
         }
         if (btn.dataset.act === 'contract') {
           openContract(supCache[id]);
+          return;
+        }
+        if (btn.dataset.act === 'homolog') {
+          renderHomolog(supCache[id]);
           return;
         }
         if (btn.dataset.act === 'portal-key') {
@@ -3272,7 +3392,9 @@
               .map(h => `<th>${h}</th>`).join('') + '</tr></thead><tbody>' +
             lt.map(f => '<tr><td><strong>' + escapeHtml(f.family) + '</strong></td>' +
               f.stages.map(e => `<td>${e.target != null ? `meta ${e.target}d` : '<span class="sub">sem meta</span>'}
-                <div class="sub"${e.late ? ' style="color:var(--s5);font-weight:700"' : ''}>${e.actual != null ? 'real ' + e.actual + 'd' + (e.late ? ' ⚠' : '') : 'sem dado'}</div></td>`).join('') +
+                <div class="sub"${e.late ? ' style="color:var(--s5);font-weight:700"' : ''}>${e.actual != null ? 'real ' + e.actual + 'd' + (e.late ? ' ⚠' : '') : 'sem dado'}</div>
+                ${e.median != null ? `<div class="sub">mediana ${e.median}d</div>` : ''}
+                ${e.withinSlaPct != null ? `<div class="sub"><span class="badge ${e.withinSlaPct >= 80 ? 'on' : e.withinSlaPct >= 50 ? 'warn' : 'off'}">${e.withinSlaPct}% no prazo</span> <span class="sub">(${e.measured})</span></div>` : ''}</td>`).join('') +
               `<td>${f.targetTotal != null ? `<strong>meta ${f.targetTotal}d</strong>` : '<span class="sub">—</span>'}
                 <div class="sub">${f.actualTotal != null ? 'real ' + f.actualTotal + 'd' : 'sem dado'}</div></td></tr>`).join('') +
             '</tbody></table>'

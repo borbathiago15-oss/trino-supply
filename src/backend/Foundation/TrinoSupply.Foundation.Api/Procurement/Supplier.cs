@@ -14,6 +14,24 @@ public class Supplier
     public string? Phone { get; set; }
     /// <summary>Hash SHA-256 da chave do Portal do Fornecedor; a chave em claro nunca é persistida.</summary>
     public string? PortalKeyHash { get; set; }
+
+    // ---- homologação (V2-P2) -----------------------------------------------
+    /// <summary>Ciclo de vida: PROSPECT → EM_HOMOLOGACAO → HOMOLOGADO → RESTRITO → BLOQUEADO.
+    /// Fornecedores existentes nascem HOMOLOGADO (grandfathering) para a operação não parar.</summary>
+    public string HomologationStatus { get; set; } = SupplierHomologation.Homologado;
+    /// <summary>Certidões e documentos com validade (CND Federal, FGTS, CNDT, contrato social…).</summary>
+    public List<SupplierDocument> Documents { get; set; } = [];
+
+    /// <summary>
+    /// Situação efetiva: HOMOLOGADO com certidão vencida vira RESTRITO — só para quem já
+    /// cadastrou certidões (quem nunca cadastrou não é punido retroativamente).
+    /// </summary>
+    public string EffectiveHomologation(DateOnly today) =>
+        HomologationStatus == SupplierHomologation.Homologado
+            && Documents.Count > 0
+            && Documents.Any(d => d.ValidUntil is not null && d.ValidUntil < today)
+        ? SupplierHomologation.Restrito
+        : HomologationStatus;
     public bool Active { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
@@ -38,6 +56,32 @@ public class Supplier
         ContractItems.Count > 0
         && (ContractValidFrom is null || today >= ContractValidFrom)
         && (ContractValidUntil is null || today <= ContractValidUntil);
+}
+
+/// <summary>Estados de homologação do fornecedor (V2-P2).</summary>
+public static class SupplierHomologation
+{
+    public const string Prospect = "PROSPECT";
+    public const string EmHomologacao = "EM_HOMOLOGACAO";
+    public const string Homologado = "HOMOLOGADO";
+    public const string Restrito = "RESTRITO";
+    public const string Bloqueado = "BLOQUEADO";
+    public static readonly string[] All = [Prospect, EmHomologacao, Homologado, Restrito, Bloqueado];
+}
+
+/// <summary>Certidão/documento do fornecedor com validade monitorada (V2-P2).</summary>
+public class SupplierDocument
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid SupplierId { get; set; }
+    /// <summary>CND_FEDERAL | FGTS | CNDT | CONTRATO_SOCIAL | OUTRO.</summary>
+    public string Type { get; set; } = "OUTRO";
+    public string? Label { get; set; }              // descrição livre (para OUTRO)
+    public Guid DocumentId { get; set; }            // arquivo em stored_document
+    public string FileName { get; set; } = string.Empty;
+    public DateOnly? ValidUntil { get; set; }       // certidão sem validade = documento permanente
+    public string UploadedByLabel { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; }
 }
 
 /// <summary>

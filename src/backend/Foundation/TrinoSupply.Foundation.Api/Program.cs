@@ -1157,6 +1157,18 @@ static object SupplierView(Supplier s) => new
 {
     id = s.Id, legalName = s.LegalName, tradeName = s.TradeName, taxId = s.TaxId,
     email = s.Email, phone = s.Phone, active = s.Active,
+    // homologação (V2-P2): PROSPECT participa; só HOMOLOGADO fecha processo (SUP-ERR-030)
+    homologationStatus = s.HomologationStatus,
+    effectiveHomologation = s.EffectiveHomologation(DateOnly.FromDateTime(DateTime.UtcNow)),
+    documents = s.Documents.OrderBy(d => d.Type).Select(d => new
+    {
+        id = d.Id, type = d.Type, label = d.Label, documentId = d.DocumentId, fileName = d.FileName,
+        validUntil = d.ValidUntil,
+        expired = d.ValidUntil is not null && d.ValidUntil < DateOnly.FromDateTime(DateTime.UtcNow),
+        expiringDays = d.ValidUntil is not null
+            ? (int?)(d.ValidUntil.Value.DayNumber - DateOnly.FromDateTime(DateTime.UtcNow).DayNumber) : null,
+        uploadedByLabel = d.UploadedByLabel,
+    }),
     // contrato de parceria: produtos com preço e prazos fixos enquanto valer
     contract = new
     {
@@ -1208,6 +1220,58 @@ sup.MapPut("/{id:guid}/contract", async (Guid id, SupplierContractRequest body, 
         id, body.Number, body.ValidFrom, body.ValidUntil, body.Notes, items, body.ValueLimit);
     return error is not null ? Error(ctx, error.Code == "SUP-ERR-404" ? 404 : 422, error.Code, error.Message)
         : Ok(SupplierView(supplier!), ctx);
+});
+
+// homologação do fornecedor: decisão do gestor de suprimentos (V2-P2)
+sup.MapPatch("/{id:guid}/homologation", async (Guid id, HomologationRequest body, SupplierService svc,
+    ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!SupplierService.CanHomologate(RoleOf(p)))
+        return Error(ctx, 403, "SUP-ERR-900", "A homologação de fornecedores cabe ao gestor de suprimentos.");
+    var (supplier, error) = await svc.SetHomologationAsync(id, body.Status);
+    return error is not null ? Error(ctx, error.Code == "SUP-ERR-404" ? 404 : 422, error.Code, error.Message)
+        : Ok(SupplierView(supplier!), ctx);
+});
+
+// certidões do fornecedor (multipart): arquivo + tipo + validade; vencida restringe o fornecedor
+sup.MapPost("/{id:guid}/documents", async (Guid id, HttpRequest request, AppDbContext db,
+    SupplierService svc, TimeProvider clock, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!SupplierService.CanMaintain(RoleOf(p)))
+        return Error(ctx, 403, "SUP-ERR-900", "Seu papel não mantém documentos de fornecedor.");
+    if (!request.HasFormContentType) return Error(ctx, 400, "DOC-ERR-001", "Envie o arquivo como multipart/form-data.");
+    var form = await request.ReadFormAsync();
+    var file = form.Files.FirstOrDefault();
+    if (file is null || file.Length == 0) return Error(ctx, 400, "DOC-ERR-001", "Nenhum arquivo enviado.");
+    if (file.Length > StoredDocument.MaxSizeBytes) return Error(ctx, 400, "DOC-ERR-002", "Arquivo acima de 10 MB.");
+    if (!StoredDocument.AllowedContentTypes.Contains(file.ContentType))
+        return Error(ctx, 400, "DOC-ERR-003", "Formato não permitido: envie PDF, imagem ou documento Office.");
+
+    using var ms = new MemoryStream();
+    await file.CopyToAsync(ms);
+    var stored = new StoredDocument
+    {
+        FileName = Path.GetFileName(file.FileName), ContentType = file.ContentType, SizeBytes = file.Length,
+        Content = ms.ToArray(), EntityType = "FORNECEDOR_CERTIDAO", EntityId = id,
+        UploadedByLabel = p.FindFirstValue("name") ?? "Cadastro", UploadedAt = clock.GetUtcNow(),
+    };
+    db.StoredDocuments.Add(stored);
+    await db.SaveChangesAsync();
+
+    DateOnly? validade = DateOnly.TryParse(form["validUntil"], out var v) ? v : null;
+    var (doc, error) = await svc.AddDocumentAsync(id, form["type"], form["label"], validade,
+        stored.Id, stored.FileName, stored.UploadedByLabel);
+    return error is not null ? Error(ctx, error.Code == "SUP-ERR-404" ? 404 : 422, error.Code, error.Message)
+        : Ok(new { id = doc!.Id, documentId = stored.Id, fileName = stored.FileName }, ctx);
+}).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+
+sup.MapDelete("/{id:guid}/documents/{docId:guid}", async (Guid id, Guid docId, SupplierService svc,
+    ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!SupplierService.CanMaintain(RoleOf(p)))
+        return Error(ctx, 403, "SUP-ERR-900", "Seu papel não mantém documentos de fornecedor.");
+    var error = await svc.RemoveDocumentAsync(id, docId);
+    return error is not null ? Error(ctx, 404, error.Code, error.Message) : Results.NoContent();
 });
 
 // gera a chave do Portal do Fornecedor (mostrada uma única vez; persiste só o hash)
@@ -2323,6 +2387,7 @@ public record IssueRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity
 public record MaterialItemRequest(Guid CatalogItemId, decimal Quantity);
 public record CreateMaterialRequisitionRequest(string CostCenter, string? Notes, List<MaterialItemRequest>? Items);
 public record FulfillRequest(List<MaterialLineRequest>? Items);
+public record HomologationRequest(string? Status);
 public record SupplierContractItemRequest(Guid? CatalogItemId, string? Description, string? CatalogCode,
     string? UnitOfMeasure, decimal UnitPrice, string? PaymentTerms, int? PaymentDays, int? DeliveryDays, string? Notes);
 public record SupplierContractRequest(string? Number, DateOnly? ValidFrom, DateOnly? ValidUntil, string? Notes,

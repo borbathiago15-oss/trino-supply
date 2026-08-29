@@ -15,7 +15,7 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
 
     public async Task<List<Supplier>> ListAsync(bool includeInactive, CancellationToken ct = default)
     {
-        var q = db.Suppliers.Include(s => s.ContractItems).AsQueryable();
+        var q = db.Suppliers.Include(s => s.ContractItems).Include(s => s.Documents).AsQueryable();
         if (!includeInactive) q = q.Where(s => s.Active);
         var list = await q.OrderBy(s => s.LegalName).Take(500).ToListAsync(ct);
 
@@ -83,6 +83,61 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
         supplier.Version += 1;
         await db.SaveChangesAsync(ct);
         return (supplier, null);
+    }
+
+    // ---- homologação e certidões (V2-P2) ------------------------------------
+    /// <summary>Homologação é decisão de gestão: gestor de suprimentos ou administrador.</summary>
+    public static bool CanHomologate(string role) =>
+        role is Roles.SupplyManager or Roles.SystemAdministrator;
+
+    public async Task<(Supplier? supplier, UserError? error)> SetHomologationAsync(
+        Guid id, string? status, CancellationToken ct = default)
+    {
+        var supplier = await db.Suppliers.Include(s => s.Documents).Include(s => s.ContractItems)
+            .SingleOrDefaultAsync(s => s.Id == id, ct);
+        if (supplier is null) return (null, new("SUP-ERR-404", "Fornecedor não encontrado."));
+        var clean = (status ?? "").Trim().ToUpperInvariant();
+        if (!SupplierHomologation.All.Contains(clean))
+            return (null, new("SUP-ERR-031", "Situação de homologação inválida."));
+        supplier.HomologationStatus = clean;
+        supplier.UpdatedAt = clock.GetUtcNow();
+        supplier.Version += 1;
+        await db.SaveChangesAsync(ct);
+        return (supplier, null);
+    }
+
+    public static readonly string[] DocumentTypes =
+        ["CND_FEDERAL", "FGTS", "CNDT", "CONTRATO_SOCIAL", "OUTRO"];
+
+    public async Task<(SupplierDocument? doc, UserError? error)> AddDocumentAsync(
+        Guid supplierId, string? type, string? label, DateOnly? validUntil,
+        Guid storedDocumentId, string fileName, string uploadedByLabel, CancellationToken ct = default)
+    {
+        if (!await db.Suppliers.AnyAsync(s => s.Id == supplierId, ct))
+            return (null, new("SUP-ERR-404", "Fornecedor não encontrado."));
+        var t = (type ?? "OUTRO").Trim().ToUpperInvariant();
+        if (!DocumentTypes.Contains(t))
+            return (null, new("SUP-ERR-032", "Tipo de documento inválido (CND_FEDERAL, FGTS, CNDT, CONTRATO_SOCIAL ou OUTRO)."));
+        var doc = new SupplierDocument
+        {
+            SupplierId = supplierId, Type = t,
+            Label = string.IsNullOrWhiteSpace(label) ? null : label.Trim(),
+            DocumentId = storedDocumentId, FileName = fileName,
+            ValidUntil = validUntil, UploadedByLabel = uploadedByLabel,
+            CreatedAt = clock.GetUtcNow(),
+        };
+        db.SupplierDocuments.Add(doc);
+        await db.SaveChangesAsync(ct);
+        return (doc, null);
+    }
+
+    public async Task<UserError?> RemoveDocumentAsync(Guid supplierId, Guid docId, CancellationToken ct = default)
+    {
+        var doc = await db.SupplierDocuments.SingleOrDefaultAsync(d => d.Id == docId && d.SupplierId == supplierId, ct);
+        if (doc is null) return new("SUP-ERR-404", "Documento não encontrado.");
+        db.SupplierDocuments.Remove(doc);
+        await db.SaveChangesAsync(ct);
+        return null;
     }
 
     // ---- contrato de parceria (produtos com preço e prazos fixos) -----------

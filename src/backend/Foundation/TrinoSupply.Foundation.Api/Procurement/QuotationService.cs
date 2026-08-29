@@ -157,7 +157,7 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
         foreach (var sid in supplierIds.Distinct())
         {
             var s = suppliers.SingleOrDefault(x => x.Id == sid);
-            if (s is null || !s.Active)
+            if (s is null || !s.Active || s.HomologationStatus == SupplierHomologation.Bloqueado)
                 return (null, new("RFQ-ERR-010", "Fornecedor inativo, bloqueado ou inexistente não pode ser convidado."));
             if (q.Suppliers.Any(x => x.SupplierId == sid)) continue;
             var invite = new QuotationSupplier
@@ -331,6 +331,14 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
             .OrderByDescending(p => p.VersionNumber).First();
         if (latest.Id != proposal.Id)
             return (null, new("RFQ-ERR-021", "Selecione a versão mais recente da proposta do fornecedor."));
+
+        // homologação (V2-P2): prospect participa da cotação, mas só homologado é selecionado
+        var vencedor = await db.Suppliers.Include(f => f.Documents)
+            .SingleAsync(f => f.Id == proposal.SupplierId, ct);
+        var situacao = vencedor.EffectiveHomologation(DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime));
+        if (situacao != SupplierHomologation.Homologado)
+            return (null, new("SUP-ERR-030",
+                $"O fornecedor {proposal.SupplierName} está {situacao} — conclua a homologação (ou regularize as certidões) antes de selecioná-lo."));
 
         q.WinnerSupplierId = proposal.SupplierId;
         q.WinnerProposalId = proposal.Id;

@@ -20,6 +20,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Materials.MaterialRequisitionItem> MaterialRequisitionItems => Set<Materials.MaterialRequisitionItem>();
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<SupplierContractItem> SupplierContractItems => Set<SupplierContractItem>();
+    public DbSet<SupplierDocument> SupplierDocuments => Set<SupplierDocument>();
     public DbSet<CostCenter> CostCenters => Set<CostCenter>();
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
@@ -368,6 +369,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(s => s.Email).HasColumnName("email").HasMaxLength(320);
             e.Property(s => s.Phone).HasColumnName("phone").HasMaxLength(40);
             e.Property(s => s.PortalKeyHash).HasColumnName("portal_key_hash").HasMaxLength(64);
+            e.Property(s => s.HomologationStatus).HasColumnName("homologation_status")
+                .HasMaxLength(20).HasDefaultValue(SupplierHomologation.Homologado);
+            e.HasMany(s => s.Documents).WithOne().HasForeignKey(d => d.SupplierId).OnDelete(DeleteBehavior.Cascade);
             e.Property(s => s.Active).HasColumnName("active");
             e.Property(s => s.CreatedAt).HasColumnName("created_at");
             e.Property(s => s.UpdatedAt).HasColumnName("updated_at");
@@ -382,6 +386,23 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(s => s.TaxId).IsUnique(); // SUP-BR-001
             e.HasIndex(s => new { s.Active, s.LegalName });
             e.HasMany(s => s.ContractItems).WithOne().HasForeignKey(i => i.SupplierId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SupplierDocument>(e =>
+        {
+            e.ToTable("supplier_document", "procurement"); // certidões com validade (V2-P2)
+            e.HasKey(d => d.Id);
+            e.Property(d => d.Id).HasColumnName("id");
+            e.Property(d => d.SupplierId).HasColumnName("supplier_id");
+            e.Property(d => d.Type).HasColumnName("type").HasMaxLength(30);
+            e.Property(d => d.Label).HasColumnName("label").HasMaxLength(200);
+            e.Property(d => d.DocumentId).HasColumnName("document_id");
+            e.Property(d => d.FileName).HasColumnName("file_name").HasMaxLength(300);
+            e.Property(d => d.ValidUntil).HasColumnName("valid_until");
+            e.Property(d => d.UploadedByLabel).HasColumnName("uploaded_by_label").HasMaxLength(200);
+            e.Property(d => d.CreatedAt).HasColumnName("created_at");
+            e.HasIndex(d => new { d.SupplierId, d.Type });
+            e.HasIndex(d => d.ValidUntil);
         });
 
         modelBuilder.Entity<SupplierContractItem>(e =>

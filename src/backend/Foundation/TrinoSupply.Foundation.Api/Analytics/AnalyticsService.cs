@@ -230,12 +230,24 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
             }
         }
         static double? Media(List<double> v) => v.Count > 0 ? Math.Round(v.Average(), 1) : null;
+        // SLA por processo (V2-P2): mediana e % dentro do prazo, medidos processo a processo
+        static double? Mediana(List<double> v)
+        {
+            if (v.Count == 0) return null;
+            var ord = v.OrderBy(x => x).ToList();
+            var meio = ord.Count / 2;
+            return Math.Round(ord.Count % 2 == 1 ? ord[meio] : (ord[meio - 1] + ord[meio]) / 2, 1);
+        }
+        static double? DentroPct(List<double> v, int? meta) =>
+            meta is null || v.Count == 0 ? null : Math.Round(v.Count(d => d <= meta.Value) * 100.0 / v.Count, 1);
+
         var leadTimes = famList
             .Where(f => family is null || string.Equals(f.Name, family, StringComparison.OrdinalIgnoreCase))
             .Select(f =>
             {
                 etapas.TryGetValue(f.Name, out var m);
-                var reais = new[] { Media(m?[0] ?? []), Media(m?[1] ?? []), Media(m?[2] ?? []), Media(m?[3] ?? []) };
+                var listas = m ?? [new(), new(), new(), new()];
+                var reais = listas.Select(Media).ToArray();
                 var metas = new int?[] { f.LeadRequestToQuote, f.LeadQuoteToApproval, f.LeadApprovalToPo, f.LeadPoToDelivery };
                 return new
                 {
@@ -244,6 +256,9 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
                         .Select((rotulo, i) => new
                         {
                             stage = rotulo, target = metas[i], actual = reais[i],
+                            median = Mediana(listas[i]),
+                            measured = listas[i].Count,
+                            withinSlaPct = DentroPct(listas[i], metas[i]),
                             late = metas[i] is not null && reais[i] is not null && reais[i] > metas[i],
                         }).ToList(),
                     targetTotal = f.LeadTotal,

@@ -311,6 +311,44 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
             }).ToList(),
         };
 
+        // ---- painel do comprador multidimensional (V2-P3): volume, SLA, saving, backlog, OTIF ----
+        var windowQuotes = await db.Quotations
+            .Where(q => q.CreatedAt >= fromDt && q.CreatedAt < toDt
+                        && q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected)
+            .Select(q => new { q.CreatedByLabel, q.CreatedAt, q.Status, q.SavingValue, q.PurchaseOrderId })
+            .ToListAsync(ct);
+        var poCreatedAt = activePos.ToDictionary(o => o.Id, o => o.CreatedAt);
+        var backlogPorResponsavel = (await db.Requisitions
+                .Where(r => r.DeletedAt == null && r.AssignedToLabel != null
+                            && (r.Status == RequisitionStatus.Submitted || r.Status == RequisitionStatus.Approved
+                                || r.Status == RequisitionStatus.InApproval))
+                .GroupBy(r => r.AssignedToLabel!)
+                .Select(g => new { Label = g.Key, Count = g.Count() }).ToListAsync(ct))
+            .ToDictionary(x => x.Label, x => x.Count);
+        var buyerPanel = windowQuotes.GroupBy(q => q.CreatedByLabel)
+            .Select(g =>
+            {
+                var comOc = g.Where(q => q.PurchaseOrderId is not null
+                                         && poCreatedAt.ContainsKey(q.PurchaseOrderId!.Value)).ToList();
+                var slaDias = comOc.Select(q => (poCreatedAt[q.PurchaseOrderId!.Value] - q.CreatedAt).TotalDays).ToList();
+                var minhasPos = activePos.Where(o => o.IssuedByLabel == g.Key).ToList();
+                var otifMedidas = minhasPos.Where(o => o.Otif is not null).ToList();
+                return new
+                {
+                    label = g.Key,
+                    processes = g.Count(),
+                    closed = g.Count(q => q.Status == QuotationStatus.PoIssued),
+                    savingTotal = g.Sum(q => q.SavingValue ?? 0),
+                    poValue = minhasPos.Sum(o => o.TotalValue),
+                    avgDaysToPo = slaDias.Count > 0 ? Math.Round(slaDias.Average(), 1) : (double?)null,
+                    backlog = backlogPorResponsavel.GetValueOrDefault(g.Key),
+                    otifPercent = otifMedidas.Count > 0
+                        ? Math.Round(otifMedidas.Count(o => o.Otif == true) * 100.0 / otifMedidas.Count, 1)
+                        : (double?)null,
+                };
+            })
+            .OrderByDescending(b => b.poValue).ToList();
+
         // ---- opções de filtro (para os selects da UI) ---------------------------
         var filterOptions = new
         {
@@ -328,7 +366,7 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
             clients = ccByCode.Values.Where(c => c.ClientName != null).Select(c => c.ClientName!).Distinct().OrderBy(x => x).ToList(),
         };
 
-        return new { from, to, kpis, months, rankings, supplierTable, leadTimes, saving, filterOptions };
+        return new { from, to, kpis, months, rankings, supplierTable, leadTimes, saving, buyerPanel, filterOptions };
     }
 
     /// <summary>

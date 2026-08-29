@@ -428,6 +428,9 @@
           <p class="hello">A meta vem de Cadastros → Famílias de Produtos. O realizado é medido nos processos do período.</p>
           <div id="sd-leadtimes" class="tablewrap"></div></div>
         <div class="panel"><h2>Fornecedor — pedidos no período</h2><div id="sd-suppliers-table" class="tablewrap"></div></div>
+        <div class="panel"><h2>Painel do comprador</h2>
+          <p class="hello">Visão multidimensional do período: processos conduzidos, valor comprado, ganho negociado, prazo médio até a O.C., backlog atual e OTIF das entregas.</p>
+          <div id="sd-buyers-panel" class="tablewrap"></div></div>
         </div>
       </section>
 
@@ -3485,6 +3488,23 @@
                 ? `<span class="badge ${s.otifPercent >= 90 ? 'on' : s.otifPercent >= 70 ? 'warn' : 'off'}" title="${s.otifMeasured} entrega(s) medida(s)">${s.otifPercent}%</span>`
                 : '<span class="sub">sem medição</span>'}</td></tr>`).join('') + '</tbody></table>'
           : '<p class="hello">Nenhum pedido de compra no período.</p>';
+        // painel do comprador multidimensional (V2-P3)
+        const bp = dash.buyerPanel || [];
+        $('sd-buyers-panel').innerHTML = bp.length
+          ? '<table><thead><tr><th>Comprador</th><th>Processos</th><th>Com O.C.</th><th>Valor comprado</th><th>Saving</th><th>Dias até a O.C.</th><th>Backlog atual</th><th>OTIF</th></tr></thead><tbody>' +
+            bp.map(b => `<tr>
+              <td>${escapeHtml(b.label)}</td>
+              <td>${fmtInt(b.processes)}</td>
+              <td>${fmtInt(b.closed)}</td>
+              <td>${money(b.poValue)}</td>
+              <td>${b.savingTotal > 0 ? '<strong>' + money(b.savingTotal) + '</strong>' : money(0)}</td>
+              <td>${b.avgDaysToPo != null ? b.avgDaysToPo + 'd' : '<span class="sub">—</span>'}</td>
+              <td>${b.backlog > 0 ? `<span class="badge warn">${fmtInt(b.backlog)}</span>` : '0'}</td>
+              <td>${b.otifPercent != null
+                ? `<span class="badge ${b.otifPercent >= 90 ? 'on' : b.otifPercent >= 70 ? 'warn' : 'off'}">${b.otifPercent}%</span>`
+                : '<span class="sub">sem medição</span>'}</td>
+            </tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhum processo de compra no período.</p>';
       } catch (err) { toast(err.message, 'error'); }
     };
     $('sd-apply').addEventListener('click', () => LOADERS['supply-dash']());

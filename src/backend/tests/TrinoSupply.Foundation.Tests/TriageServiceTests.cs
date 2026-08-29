@@ -157,4 +157,44 @@ public class TriageServiceTests
         Assert.DoesNotContain(responsibles, r => r.Id == Ana.Id);
         Assert.DoesNotContain(responsibles, r => r.Id == Bruno.Id);
     }
+
+    // ==== alteração de prioridade com justificativa (V2-P3) =====================
+
+    [Fact]
+    public async Task Alterar_prioridade_exige_justificativa_e_urgente_exige_impacto()
+    {
+        var w = await BuildAsync();
+
+        var (_, semMotivo) = await w.Triage.ChangePriorityAsync(Carla, w.Pr.Id, "URGENT", null, null);
+        Assert.Equal("TRI-ERR-031", semMotivo!.Code);
+
+        var (_, semImpacto) = await w.Triage.ChangePriorityAsync(Carla, w.Pr.Id, "URGENT", "Máquina parou", null);
+        Assert.Equal("TRI-ERR-031", semImpacto!.Code);
+
+        var (pr, error) = await w.Triage.ChangePriorityAsync(Carla, w.Pr.Id, "URGENT",
+            "Máquina parou", "Linha inteira sem produzir");
+        Assert.Null(error);
+        Assert.Equal("URGENT", pr!.Priority);
+        Assert.Equal("Máquina parou", pr.UrgencyReason);
+        Assert.Equal("Linha inteira sem produzir", pr.UrgencyImpact);
+        Assert.Equal(Carla.Label, pr.PriorityChangedByLabel);
+        Assert.Equal("Máquina parou", pr.PriorityChangeReason);
+
+        // voltar a NORMAL limpa a urgência e registra o novo motivo
+        var (normal, e2) = await w.Triage.ChangePriorityAsync(Gustavo, w.Pr.Id, "NORMAL",
+            "Fornecedor local resolveu o pico", null);
+        Assert.Null(e2);
+        Assert.Equal("NORMAL", normal!.Priority);
+        Assert.Null(normal.UrgencyReason);
+        Assert.Null(normal.UrgencyImpact);
+        Assert.Equal(Gustavo.Label, normal.PriorityChangedByLabel);
+    }
+
+    [Fact]
+    public async Task Solicitante_nao_altera_prioridade()
+    {
+        var w = await BuildAsync();
+        var (_, error) = await w.Triage.ChangePriorityAsync(Ana, w.Pr.Id, "URGENT", "quero logo", "atraso");
+        Assert.Equal("TRI-ERR-900", error!.Code);
+    }
 }

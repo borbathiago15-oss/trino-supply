@@ -38,6 +38,10 @@ public class PurchaseRequisition
     // compra urgente exige dizer por quê e o que acontece se não comprar (PR-ERR-050)
     public string? UrgencyReason { get; set; }
     public string? UrgencyImpact { get; set; }
+    // alteração de prioridade pela triagem (V2-P3): quem mudou, quando e por quê
+    public string? PriorityChangedByLabel { get; set; }
+    public DateTimeOffset? PriorityChangedAt { get; set; }
+    public string? PriorityChangeReason { get; set; }
     public DateOnly? NeededBy { get; set; }
     public string Justification { get; set; } = string.Empty;
     public string CostCenter { get; set; } = string.Empty;       // referência textual até FD-001-02/09 existirem

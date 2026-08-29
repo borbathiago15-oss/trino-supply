@@ -254,6 +254,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(r => r.Cycle).HasColumnName("cycle");
             e.Property(r => r.Priority).HasColumnName("priority").HasMaxLength(10);
             e.Property(r => r.UrgencyReason).HasColumnName("urgency_reason").HasMaxLength(500);
+            e.Property(r => r.PriorityChangedByLabel).HasColumnName("priority_changed_by_label").HasMaxLength(200);
+            e.Property(r => r.PriorityChangedAt).HasColumnName("priority_changed_at");
+            e.Property(r => r.PriorityChangeReason).HasColumnName("priority_change_reason").HasMaxLength(500);
             e.Property(r => r.UrgencyImpact).HasColumnName("urgency_impact").HasMaxLength(500);
             e.Property(r => r.NeededBy).HasColumnName("needed_by");
             e.Property(r => r.Justification).HasColumnName("justification").HasMaxLength(2000).IsRequired();

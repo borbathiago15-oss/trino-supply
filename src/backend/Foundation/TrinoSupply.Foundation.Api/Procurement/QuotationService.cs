@@ -66,9 +66,13 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
     public async Task<(List<PurchaseRequisition> ready, List<QueueBlocked> blocked)> QueueAsync(
         CancellationToken ct = default)
     {
-        var activeQuotationPrs = await db.Quotations
-            .Where(q => q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected)
-            .Select(q => q.SourcePrId).ToListAsync(ct);
+        var activeQuotes = db.Quotations
+            .Where(q => q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected);
+        // multi-SC (V2): além da SC primária do cabeçalho, as SCs agrupadas via itens também saem da fila
+        var activeQuotationPrs = (await activeQuotes.Select(q => q.SourcePrId).ToListAsync(ct))
+            .Concat(await activeQuotes.SelectMany(q => q.Items)
+                .Where(i => i.SourcePrId != null).Select(i => i.SourcePrId!.Value).ToListAsync(ct))
+            .Distinct().ToList();
         var linkedPoPrs = await db.PurchaseOrders
             .Where(o => o.SourcePrId != null && o.Status != PurchaseOrderStatus.Cancelled)
             .Select(o => o.SourcePrId!.Value).ToListAsync(ct);
@@ -104,7 +108,8 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
         var pr = await db.Requisitions.Include(r => r.Items).SingleOrDefaultAsync(r => r.Id == prId, ct);
         if (pr is null || pr.Status is not (RequisitionStatus.Submitted or RequisitionStatus.Approved))
             return (null, new("RFQ-ERR-001", "A requisição de origem precisa estar enviada (ou aprovada) para virar cotação."));
-        if (await db.Quotations.AnyAsync(q => q.SourcePrId == prId
+        if (await db.Quotations.AnyAsync(q =>
+                (q.SourcePrId == prId || q.Items.Any(i => i.SourcePrId == prId))
                 && q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected, ct))
             return (null, new("RFQ-ERR-001", "A requisição já possui um processo de cotação ativo."));
         if (pr.Items.Count == 0)
@@ -135,9 +140,101 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
                 QuotationId = q.Id, Sequence = ++seqNo, CatalogItemId = i.CatalogItemId,
                 CatalogCode = i.CatalogCode, Description = i.Description,
                 Quantity = i.Quantity, UnitOfMeasure = i.UnitOfMeasure,
+                SourcePrId = pr.Id, SourcePrNumber = pr.Number, SourcePrItemId = i.Id,
             });
         db.Quotations.Add(q);
         AddEvent(q, "COTACAO_ABERTA", $"Cotação {q.Number} aberta a partir da requisição {pr.Number}.",
+            actor, null, QuotationStatus.Open);
+        await db.SaveChangesAsync(ct);
+        return (q, null);
+    }
+
+    // ---- abertura agrupada (V2 — regra 1 generalizada) -----------------------
+    /// <summary>
+    /// Abre um processo a partir de itens aprovados de UMA OU MAIS SCs do mesmo centro de custo.
+    /// A SC mais antiga vira a primária do cabeçalho (compatibilidade); cada item guarda a origem.
+    /// Alçadas preservadas: o centro de custo único mantém a semântica de aprovação por CC.
+    /// </summary>
+    public async Task<(Quotation? q, UserError? error)> CreateFromItemsAsync(
+        Actor actor, IReadOnlyList<Guid> prItemIds, QuotationKind kind, DateOnly? deadline, string? notes,
+        CancellationToken ct = default)
+    {
+        var ids = prItemIds.Distinct().ToList();
+        if (ids.Count == 0)
+            return (null, new("RFQ-ERR-060", "Selecione ao menos um item de solicitação para abrir o processo."));
+
+        var prs = await db.Requisitions.Include(r => r.Items)
+            .Where(r => r.DeletedAt == null && r.Items.Any(i => ids.Contains(i.Id)))
+            .ToListAsync(ct);
+        var found = prs.SelectMany(r => r.Items).Where(i => ids.Contains(i.Id)).Select(i => i.Id).ToHashSet();
+        if (found.Count != ids.Count)
+            return (null, new("RFQ-ERR-060", "Há item selecionado que não existe mais — atualize a lista."));
+
+        foreach (var pr0 in prs)
+            if (pr0.Status is not (RequisitionStatus.Submitted or RequisitionStatus.Approved))
+                return (null, new("RFQ-ERR-060",
+                    $"A solicitação {pr0.Number} precisa estar enviada (ou aprovada) para entrar em cotação."));
+
+        var centros = prs.Select(r => r.CostCenter.Trim().ToUpperInvariant()).Distinct().ToList();
+        if (centros.Count > 1)
+            return (null, new("RFQ-ERR-061",
+                "O agrupamento só aceita solicitações do MESMO centro de custo — as alçadas de aprovação são do centro. " +
+                $"Selecionados: {string.Join(", ", centros)}."));
+
+        // nenhum item pode estar em outro processo ativo (item a item, não mais SC a SC)
+        var emProcesso = await db.Quotations
+            .Where(q => q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected)
+            .SelectMany(q => q.Items.Where(i => i.SourcePrItemId != null && ids.Contains(i.SourcePrItemId.Value))
+                .Select(i => new { i.SourcePrNumber, q.Number }))
+            .FirstOrDefaultAsync(ct);
+        if (emProcesso is not null)
+            return (null, new("RFQ-ERR-062",
+                $"Item da solicitação {emProcesso.SourcePrNumber} já está no processo ativo {emProcesso.Number}."));
+        // SC de fluxo antigo (sem rastreio por item) em processo ativo também bloqueia
+        var prIds = prs.Select(r => r.Id).ToList();
+        var scAtiva = await db.Quotations
+            .Where(q => prIds.Contains(q.SourcePrId)
+                        && q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected)
+            .Select(q => q.Number).FirstOrDefaultAsync(ct);
+        if (scAtiva is not null)
+            return (null, new("RFQ-ERR-062", $"Solicitação selecionada já possui o processo ativo {scAtiva}."));
+
+        var now = clock.GetUtcNow();
+        var ordered = prs.OrderBy(r => r.SubmittedAt ?? r.CreatedAt).ToList();
+        var primary = ordered[0];
+        var prefix = kind == QuotationKind.Bid ? "BID" : "RFQ";
+        var seq = await NextSeqAsync(kind, ct);
+        var numbers = ordered.Select(r => r.Number).ToList();
+        var q = new Quotation
+        {
+            Number = $"{prefix}-{now.Year}-{seq:000000}",
+            Kind = kind,
+            SourcePrId = primary.Id,
+            SourcePrNumber = primary.Number,
+            CostCenter = primary.CostCenter,
+            Justification = ordered.Count == 1 ? primary.Justification
+                : $"Agrupamento de demandas: {string.Join(", ", numbers)}.",
+            Deadline = deadline,
+            Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
+            CreatedBy = actor.Id,
+            CreatedByLabel = actor.Label,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var seqNo = 0;
+        foreach (var pr0 in ordered)
+            foreach (var i in pr0.Items.Where(i => ids.Contains(i.Id)).OrderBy(i => i.Sequence))
+                q.Items.Add(new QuotationItem
+                {
+                    QuotationId = q.Id, Sequence = ++seqNo, CatalogItemId = i.CatalogItemId,
+                    CatalogCode = i.CatalogCode, Description = i.Description,
+                    Quantity = i.Quantity, UnitOfMeasure = i.UnitOfMeasure,
+                    SourcePrId = pr0.Id, SourcePrNumber = pr0.Number, SourcePrItemId = i.Id,
+                });
+        db.Quotations.Add(q);
+        AddEvent(q, "COTACAO_ABERTA", ordered.Count == 1
+                ? $"Cotação {q.Number} aberta a partir da requisição {primary.Number}."
+                : $"Cotação {q.Number} aberta agrupando as requisições {string.Join(", ", numbers)} ({q.Items.Count} itens).",
             actor, null, QuotationStatus.Open);
         await db.SaveChangesAsync(ct);
         return (q, null);
@@ -429,18 +526,22 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
         return await db.Users.Where(u => u.Id == managerId).Select(u => u.DirectorId).FirstOrDefaultAsync(ct);
     }
 
-    /// <summary>Compra autorizada pela diretoria: a SC de origem passa a APROVADA (autorização com preço).</summary>
+    /// <summary>Compra autorizada pela diretoria: TODAS as SCs de origem passam a APROVADAS (autorização com preço).</summary>
     private async Task MarkSourcePrApprovedAsync(Quotation q, Actor actor, CancellationToken ct)
     {
-        var pr = await db.Requisitions.SingleOrDefaultAsync(r => r.Id == q.SourcePrId, ct);
-        if (pr is null || pr.Status == RequisitionStatus.Approved) return;
-        pr.Status = RequisitionStatus.Approved;
-        pr.DecidedById = actor.Id;
-        pr.DecidedByLabel = actor.Label;
-        pr.DecidedAt = clock.GetUtcNow();
-        pr.DecisionReason = $"Compra aprovada no processo {q.Number}.";
-        pr.UpdatedAt = clock.GetUtcNow();
-        pr.Version += 1;
+        var prIds = q.SourcePrIds;
+        var prs = await db.Requisitions.Where(r => prIds.Contains(r.Id)).ToListAsync(ct);
+        foreach (var pr in prs)
+        {
+            if (pr.Status == RequisitionStatus.Approved) continue;
+            pr.Status = RequisitionStatus.Approved;
+            pr.DecidedById = actor.Id;
+            pr.DecidedByLabel = actor.Label;
+            pr.DecidedAt = clock.GetUtcNow();
+            pr.DecisionReason = $"Compra aprovada no processo {q.Number}.";
+            pr.UpdatedAt = clock.GetUtcNow();
+            pr.Version += 1;
+        }
     }
 
     private async Task<(Quotation? q, UserError? error)> DecideAsync(
@@ -575,6 +676,7 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
                 CatalogItemId = qi.CatalogItemId, CatalogCode = qi.CatalogCode,
                 LastPaidUnitPrice = ultimo,
                 ReferenceSaving = ultimo is not null ? (ultimo.Value - pi.UnitPrice) * pi.Quantity : null,
+                SourcePrNumber = qi.SourcePrNumber ?? q.SourcePrNumber,
                 CreatedAt = now,
             });
         }

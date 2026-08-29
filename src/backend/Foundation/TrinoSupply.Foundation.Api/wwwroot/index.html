@@ -697,6 +697,13 @@
         <div class="panel">
           <h2>Solicitações aguardando cotação</h2>
           <p class="hello">As aprovadas podem ser cotadas agora; as retidas mostram de quem está a aprovação pendente. O comprador responsável vem de Compras → Gestão de Solicitações.</p>
+          <!-- agrupamento multi-SC (V2): um processo só para várias SCs do MESMO centro de custo -->
+          <div id="rfq-group-bar" hidden style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+            <span class="sub">Marque solicitações do <strong>mesmo centro de custo</strong> para cotar juntas:</span>
+            <select id="rfq-g-kind" style="width:auto"><option value="COMPRA">Cotação de compra</option><option value="SERVICO">Cotação de serviço</option><option value="BID">BID</option></select>
+            <input type="date" id="rfq-g-deadline" title="Prazo para respostas" style="width:auto;padding:5px 8px;font-size:12px" />
+            <button id="rfq-g-open" disabled>Abrir processo com as selecionadas (0)</button>
+          </div>
           <div id="rfq-queue" class="tablewrap"></div>
         </div>
       </section>
@@ -3710,8 +3717,11 @@
       try {
         const conduct = canConductRfq();
         const queue = (await api('/api/v1/quotations/queue')).items;
+        const selectable = queue.filter(r => !r.blockReason).length;
+        $('rfq-group-bar').hidden = !(conduct && selectable > 1);
+        updateRfqGroupButton();
         $('rfq-queue').innerHTML = queue.length
-          ? '<table><thead><tr><th>Solicitação</th><th>Itens</th><th>Valor est.</th><th>Comprador responsável</th><th>Abrir cotação</th></tr></thead><tbody>' +
+          ? `<table><thead><tr>${conduct ? '<th></th>' : ''}<th>Solicitação</th><th>Itens</th><th>Valor est.</th><th>Comprador responsável</th><th>Abrir cotação</th></tr></thead><tbody>` +
             queue.map(r => {
               const mine = r.assignedToId && currentUser && r.assignedToId === currentUser.id;
               const responsible = r.assignedToLabel
@@ -3723,8 +3733,12 @@
                   <select class="rfq-kind"><option value="COMPRA">Cotação de compra</option><option value="SERVICO">Cotação de serviço</option><option value="BID">BID</option></select>
                   <input type="date" class="rfq-deadline" title="Prazo para respostas" style="width:auto;padding:5px 8px;font-size:12px" />
                   <button data-act="open-rfq">Abrir</button>` : '—';
+              const check = !conduct ? ''
+                : r.blockReason ? '<td></td>'
+                : `<td><input type="checkbox" class="rfq-sel" title="Agrupar esta SC" data-cc="${escapeHtml(r.costCenter)}"></td>`;
               return `
-              <tr data-pr="${r.id}">
+              <tr data-pr="${r.id}" data-items='${JSON.stringify(r.items.map(i => i.id))}'>
+                ${check}
                 <td>${escapeHtml(r.number)}<div class="sub">${escapeHtml(r.requesterLabel)} · CC: ${escapeHtml(r.costCenter)}</div></td>
                 <td>${escapeHtml(r.justification)}<div class="sub">${r.items.map(i => `${i.quantity}× ${escapeHtml(i.description)}`).join(' · ')}</div></td>
                 <td>${money(r.totalEstimatedValue)}</td>
@@ -3735,6 +3749,31 @@
           : '<p class="hello">Nenhuma solicitação aguardando cotação. ✔</p>';
       } catch (err) { $('rfq-queue').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
+
+    /// agrupamento multi-SC (V2): habilita o botão conforme a seleção e avisa se os CCs divergem
+    function updateRfqGroupButton() {
+      const sel = [...document.querySelectorAll('#rfq-queue .rfq-sel:checked')];
+      const ccs = [...new Set(sel.map(c => c.dataset.cc.toUpperCase()))];
+      const btn = $('rfq-g-open');
+      btn.disabled = sel.length === 0 || ccs.length > 1;
+      btn.textContent = ccs.length > 1
+        ? 'Centros de custo diferentes — desmarque'
+        : `Abrir processo com as selecionadas (${sel.length})`;
+    }
+    $('rfq-queue').addEventListener('change', e => {
+      if (e.target.classList.contains('rfq-sel')) updateRfqGroupButton();
+    });
+    $('rfq-g-open').addEventListener('click', async () => {
+      const rows = [...document.querySelectorAll('#rfq-queue .rfq-sel:checked')].map(c => c.closest('tr'));
+      if (!rows.length) return;
+      const prItemIds = rows.flatMap(tr => JSON.parse(tr.dataset.items));
+      try {
+        const q = await api('/api/v1/quotations/', { method: 'POST', body: {
+          prItemIds, kind: $('rfq-g-kind').value, deadline: $('rfq-g-deadline').value || null } });
+        toast(`Processo ${q.number} aberto agrupando ${rows.length} solicitação(ões).`, 'ok');
+        goTo('quotations', () => { rfqCache[q.id] = q; renderRfqDetail(q); });
+      } catch (err) { toast(err.message, 'error'); }
+    });
 
     LOADERS['quotations'] = async () => {
       $('rfq-detail').hidden = true;
@@ -3751,7 +3790,7 @@
               const winner = q.selection ? `<div class="sub">Vencedor: ${escapeHtml((q.proposals.find(p => p.id === q.selection.winnerProposalId) || {}).supplierName || '')}</div>` : '';
               return `<tr data-id="${q.id}">
                 <td>${escapeHtml(q.number)}<div class="sub">${q.kind}</div></td>
-                <td>${escapeHtml(q.sourcePrNumber)}<div class="sub">CC: ${escapeHtml(q.costCenter)}</div></td>
+                <td>${escapeHtml((q.sourcePrNumbers || [q.sourcePrNumber]).join(', '))}<div class="sub">CC: ${escapeHtml(q.costCenter)}${(q.sourcePrNumbers || []).length > 1 ? ' · agrupamento de ' + q.sourcePrNumbers.length + ' SCs' : ''}</div></td>
                 <td>${q.suppliers.length} convidado(s) · ${q.proposals.filter(p => p.isLatest).length} proposta(s)${winner}</td>
                 <td><span class="badge ${cls}">${label}</span></td>
                 <td class="row-actions"><button data-act="open-detail">Abrir processo</button></td>
@@ -3787,7 +3826,9 @@
       const rows = q.items.map(i => {
         const precos = latest.map(p => priceOf(p, i.id)).filter(v => v != null);
         const melhor = precos.length ? Math.min(...precos) : null;
-        return '<tr><td>' + escapeHtml(i.description) + `</td><td class="sub">${i.quantity} ${escapeHtml(i.unitOfMeasure)}</td>` +
+        const origem = (q.sourcePrNumbers || []).length > 1 && i.sourcePrNumber
+          ? `<div class="sub">${escapeHtml(i.sourcePrNumber)}</div>` : '';
+        return '<tr><td>' + escapeHtml(i.description) + origem + `</td><td class="sub">${i.quantity} ${escapeHtml(i.unitOfMeasure)}</td>` +
           latest.map(p => {
             const v = priceOf(p, i.id);
             if (v == null) return '<td class="sub">—</td>';
@@ -3867,7 +3908,7 @@
         : `<p class="hello">Informe o que chegou. O que faltar continua pendente até a próxima entrega.${o.promisedDate ? ' Entrega prometida para <strong>' + dt(o.promisedDate) + '</strong>.' : ''}</p>`;
       html += '<div class="tablewrap"><table><thead><tr><th>Item</th><th>Pedido</th><th>Entregue</th><th>Pendente</th>' +
         (conduct && !o.deliveryCompletedAt ? '<th>Chegou agora</th>' : '') + '</tr></thead><tbody>' +
-        o.items.map(i => `<tr><td>${escapeHtml(i.description)}</td><td>${i.quantity} ${escapeHtml(i.unitOfMeasure || '')}</td>
+        o.items.map(i => `<tr><td>${escapeHtml(i.description)}${new Set(o.items.map(x => x.sourcePrNumber).filter(Boolean)).size > 1 && i.sourcePrNumber ? `<div class="sub">${escapeHtml(i.sourcePrNumber)}</div>` : ''}</td><td>${i.quantity} ${escapeHtml(i.unitOfMeasure || '')}</td>
           <td>${i.receivedQuantity}</td><td>${i.pendingQuantity > 0 ? `<span class="badge warn">${i.pendingQuantity}</span>` : '<span class="badge on">0</span>'}</td>` +
           (conduct && !o.deliveryCompletedAt
             ? `<td><input class="rfq-recv" data-item="${i.itemId}" type="number" min="0" max="${i.pendingQuantity}" step="0.01" style="width:100px" ${i.pendingQuantity > 0 ? '' : 'disabled'} /></td>`
@@ -3887,14 +3928,14 @@
         <div class="topbar" style="margin-bottom:8px">
           <div><span style="font-size:17px;font-weight:800">${escapeHtml(q.number)}</span>
             <span class="badge ${cls}" style="margin-left:8px">${label}</span>
-            <div class="sub" style="color:var(--text-muted);font-size:12px">${q.kind} · origem ${escapeHtml(q.sourcePrNumber)} · CC ${escapeHtml(q.costCenter)} · aberta por ${escapeHtml(q.createdByLabel)}${q.deadline ? ' · prazo ' + q.deadline : ''}</div>
+            <div class="sub" style="color:var(--text-muted);font-size:12px">${q.kind} · origem ${escapeHtml((q.sourcePrNumbers || [q.sourcePrNumber]).join(', '))} · CC ${escapeHtml(q.costCenter)} · aberta por ${escapeHtml(q.createdByLabel)}${q.deadline ? ' · prazo ' + q.deadline : ''}</div>
           </div>
           <button class="secondary" data-act="back">← Voltar</button>
         </div>
         ${q.decisionReason ? `<p class="hello">Último motivo registrado: <strong>${escapeHtml(q.decisionReason)}</strong></p>` : ''}
         <h2>Itens da cotação</h2>
-        <div class="tablewrap"><table><thead><tr><th>#</th><th>Descrição</th><th>Qtd</th><th>Unid.</th></tr></thead><tbody>` +
-        q.items.map(i => `<tr><td>${i.sequence}</td><td>${escapeHtml(i.description)}${i.catalogCode ? `<div class="sub">${escapeHtml(i.catalogCode)}</div>` : ''}</td><td>${i.quantity}</td><td>${escapeHtml(i.unitOfMeasure)}</td></tr>`).join('') +
+        <div class="tablewrap"><table><thead><tr><th>#</th><th>Descrição</th><th>Qtd</th><th>Unid.</th>${(q.sourcePrNumbers || []).length > 1 ? '<th>SC de origem</th>' : ''}</tr></thead><tbody>` +
+        q.items.map(i => `<tr><td>${i.sequence}</td><td>${escapeHtml(i.description)}${i.catalogCode ? `<div class="sub">${escapeHtml(i.catalogCode)}</div>` : ''}</td><td>${i.quantity}</td><td>${escapeHtml(i.unitOfMeasure)}</td>${(q.sourcePrNumbers || []).length > 1 ? `<td class="sub">${escapeHtml(i.sourcePrNumber || '—')}</td>` : ''}</tr>`).join('') +
         `</tbody></table></div></div>`;
 
       // fornecedores convidados

@@ -78,10 +78,20 @@ public class TriageService(AppDbContext db, TimeProvider clock)
                 : $"AGUARDANDO APROVAÇÃO DE {manager.ToUpperInvariant()}";
         }
 
+        // multi-SC (V2): a SC conta como "em cotação" pelo cabeçalho OU por item agrupado
         var quotationByPr = await db.Quotations
             .Where(q => q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected)
-            .Select(q => new { q.SourcePrId, q.Number }).ToListAsync(ct);
-        var inQuotation = quotationByPr.ToDictionary(x => x.SourcePrId, x => x.Number);
+            .Select(q => new
+            {
+                q.SourcePrId, q.Number,
+                ItemPrIds = q.Items.Where(i => i.SourcePrId != null).Select(i => i.SourcePrId!.Value).ToList(),
+            }).ToListAsync(ct);
+        var inQuotation = new Dictionary<Guid, string>();
+        foreach (var x in quotationByPr)
+        {
+            inQuotation.TryAdd(x.SourcePrId, x.Number);
+            foreach (var pid in x.ItemPrIds) inQuotation.TryAdd(pid, x.Number);
+        }
 
         // tamanho do produto (grade de EPI/fardamento) para a lista por item
         var sizeByItem = await db.CatalogItems.Where(c => c.Size != null)
@@ -89,13 +99,15 @@ public class TriageService(AppDbContext db, TimeProvider clock)
 
         // situação única do fluxo de compras, a mesma que o solicitante vê
         var prIds = prs.Select(r => r.Id).ToList();
-        var quotations = await db.Quotations.Where(q => prIds.Contains(q.SourcePrId))
+        var quotations = await db.Quotations.Include(q => q.Items)
+            .Where(q => prIds.Contains(q.SourcePrId)
+                        || q.Items.Any(i => i.SourcePrId != null && prIds.Contains(i.SourcePrId.Value)))
             .OrderByDescending(q => q.CreatedAt).ToListAsync(ct);
         var orders = await db.PurchaseOrders.Include(o => o.Items)
             .Where(o => o.SourcePrId != null && prIds.Contains(o.SourcePrId!.Value))
             .OrderByDescending(o => o.CreatedAt).ToListAsync(ct);
         ProcessStatusView ProcessOf(PurchaseRequisition r) => ProcessStatus.Of(
-            r, quotations.FirstOrDefault(q => q.SourcePrId == r.Id),
+            r, quotations.FirstOrDefault(q => q.CoversPr(r.Id)),
             orders.FirstOrDefault(o => o.SourcePrId == r.Id));
 
         var tickets = prs.Select(r => new TriageTicket(

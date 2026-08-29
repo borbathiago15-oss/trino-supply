@@ -77,6 +77,19 @@ public class Quotation
     public List<QuotationItem> Items { get; set; } = [];
     public List<QuotationSupplier> Suppliers { get; set; } = [];
     public List<Proposal> Proposals { get; set; } = [];
+
+    /// <summary>SCs atendidas pelo processo: a primária mais as agrupadas via itens (V2 — regra 1 generalizada).</summary>
+    public IReadOnlyList<Guid> SourcePrIds =>
+        Items.Where(i => i.SourcePrId is not null).Select(i => i.SourcePrId!.Value)
+            .Append(SourcePrId).Distinct().ToList();
+
+    /// <summary>O processo cobre a SC? Vale tanto para a primária quanto para as agrupadas (exige Items carregados).</summary>
+    public bool CoversPr(Guid prId) =>
+        SourcePrId == prId || Items.Any(i => i.SourcePrId == prId);
+
+    public IReadOnlyList<string> SourcePrNumbers =>
+        Items.Where(i => !string.IsNullOrWhiteSpace(i.SourcePrNumber)).Select(i => i.SourcePrNumber!)
+            .Append(SourcePrNumber).Distinct().ToList();
 }
 
 public class QuotationItem
@@ -89,6 +102,11 @@ public class QuotationItem
     public string Description { get; set; } = string.Empty;
     public decimal Quantity { get; set; }
     public string UnitOfMeasure { get; set; } = "UN";
+    // rastreio de origem (V2 — agrupamento multi-SC): de qual SC e de qual item da SC este item veio.
+    // Cotações antigas ficam com null e continuam valendo pelo SourcePrId do cabeçalho.
+    public Guid? SourcePrId { get; set; }
+    public string? SourcePrNumber { get; set; }
+    public Guid? SourcePrItemId { get; set; }
 }
 
 /// <summary>Fornecedor convidado (somente ativos do cadastro único — RFQ-BR-003).</summary>

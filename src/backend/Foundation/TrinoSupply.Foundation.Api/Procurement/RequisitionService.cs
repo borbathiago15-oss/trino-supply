@@ -401,7 +401,8 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         if (pr.AssignedToId is not null)
             return new("PR-ERR-041",
                 $"A solicitação já está com o comprador {pr.AssignedToLabel}: peça a alteração a ele.");
-        if (await db.Quotations.AnyAsync(q => q.SourcePrId == pr.Id, ct))
+        if (await db.Quotations.AnyAsync(q => q.SourcePrId == pr.Id
+                || q.Items.Any(i => i.SourcePrId == pr.Id), ct))
             return new("PR-ERR-041", "A solicitação já entrou em cotação e não pode mais ser alterada.");
         return null;
     }

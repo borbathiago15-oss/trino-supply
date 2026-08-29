@@ -827,6 +827,11 @@
           <div id="ins-list"></div>
         </div>
         <div class="panel">
+          <h2>TCO por produto</h2>
+          <p class="hello">Custo total de aquisição no período: o extra de cada O.C. (frete + impostos + outros − desconto) é rateado entre os itens proporcionalmente ao valor. Compare o <strong>TCO unitário</strong> com o preço unitário puro.</p>
+          <div id="ins-tco" class="tablewrap"></div>
+        </div>
+        <div class="panel">
           <h2>Backlog de demandas em aberto</h2>
           <div id="ins-backlog"></div>
         </div>
@@ -3522,9 +3527,12 @@
         // painel do comprador multidimensional (V2-P3)
         const bp = dash.buyerPanel || [];
         $('sd-buyers-panel').innerHTML = bp.length
-          ? '<table><thead><tr><th>Comprador</th><th>Processos</th><th>Com O.C.</th><th>Valor comprado</th><th>Saving</th><th>Dias até a O.C.</th><th>Backlog atual</th><th>OTIF</th></tr></thead><tbody>' +
+          ? '<table><thead><tr><th>Comprador</th><th>Score</th><th>Processos</th><th>Com O.C.</th><th>Valor comprado</th><th>Saving</th><th>Dias até a O.C.</th><th>Backlog atual</th><th>OTIF</th></tr></thead><tbody>' +
             bp.map(b => `<tr>
               <td>${escapeHtml(b.label)}</td>
+              <td>${b.compositeScore != null
+                ? `<span class="badge ${b.compositeScore >= 85 ? 'on' : b.compositeScore >= 65 ? 'warn' : 'off'}" title="OTIF 40 · agilidade 40 · saving 20 — relativo ao período">${b.compositeScore}</span>`
+                : '<span class="sub">—</span>'}</td>
               <td>${fmtInt(b.processes)}</td>
               <td>${fmtInt(b.closed)}</td>
               <td>${money(b.poValue)}</td>
@@ -4623,6 +4631,20 @@
                   <div class="sub">${escapeHtml(i.evidence)}</div></span>
               </div>`).join('')
           : '<p class="hello">Nenhum achado no período — nada de sobrepreço, fracionamento, urgência recorrente ou concentração. ✔</p>';
+        api('/api/v1/analytics/tco?months=' + $('ins-months').value).then(t => {
+          $('ins-tco').innerHTML = t.items.length
+            ? '<table><thead><tr><th>Produto</th><th>Categoria</th><th>Qtde</th><th>Preço unit. médio</th><th>TCO unit. médio</th><th>Extras (frete/impostos)</th><th>TCO total</th></tr></thead><tbody>' +
+              t.items.map(i => `<tr>
+                <td>${i.code ? '[' + escapeHtml(i.code) + '] ' : ''}${escapeHtml(i.description)}<div class="sub">${escapeHtml(i.family || '')}</div></td>
+                <td>${i.category ? escapeHtml(i.category) : '<span class="sub">—</span>'}</td>
+                <td>${fmtInt(i.quantity)} ${escapeHtml(i.unitOfMeasure || '')}</td>
+                <td>${money(i.unitPriceAvg)}</td>
+                <td><strong>${money(i.tcoUnitAvg)}</strong></td>
+                <td>${money(i.extrasValue)} <span class="sub">(${i.extrasPercent}%)</span></td>
+                <td>${money(i.tcoTotal)}</td>
+              </tr>`).join('') + '</tbody></table>'
+            : '<p class="hello">Nenhuma O.C. com produto de catálogo no período.</p>';
+        }).catch(() => {});
         const bk = r.backlog;
         $('ins-backlog').innerHTML =
           `<p class="hello"><strong>${fmtInt(bk.total)}</strong> demanda(s) em aberto · <strong>${fmtInt(bk.unassigned)}</strong> sem responsável</p>` +

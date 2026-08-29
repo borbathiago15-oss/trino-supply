@@ -54,6 +54,7 @@ builder.Services.AddScoped<QuotationService>();
 builder.Services.AddScoped<TriageService>();
 builder.Services.AddScoped<TrinoSupply.Foundation.Api.Analytics.AnalyticsService>();
 builder.Services.AddScoped<TrinoSupply.Foundation.Api.Compliance.ComplianceService>();
+builder.Services.AddScoped<TrinoSupply.Foundation.Api.Insights.InsightsService>();
 
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseNpgsql(ConnectionStringFactory.Resolve(builder.Configuration)));
@@ -1718,6 +1719,17 @@ analytics.MapGet("/supply", async (TrinoSupply.Foundation.Api.Analytics.Analytic
     var t = to ?? today;
     if (t < f) (f, t) = (t, f);
     return Ok(await svc.SupplyAsync(f, t, supplierId, buyerId, requesterId, family, costCenter, region, manager, client), ctx);
+});
+
+// Procurement Insights (V2-P3): achados determinísticos + visão executiva + backlog
+analytics.MapGet("/insights", async (TrinoSupply.Foundation.Api.Insights.InsightsService svc,
+    ClaimsPrincipal p, HttpContext ctx, int? months) =>
+{
+    if (!TrinoSupply.Foundation.Api.Insights.InsightsService.CanView(RoleOf(p)))
+        return Error(ctx, 403, "INS-ERR-900", "Seu papel não acessa o painel de insights.");
+    if (!ModulesOf(p).Contains(AppModules.Insights))
+        return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para este módulo.");
+    return Ok(await svc.ReportAsync(months ?? 6), ctx);
 });
 
 // Scorecard de fornecedores (V2-P3): classes A/B/C/D por OTIF + qualidade + competitividade

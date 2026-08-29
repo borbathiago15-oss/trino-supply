@@ -52,9 +52,10 @@ public static class AppModules
     public const string Usuarios = "USUARIOS";           // cadastro de usuários (somente admin)
     public const string Contratos = "CONTRATOS";         // painel de contratos de parceria (V2-P2)
     public const string Compliance = "COMPLIANCE";       // compliance score e controles (V2-P2)
+    public const string Insights = "INSIGHTS";           // insights determinísticos + visão executiva (V2-P3)
 
     public static readonly string[] All =
-        [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, CentrosCusto, Usuarios, Contratos, Compliance];
+        [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, CentrosCusto, Usuarios, Contratos, Compliance, Insights];
 
     /// <summary>Padrão por papel, aplicado quando o cadastro não define módulos.</summary>
     public static string[] DefaultsFor(string role) => role switch
@@ -65,9 +66,9 @@ public static class AppModules
         Roles.PurchasingOfficer => [Compras, Fornecedores, Estoque],
         Roles.WarehouseOperator => [Estoque],
         Roles.WarehouseSupervisor => [Estoque, Produtos],
-        Roles.SupplyManager => [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, CentrosCusto, Compliance],
-        Roles.Director => [Solicitacoes, Aprovacao, Compras, Compliance],
-        Roles.Auditor => [Solicitacoes, Estoque, Compras, Compliance],
+        Roles.SupplyManager => [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, CentrosCusto, Compliance, Insights],
+        Roles.Director => [Solicitacoes, Aprovacao, Compras, Compliance, Insights],
+        Roles.Auditor => [Solicitacoes, Estoque, Compras, Compliance, Insights],
         _ => [],
     };
 

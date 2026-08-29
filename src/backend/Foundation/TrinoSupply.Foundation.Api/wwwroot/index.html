@@ -808,6 +808,30 @@
         </div>
       </section>
 
+      <!-- Gestão: Insights & Executivo (V2-P3 — determinísticos, com evidência) -->
+      <section class="view" id="view-insights">
+        <div class="panel">
+          <div class="topbar" style="margin-bottom:6px">
+            <h2 style="margin:0">Visão executiva</h2>
+            <select id="ins-months" style="width:auto">
+              <option value="3">Últimos 3 meses</option>
+              <option value="6" selected>Últimos 6 meses</option>
+              <option value="12">Últimos 12 meses</option>
+            </select>
+          </div>
+          <div id="ins-exec" class="kpis"></div>
+        </div>
+        <div class="panel">
+          <h2>Insights de compras</h2>
+          <p class="hello">Achados <strong>100% determinísticos</strong> — regra fixa sobre os dados reais, sempre com a evidência: sobrepreço vs último preço pago (+20%), possível fracionamento (SCs pequenas somando acima do limite de alçada em 30 dias), urgências recorrentes (3+ no período) e concentração de fornecedor (≥40% do spend da categoria).</p>
+          <div id="ins-list"></div>
+        </div>
+        <div class="panel">
+          <h2>Backlog de demandas em aberto</h2>
+          <div id="ins-backlog"></div>
+        </div>
+      </section>
+
       <!-- Compras: Scorecard de Fornecedores (V2-P3 — classes A/B/C/D) -->
       <section class="view" id="view-scorecard">
         <div class="panel">
@@ -1312,6 +1336,7 @@
       { title: null, items: [
         { id: 'supply-dash', label: 'Dashboard de Suprimentos', show: () => true },
         { id: 'compliance', label: 'Compliance', module: 'COMPLIANCE', show: () => canViewCompliance() },
+        { id: 'insights', label: 'Insights & Executivo', module: 'INSIGHTS', show: () => canViewCompliance() },
       ]},
       { title: 'Solicitações de Compra', module: 'SOLICITACOES', items: [
         { label: 'Nova Solicitação', children: [
@@ -1365,6 +1390,7 @@
       'supply-dash': 'Dashboard de Suprimentos', 'cost-centers': 'Centros de Custo',
       quotations: 'Processos de Cotação', company: 'Empresas do Grupo (CNPJs)',
       compliance: 'Compliance', scorecard: 'Scorecard de Fornecedores',
+      insights: 'Insights & Executivo',
     };
     const LOADERS = {};
     let currentView = 'supply-dash';
@@ -4524,6 +4550,40 @@
           : '<p class="hello">Nenhum contrato de parceria cadastrado. Cadastre em Cadastros → Fornecedores → Contrato.</p>';
       } catch (err) { $('contracts-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
+
+    // ============ GESTÃO: INSIGHTS & EXECUTIVO (V2-P3) ============
+    const INS_SEV = { alta: 'off', media: 'warn', info: '' };
+    LOADERS['insights'] = async () => {
+      try {
+        const r = await api('/api/v1/analytics/insights?months=' + $('ins-months').value);
+        const ex = r.executive;
+        $('ins-exec').innerHTML = [
+          ['Spend (O.C.s)', money(ex.spend), `${fmtInt(ex.orders)} pedido(s)`],
+          ['Processos', fmtInt(ex.processes), `${fmtInt(ex.closedProcesses)} com O.C. registrada`],
+          ['Saving negociado', money(ex.savingTotal), 'ganho de negociação'],
+          ['Saving de referência', money(ex.referenceSavingTotal), 'vs último preço pago'],
+          ['OTIF médio', ex.otifPercent != null ? ex.otifPercent + '%' : '—', 'entregas medidas'],
+          ['Compliance médio', ex.complianceAverage != null ? ex.complianceAverage : '—', 'score dos processos'],
+        ].map(([l, v, d]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="d flat">${d}</div></div>`).join('');
+        $('ins-list').innerHTML = r.insights.length
+          ? r.insights.map(i => `
+              <div class="alert-card ${i.severity}" style="cursor:default">
+                <span><span class="badge ${INS_SEV[i.severity] || ''}">${i.code}</span> <strong>${escapeHtml(i.title)}</strong>
+                  <div class="sub">${escapeHtml(i.evidence)}</div></span>
+              </div>`).join('')
+          : '<p class="hello">Nenhum achado no período — nada de sobrepreço, fracionamento, urgência recorrente ou concentração. ✔</p>';
+        const bk = r.backlog;
+        $('ins-backlog').innerHTML =
+          `<p class="hello"><strong>${fmtInt(bk.total)}</strong> demanda(s) em aberto · <strong>${fmtInt(bk.unassigned)}</strong> sem responsável</p>` +
+          '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">' +
+          bk.aging.map((f, i) => `<span class="badge ${['on','teal','warn','off'][i]}">${f.label}: ${fmtInt(f.count)}</span>`).join('') + '</div>' +
+          (bk.byAssignee.length
+            ? '<div class="tablewrap"><table><thead><tr><th>Responsável</th><th>Demandas abertas</th></tr></thead><tbody>' +
+              bk.byAssignee.map(a => `<tr><td>${escapeHtml(a.label)}</td><td>${fmtInt(a.count)}</td></tr>`).join('') + '</tbody></table></div>'
+            : '');
+      } catch (err) { $('ins-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
+    $('ins-months').addEventListener('change', () => LOADERS['insights']());
 
     // ============ COMPRAS: SCORECARD DE FORNECEDORES (V2-P3) ============
     const GRADE_CLS = { A: 'on', B: 'teal', C: 'warn', D: 'off' };

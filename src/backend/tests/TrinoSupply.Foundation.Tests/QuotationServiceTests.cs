@@ -595,4 +595,112 @@ public class QuotationServiceTests
         Assert.Equal("um real e um centavo", NumberToWordsPtBr.Currency(1.01m));
         Assert.Equal("dois milhões e trezentos mil reais", NumberToWordsPtBr.Currency(2_300_000m));
     }
+
+    // ==== agrupamento multi-SC (V2 — regra 1 generalizada) ======================
+
+    private static async Task<PurchaseRequisition> SegundaScAprovadaAsync(World w, string cc = "CC-01")
+    {
+        var (pr2, e) = await w.Prs.CreateAsync(Ana, "Consumíveis da oficina", cc, "NORMAL", null,
+            [new ItemInput("Luva nitrílica", 10, "PAR", 8, null)]);
+        Assert.Null(e);
+        await w.Prs.SubmitAsync(Ana, pr2!.Id);
+        await w.Prs.ApproveAsync(Bruno, pr2.Id, null);
+        return pr2;
+    }
+
+    private static ProposalInput ProposalForAll(Quotation q, params decimal[] precos) =>
+        new(15, "28 dias", 0, null, null,
+            q.Items.OrderBy(i => i.Sequence).Zip(precos)
+                .Select(x => new ProposalItemInput(x.First.Id, x.Second, null)).ToList());
+
+    [Fact]
+    public async Task Agrupamento_junta_itens_de_varias_SCs_do_mesmo_centro_e_aprova_todas_no_fim()
+    {
+        var w = await BuildAsync();
+        var pr2 = await SegundaScAprovadaAsync(w);
+        var itens = w.Pr.Items.Select(i => i.Id).Concat(pr2.Items.Select(i => i.Id)).ToList();
+
+        var (q, error) = await w.Rfq.CreateFromItemsAsync(Carla, itens, QuotationKind.Purchase, null, null);
+
+        Assert.Null(error);
+        Assert.Equal(3, q!.Items.Count);
+        Assert.Equal(2, q.SourcePrNumbers.Count);
+        Assert.All(q.Items, i => Assert.NotNull(i.SourcePrNumber));
+        Assert.Contains(q.Items, i => i.SourcePrId == pr2.Id);
+
+        // as duas SCs saem da fila de "aguardando cotação"
+        var (ready, _) = await w.Rfq.QueueAsync();
+        Assert.DoesNotContain(ready, r => r.Id == w.Pr.Id || r.Id == pr2.Id);
+
+        // fluxo completo: proposta → seleção → alçadas → O.C. registrada
+        await w.Rfq.InviteSuppliersAsync(Carla, q.Id, [w.Alfa.Id]);
+        var (prop, pe) = await w.Rfq.SubmitProposalAsync(q.Id, w.Alfa.Id, ProposalForAll(q, 800m, 60m, 7m), "PORTAL", "Alfa");
+        Assert.Null(pe);
+        await w.Rfq.CloseForAnalysisAsync(Carla, q.Id);
+        var (_, se) = await w.Rfq.SelectWinnerAsync(Carla, q.Id, prop!.Id, "Preço", "Única proposta com preço adequado.");
+        Assert.Null(se);
+        await w.Rfq.ManagerDecisionAsync(Gustavo, q.Id, "APROVAR", null);
+        var (dir, de) = await w.Rfq.DirectorDecisionAsync(Diana, q.Id, "APROVAR", null);
+        Assert.Null(de);
+
+        // a autorização da diretoria aprova TODAS as SCs de origem, não só a primária
+        var sc1 = await w.Db.Requisitions.SingleAsync(r => r.Id == w.Pr.Id);
+        var sc2 = await w.Db.Requisitions.SingleAsync(r => r.Id == pr2.Id);
+        Assert.Equal(RequisitionStatus.Approved, sc1.Status);
+        Assert.Equal(RequisitionStatus.Approved, sc2.Status);
+
+        // a O.C. registrada guarda a SC de origem em cada item (rateio visível)
+        var (order, oe) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, dir!.Id, "OC-777", null, null);
+        Assert.Null(oe);
+        Assert.Equal(2, order!.Items.Select(i => i.SourcePrNumber).Distinct().Count());
+        Assert.Contains(order.Items, i => i.SourcePrNumber == pr2.Number);
+    }
+
+    [Fact]
+    public async Task Agrupamento_recusa_SCs_de_centros_de_custo_diferentes()
+    {
+        var w = await BuildAsync();
+        var pr2 = await SegundaScAprovadaAsync(w, cc: "CC-02");
+        var itens = w.Pr.Items.Select(i => i.Id).Concat(pr2.Items.Select(i => i.Id)).ToList();
+
+        var (q, error) = await w.Rfq.CreateFromItemsAsync(Carla, itens, QuotationKind.Purchase, null, null);
+
+        Assert.Null(q);
+        Assert.Equal("RFQ-ERR-061", error!.Code);
+    }
+
+    [Fact]
+    public async Task Item_que_ja_esta_em_processo_ativo_nao_entra_em_novo_agrupamento()
+    {
+        var w = await BuildAsync();
+        var pr2 = await SegundaScAprovadaAsync(w);
+        var (q1, e1) = await w.Rfq.CreateFromPrAsync(Carla, w.Pr.Id, QuotationKind.Purchase, null, null);
+        Assert.Null(e1);
+
+        var itens = w.Pr.Items.Select(i => i.Id).Concat(pr2.Items.Select(i => i.Id)).ToList();
+        var (q2, error) = await w.Rfq.CreateFromItemsAsync(Carla, itens, QuotationKind.Purchase, null, null);
+
+        Assert.Null(q2);
+        Assert.Equal("RFQ-ERR-062", error!.Code);
+        Assert.Contains(q1!.Number, error.Message);
+    }
+
+    [Fact]
+    public async Task Fluxo_1para1_continua_valendo_e_agora_rastreia_a_origem_por_item()
+    {
+        var w = await BuildAsync();
+        var (q, error) = await w.Rfq.CreateFromPrAsync(Carla, w.Pr.Id, QuotationKind.Purchase, null, null);
+
+        Assert.Null(error);
+        Assert.All(q!.Items, i =>
+        {
+            Assert.Equal(w.Pr.Id, i.SourcePrId);
+            Assert.Equal(w.Pr.Number, i.SourcePrNumber);
+            Assert.NotNull(i.SourcePrItemId);
+        });
+        // a SC não pode mais ser alterada depois de entrar em cotação (regressão da janela de alteração)
+        var pr = await w.Db.Requisitions.Include(r => r.Items).SingleAsync(r => r.Id == w.Pr.Id);
+        var window = await w.Prs.ChangeWindowErrorAsync(pr);
+        Assert.NotNull(window);
+    }
 }

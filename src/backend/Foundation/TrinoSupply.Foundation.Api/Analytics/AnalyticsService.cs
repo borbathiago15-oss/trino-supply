@@ -193,9 +193,12 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
         var famList = await db.ProductFamilies.Where(f => f.Active).ToListAsync(ct);
         var prIds = prs.Select(r => r.Id).ToList();
         var quotes = await db.Quotations
-            .Where(q => prIds.Contains(q.SourcePrId))
+            .Where(q => prIds.Contains(q.SourcePrId)
+                        || q.Items.Any(i => i.SourcePrId != null && prIds.Contains(i.SourcePrId.Value)))
             .Select(q => new { q.Id, q.SourcePrId, q.CreatedAt, q.DirectorApprovedAt, q.PurchaseOrderId,
-                               q.SavingValue, q.BaselineValue, q.NegotiatedValue, q.NegotiatedByLabel, q.Number })
+                               q.SavingValue, q.BaselineValue, q.NegotiatedValue, q.NegotiatedByLabel, q.Number,
+                               ItemPrIds = q.Items.Where(i => i.SourcePrId != null)
+                                   .Select(i => i.SourcePrId!.Value).Distinct().ToList() })
             .ToListAsync(ct);
         var poIds = quotes.Where(q => q.PurchaseOrderId != null).Select(q => q.PurchaseOrderId!.Value).ToList();
         var poDates = (await db.PurchaseOrders.Where(o => poIds.Contains(o.Id))
@@ -215,7 +218,7 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
             var familias = pr.Items.Select(i => FamilyOf(i.CatalogItemId)).Where(f => f is not null)
                 .Select(f => f!).Distinct().ToList();
             if (familias.Count == 0) familias = ["SEM FAMÍLIA"];
-            var q = quotes.FirstOrDefault(x => x.SourcePrId == pr.Id);
+            var q = quotes.FirstOrDefault(x => x.SourcePrId == pr.Id || x.ItemPrIds.Contains(pr.Id));
             var po = q?.PurchaseOrderId is not null && poDates.TryGetValue(q.PurchaseOrderId.Value, out var o) ? o : null;
             foreach (var f in familias)
             {

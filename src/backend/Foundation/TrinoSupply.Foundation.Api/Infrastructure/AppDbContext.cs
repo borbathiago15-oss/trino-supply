@@ -502,6 +502,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.ReceivedQuantity).HasColumnName("received_quantity").HasPrecision(18, 4);
             e.Property(i => i.LastPaidUnitPrice).HasColumnName("last_paid_unit_price").HasPrecision(18, 4);
             e.Property(i => i.ReferenceSaving).HasColumnName("reference_saving").HasPrecision(18, 4);
+            e.Property(i => i.SourcePrNumber).HasColumnName("source_pr_number").HasMaxLength(30);
             e.Property(i => i.CreatedAt).HasColumnName("created_at");
             e.HasIndex(i => i.OrderId);
         });
@@ -568,7 +569,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.Description).HasColumnName("description").HasMaxLength(500);
             e.Property(i => i.Quantity).HasColumnName("quantity").HasPrecision(18, 4);
             e.Property(i => i.UnitOfMeasure).HasColumnName("unit_of_measure").HasMaxLength(10);
+            e.Property(i => i.SourcePrId).HasColumnName("source_pr_id");
+            e.Property(i => i.SourcePrNumber).HasColumnName("source_pr_number").HasMaxLength(30);
+            e.Property(i => i.SourcePrItemId).HasColumnName("source_pr_item_id");
             e.HasIndex(i => i.QuotationId);
+            e.HasIndex(i => i.SourcePrId);
         });
 
         modelBuilder.Entity<QuotationSupplier>(e =>

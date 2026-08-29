@@ -96,5 +96,7 @@ public class PurchaseOrderItem
     // de catálogo e a diferença para o preço fechado; nunca se mistura ao saving de negociação
     public decimal? LastPaidUnitPrice { get; set; }
     public decimal? ReferenceSaving { get; set; }
+    // agrupamento multi-SC (V2): de qual SC o item veio — rateio visível dentro da O.C.
+    public string? SourcePrNumber { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }

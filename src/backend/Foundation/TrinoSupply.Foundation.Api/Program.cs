@@ -548,14 +548,16 @@ static async Task<Dictionary<Guid, ProcessStatusView>> ProcessStatusMapAsync(
     var map = new Dictionary<Guid, ProcessStatusView>();
     if (prs.Count == 0) return map;
     var ids = prs.Select(r => r.Id).ToList();
-    var quotations = await db.Quotations.Where(q => ids.Contains(q.SourcePrId))
+    var quotations = await db.Quotations.Include(q => q.Items)
+        .Where(q => ids.Contains(q.SourcePrId)
+                    || q.Items.Any(i => i.SourcePrId != null && ids.Contains(i.SourcePrId.Value)))
         .OrderByDescending(q => q.CreatedAt).ToListAsync();
     var orders = await db.PurchaseOrders.Include(o => o.Items)
         .Where(o => o.SourcePrId != null && ids.Contains(o.SourcePrId!.Value))
         .OrderByDescending(o => o.CreatedAt).ToListAsync();
     foreach (var pr in prs)
     {
-        var q = quotations.FirstOrDefault(x => x.SourcePrId == pr.Id);
+        var q = quotations.FirstOrDefault(x => x.CoversPr(pr.Id));
         var o = orders.FirstOrDefault(x => x.SourcePrId == pr.Id);
         map[pr.Id] = ProcessStatus.Of(pr, q, o);
     }
@@ -1329,6 +1331,7 @@ static object PoView(PurchaseOrder o) => new
         itemId = i.Id, description = i.Description, unitOfMeasure = i.UnitOfMeasure, quantity = i.Quantity,
         receivedQuantity = i.ReceivedQuantity, pendingQuantity = i.Quantity - i.ReceivedQuantity,
         lastPaidUnitPrice = i.LastPaidUnitPrice, referenceSaving = i.ReferenceSaving,
+        sourcePrNumber = i.SourcePrNumber ?? o.SourcePrNumber,
         unitPrice = i.UnitPrice, catalogCode = i.CatalogCode, catalogItemId = i.CatalogItemId,
     }),
 };
@@ -1692,12 +1695,14 @@ static object QuotationView(Quotation q) => new
 {
     id = q.Id, number = q.Number, kind = QKindLabel(q.Kind), status = QStatusLabel(q.Status),
     sourcePrId = q.SourcePrId, sourcePrNumber = q.SourcePrNumber, costCenter = q.CostCenter,
+    sourcePrNumbers = q.SourcePrNumbers,
     justification = q.Justification, deadline = q.Deadline, notes = q.Notes,
     createdByLabel = q.CreatedByLabel, createdAt = q.CreatedAt, decisionReason = q.DecisionReason,
     items = q.Items.OrderBy(i => i.Sequence).Select(i => new
     {
         id = i.Id, sequence = i.Sequence, catalogItemId = i.CatalogItemId, catalogCode = i.CatalogCode,
         description = i.Description, quantity = i.Quantity, unitOfMeasure = i.UnitOfMeasure,
+        sourcePrNumber = i.SourcePrNumber ?? q.SourcePrNumber,
     }),
     suppliers = q.Suppliers.Select(s => new
     {
@@ -1775,7 +1780,7 @@ rfq.MapGet("/queue", async (QuotationService svc, ClaimsPrincipal p, HttpContext
         neededBy = r.NeededBy, decidedAt = r.DecidedAt,
         assignedToId = r.AssignedToId, assignedToLabel = r.AssignedToLabel,
         blockReason,
-        items = r.Items.Select(i => new { description = i.Description, quantity = i.Quantity, unitOfMeasure = i.UnitOfMeasure }),
+        items = r.Items.Select(i => new { id = i.Id, description = i.Description, quantity = i.Quantity, unitOfMeasure = i.UnitOfMeasure }),
     };
     return Ok(new
     {
@@ -1816,7 +1821,12 @@ rfq.MapPost("/", async (CreateQuotationRequest body, QuotationService svc, Claim
     {
         "BID" => QuotationKind.Bid, "SERVICO" => QuotationKind.Service, _ => QuotationKind.Purchase,
     };
-    var (q, error) = await svc.CreateFromPrAsync(actor, body.PrId, kind, body.Deadline, body.Notes);
+    // agrupamento multi-SC (V2): itens de várias SCs do mesmo centro; sem itens, vale o fluxo 1:1 por PrId
+    var (q, error) = body.PrItemIds is { Count: > 0 }
+        ? await svc.CreateFromItemsAsync(actor, body.PrItemIds, kind, body.Deadline, body.Notes)
+        : body.PrId is { } prId
+            ? await svc.CreateFromPrAsync(actor, prId, kind, body.Deadline, body.Notes)
+            : (null, new UserError("RFQ-ERR-060", "Informe a solicitação (prId) ou os itens (prItemIds) para abrir o processo."));
     return error is not null ? Error(ctx, 422, error.Code, error.Message)
         : Results.Json(new { data = QuotationView(q!), correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
@@ -2404,7 +2414,8 @@ public record CreateCompanyRequest(string LegalName, string TaxId, string? State
     string? District, string City, string State, string Zip, string? Phone, string? Email);
 public record UpdateCompanyRequest(string? LegalName, string? StateRegistration, string? Address, string? District,
     string? City, string? State, string? Zip, string? Phone, string? Email, bool? Active);
-public record CreateQuotationRequest(Guid PrId, string? Kind, DateOnly? Deadline, string? Notes);
+public record CreateQuotationRequest(Guid? PrId, string? Kind, DateOnly? Deadline, string? Notes,
+    List<Guid>? PrItemIds = null);
 public record InviteSuppliersRequest(List<Guid>? SupplierIds);
 public record ProposalItemRequest(Guid QuotationItemId, decimal UnitPrice, decimal? Quantity);
 public record InternalProposalRequest(Guid SupplierId, int? DeliveryDays, string? PaymentTerms, decimal? FreightValue,

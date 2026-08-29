@@ -351,6 +351,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(c => c.CompanyId).HasColumnName("company_id");
             e.Property(c => c.ManagerUserId).HasColumnName("manager_user_id");
             e.Property(c => c.ManagerName).HasColumnName("manager_name").HasMaxLength(200);
+            e.Property(c => c.Level1ValueLimit).HasColumnName("level1_value_limit").HasPrecision(18, 4);
+            e.Property(c => c.Level2ValueLimit).HasColumnName("level2_value_limit").HasPrecision(18, 4);
             e.Property(c => c.ClientName).HasColumnName("client_name").HasMaxLength(200);
             e.Property(c => c.Active).HasColumnName("active");
             e.Property(c => c.CreatedAt).HasColumnName("created_at");

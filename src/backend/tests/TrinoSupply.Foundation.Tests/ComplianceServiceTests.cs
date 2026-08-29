@@ -133,6 +133,29 @@ public class ComplianceServiceTests
     }
 
     [Fact]
+    public async Task Processo_acima_do_limite_de_alcada_do_centro_penaliza_10()
+    {
+        var w = await BuildAsync();
+        w.Db.CostCenters.Add(new CostCenter
+        {
+            Code = "CC-01", Name = "Centro limitado", Active = true,
+            Level2ValueLimit = 150m,   // proposta vencedora fecha em 200 (2 × 100)
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await w.Db.SaveChangesAsync();
+        var pr = await ScAprovadaAsync(w, neededBy: DateOnly.FromDateTime(Hoje.UtcDateTime).AddDays(30));
+        await AteVencedorAsync(w, pr, w.Alfa, w.Beta);
+
+        var report = await w.Cp.ReportAsync();
+
+        var row = Assert.Single(report.Items);
+        Assert.Equal(90, row.Score);
+        var pena = Assert.Single(row.Penalties);
+        Assert.Equal("CP-05", pena.Code);
+        Assert.Contains("Nível 2", pena.Evidence);
+    }
+
+    [Fact]
     public async Task Vencedor_que_perdeu_a_homologacao_penaliza_30_sem_bloquear_nada()
     {
         var w = await BuildAsync();

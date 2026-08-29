@@ -17,11 +17,18 @@ public class CostCenterService(AppDbContext db, TimeProvider clock)
         return q.OrderBy(c => c.Code).Take(1000).ToListAsync(ct);
     }
 
+    /// <summary>Limite de valor por nível (V2-P3): só mede — negativo é o único inválido.</summary>
+    private static UserError? LimitError(decimal? limit) =>
+        limit is < 0 ? new("CC-ERR-016", "O limite de valor por nível não pode ser negativo.") : null;
+
     public async Task<(CostCenter? cc, UserError? error)> CreateAsync(
         Guid actorId, string? code, string name, string? region, Guid? managerUserId, string? client,
         Guid? companyId = null, IReadOnlyList<Guid>? level1 = null, IReadOnlyList<Guid>? level2 = null,
+        decimal? level1ValueLimit = null, decimal? level2ValueLimit = null,
         CancellationToken ct = default)
     {
+        if (LimitError(level1ValueLimit) is { } l1e) return (null, l1e);
+        if (LimitError(level2ValueLimit) is { } l2e) return (null, l2e);
         if (name.Trim().Length < 3) return (null, new("CC-ERR-012", "Informe o nome do centro de custo."));
         var regionClean = Clean(region)?.ToUpperInvariant();
 
@@ -50,6 +57,8 @@ public class CostCenterService(AppDbContext db, TimeProvider clock)
             CompanyId = companyId,
             ManagerUserId = managerUserId,
             ManagerName = managerName,
+            Level1ValueLimit = level1ValueLimit,
+            Level2ValueLimit = level2ValueLimit,
             ClientName = Clean(client),
             CreatedAt = now,
             UpdatedAt = now,
@@ -112,10 +121,16 @@ public class CostCenterService(AppDbContext db, TimeProvider clock)
     public async Task<(CostCenter? cc, UserError? error)> UpdateAsync(
         Guid id, string? name, string? region, Guid? managerUserId, string? client, bool? active,
         Guid? companyId = null, IReadOnlyList<Guid>? level1 = null, IReadOnlyList<Guid>? level2 = null,
+        decimal? level1ValueLimit = null, decimal? level2ValueLimit = null, bool clearValueLimits = false,
         CancellationToken ct = default)
     {
+        if (LimitError(level1ValueLimit) is { } l1e) return (null, l1e);
+        if (LimitError(level2ValueLimit) is { } l2e) return (null, l2e);
         var cc = await db.CostCenters.Include(c => c.Approvers).SingleOrDefaultAsync(c => c.Id == id, ct);
         if (cc is null) return (null, new("CC-ERR-404", "Centro de custo não encontrado."));
+        if (clearValueLimits) { cc.Level1ValueLimit = null; cc.Level2ValueLimit = null; }
+        if (level1ValueLimit is not null) cc.Level1ValueLimit = level1ValueLimit;
+        if (level2ValueLimit is not null) cc.Level2ValueLimit = level2ValueLimit;
         if (name is not null && name.Trim().Length >= 3) cc.Name = name.Trim();
         if (region is not null) cc.Region = Clean(region)?.ToUpperInvariant();
         if (companyId is not null)

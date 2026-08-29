@@ -596,6 +596,35 @@ public class QuotationServiceTests
         Assert.Equal("dois milhões e trezentos mil reais", NumberToWordsPtBr.Currency(2_300_000m));
     }
 
+    // ==== pleito de reajuste do contrato (V2-P4 — cost avoidance) ===============
+
+    [Fact]
+    public async Task Pleito_de_reajuste_congela_o_custo_evitado_sobre_o_consumo_de_12_meses()
+    {
+        var w = await BuildAsync();
+        var hoje = DateOnly.FromDateTime(new DateTime(2026, 8, 24));
+        await w.Sup.SaveContractAsync(w.Alfa.Id, "CT-CA", hoje.AddDays(-30), hoje.AddDays(300), null,
+            [new SupplierService.ContractItemInput(null, "Martelete tabelado", null, "UN", 100m, null, null, null, null)]);
+        var q = await UpToApprovedAsync(w);
+        var (order, _) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, "OC-CA", null, null);
+        Assert.NotNull(order);   // consumo 12m = total da O.C.
+
+        // pediu 10%, fechou 4%: evitado = 6% da base; preços do contrato reajustados em 4%
+        var (adj, error) = await w.Sup.RegisterContractAdjustmentAsync(
+            Carla, w.Alfa.Id, 10m, 4m, "Reajuste anual", applyToPrices: true);
+        Assert.Null(error);
+        Assert.Equal(order!.TotalValue, adj!.BaseValue);
+        Assert.Equal(Math.Round(0.06m * order.TotalValue, 2), adj.CostAvoidance);
+        var item = await w.Db.Set<SupplierContractItem>().SingleAsync(i => i.SupplierId == w.Alfa.Id);
+        Assert.Equal(104m, item.UnitPrice);
+
+        // aceito acima do pleiteado não existe (CT-ERR-021); sem contrato não registra (CT-ERR-022)
+        var (_, acima) = await w.Sup.RegisterContractAdjustmentAsync(Carla, w.Alfa.Id, 5m, 8m, null, false);
+        Assert.Equal("CT-ERR-021", acima!.Code);
+        var (_, semContrato) = await w.Sup.RegisterContractAdjustmentAsync(Carla, w.Beta.Id, 10m, 0m, null, false);
+        Assert.Equal("CT-ERR-022", semContrato!.Code);
+    }
+
     // ==== agrupamento multi-SC (V2 — regra 1 generalizada) ======================
 
     private static async Task<PurchaseRequisition> SegundaScAprovadaAsync(World w, string cc = "CC-01")

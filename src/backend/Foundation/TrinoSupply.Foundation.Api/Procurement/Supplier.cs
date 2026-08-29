@@ -85,6 +85,26 @@ public class SupplierDocument
 }
 
 /// <summary>
+/// Pleito de reajuste do contrato (V2-P4 — Cost Avoidance): o fornecedor pede X% de aumento,
+/// o comprador fecha em Y%; o custo evitado = (X − Y)% sobre o consumo dos últimos 12 meses,
+/// congelado no registro. Registro imutável — a métrica nunca se mistura ao saving de negociação.
+/// </summary>
+public class ContractAdjustment
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid SupplierId { get; set; }
+    public decimal RequestedPercent { get; set; }         // % pleiteado pelo fornecedor
+    public decimal AgreedPercent { get; set; }            // % fechado na negociação
+    public decimal BaseValue { get; set; }                // consumo 12m no momento do registro (congelado)
+    public decimal CostAvoidance { get; set; }            // (pleiteado − aceito)% × base (congelado)
+    public bool AppliedToPrices { get; set; }             // reajuste aceito aplicado aos preços do contrato
+    public string? Notes { get; set; }
+    public Guid CreatedBy { get; set; }
+    public string CreatedByLabel { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>
 /// Produto do contrato de parceria: preço, prazo de pagamento e prazo de entrega fixos,
 /// para o comprador não precisar renegociar o que já está contratado.
 /// </summary>

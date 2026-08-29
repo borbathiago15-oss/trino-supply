@@ -21,6 +21,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Supplier> Suppliers => Set<Supplier>();
     public DbSet<SupplierContractItem> SupplierContractItems => Set<SupplierContractItem>();
     public DbSet<SupplierDocument> SupplierDocuments => Set<SupplierDocument>();
+    public DbSet<ContractAdjustment> ContractAdjustments => Set<ContractAdjustment>();
     public DbSet<CostCenter> CostCenters => Set<CostCenter>();
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
@@ -428,6 +429,25 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.Notes).HasColumnName("notes").HasMaxLength(500);
             e.Property(i => i.CreatedAt).HasColumnName("created_at");
             e.HasIndex(i => new { i.SupplierId, i.CatalogItemId });
+        });
+
+        modelBuilder.Entity<ContractAdjustment>(e =>
+        {
+            e.ToTable("contract_adjustment", "procurement"); // pleitos de reajuste (V2-P4 — cost avoidance)
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Id).HasColumnName("id");
+            e.Property(a => a.SupplierId).HasColumnName("supplier_id");
+            e.Property(a => a.RequestedPercent).HasColumnName("requested_percent").HasPrecision(9, 4);
+            e.Property(a => a.AgreedPercent).HasColumnName("agreed_percent").HasPrecision(9, 4);
+            e.Property(a => a.BaseValue).HasColumnName("base_value").HasPrecision(18, 4);
+            e.Property(a => a.CostAvoidance).HasColumnName("cost_avoidance").HasPrecision(18, 4);
+            e.Property(a => a.AppliedToPrices).HasColumnName("applied_to_prices");
+            e.Property(a => a.Notes).HasColumnName("notes").HasMaxLength(500);
+            e.Property(a => a.CreatedBy).HasColumnName("created_by");
+            e.Property(a => a.CreatedByLabel).HasColumnName("created_by_label").HasMaxLength(200);
+            e.Property(a => a.CreatedAt).HasColumnName("created_at");
+            e.HasIndex(a => a.SupplierId);
+            e.HasIndex(a => a.CreatedAt);
         });
 
         modelBuilder.Entity<PurchaseOrder>(e =>

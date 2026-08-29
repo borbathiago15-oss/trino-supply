@@ -799,6 +799,23 @@
         </div>
       </section>
 
+      <!-- Gestão: Compliance Score (V2 §14 — mede, não bloqueia) -->
+      <section class="view" id="view-compliance">
+        <div class="panel">
+          <h2>Compliance Score dos processos</h2>
+          <p class="hello">Todo processo recebe <strong>100 − penalizações</strong>, derivado dos fatos já gravados: sem cotação competitiva −25 · emergencial −20 · fornecedor não homologado −30 · demanda atendida após a data da necessidade −20. O score <strong>mede e expõe — nunca bloqueia</strong>.</p>
+          <div id="cp-kpis" class="kpis"></div>
+          <div id="cp-list" class="tablewrap"></div>
+        </div>
+        <div class="panel">
+          <h2>Médias por comprador e por centro de custo</h2>
+          <div class="grid2">
+            <div id="cp-by-buyer" class="tablewrap"></div>
+            <div id="cp-by-cc" class="tablewrap"></div>
+          </div>
+        </div>
+      </section>
+
       <!-- Cadastros: usuários -->
       <section class="view" id="view-users">
         <div class="panel">
@@ -1253,6 +1270,7 @@
     const canMgrApprove = () => ['SupplyManager', 'SystemAdministrator', 'Approver'].includes(currentUser.role);
     const canDirApprove = () => ['Director', 'SystemAdministrator'].includes(currentUser.role);
     const canViewRfq = () => canConductRfq() || canMgrApprove() || canDirApprove() || currentUser.role === 'Auditor';
+    const canViewCompliance = () => ['Auditor', 'SupplyManager', 'Director', 'SystemAdministrator'].includes(currentUser.role);
     const canManageLocations = () => ['WarehouseSupervisor', 'SupplyManager', 'SystemAdministrator'].includes(currentUser.role);
     const hasModule = (m) => isAdmin() || (currentUser.modules || []).includes(m);
 
@@ -1260,6 +1278,7 @@
     const MENU = [
       { title: null, items: [
         { id: 'supply-dash', label: 'Dashboard de Suprimentos', show: () => true },
+        { id: 'compliance', label: 'Compliance', module: 'COMPLIANCE', show: () => canViewCompliance() },
       ]},
       { title: 'Solicitações de Compra', module: 'SOLICITACOES', items: [
         { label: 'Nova Solicitação', children: [
@@ -1311,6 +1330,7 @@
       families: 'Famílias de Produtos',
       'supply-dash': 'Dashboard de Suprimentos', 'cost-centers': 'Centros de Custo',
       quotations: 'Processos de Cotação', company: 'Empresas do Grupo (CNPJs)',
+      compliance: 'Compliance',
     };
     const LOADERS = {};
     let currentView = 'supply-dash';
@@ -4101,11 +4121,25 @@
       if (q.purchaseOrderId)
         html += '<div class="panel" id="rfq-po"><h2>O.C., faturamento e entrega</h2><p class="hello">Carregando…</p></div>';
 
+      // selo de compliance (V2 §14): quem tem o módulo vê o score e as penalidades do processo
+      if (canViewCompliance() && hasModule('COMPLIANCE'))
+        html += '<div class="panel" id="rfq-compliance" hidden></div>';
+
       html += '<div class="panel"><h2>Histórico do processo (timeline)</h2><div id="rfq-timeline"><p class="hello">Carregando…</p></div></div>';
 
       $('rfq-lists').hidden = true;
       $('rfq-detail').hidden = false;
       $('rfq-detail').innerHTML = html;
+      if (canViewCompliance() && hasModule('COMPLIANCE'))
+        api('/api/v1/analytics/compliance?quotationId=' + q.id).then(r => {
+          const row = r.items[0];
+          if (!row) return;
+          $('rfq-compliance').hidden = false;
+          $('rfq-compliance').innerHTML = `<h2>Compliance ${cpScoreBadge(row.score)}</h2>` +
+            (row.penalties.length
+              ? row.penalties.map(p => `<div class="alert-card warn" style="cursor:default"><span><strong>−${p.points} ${escapeHtml(p.label)}</strong><div class="sub">${escapeHtml(p.evidence)}</div></span></div>`).join('')
+              : '<p class="hello">Nenhuma penalidade — processo 100% conforme. ✔</p>');
+        }).catch(() => {});
       if (q.purchaseOrderId)
         api('/api/v1/purchase-orders/' + q.purchaseOrderId)
           .then(order => { $('rfq-po').innerHTML = processOrderPanel(order, conduct); })
@@ -4349,6 +4383,41 @@
             }).join('') + '</tbody></table>'
           : '<p class="hello">Nenhum contrato de parceria cadastrado. Cadastre em Cadastros → Fornecedores → Contrato.</p>';
       } catch (err) { $('contracts-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
+
+    // ============ GESTÃO: COMPLIANCE SCORE (V2 §14) ============
+    const cpScoreBadge = (s) =>
+      `<span class="badge ${s === 100 ? 'on' : s >= 70 ? 'warn' : 'off'}">${s}</span>`;
+    LOADERS['compliance'] = async () => {
+      try {
+        const r = await api('/api/v1/analytics/compliance');
+        $('cp-kpis').innerHTML = [
+          ['Score médio', r.averageScore != null ? r.averageScore : '—', `${fmtInt(r.evaluated)} processo(s) avaliado(s)`],
+          ['100% conformes', fmtInt(r.fullCompliance), 'sem nenhuma penalidade'],
+          ['Com penalidade', fmtInt(r.evaluated - r.fullCompliance), 'detalhadas por processo abaixo'],
+          ['Concluídos', fmtInt(r.concluded), 'com O.C. registrada'],
+        ].map(([l, v, d]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="d flat">${d}</div></div>`).join('');
+        $('cp-list').innerHTML = r.items.length
+          ? '<table><thead><tr><th>Processo</th><th>CC</th><th>Comprador</th><th>Situação</th><th>Score</th><th>Penalidades (evidência)</th></tr></thead><tbody>' +
+            r.items.map(i => `<tr>
+              <td>${escapeHtml(i.number)}<div class="sub">${escapeHtml(i.kind)}</div></td>
+              <td>${escapeHtml(i.costCenter)}</td>
+              <td>${escapeHtml(i.buyerLabel)}</td>
+              <td class="sub">${escapeHtml((RFQ_STATUS[i.status] || [i.status])[0])}</td>
+              <td>${cpScoreBadge(i.score)}</td>
+              <td>${i.penalties.length
+                ? i.penalties.map(p => `<div><strong>−${p.points}</strong> ${escapeHtml(p.label)}<div class="sub">${escapeHtml(p.evidence)}</div></div>`).join('')
+                : '<span class="sub">nenhuma ✔</span>'}</td>
+            </tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhum processo de cotação para avaliar ainda.</p>';
+        const grupo = (rows, titulo) => rows.length
+          ? `<table><thead><tr><th>${titulo}</th><th>Processos</th><th>Score médio</th></tr></thead><tbody>` +
+            rows.map(g => `<tr><td>${escapeHtml(g.label)}</td><td>${fmtInt(g.count)}</td><td>${cpScoreBadge(Math.round(g.averageScore))} <span class="sub">${g.averageScore}</span></td></tr>`).join('') +
+            '</tbody></table>'
+          : '<p class="hello">Sem dados.</p>';
+        $('cp-by-buyer').innerHTML = grupo(r.byBuyer, 'Comprador');
+        $('cp-by-cc').innerHTML = grupo(r.byCostCenter, 'Centro de custo');
+      } catch (err) { $('cp-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
 
     // ============ CADASTROS: EMPRESAS DO GRUPO (CNPJs) + PADRÃO DA OC ============

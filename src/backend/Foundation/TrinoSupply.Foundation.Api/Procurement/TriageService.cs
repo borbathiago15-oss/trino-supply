@@ -14,7 +14,8 @@ public record TriageTicket(
     Guid? AssignedToId, string? AssignedToLabel, string? AssignedByLabel, DateTimeOffset? AssignedAt,
     ProcessStatusView? Process = null,    // situação do fluxo de compras (slide "Status das Solicitações")
     string Priority = "NORMAL", DateOnly? NeededBy = null, string? Justification = null,
-    IReadOnlyList<TriageTicketItem>? Items = null);
+    IReadOnlyList<TriageTicketItem>? Items = null,
+    string? UrgencyReason = null, string? UrgencyImpact = null);
 
 /// <summary>Item da demanda: a tela lista uma linha por item, como no ERP (slides 8 e 9).</summary>
 public record TriageTicketItem(
@@ -109,7 +110,8 @@ public class TriageService(AppDbContext db, TimeProvider clock)
             r.Items.OrderBy(i => i.Sequence).Select(i => new TriageTicketItem(
                 i.Id, i.Sequence, i.CatalogCode, i.Description,
                 sizeByItem.GetValueOrDefault(i.CatalogItemId ?? Guid.Empty),
-                i.Quantity, i.UnitOfMeasure, i.Notes)).ToList())).ToList();
+                i.Quantity, i.UnitOfMeasure, i.Notes)).ToList(),
+            r.UrgencyReason, r.UrgencyImpact)).ToList();
 
         var mrs = await db.MaterialRequisitions.Include(r => r.Items)
             .Where(r => r.Status == MaterialRequisitionStatus.Submitted

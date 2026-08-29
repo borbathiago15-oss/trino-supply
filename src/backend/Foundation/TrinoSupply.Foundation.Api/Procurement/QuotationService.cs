@@ -513,6 +513,10 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
             Number = numero,
             ErpNumber = numero,
             ErpIssuedOn = issuedOn ?? DateOnly.FromDateTime(now.UtcDateTime),
+            // congela a data prometida para o OTIF: data da O.C. + prazo de entrega da proposta
+            PromisedDate = proposal.DeliveryDays is { } prazo
+                ? (issuedOn ?? DateOnly.FromDateTime(now.UtcDateTime)).AddDays(prazo)
+                : null,
             SupplierId = supplier.Id,
             SupplierName = supplier.TradeName ?? supplier.LegalName,
             SourcePrId = q.SourcePrId,

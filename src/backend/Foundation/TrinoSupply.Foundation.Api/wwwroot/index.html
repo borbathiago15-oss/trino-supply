@@ -455,6 +455,12 @@
                 <div><label for="pru-needed">Necessidade</label><input id="pru-needed" type="date" /></div>
               </div>
             </div>
+            <div id="pru-urgency" class="grid2" hidden>
+              <div><label for="pru-urg-reason">Justificativa da urgência <span class="sub">(obrigatória)</span></label>
+                <input id="pru-urg-reason" placeholder="ex.: parada de linha na obra Whirlpool" /></div>
+              <div><label for="pru-urg-impact">Impacto se não comprar <span class="sub">(obrigatório)</span></label>
+                <input id="pru-urg-impact" placeholder="ex.: equipe parada e multa contratual" /></div>
+            </div>
             <div class="grid2">
               <div><label for="pru-type">Família do produto</label>
                 <select id="pru-type"><option value="">Selecione a família…</option></select>
@@ -498,6 +504,12 @@
               <div><label for="prm-needed">Necessidade</label><input id="prm-needed" type="date" /></div>
             </div>
           </div>
+          <div id="prm-urgency" class="grid2" hidden>
+            <div><label for="prm-urg-reason">Justificativa da urgência <span class="sub">(obrigatória)</span></label>
+              <input id="prm-urg-reason" placeholder="por que é urgente?" /></div>
+            <div><label for="prm-urg-impact">Impacto se não comprar <span class="sub">(obrigatório)</span></label>
+              <input id="prm-urg-impact" placeholder="o que acontece sem a compra?" /></div>
+          </div>
           <label for="prm-just">Justificativa</label>
           <input id="prm-just" required placeholder="ex.: Reposição mensal — cobertura de estoque" />
           <h2>Geração de Solicitações de Compra</h2>
@@ -524,6 +536,10 @@
             </div>
             <label for="pe-needed">Data de necessidade</label>
             <input id="pe-needed" type="date" />
+            <div id="pe-urgency" class="grid2" hidden>
+              <div><label for="pe-urg-reason">Justificativa da urgência</label><input id="pe-urg-reason" /></div>
+              <div><label for="pe-urg-impact">Impacto se não comprar</label><input id="pe-urg-impact" /></div>
+            </div>
             <button type="submit" class="full">Salvar alterações</button>
             <button type="button" class="secondary full" id="pr-edit-cancel" style="margin-top:8px">Cancelar</button>
           </form>
@@ -639,6 +655,7 @@
           <div class="topbar" style="margin-bottom:8px">
             <h2 style="margin:0">Gestão de Solicitações</h2>
             <span class="sub" id="tri-count"></span>
+            <span id="tri-aging-count"></span>
           </div>
           <div class="filters">
             <div><label for="tri-filter">Escopo</label>
@@ -653,6 +670,14 @@
               <select id="tri-assignee"><option value="">Todos</option></select></div>
             <div><label for="tri-status">Situação</label>
               <select id="tri-status"><option value="">Todas</option></select></div>
+            <div><label for="tri-aging">Tempo na fila</label>
+              <select id="tri-aging">
+                <option value="">Todos</option>
+                <option value="0">0–2 dias</option>
+                <option value="1">3–5 dias</option>
+                <option value="2">6–10 dias</option>
+                <option value="3">mais de 10 dias</option>
+              </select></div>
             <div><button type="button" class="secondary" id="tri-clear">Limpar filtros</button></div>
           </div>
           <p class="hello">Toda solicitação de compra e toda solicitação de material entra aqui: designe o responsável pela continuidade (comprador ou almoxarife) e acompanhe a situação de cada pedido.</p>
@@ -1502,6 +1527,7 @@
           priority: $('pru-priority').value, neededBy: $('pru-needed').value || null, items, kind: 'AVULSA',
           needType: $('pru-type').value || null, deliveryLocation: $('pru-delivery').value || null,
           company: $('pru-company').value || null, internalNotes: $('pru-notes').value || null,
+          urgencyReason: $('pru-urg-reason').value || null, urgencyImpact: $('pru-urg-impact').value || null,
         }});
         const anexos = await uploadPrAttachments(created.id, $('pru-files').files);
         toast(`SC criada como rascunho${anexos ? ` com ${anexos} anexo(s)` : ''}. Revise em "Meus Pedidos" e envie.`, 'ok');
@@ -1579,6 +1605,7 @@
           justification: $('prm-just').value, costCenter: $('prm-cc').value,
           priority: $('prm-priority').value, neededBy: $('prm-needed').value || null, items, kind: 'CATALOGO',
           deliveryLocation: $('lot-delivery').value || null,
+          urgencyReason: $('prm-urg-reason').value || null, urgencyImpact: $('prm-urg-impact').value || null,
         }});
         toast(`SC em lote criada com ${items.length} item(ns). Revise em "Meus Pedidos" e envie para aprovação.`, 'ok');
         document.querySelectorAll('.lot-qty').forEach(i => i.value = '');
@@ -1654,6 +1681,9 @@
       $('pe-just').value = r.justification || '';
       $('pe-cc').value = r.costCenter || '';
       $('pe-priority').value = r.priority || 'NORMAL';
+      $('pe-urgency').hidden = r.priority !== 'URGENT';
+      $('pe-urg-reason').value = r.urgencyReason || '';
+      $('pe-urg-impact').value = r.urgencyImpact || '';
       $('pe-needed').value = r.neededBy || '';
       $('pr-edit-panel').hidden = false;
       $('pr-edit-panel').scrollIntoView({ behavior: 'smooth' });
@@ -1668,12 +1698,17 @@
           priority: $('pe-priority').value,
           neededBy: $('pe-needed').value || null,
           clearNeededBy: !$('pe-needed').value,
+          urgencyReason: $('pe-urg-reason').value || null, urgencyImpact: $('pe-urg-impact').value || null,
         }});
         toast('Pedido atualizado.', 'ok');
         prEditingId = null; $('pr-edit-panel').hidden = true;
         LOADERS['pr-mine']();
       } catch (err) { toast(err.message, 'error'); }
     });
+    /// urgência: os campos aparecem (e passam a obrigatórios) quando a prioridade é URGENTE
+    for (const [sel, box] of [['pru-priority', 'pru-urgency'], ['prm-priority', 'prm-urgency'], ['pe-priority', 'pe-urgency']])
+      $(sel).addEventListener('change', () => { $(box).hidden = $(sel).value !== 'URGENT'; });
+
     let mrApprovalCache = {};
 
     LOADERS['pr-approvals'] = async () => {
@@ -3226,11 +3261,14 @@
           : '<p class="hello">Defina os prazos-meta em Cadastros → Famílias de Produtos para acompanhar meta × realizado.</p>';
 
         $('sd-suppliers-table').innerHTML = dash.supplierTable.length
-          ? '<table><thead><tr><th>Fornecedor</th><th>Pedidos</th><th>Em aberto</th><th>Quantidade</th><th>Valor</th></tr></thead><tbody>' +
+          ? '<table><thead><tr><th>Fornecedor</th><th>Pedidos</th><th>Em aberto</th><th>Quantidade</th><th>Valor</th><th>OTIF</th></tr></thead><tbody>' +
             dash.supplierTable.map(s => `
               <tr><td>${escapeHtml(s.supplier)}</td><td>${fmtInt(s.orders)}</td>
               <td>${s.open > 0 ? `<span class="badge dev">${s.open}</span>` : '0'}</td>
-              <td>${fmtInt(s.quantity)}</td><td>${money(s.value)}</td></tr>`).join('') + '</tbody></table>'
+              <td>${fmtInt(s.quantity)}</td><td>${money(s.value)}</td>
+              <td>${s.otifPercent != null
+                ? `<span class="badge ${s.otifPercent >= 90 ? 'on' : s.otifPercent >= 70 ? 'warn' : 'off'}" title="${s.otifMeasured} entrega(s) medida(s)">${s.otifPercent}%</span>`
+                : '<span class="sub">sem medição</span>'}</td></tr>`).join('') + '</tbody></table>'
           : '<p class="hello">Nenhum pedido de compra no período.</p>';
       } catch (err) { toast(err.message, 'error'); }
     };
@@ -3410,6 +3448,15 @@
         // uma linha por item, como no ERP (slides 8 e 9): o cabeçalho da demanda só aparece
         // na primeira linha e as células de situação e responsável são mescladas
         const dt = (v) => v ? new Date(v).toLocaleDateString('pt-BR') : '—';
+        // aging: dias corridos desde a entrada na fila, em quatro faixas
+        const agingDays = (t) => t.openedAt ? Math.floor((Date.now() - new Date(t.openedAt)) / 86400000) : 0;
+        const AGING = [
+          { max: 2, label: '0–2 dias', cls: 'on' },
+          { max: 5, label: '3–5 dias', cls: 'teal' },
+          { max: 10, label: '6–10 dias', cls: 'warn' },
+          { max: Infinity, label: '+10 dias', cls: 'off' },
+        ];
+        const agingBand = (t) => AGING.findIndex(f => agingDays(t) <= f.max);
         const linhasDe = (t) => {
           const its = (t.items || []).length ? t.items : [{ id: t.id, description: t.summary || '—', quantity: '', unitOfMeasure: '' }];
           const urgente = t.priority === 'URGENT';
@@ -3423,9 +3470,12 @@
               <td>${escapeHtml(t.requesterLabel)}</td>
               <td>${escapeHtml(t.costCenter)}</td>
               <td style="white-space:nowrap">${i.quantity !== '' ? fmtInt(i.quantity) + ' ' + escapeHtml(i.unitOfMeasure || '') : '—'}</td>
-              <td style="white-space:nowrap">${dt(t.openedAt)}</td>
+              <td style="white-space:nowrap">${dt(t.openedAt)}
+                  ${idx === 0 ? `<div><span class="badge ${AGING[agingBand(t)].cls}" title="há ${agingDays(t)} dia(s) na fila">${AGING[agingBand(t)].label}</span></div>` : ''}</td>
               <td style="white-space:nowrap">${t.neededBy || '—'}</td>
-              <td style="white-space:nowrap">${urgente ? '<strong>URGENTE</strong>' : 'Normal'}</td>
+              <td style="white-space:nowrap">${urgente
+                ? `<strong title="${escapeHtml((t.urgencyReason || '') + (t.urgencyImpact ? ' — Impacto: ' + t.urgencyImpact : ''))}">URGENTE</strong>${t.urgencyReason ? `<div class="sub" style="white-space:normal;max-width:180px">${escapeHtml(t.urgencyReason)}</div>` : ''}`
+                : 'Normal'}</td>
               ${idx === 0 ? `<td rowspan="${its.length}">${mayAssign
                     ? `<select class="tri-assign" style="width:100%">${options(t.assignedToId)}</select>${t.assignedByLabel ? `<div class="sub">designado por ${escapeHtml(t.assignedByLabel)}</div>` : ''}`
                     : `${escapeHtml(t.assignedToLabel || '—')}${t.assignedByLabel ? `<div class="sub">por ${escapeHtml(t.assignedByLabel)}</div>` : ''}`}</td>
@@ -3434,6 +3484,12 @@
                     ${t.estimatedValue ? `<div class="sub">${money(t.estimatedValue)}</div>` : ''}</td>` : ''}
             </tr>`).join('');
         };
+        const faixaEscolhida = $('tri-aging').value;
+        if (faixaEscolhida !== '') items = items.filter(t => agingBand(t) === parseInt(faixaEscolhida));
+        $('tri-aging-count').innerHTML = AGING.map((f, i) => {
+          const n = items.filter(t => agingBand(t) === i).length;
+          return n ? `<span class="badge ${f.cls}" style="margin-right:6px">${f.label}: ${n}</span>` : '';
+        }).join('') || '';
         $('tri-list').innerHTML = items.length
           ? '<table style="min-width:1180px"><thead><tr><th>SC / Item</th><th>Produto | Serviço</th><th>Tam.</th><th>Solicitante</th>' +
             '<th>Centro de custo</th><th>Qtde.</th><th>Emissão</th><th>Necessidade</th><th>Prioridade</th>' +
@@ -3442,11 +3498,11 @@
           : '<p class="hello">Nenhuma demanda neste filtro. ✔</p>';
       } catch (err) { $('tri-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
-    ['tri-filter', 'tri-requester', 'tri-assignee', 'tri-status'].forEach(id =>
+    ['tri-filter', 'tri-requester', 'tri-assignee', 'tri-status', 'tri-aging'].forEach(id =>
       $(id).addEventListener('change', () => LOADERS['triage']()));
     $('tri-clear').addEventListener('click', () => {
       $('tri-filter').value = 'TODAS'; $('tri-requester').value = '';
-      $('tri-assignee').value = ''; $('tri-status').value = '';
+      $('tri-assignee').value = ''; $('tri-status').value = ''; $('tri-aging').value = '';
       LOADERS['triage']();
     });
     $('tri-list').addEventListener('change', async (ev) => {
@@ -3662,8 +3718,9 @@
 
       html += '<h2>Entrega</h2>';
       html += o.deliveryCompletedAt
-        ? `<p class="hello">Entrega encerrada em <strong>${dt(o.deliveryCompletedAt)}</strong>${o.cancelReason ? ' · saldo cancelado: “' + escapeHtml(o.cancelReason) + '”' : ''}.</p>`
-        : '<p class="hello">Informe o que chegou. O que faltar continua pendente até a próxima entrega.</p>';
+        ? `<p class="hello">Entrega encerrada em <strong>${dt(o.deliveryCompletedAt)}</strong>${o.promisedDate ? ' · prometida para ' + dt(o.promisedDate) : ''}${o.cancelReason ? ' · saldo cancelado: “' + escapeHtml(o.cancelReason) + '”' : ''}
+           ${o.otif != null ? ` · <span class="badge ${o.otif ? 'on' : 'off'}" title="No prazo: ${o.onTime ? 'sim' : 'não'} · Completa: ${o.inFull ? 'sim' : 'não'}">OTIF ${o.otif ? 'OK' : 'FALHOU'}</span>` : ''}</p>`
+        : `<p class="hello">Informe o que chegou. O que faltar continua pendente até a próxima entrega.${o.promisedDate ? ' Entrega prometida para <strong>' + dt(o.promisedDate) + '</strong>.' : ''}</p>`;
       html += '<div class="tablewrap"><table><thead><tr><th>Item</th><th>Pedido</th><th>Entregue</th><th>Pendente</th>' +
         (conduct && !o.deliveryCompletedAt ? '<th>Chegou agora</th>' : '') + '</tr></thead><tbody>' +
         o.items.map(i => `<tr><td>${escapeHtml(i.description)}</td><td>${i.quantity} ${escapeHtml(i.unitOfMeasure || '')}</td>

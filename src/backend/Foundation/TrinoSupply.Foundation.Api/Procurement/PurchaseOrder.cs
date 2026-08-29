@@ -30,7 +30,9 @@ public class PurchaseOrder
     public Guid? PdfDocumentId { get; set; }                   // último PDF gerado (stored_document)
     // OC feita no ERP: o sistema só amarra a solicitação ao documento oficial (revisão de telas)
     public string? ErpNumber { get; set; }                      // número da OC no ERP
-    public DateOnly? ErpIssuedOn { get; set; }                  // data da OC (base do lead time)
+    public DateOnly? ErpIssuedOn { get; set; }
+    /// <summary>Data prometida: data da O.C. + prazo de entrega da proposta vencedora (OTIF).</summary>
+    public DateOnly? PromisedDate { get; set; }                  // data da OC (base do lead time)
     public Guid? ErpDocumentId { get; set; }                    // anexo da OC
     public string? ErpFileName { get; set; }
     public DateTimeOffset? DeliveryCompletedAt { get; set; }    // data da conclusão da entrega
@@ -50,6 +52,18 @@ public class PurchaseOrder
 
     /// <summary>Ainda falta material chegar (usado na entrega parcial).</summary>
     public bool HasPendingDelivery => Items.Any(i => i.ReceivedQuantity < i.Quantity);
+
+    // ---- OTIF (derivado; nada é persistido além da data prometida) -----------
+    /// <summary>Entrega no prazo: encerrada até a data prometida. Null enquanto não encerrar (ou sem data).</summary>
+    public bool? OnTime => DeliveryCompletedAt is null || PromisedDate is null
+        ? null
+        : DateOnly.FromDateTime(DeliveryCompletedAt.Value.UtcDateTime) <= PromisedDate;
+
+    /// <summary>Entrega completa: tudo o que foi pedido chegou (saldo encerrado sem chegar = false).</summary>
+    public bool? InFull => DeliveryCompletedAt is null ? null : !HasPendingDelivery;
+
+    /// <summary>OTIF do pedido = no prazo E completo.</summary>
+    public bool? Otif => OnTime is null || InFull is null ? null : OnTime.Value && InFull.Value;
 }
 
 /// <summary>Nota fiscal do faturamento — uma OC pode ter mais de uma (revisão de telas 2026-08-26).</summary>

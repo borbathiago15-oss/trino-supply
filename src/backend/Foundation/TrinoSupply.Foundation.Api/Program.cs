@@ -502,6 +502,7 @@ static object PrView(PurchaseRequisition r, ApproverHint? approver = null, Proce
     },
     cycle = r.Cycle,
     priority = r.Priority,
+    urgencyReason = r.UrgencyReason, urgencyImpact = r.UrgencyImpact,
     neededBy = r.NeededBy,
     justification = r.Justification,
     needType = r.NeedType, deliveryLocation = r.DeliveryLocation,
@@ -608,7 +609,8 @@ prs.MapPost("/", async (CreateRequisitionRequest body, RequisitionService svc, C
         return Error(ctx, 403, "PR-ERR-001", "Seu papel não cria requisições.");
     var items = (body.Items ?? []).Select(i => new ItemInput(i.Description ?? "", i.Quantity, i.UnitOfMeasure, i.EstimatedUnitPrice, i.Notes, i.CatalogItemId)).ToList();
     var (pr, error) = await svc.CreateAsync(actor, body.Justification, body.CostCenter, body.Priority, body.NeededBy, items, body.Kind,
-        new RequisitionService.ScHeaderInput(body.NeedType, body.DeliveryLocation, body.Company, body.InternalNotes));
+        new RequisitionService.ScHeaderInput(body.NeedType, body.DeliveryLocation, body.Company, body.InternalNotes,
+            body.UrgencyReason, body.UrgencyImpact));
     return error is not null ? PrError(ctx, error)
         : Results.Json(new { data = PrView(pr!), correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
@@ -616,7 +618,8 @@ prs.MapPost("/", async (CreateRequisitionRequest body, RequisitionService svc, C
 prs.MapPatch("/{id:guid}", async (Guid id, UpdateRequisitionRequest body, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
 {
     if (BuildActor(p) is not { } actor) return Error(ctx, 403, "PR-ERR-001", "Seu papel não acessa o módulo de requisições.");
-    var (pr, error) = await svc.UpdateHeaderAsync(actor, id, body.Justification, body.CostCenter, body.Priority, body.NeededBy, body.ClearNeededBy == true);
+    var (pr, error) = await svc.UpdateHeaderAsync(actor, id, body.Justification, body.CostCenter, body.Priority, body.NeededBy,
+        body.ClearNeededBy == true, body.UrgencyReason, body.UrgencyImpact);
     return error is not null ? PrError(ctx, error) : Ok(PrView(pr!), ctx);
 });
 
@@ -1243,6 +1246,7 @@ static object PoView(PurchaseOrder o) => new
     issuedByLabel = o.IssuedByLabel, receivedByLabel = o.ReceivedByLabel, receivedAt = o.ReceivedAt,
     cancelReason = o.CancelReason, createdAt = o.CreatedAt,
     erpNumber = o.ErpNumber, erpIssuedOn = o.ErpIssuedOn,
+    promisedDate = o.PromisedDate, onTime = o.OnTime, inFull = o.InFull, otif = o.Otif,
     erpDocumentId = o.ErpDocumentId, erpFileName = o.ErpFileName,
     deliveryCompletedAt = o.DeliveryCompletedAt,
     pendingDelivery = o.HasPendingDelivery,
@@ -1453,6 +1457,7 @@ static object TicketView(TriageTicket t) => new
     processStatus = t.Process?.Key, processStatusLabel = t.Process?.Label,
     processStatusTone = t.Process?.Tone, processStatusHint = t.Process?.Explanation,
     priority = t.Priority, neededBy = t.NeededBy, justification = t.Justification,
+    urgencyReason = t.UrgencyReason, urgencyImpact = t.UrgencyImpact,
     items = (t.Items ?? []).Select(i => new
     {
         id = i.Id, sequence = i.Sequence, code = i.Code, description = i.Description,
@@ -2272,7 +2277,8 @@ public record UpdateUserRequest(string? Name, string? Role, bool? Active, List<s
 public record ResetPasswordRequest(string NewPassword);
 public record ItemRequest(string? Description, decimal Quantity, string? UnitOfMeasure, decimal? EstimatedUnitPrice, string? Notes, Guid? CatalogItemId);
 public record CreateRequisitionRequest(string Justification, string CostCenter, string? Priority, DateOnly? NeededBy, List<ItemRequest>? Items, string? Kind,
-    string? NeedType, string? DeliveryLocation, string? Company, string? InternalNotes);
+    string? NeedType, string? DeliveryLocation, string? Company, string? InternalNotes,
+    string? UrgencyReason = null, string? UrgencyImpact = null);
 public interface IFamilyLeadTimes
 {
     int? LeadRequestToQuote { get; }
@@ -2338,7 +2344,8 @@ public record NegotiationRequest(Guid SupplierId, decimal? ClosedValue, decimal?
 public record PortalLoginRequest(string TaxId, string AccessKey);
 public record PortalProposalRequest(int? DeliveryDays, string? PaymentTerms, decimal? FreightValue, DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items);
 public record CompanyProfileRequest(string LegalName, string Address, string? District, string City, string State, string Zip, string TaxId, string? StateRegistration, string? Phone, string? Email, string? DeliveryAddress, string? DeliveryTaxId, string? StandardClauses, string? PaymentPolicy);
-public record UpdateRequisitionRequest(string? Justification, string? CostCenter, string? Priority, DateOnly? NeededBy, bool? ClearNeededBy);
+public record UpdateRequisitionRequest(string? Justification, string? CostCenter, string? Priority, DateOnly? NeededBy, bool? ClearNeededBy,
+    string? UrgencyReason = null, string? UrgencyImpact = null);
 public record ReasonRequest(string? Reason);
 public record DecisionRequest(string? Reason, string? Comments);
 

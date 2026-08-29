@@ -347,6 +347,39 @@ public class QuotationServiceTests
         Assert.Equal("RFQ-ERR-040", again!.Code); // nunca duas OCs do mesmo processo
     }
 
+    /// <summary>OTIF (V2-P1): a data prometida congela no registro da O.C. e o OTIF deriva da entrega.</summary>
+    [Fact]
+    public async Task Registro_da_OC_congela_a_data_prometida_para_o_OTIF()
+    {
+        var w = await BuildAsync();
+        var q = await UpToApprovedAsync(w);   // proposta vencedora com prazo de 28 dias? -> ProposalFor usa DeliveryDays 15
+
+        var (order, error) = await w.Rfq.RegisterErpPurchaseOrderAsync(
+            Carla, q.Id, "800", new DateOnly(2026, 8, 27), null);
+        Assert.Null(error);
+
+        var prazo = q.Proposals.Single(p => p.Id == q.WinnerProposalId).DeliveryDays!.Value;
+        Assert.Equal(new DateOnly(2026, 8, 27).AddDays(prazo), order!.PromisedDate);
+        Assert.Null(order.Otif);   // sem entrega encerrada, não há OTIF
+
+        // entrega completa dentro do prazo: OTIF OK
+        foreach (var item in order.Items) item.ReceivedQuantity = item.Quantity;
+        order.DeliveryCompletedAt = new DateTimeOffset(new DateOnly(2026, 8, 30).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        Assert.True(order.OnTime);
+        Assert.True(order.InFull);
+        Assert.True(order.Otif);
+
+        // entrega depois da data prometida: falha o On-Time
+        order.DeliveryCompletedAt = new DateTimeOffset(
+            order.PromisedDate!.Value.AddDays(3).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+        Assert.False(order.OnTime);
+        Assert.False(order.Otif);
+
+        // saldo encerrado sem chegar tudo: falha o In-Full
+        order.Items.First().ReceivedQuantity -= 1;
+        Assert.False(order.InFull);
+    }
+
     [Fact]
     public async Task Numero_de_OC_ja_registrado_em_outro_processo_e_recusado()
     {

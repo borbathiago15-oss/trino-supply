@@ -53,6 +53,7 @@ builder.Services.AddScoped<CompanyService>();
 builder.Services.AddScoped<QuotationService>();
 builder.Services.AddScoped<TriageService>();
 builder.Services.AddScoped<TrinoSupply.Foundation.Api.Analytics.AnalyticsService>();
+builder.Services.AddScoped<TrinoSupply.Foundation.Api.Compliance.ComplianceService>();
 
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseNpgsql(ConnectionStringFactory.Resolve(builder.Configuration)));
@@ -1645,6 +1646,31 @@ analytics.MapGet("/supply", async (TrinoSupply.Foundation.Api.Analytics.Analytic
     var t = to ?? today;
     if (t < f) (f, t) = (t, f);
     return Ok(await svc.SupplyAsync(f, t, supplierId, buyerId, requesterId, family, costCenter, region, manager, client), ctx);
+});
+
+// Compliance Score (V2-P2 §14): derivado dos fatos do processo; mede e expõe, nunca bloqueia
+analytics.MapGet("/compliance", async (TrinoSupply.Foundation.Api.Compliance.ComplianceService svc,
+    ClaimsPrincipal p, HttpContext ctx, Guid? quotationId) =>
+{
+    if (!TrinoSupply.Foundation.Api.Compliance.ComplianceService.CanView(RoleOf(p)))
+        return Error(ctx, 403, "CP-ERR-900", "Seu papel não acessa o painel de compliance.");
+    if (!ModulesOf(p).Contains(AppModules.Compliance))
+        return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para este módulo.");
+    var report = await svc.ReportAsync(quotationId);
+    return Ok(new
+    {
+        evaluated = report.Evaluated, concluded = report.Concluded,
+        averageScore = report.AverageScore, fullCompliance = report.FullCompliance,
+        byBuyer = report.ByBuyer.Select(g => new { label = g.Label, count = g.Count, averageScore = g.AverageScore }),
+        byCostCenter = report.ByCostCenter.Select(g => new { label = g.Label, count = g.Count, averageScore = g.AverageScore }),
+        items = report.Items.Select(r => new
+        {
+            quotationId = r.QuotationId, number = r.Number, kind = r.Kind,
+            status = QStatusLabel(r.Status), costCenter = r.CostCenter, buyerLabel = r.BuyerLabel,
+            openedAt = r.OpenedAt, concluded = r.Concluded, score = r.Score,
+            penalties = r.Penalties.Select(pe => new { code = pe.Code, label = pe.Label, points = pe.Points, evidence = pe.Evidence }),
+        }),
+    }, ctx);
 });
 
 analytics.MapGet("/stock", async (TrinoSupply.Foundation.Api.Analytics.AnalyticsService svc,

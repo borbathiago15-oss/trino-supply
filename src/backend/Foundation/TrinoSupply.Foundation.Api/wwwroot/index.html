@@ -1057,6 +1057,9 @@
             <input id="nf-name" required minlength="3" placeholder="ex.: MATERIAL DE LIMPEZA" />
             <label for="nf-notes">Observação</label>
             <input id="nf-notes" placeholder="opcional — o que entra nesta família" />
+            <label for="nf-category">Categoria <span class="sub">(agrupador de famílias para o spend — ex.: MRO, EPI, EMBALAGENS)</span></label>
+            <input id="nf-category" list="nf-category-options" placeholder="opcional — escolha ou digite uma nova" />
+            <datalist id="nf-category-options"></datalist>
             <label style="margin-top:12px">Prazos-meta do processo <span class="sub">(dias corridos; o dashboard compara com o realizado)</span></label>
             <div class="grid2">
               <div><label for="nf-l1" class="sub">Solicitação → cotação</label><input id="nf-l1" type="number" min="0" max="365" placeholder="ex.: 2" /></div>
@@ -2786,6 +2789,7 @@
       $('fam-form-cancel').hidden = !f;
       if (f) {
         $('nf-name').value = f.name; $('nf-notes').value = f.notes || '';
+        $('nf-category').value = f.category || '';
         $('nf-l1').value = f.leadRequestToQuote ?? ''; $('nf-l2').value = f.leadQuoteToApproval ?? '';
         $('nf-l3').value = f.leadApprovalToPo ?? ''; $('nf-l4').value = f.leadPoToDelivery ?? '';
       }
@@ -2797,11 +2801,15 @@
         familyCache = Object.fromEntries(items.map(f => [f.id, f]));
         const { items: prods } = await api('/api/v1/items/?all=true');
         const usage = prods.reduce((acc, i) => { acc[i.family] = (acc[i.family] || 0) + 1; return acc; }, {});
+        $('nf-category-options').innerHTML =
+          [...new Set(items.map(f => f.category).filter(Boolean))].sort()
+            .map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
         $('fam-list').innerHTML = items.length
-          ? '<table><thead><tr><th>Família</th><th>Produtos</th><th>Prazos-meta (dias)</th><th>Observação</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
+          ? '<table><thead><tr><th>Família</th><th>Categoria</th><th>Produtos</th><th>Prazos-meta (dias)</th><th>Observação</th><th>Situação</th><th>Ações</th></tr></thead><tbody>' +
             items.map(f => `
               <tr data-id="${f.id}">
                 <td>${escapeHtml(f.name)}</td>
+                <td>${f.category ? escapeHtml(f.category) : '<span class="sub">—</span>'}</td>
                 <td>${usage[f.name] || 0}</td>
                 <td><div class="sub">${f.leadTotal != null
                     ? `${f.leadRequestToQuote ?? 0} + ${f.leadQuoteToApproval ?? 0} + ${f.leadApprovalToPo ?? 0} + ${f.leadPoToDelivery ?? 0} = <strong>${f.leadTotal}</strong>`
@@ -2838,6 +2846,8 @@
       const dias = (id) => $(id).value === '' ? null : parseInt($(id).value);
       const body = {
         name: $('nf-name').value, notes: $('nf-notes').value || null,
+        category: $('nf-category').value || null,
+        clearCategory: $('nf-category').value === '',   // apagar o campo remove a categoria
         leadRequestToQuote: dias('nf-l1'), leadQuoteToApproval: dias('nf-l2'),
         leadApprovalToPo: dias('nf-l3'), leadPoToDelivery: dias('nf-l4'),
         applyLeadTimes: true,   // o formulário manda as quatro etapas: vazio limpa a meta
@@ -3387,6 +3397,7 @@
         const rankPanels = [
           ['Fornecedores por valor comprado', r.suppliers, money, 'var(--s1)'],
           ['Famílias por valor solicitado', r.families, money, 'var(--s3)'],
+          ['Spend por categoria (O.C.s)', r.categories || [], money, 'var(--s2)'],
           ['Compradores por valor', r.buyers, money, 'var(--s2)'],
           ['Solicitantes por valor', r.requesters, money, 'var(--s1)'],
           ['Regionais por valor solicitado', r.regions, money, 'var(--s3)'],

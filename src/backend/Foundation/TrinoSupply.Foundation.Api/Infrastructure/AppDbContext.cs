@@ -374,6 +374,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(s => s.CreatedBy).HasColumnName("created_by");
             e.Property(s => s.Version).HasColumnName("version");
             e.Property(s => s.ContractNumber).HasColumnName("contract_number").HasMaxLength(60);
+            e.Property(s => s.ContractValueLimit).HasColumnName("contract_value_limit").HasPrecision(18, 4);
+            e.Ignore(s => s.ContractConsumed);
             e.Property(s => s.ContractValidFrom).HasColumnName("contract_valid_from");
             e.Property(s => s.ContractValidUntil).HasColumnName("contract_valid_until");
             e.Property(s => s.ContractNotes).HasColumnName("contract_notes").HasMaxLength(500);
@@ -477,6 +479,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.CatalogItemId).HasColumnName("catalog_item_id");
             e.Property(i => i.CatalogCode).HasColumnName("catalog_code").HasMaxLength(50);
             e.Property(i => i.ReceivedQuantity).HasColumnName("received_quantity").HasPrecision(18, 4);
+            e.Property(i => i.LastPaidUnitPrice).HasColumnName("last_paid_unit_price").HasPrecision(18, 4);
+            e.Property(i => i.ReferenceSaving).HasColumnName("reference_saving").HasPrecision(18, 4);
             e.Property(i => i.CreatedAt).HasColumnName("created_at");
             e.HasIndex(i => i.OrderId);
         });
@@ -575,6 +579,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(p => p.PaymentTerms).HasColumnName("payment_terms").HasMaxLength(200);
             e.Property(p => p.PaymentDays).HasColumnName("payment_days");
             e.Property(p => p.FreightValue).HasColumnName("freight_value").HasPrecision(18, 4);
+            e.Property(p => p.TaxValue).HasColumnName("tax_value").HasPrecision(18, 4);
+            e.Property(p => p.OtherCosts).HasColumnName("other_costs").HasPrecision(18, 4);
             e.Property(p => p.DiscountValue).HasColumnName("discount_value").HasPrecision(18, 4);
             e.Property(p => p.Currency).HasColumnName("currency").HasMaxLength(3);
             e.Property(p => p.ValidUntil).HasColumnName("valid_until");

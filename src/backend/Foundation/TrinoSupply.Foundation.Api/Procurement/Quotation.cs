@@ -117,6 +117,8 @@ public class Proposal
     public string? PaymentTerms { get; set; }                  // condição (ex.: 30/60 dias, à vista)
     public int? PaymentDays { get; set; }                      // prazo para pagamento, em dias
     public decimal? FreightValue { get; set; }
+    public decimal? TaxValue { get; set; }                    // impostos destacados na proposta (V2-P2)
+    public decimal? OtherCosts { get; set; }                  // outros custos (embalagem, taxa…)
     public decimal? DiscountValue { get; set; }               // desconto negociado (mapa de cotação)
     public string Currency { get; set; } = "BRL";             // moeda da proposta
     public DateOnly? ValidUntil { get; set; }

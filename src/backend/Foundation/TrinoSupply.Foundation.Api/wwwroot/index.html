@@ -782,6 +782,16 @@
         </div>
       </section>
 
+      <!-- Compras: contratos de parceria (teto, consumo e saldo) -->
+      <section class="view" id="view-contracts">
+        <div class="panel">
+          <h2>Contratos de Parceria</h2>
+          <p class="hello">Os contratos são mantidos em Cadastros → Fornecedores (botão Contrato). Aqui você acompanha vigência, teto, consumo e saldo — cada O.C. registrada do fornecedor abate o saldo.</p>
+          <div id="contracts-kpis" class="kpis"></div>
+          <div id="contracts-list" class="tablewrap"></div>
+        </div>
+      </section>
+
       <!-- Cadastros: usuários -->
       <section class="view" id="view-users">
         <div class="panel">
@@ -841,7 +851,11 @@
           </div>
           <p class="hello">Produtos com <strong>preço, prazo de pagamento e prazo de entrega fixos</strong> enquanto o contrato valer. O comprador preenche a proposta desse fornecedor com um clique, sem renegociar.</p>
           <div class="grid2">
-            <div><label for="sc-number">Número do contrato</label><input id="sc-number" placeholder="ex.: CT-2026-014" /></div>
+            <div class="grid2">
+              <div><label for="sc-number">Número do contrato</label><input id="sc-number" placeholder="ex.: CT-2026-014" /></div>
+              <div><label for="sc-limit">Teto financeiro (R$) <span class="sub">(as O.C.s abatem o saldo)</span></label>
+                <input id="sc-limit" type="number" min="0" step="0.01" placeholder="opcional" /></div>
+            </div>
             <div class="grid2">
               <div><label for="sc-from">Início da vigência</label><input id="sc-from" type="date" /></div>
               <div><label for="sc-until">Fim da vigência</label><input id="sc-until" type="date" /></div>
@@ -1102,7 +1116,7 @@
       MATERIAL: 'Solicitação de Material', ESTOQUE: 'Estoque / Almoxarifado',
       COMPRAS: 'Compras', PRODUTOS: 'Cadastro de Produtos',
       FORNECEDORES: 'Cadastro de Fornecedores', CENTROS_CUSTO: 'Centros de Custo',
-      USUARIOS: 'Cadastro de Usuários',
+      USUARIOS: 'Cadastro de Usuários', CONTRATOS: 'Contratos de Parceria',
     };
     const DEFAULT_MODULES = {
       SystemAdministrator: Object.keys(MODULE_LABELS),
@@ -1226,6 +1240,7 @@
           { id: 'quotations', label: 'Processos de Cotação', show: () => canViewRfq() },
         ]},
         { id: 'buy-orders', label: 'Pedidos de Compra', show: () => true },
+        { id: 'contracts', label: 'Contratos', module: 'CONTRATOS', show: () => canBuy() || isAdmin() },
       ]},
       { title: 'Cadastros', items: [
         { label: 'Produtos', children: [
@@ -1245,7 +1260,7 @@
       'pr-mine': 'Meus Pedidos', 'pr-approvals': 'Central de Aprovação',
       'mr-new': 'Solicitar Material', 'mr-mine': 'Minhas Solicitações',
       'wh-queue': 'Fila de Atendimento', 'wh-panel': 'Painel de Atendimentos',
-      'rfq-queue': 'Abrir Cotação',
+      'rfq-queue': 'Abrir Cotação', contracts: 'Contratos de Parceria',
       'buy-orders': 'Pedidos de Compra',
       triage: 'Gestão de Solicitações',
       users: 'Cadastro de Usuários', suppliers: 'Cadastro de Fornecedores', products: 'Cadastro de Produtos',
@@ -2476,6 +2491,7 @@
       const c = supplier.contract || {};
       $('sup-contract-title').textContent = `Contrato de parceria — ${supplier.legalName}`;
       $('sc-number').value = c.number || '';
+      $('sc-limit').value = c.valueLimit != null ? c.valueLimit : '';
       $('sc-from').value = c.validFrom || '';
       $('sc-until').value = c.validUntil || '';
       $('sc-notes').value = c.notes || '';
@@ -2508,6 +2524,7 @@
       try {
         await api(`/api/v1/suppliers/${contractSupId}/contract`, { method: 'PUT', body: {
           number: $('sc-number').value || null,
+          valueLimit: $('sc-limit').value ? parseFloat($('sc-limit').value) : null,
           validFrom: $('sc-from').value || null,
           validUntil: $('sc-until').value || null,
           notes: $('sc-notes').value || null,
@@ -3238,7 +3255,8 @@
         $('sd-saving').innerHTML = sv.processes
           ? `<div class="alert-card ok" style="cursor:default"><span>
                <strong>${money(sv.total)} economizados em ${fmtInt(sv.processes)} negociação(ões) — ${sv.percent}% sobre ${money(sv.baseline)}</strong>
-               <div class="sub">Primeiras propostas ${money(sv.baseline)} → fechado ${money(sv.closed)}</div></span></div>
+               <div class="sub">Primeiras propostas ${money(sv.baseline)} → fechado ${money(sv.closed)}</div>
+               ${sv.referenceOrders ? `<div class="sub">Saving de referência (× último preço pago): <strong>${money(sv.referenceTotal)}</strong> em ${fmtInt(sv.referenceOrders)} pedido(s)</div>` : ''}</span></div>
              <div class="tablewrap" style="margin-top:8px"><table><thead><tr><th>Processo</th><th>Fornecedor</th><th>1ª proposta</th><th>Fechado</th><th>Ganho</th><th>Negociado por</th></tr></thead><tbody>` +
             sv.items.map(x => `<tr><td>${escapeHtml(x.number)}</td><td>${escapeHtml(x.supplier || '—')}</td>
               <td>${money(x.baseline || 0)}</td><td>${money(x.closed || 0)}</td>
@@ -3671,6 +3689,8 @@
       return '<table>' + head +
         rows +
         linha('Frete', p => p.freightValue != null ? money(p.freightValue) : '—') +
+        linha('Impostos', p => p.taxValue != null ? money(p.taxValue) : '—') +
+        linha('Outros custos', p => p.otherCosts != null ? money(p.otherCosts) : '—') +
         linha('Desconto', p => p.discountValue != null ? '− ' + money(p.discountValue) : '—') +
         totais +
         linha('Validade da proposta', p => p.validUntil || '—') +
@@ -3696,6 +3716,8 @@
         (o.erpDocumentId ? ` · <a href="#" data-doc="${o.erpDocumentId}" data-act="download-doc">${escapeHtml(o.erpFileName || 'anexo da OC')}</a>` : '') +
         `</div></span></div>`;
 
+      if (o.referenceSavingTotal != null)
+        html += `<p class="hello">Saving de referência (contra o último preço pago): <strong${o.referenceSavingTotal >= 0 ? '' : ' style="color:var(--danger)"'}>${money(o.referenceSavingTotal)}</strong> — métrica separada do ganho de negociação.</p>`;
       html += '<h2>Faturamento</h2>';
       html += (o.invoices || []).length
         ? '<div class="tablewrap"><table><thead><tr><th>Nota fiscal</th><th>Data de faturamento</th><th>Valor</th><th>Anexo</th></tr></thead><tbody>' +
@@ -3791,6 +3813,10 @@
             <div class="grid2">
               <div><label>Frete (R$)</label><input id="ip-freight" type="number" min="0" step="0.01" /></div>
               <div><label>Desconto (R$)</label><input id="ip-discount" type="number" min="0" step="0.01" /></div>
+            </div>
+            <div class="grid2">
+              <div><label>Impostos (R$)</label><input id="ip-tax" type="number" min="0" step="0.01" placeholder="destacados na proposta" /></div>
+              <div><label>Outros custos (R$)</label><input id="ip-other" type="number" min="0" step="0.01" placeholder="embalagem, taxas…" /></div>
             </div>
             <div class="grid2">
               <div><label>Prazo p/ pagamento (dias)</label><input id="ip-paydays" type="number" min="0" placeholder="ex.: 28" /></div>
@@ -4001,6 +4027,8 @@
             deliveryDays: $('ip-delivery').value ? parseInt($('ip-delivery').value) : null,
             paymentTerms: $('ip-payment').value || null,
             paymentDays: $('ip-paydays').value ? parseInt($('ip-paydays').value) : null,
+            taxValue: $('ip-tax').value ? parseFloat($('ip-tax').value) : null,
+            otherCosts: $('ip-other').value ? parseFloat($('ip-other').value) : null,
             freightValue: $('ip-freight').value ? parseFloat($('ip-freight').value) : null,
             discountValue: $('ip-discount').value ? parseFloat($('ip-discount').value) : null,
             currency: $('ip-currency').value || 'BRL',
@@ -4057,9 +4085,21 @@
         } else if (act === 'register-po') {
           const numero = $('rp-number').value.trim();
           if (!numero) { toast('Informe o número da O.C. fechada no SENIOR.', 'error'); return; }
-          const order = await api(`/api/v1/quotations/${rfqOpenId}/register-po`, { method: 'POST', body: {
-            erpNumber: numero, issuedOn: $('rp-date').value || null, notes: $('rp-notes').value || null,
-          }});
+          let order;
+          try {
+            order = await api(`/api/v1/quotations/${rfqOpenId}/register-po`, { method: 'POST', body: {
+              erpNumber: numero, issuedOn: $('rp-date').value || null, notes: $('rp-notes').value || null,
+            }});
+          } catch (e) {
+            // teto do contrato estourado: pede a justificativa e registra mesmo assim (fica na timeline)
+            if (!String(e.message).includes('teto do contrato') && !String(e.message).includes('saldo do contrato')) throw e;
+            const just = prompt(e.message + '\n\nJustificativa para exceder o teto (obrigatória):');
+            if (!just) return;
+            order = await api(`/api/v1/quotations/${rfqOpenId}/register-po`, { method: 'POST', body: {
+              erpNumber: numero, issuedOn: $('rp-date').value || null, notes: $('rp-notes').value || null,
+              overLimitJustification: just,
+            }});
+          }
           const file = $('rp-file').files[0];
           if (file) {
             try { await sendFile(`/api/v1/purchase-orders/${order.id}/erp-order/attachment`, file); }
@@ -4113,6 +4153,40 @@
     };
     $('view-quotations').addEventListener('click', onRfqClick);
     $('view-rfq-queue').addEventListener('click', onRfqClick);
+
+    // ============ COMPRAS: CONTRATOS DE PARCERIA (V2-P2) ============
+    LOADERS['contracts'] = async () => {
+      try {
+        const { items } = await api('/api/v1/suppliers/?all=true');
+        const comContrato = items.filter(s => s.contract && s.contract.items.length);
+        const vigentes = comContrato.filter(s => s.contract.current);
+        const tetoTotal = vigentes.reduce((t, s) => t + (s.contract.valueLimit || 0), 0);
+        const consumido = vigentes.reduce((t, s) => t + (s.contract.consumed || 0), 0);
+        $('contracts-kpis').innerHTML = [
+          ['Contratos vigentes', fmtInt(vigentes.length), `${fmtInt(comContrato.length - vigentes.length)} fora da vigência`],
+          ['Teto contratado', money(tetoTotal), 'somando os vigentes com teto'],
+          ['Consumido (O.C.s na vigência)', money(consumido), 'spend sob contrato'],
+          ['Saldo disponível', money(tetoTotal - consumido), tetoTotal > 0 ? Math.round(consumido * 100 / tetoTotal) + '% consumido' : '—'],
+        ].map(([l, v, d]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="d flat">${d}</div></div>`).join('');
+        $('contracts-list').innerHTML = comContrato.length
+          ? '<table><thead><tr><th>Fornecedor</th><th>Contrato</th><th>Vigência</th><th>Produtos</th><th>Teto</th><th>Consumido</th><th>Saldo</th><th>Situação</th></tr></thead><tbody>' +
+            comContrato.map(s => {
+              const c = s.contract;
+              const pct = c.valueLimit ? Math.min(100, Math.round((c.consumed || 0) * 100 / c.valueLimit)) : null;
+              return `<tr>
+                <td>${escapeHtml(s.legalName)}</td>
+                <td>${escapeHtml(c.number || '—')}</td>
+                <td class="sub">${c.validFrom ? new Date(c.validFrom).toLocaleDateString('pt-BR') : '—'} → ${c.validUntil ? new Date(c.validUntil).toLocaleDateString('pt-BR') : '—'}</td>
+                <td>${c.items.length}</td>
+                <td>${c.valueLimit != null ? money(c.valueLimit) : '<span class="sub">sem teto</span>'}</td>
+                <td>${c.valueLimit != null ? money(c.consumed || 0) + (pct != null ? ` <span class="sub">(${pct}%)</span>` : '') : '—'}</td>
+                <td>${c.balance != null ? `<strong${c.balance < (c.valueLimit || 0) * 0.2 ? ' style="color:var(--danger)"' : ''}>${money(c.balance)}</strong>` : '—'}</td>
+                <td><span class="badge ${c.current ? 'on' : 'off'}">${c.current ? 'VIGENTE' : 'FORA DA VIGÊNCIA'}</span></td>
+              </tr>`;
+            }).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhum contrato de parceria cadastrado. Cadastre em Cadastros → Fornecedores → Contrato.</p>';
+      } catch (err) { $('contracts-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
 
     // ============ CADASTROS: EMPRESAS DO GRUPO (CNPJs) + PADRÃO DA OC ============
     let empCache = {};

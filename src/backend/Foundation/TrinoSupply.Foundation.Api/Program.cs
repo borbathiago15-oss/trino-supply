@@ -1162,6 +1162,8 @@ static object SupplierView(Supplier s) => new
     {
         number = s.ContractNumber, validFrom = s.ContractValidFrom, validUntil = s.ContractValidUntil,
         notes = s.ContractNotes,
+        valueLimit = s.ContractValueLimit, consumed = s.ContractConsumed,
+        balance = s.ContractValueLimit is not null ? s.ContractValueLimit - (s.ContractConsumed ?? 0) : null,
         current = s.ContractIsCurrent(DateOnly.FromDateTime(DateTime.UtcNow)),
         items = s.ContractItems.OrderBy(i => i.Description).Select(i => new
         {
@@ -1203,7 +1205,7 @@ sup.MapPut("/{id:guid}/contract", async (Guid id, SupplierContractRequest body, 
         i.CatalogItemId, i.Description, i.CatalogCode, i.UnitOfMeasure, i.UnitPrice,
         i.PaymentTerms, i.PaymentDays, i.DeliveryDays, i.Notes)).ToList();
     var (supplier, error) = await svc.SaveContractAsync(
-        id, body.Number, body.ValidFrom, body.ValidUntil, body.Notes, items);
+        id, body.Number, body.ValidFrom, body.ValidUntil, body.Notes, items, body.ValueLimit);
     return error is not null ? Error(ctx, error.Code == "SUP-ERR-404" ? 404 : 422, error.Code, error.Message)
         : Ok(SupplierView(supplier!), ctx);
 });
@@ -1247,6 +1249,8 @@ static object PoView(PurchaseOrder o) => new
     cancelReason = o.CancelReason, createdAt = o.CreatedAt,
     erpNumber = o.ErpNumber, erpIssuedOn = o.ErpIssuedOn,
     promisedDate = o.PromisedDate, onTime = o.OnTime, inFull = o.InFull, otif = o.Otif,
+    referenceSavingTotal = o.Items.Any(i => i.ReferenceSaving != null)
+        ? o.Items.Sum(i => i.ReferenceSaving ?? 0) : (decimal?)null,
     erpDocumentId = o.ErpDocumentId, erpFileName = o.ErpFileName,
     deliveryCompletedAt = o.DeliveryCompletedAt,
     pendingDelivery = o.HasPendingDelivery,
@@ -1260,6 +1264,7 @@ static object PoView(PurchaseOrder o) => new
     {
         itemId = i.Id, description = i.Description, unitOfMeasure = i.UnitOfMeasure, quantity = i.Quantity,
         receivedQuantity = i.ReceivedQuantity, pendingQuantity = i.Quantity - i.ReceivedQuantity,
+        lastPaidUnitPrice = i.LastPaidUnitPrice, referenceSaving = i.ReferenceSaving,
         unitPrice = i.UnitPrice, catalogCode = i.CatalogCode, catalogItemId = i.CatalogItemId,
     }),
 };
@@ -1608,7 +1613,8 @@ static object ProposalView(Proposal p, Quotation q) => new
     id = p.Id, supplierId = p.SupplierId, supplierName = p.SupplierName,
     version = p.VersionNumber, totalValue = p.TotalValue, deliveryDays = p.DeliveryDays,
     paymentTerms = p.PaymentTerms, paymentDays = p.PaymentDays,
-    freightValue = p.FreightValue, validUntil = p.ValidUntil,
+    freightValue = p.FreightValue, taxValue = p.TaxValue, otherCosts = p.OtherCosts,
+    validUntil = p.ValidUntil,
     discountValue = p.DiscountValue, currency = p.Currency,
     notes = p.Notes, submittedVia = p.SubmittedVia, submittedByLabel = p.SubmittedByLabel,
     submittedAt = p.SubmittedAt, attachmentDocumentId = p.AttachmentDocumentId,
@@ -1767,7 +1773,7 @@ rfq.MapPost("/{id:guid}/proposals", async (Guid id, InternalProposalRequest body
     if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não registra propostas.");
     var input = new ProposalInput(body.DeliveryDays, body.PaymentTerms, body.FreightValue, body.ValidUntil, body.Notes,
         (body.Items ?? []).Select(i => new ProposalItemInput(i.QuotationItemId, i.UnitPrice, i.Quantity)).ToList(),
-        body.DiscountValue, body.Currency, body.PaymentDays);
+        body.DiscountValue, body.Currency, body.PaymentDays, body.TaxValue, body.OtherCosts);
     var (proposal, error) = await svc.SubmitProposalAsync(id, body.SupplierId, input, "INTERNO", p.FindFirstValue("name") ?? "Usuário");
     if (error is not null) return Error(ctx, error.Code == "RFQ-ERR-020" ? 409 : 400, error.Code, error.Message);
     var q = await svc.GetAsync(id);
@@ -1823,8 +1829,9 @@ rfq.MapPost("/{id:guid}/register-po", async (Guid id, RegisterPoRequest body, Qu
     var role = RoleOf(p);
     if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não registra ordens de compra.");
     var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
-    var (order, error) = await svc.RegisterErpPurchaseOrderAsync(actor, id, body.ErpNumber, body.IssuedOn, body.Notes);
-    return error is not null ? Error(ctx, error.Code == "RFQ-ERR-041" ? 422 : 409, error.Code, error.Message)
+    var (order, error) = await svc.RegisterErpPurchaseOrderAsync(actor, id, body.ErpNumber, body.IssuedOn, body.Notes,
+        body.OverLimitJustification);
+    return error is not null ? Error(ctx, error.Code is "RFQ-ERR-041" or "CT-ERR-010" ? 422 : 409, error.Code, error.Message)
         : Results.Json(new { data = PoView(order!), correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
 
@@ -1917,7 +1924,8 @@ portal.MapPost("/quotations/{id:guid}/proposal", async (Guid id, PortalProposalR
 {
     if (PortalSupplierId(p) is not { } sid) return Error(ctx, 403, "RFQ-ERR-050", "Acesso exclusivo do Portal do Fornecedor.");
     var input = new ProposalInput(body.DeliveryDays, body.PaymentTerms, body.FreightValue, body.ValidUntil, body.Notes,
-        (body.Items ?? []).Select(i => new ProposalItemInput(i.QuotationItemId, i.UnitPrice, i.Quantity)).ToList());
+        (body.Items ?? []).Select(i => new ProposalItemInput(i.QuotationItemId, i.UnitPrice, i.Quantity)).ToList(),
+        TaxValue: body.TaxValue, OtherCosts: body.OtherCosts);
     var (proposal, error) = await svc.SubmitProposalAsync(id, sid, input, "PORTAL", p.FindFirstValue("name") ?? "Fornecedor");
     return error is not null
         ? Error(ctx, error.Code switch { "RFQ-ERR-050" => 403, "RFQ-ERR-020" => 409, _ => 400 }, error.Code, error.Message)
@@ -2318,7 +2326,7 @@ public record FulfillRequest(List<MaterialLineRequest>? Items);
 public record SupplierContractItemRequest(Guid? CatalogItemId, string? Description, string? CatalogCode,
     string? UnitOfMeasure, decimal UnitPrice, string? PaymentTerms, int? PaymentDays, int? DeliveryDays, string? Notes);
 public record SupplierContractRequest(string? Number, DateOnly? ValidFrom, DateOnly? ValidUntil, string? Notes,
-    List<SupplierContractItemRequest>? Items);
+    List<SupplierContractItemRequest>? Items, decimal? ValueLimit = null);
 public record CreateSupplierRequest(string LegalName, string? TradeName, string TaxId, string? Email, string? Phone);
 public record UpdateSupplierRequest(string? TradeName, string? Email, string? Phone, bool? Active);
 public record PoItemRequest(string Description, decimal Quantity, string? UnitOfMeasure, decimal? UnitPrice, Guid? CatalogItemId);
@@ -2336,13 +2344,14 @@ public record InviteSuppliersRequest(List<Guid>? SupplierIds);
 public record ProposalItemRequest(Guid QuotationItemId, decimal UnitPrice, decimal? Quantity);
 public record InternalProposalRequest(Guid SupplierId, int? DeliveryDays, string? PaymentTerms, decimal? FreightValue,
     DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items, decimal? DiscountValue, string? Currency,
-    int? PaymentDays = null);
+    int? PaymentDays = null, decimal? TaxValue = null, decimal? OtherCosts = null);
 public record SelectWinnerRequest(Guid ProposalId, List<string>? Criteria, string Justification);
 public record QuotationDecisionRequest(string Decision, string? Reason);
-public record RegisterPoRequest(string? ErpNumber, DateOnly? IssuedOn, string? Notes);
+public record RegisterPoRequest(string? ErpNumber, DateOnly? IssuedOn, string? Notes, string? OverLimitJustification = null);
 public record NegotiationRequest(Guid SupplierId, decimal? ClosedValue, decimal? DiscountPercent, string? Notes);
 public record PortalLoginRequest(string TaxId, string AccessKey);
-public record PortalProposalRequest(int? DeliveryDays, string? PaymentTerms, decimal? FreightValue, DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items);
+public record PortalProposalRequest(int? DeliveryDays, string? PaymentTerms, decimal? FreightValue, DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items,
+    decimal? TaxValue = null, decimal? OtherCosts = null);
 public record CompanyProfileRequest(string LegalName, string Address, string? District, string City, string State, string Zip, string TaxId, string? StateRegistration, string? Phone, string? Email, string? DeliveryAddress, string? DeliveryTaxId, string? StandardClauses, string? PaymentPolicy);
 public record UpdateRequisitionRequest(string? Justification, string? CostCenter, string? Priority, DateOnly? NeededBy, bool? ClearNeededBy,
     string? UrgencyReason = null, string? UrgencyImpact = null);

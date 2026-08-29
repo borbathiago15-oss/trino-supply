@@ -92,5 +92,9 @@ public class PurchaseOrderItem
     public Guid? CatalogItemId { get; set; }   // com vínculo → recebimento gera entrada de estoque
     public string? CatalogCode { get; set; }   // snapshot
     public decimal ReceivedQuantity { get; set; }   // acumulado das entregas (parciais ou total)
+    // saving de referência (V2-P2): congelado no registro da O.C. — último preço pago do item
+    // de catálogo e a diferença para o preço fechado; nunca se mistura ao saving de negociação
+    public decimal? LastPaidUnitPrice { get; set; }
+    public decimal? ReferenceSaving { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }

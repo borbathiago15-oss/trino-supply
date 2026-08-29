@@ -8,7 +8,8 @@ namespace TrinoSupply.Foundation.Api.Procurement;
 public record ProposalInput(
     int? DeliveryDays, string? PaymentTerms, decimal? FreightValue, DateOnly? ValidUntil,
     string? Notes, IReadOnlyList<ProposalItemInput> Items,
-    decimal? DiscountValue = null, string? Currency = null, int? PaymentDays = null);
+    decimal? DiscountValue = null, string? Currency = null, int? PaymentDays = null,
+    decimal? TaxValue = null, decimal? OtherCosts = null);
 /// <summary>SC já designada a um comprador, mas ainda retida na aprovação.</summary>
 public record QueueBlocked(PurchaseRequisition Pr, string Reason);
 
@@ -206,6 +207,8 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
             PaymentTerms = string.IsNullOrWhiteSpace(input.PaymentTerms) ? null : input.PaymentTerms.Trim(),
             PaymentDays = input.PaymentDays,
             FreightValue = input.FreightValue,
+            TaxValue = input.TaxValue,
+            OtherCosts = input.OtherCosts,
             DiscountValue = input.DiscountValue,
             Currency = string.IsNullOrWhiteSpace(input.Currency) ? "BRL" : input.Currency.Trim().ToUpperInvariant(),
             ValidUntil = input.ValidUntil,
@@ -223,8 +226,10 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
                 UnitPrice = i.UnitPrice, Quantity = i.Quantity ?? qi.Quantity,
             });
         }
+        // custo total (V2-P2): itens + frete + impostos + outros − desconto
         proposal.TotalValue = proposal.Items.Sum(i => i.UnitPrice * i.Quantity)
-            + (proposal.FreightValue ?? 0) - (proposal.DiscountValue ?? 0);
+            + (proposal.FreightValue ?? 0) + (proposal.TaxValue ?? 0) + (proposal.OtherCosts ?? 0)
+            - (proposal.DiscountValue ?? 0);
         if (proposal.TotalValue < 0)
             return (null, new("RFQ-ERR-021", "O desconto não pode ser maior que o total da proposta."));
         db.Proposals.Add(proposal);
@@ -271,12 +276,13 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
                 $"O valor fechado ({fechado:0.00}) é maior que a proposta atual ({atual.TotalValue:0.00}): isso não é um ganho de negociação."));
 
         // a nova versão repete itens e frete e concentra a negociação no desconto
-        var bruto = atual.Items.Sum(i => i.UnitPrice * i.Quantity) + (atual.FreightValue ?? 0);
+        var bruto = atual.Items.Sum(i => i.UnitPrice * i.Quantity) + (atual.FreightValue ?? 0)
+            + (atual.TaxValue ?? 0) + (atual.OtherCosts ?? 0);
         var input = new ProposalInput(
             atual.DeliveryDays, atual.PaymentTerms, atual.FreightValue, atual.ValidUntil,
             string.IsNullOrWhiteSpace(notes) ? atual.Notes : notes.Trim(),
             atual.Items.Select(i => new ProposalItemInput(i.QuotationItemId, i.UnitPrice, i.Quantity)).ToList(),
-            bruto - fechado.Value, atual.Currency, atual.PaymentDays);
+            bruto - fechado.Value, atual.Currency, atual.PaymentDays, atual.TaxValue, atual.OtherCosts);
         var (nova, error) = await SubmitProposalAsync(q.Id, supplierId, input, "NEGOCIACAO", actor.Label, ct);
         if (error is not null) return (null, error);
 
@@ -490,7 +496,8 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
     /// faturamento e a entrega (revisão de telas 2026-08-26).
     /// </summary>
     public async Task<(PurchaseOrder? order, UserError? error)> RegisterErpPurchaseOrderAsync(
-        Actor actor, Guid id, string? erpNumber, DateOnly? issuedOn, string? notes, CancellationToken ct = default)
+        Actor actor, Guid id, string? erpNumber, DateOnly? issuedOn, string? notes,
+        string? overLimitJustification = null, CancellationToken ct = default)
     {
         var q = await GetAsync(id, ct);
         if (q is null) return (null, new("RFQ-ERR-404", "Cotação não encontrada."));
@@ -503,7 +510,9 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
         if (await db.PurchaseOrders.AnyAsync(o => o.Number == numero, ct))
             return (null, new("RFQ-ERR-041", $"A OC {numero} já está registrada em outro processo."));
         var proposal = q.Proposals.Single(p => p.Id == q.WinnerProposalId);
-        var supplier = await db.Suppliers.SingleOrDefaultAsync(s => s.Id == q.WinnerSupplierId, ct);
+        // itens do contrato incluídos: a vigência (ContractIsCurrent) depende deles para o teto
+        var supplier = await db.Suppliers.Include(s => s.ContractItems)
+            .SingleOrDefaultAsync(s => s.Id == q.WinnerSupplierId, ct);
         if (supplier is null || !supplier.Active)
             return (null, new("RFQ-ERR-040", "Fornecedor vencedor inativo: regularize o cadastro ou solicite ajustes."));
 
@@ -532,21 +541,53 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
             CreatedAt = now,
             UpdatedAt = now,
         };
+        // saving de referência (V2-P2): último preço pago de cada item de catálogo, congelado agora
+        var catalogIds = q.Items.Where(i => i.CatalogItemId is not null)
+            .Select(i => i.CatalogItemId!.Value).Distinct().ToList();
+        var ultimosPrecos = catalogIds.Count == 0
+            ? new Dictionary<Guid, decimal>()
+            : (await db.PurchaseOrderItems
+                .Where(i => i.CatalogItemId != null && catalogIds.Contains(i.CatalogItemId.Value)
+                            && i.UnitPrice != null)
+                .Join(db.PurchaseOrders.Where(o => o.Status != PurchaseOrderStatus.Cancelled),
+                      i => i.OrderId, o => o.Id, (i, o) => new { i.CatalogItemId, i.UnitPrice, o.CreatedAt })
+                .ToListAsync(ct))
+              .GroupBy(x => x.CatalogItemId!.Value)
+              .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.CreatedAt).First().UnitPrice!.Value);
+
         foreach (var pi in proposal.Items)
         {
             var qi = q.Items.Single(x => x.Id == pi.QuotationItemId);
+            var ultimo = qi.CatalogItemId is not null && ultimosPrecos.TryGetValue(qi.CatalogItemId.Value, out var v)
+                ? v : (decimal?)null;
             order.Items.Add(new PurchaseOrderItem
             {
                 Description = qi.Description, UnitOfMeasure = qi.UnitOfMeasure,
                 Quantity = pi.Quantity, UnitPrice = pi.UnitPrice,
                 CatalogItemId = qi.CatalogItemId, CatalogCode = qi.CatalogCode,
+                LastPaidUnitPrice = ultimo,
+                ReferenceSaving = ultimo is not null ? (ultimo.Value - pi.UnitPrice) * pi.Quantity : null,
                 CreatedAt = now,
             });
         }
         order.TotalValue = order.Items.Sum(i => (i.UnitPrice ?? 0) * i.Quantity) + (proposal.FreightValue ?? 0)
-            - (proposal.DiscountValue ?? 0);
+            + (proposal.TaxValue ?? 0) + (proposal.OtherCosts ?? 0) - (proposal.DiscountValue ?? 0);
         if (order.Items.Count == 0 || order.TotalValue <= 0)
             return (null, new("RFQ-ERR-040", "A OC precisa de itens e valor."));
+
+        // teto do contrato de parceria (V2-P2): exceder exige justificativa — mede, não trava cego
+        if (supplier.ContractValueLimit is { } teto && supplier.ContractIsCurrent(DateOnly.FromDateTime(now.UtcDateTime)))
+        {
+            var consumido = await ContractConsumedAsync(supplier, ct);
+            if (consumido + order.TotalValue > teto && string.IsNullOrWhiteSpace(overLimitJustification))
+                return (null, new("CT-ERR-010",
+                    $"Esta O.C. ({order.TotalValue:0.00}) ultrapassa o saldo do contrato {supplier.ContractNumber} " +
+                    $"(teto {teto:0.00}, consumido {consumido:0.00}). Informe a justificativa para prosseguir."));
+            if (consumido + order.TotalValue > teto)
+                AddEvent(q, "CONTRATO_TETO_EXCEDIDO",
+                    $"O.C. {numero} excede o teto do contrato {supplier.ContractNumber} " +
+                    $"({consumido + order.TotalValue:0.00} de {teto:0.00}).", actor, null, null, overLimitJustification!.Trim());
+        }
         db.PurchaseOrders.Add(order);
 
         var from = q.Status;
@@ -558,6 +599,19 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
             actor, from, q.Status);
         await TouchAndSaveAsync(q, ct);
         return (order, null);
+    }
+
+    /// <summary>Consumo do contrato: soma das O.C.s não canceladas do fornecedor dentro da vigência.</summary>
+    public async Task<decimal> ContractConsumedAsync(Supplier supplier, CancellationToken ct = default)
+    {
+        var inicio = supplier.ContractValidFrom?.ToDateTime(TimeOnly.MinValue) ?? DateTime.MinValue;
+        var fim = supplier.ContractValidUntil?.ToDateTime(TimeOnly.MaxValue) ?? DateTime.MaxValue;
+        var i0 = new DateTimeOffset(inicio, TimeSpan.Zero);
+        var f0 = new DateTimeOffset(fim, TimeSpan.Zero);
+        return await db.PurchaseOrders
+            .Where(o => o.SupplierId == supplier.Id && o.Status != PurchaseOrderStatus.Cancelled
+                        && o.CreatedAt >= i0 && o.CreatedAt <= f0)
+            .SumAsync(o => (decimal?)o.TotalValue, ct) ?? 0m;
     }
 
     public Task<(Quotation? q, UserError? error)> CancelAsync(Actor actor, Guid id, string? reason, CancellationToken ct = default) =>

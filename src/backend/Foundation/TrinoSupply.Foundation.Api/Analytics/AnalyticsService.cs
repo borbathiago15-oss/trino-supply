@@ -256,12 +256,16 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
 
         // ---- ganho de negociação (saving) ---------------------------------------
         var comSaving = quotes.Where(q => q.SavingValue > 0).ToList();
+        // saving de referência (V2-P2): congelado nos itens das O.C.s do período
+        var referenceSaving = activePos.Sum(o => o.Items.Sum(i => i.ReferenceSaving ?? 0));
+        var referenceMeasured = activePos.Count(o => o.Items.Any(i => i.ReferenceSaving != null));
         var saving = new
         {
             total = comSaving.Sum(q => q.SavingValue ?? 0),
             baseline = comSaving.Sum(q => q.BaselineValue ?? 0),
             closed = comSaving.Sum(q => q.NegotiatedValue ?? 0),
             processes = comSaving.Count,
+            referenceTotal = referenceSaving, referenceOrders = referenceMeasured,
             percent = comSaving.Sum(q => q.BaselineValue ?? 0) > 0
                 ? Math.Round(comSaving.Sum(q => q.SavingValue ?? 0) / comSaving.Sum(q => q.BaselineValue ?? 0) * 100m, 1)
                 : 0m,

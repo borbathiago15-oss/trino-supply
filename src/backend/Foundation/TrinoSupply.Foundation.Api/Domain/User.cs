@@ -50,9 +50,10 @@ public static class AppModules
     public const string Fornecedores = "FORNECEDORES";   // cadastro de fornecedores
     public const string CentrosCusto = "CENTROS_CUSTO";  // cadastro de centros de custo (regional/gerente/cliente)
     public const string Usuarios = "USUARIOS";           // cadastro de usuários (somente admin)
+    public const string Contratos = "CONTRATOS";         // painel de contratos de parceria (V2-P2)
 
     public static readonly string[] All =
-        [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, CentrosCusto, Usuarios];
+        [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, CentrosCusto, Usuarios, Contratos];
 
     /// <summary>Padrão por papel, aplicado quando o cadastro não define módulos.</summary>
     public static string[] DefaultsFor(string role) => role switch

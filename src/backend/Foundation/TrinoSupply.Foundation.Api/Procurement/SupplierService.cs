@@ -13,11 +13,31 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
 
     public static bool CanView(string role) => CanMaintain(role) || role == Roles.Auditor;
 
-    public Task<List<Supplier>> ListAsync(bool includeInactive, CancellationToken ct = default)
+    public async Task<List<Supplier>> ListAsync(bool includeInactive, CancellationToken ct = default)
     {
         var q = db.Suppliers.Include(s => s.ContractItems).AsQueryable();
         if (!includeInactive) q = q.Where(s => s.Active);
-        return q.OrderBy(s => s.LegalName).Take(500).ToListAsync(ct);
+        var list = await q.OrderBy(s => s.LegalName).Take(500).ToListAsync(ct);
+
+        // consumo do contrato (teto − O.C.s na vigência), calculado em uma consulta só
+        var comTeto = list.Where(s => s.ContractValueLimit is not null && s.ContractItems.Count > 0).ToList();
+        if (comTeto.Count > 0)
+        {
+            var ids = comTeto.Select(s => s.Id).ToList();
+            var somas = (await db.PurchaseOrders
+                    .Where(o => ids.Contains(o.SupplierId) && o.Status != PurchaseOrderStatus.Cancelled)
+                    .Select(o => new { o.SupplierId, o.TotalValue, o.CreatedAt }).ToListAsync(ct))
+                .GroupBy(o => o.SupplierId).ToDictionary(g => g.Key, g => g.ToList());
+            foreach (var s in comTeto)
+            {
+                var i0 = s.ContractValidFrom?.ToDateTime(TimeOnly.MinValue) ?? DateTime.MinValue;
+                var f0 = s.ContractValidUntil?.ToDateTime(TimeOnly.MaxValue) ?? DateTime.MaxValue;
+                s.ContractConsumed = somas.TryGetValue(s.Id, out var os)
+                    ? os.Where(o => o.CreatedAt.UtcDateTime >= i0 && o.CreatedAt.UtcDateTime <= f0).Sum(o => o.TotalValue)
+                    : 0m;
+            }
+        }
+        return list;
     }
 
     public async Task<(Supplier? supplier, UserError? error)> CreateAsync(
@@ -76,14 +96,16 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
     /// </summary>
     public async Task<(Supplier? supplier, UserError? error)> SaveContractAsync(
         Guid id, string? number, DateOnly? validFrom, DateOnly? validUntil, string? notes,
-        IReadOnlyList<ContractItemInput>? items, CancellationToken ct = default)
+        IReadOnlyList<ContractItemInput>? items, decimal? valueLimit = null, CancellationToken ct = default)
     {
         var supplier = await db.Suppliers.Include(s => s.ContractItems).SingleOrDefaultAsync(s => s.Id == id, ct);
         if (supplier is null) return (null, new("SUP-ERR-404", "Fornecedor não encontrado."));
         if (validFrom is not null && validUntil is not null && validUntil < validFrom)
             return (null, new("SUP-ERR-020", "A vigência do contrato termina antes de começar."));
 
+        if (valueLimit is < 0) return (null, new("CT-ERR-011", "O teto financeiro do contrato não pode ser negativo."));
         supplier.ContractNumber = Clean(number);
+        supplier.ContractValueLimit = valueLimit;
         supplier.ContractValidFrom = validFrom;
         supplier.ContractValidUntil = validUntil;
         supplier.ContractNotes = Clean(notes);

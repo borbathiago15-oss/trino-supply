@@ -1949,6 +1949,27 @@ rfq.MapGet("/{id:guid}", async (Guid id, QuotationService svc, ClaimsPrincipal p
     return q is null ? Error(ctx, 404, "RFQ-ERR-404", "Cotação não encontrada.") : Ok(QuotationView(q), ctx);
 });
 
+// score multicritério da escolha (V2-P4, decisão C5): INFORMATIVO — nunca decide nem bloqueia
+rfq.MapGet("/{id:guid}/score-map", async (Guid id, QuotationService svc,
+    TrinoSupply.Foundation.Api.Analytics.AnalyticsService analytics, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");
+    var q = await svc.GetAsync(id);
+    if (q is null) return Error(ctx, 404, "RFQ-ERR-404", "Cotação não encontrada.");
+    var latest = q.Proposals.GroupBy(pr => pr.SupplierId)
+        .Select(g => g.OrderByDescending(pr => pr.VersionNumber).First()).ToList();
+    var scorecard = (await analytics.ScorecardRowsAsync(12)).ToDictionary(r => r.SupplierId);
+    var inputs = latest.Select(pr => new ScoreInput(
+        pr.SupplierId, pr.SupplierName, pr.TotalValue, pr.DeliveryDays, pr.PaymentDays,
+        scorecard.TryGetValue(pr.SupplierId, out var sc) ? sc.OtifPercent : null,
+        scorecard.TryGetValue(pr.SupplierId, out var sc2) ? sc2.RiskScore : null)).ToList();
+    return Ok(new
+    {
+        note = "Score informativo: compara as propostas mais recentes; a escolha continua sendo do comprador com justificativa.",
+        items = MultiCriteriaScore.Compute(inputs),
+    }, ctx);
+});
+
 rfq.MapGet("/{id:guid}/timeline", async (Guid id, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
 {
     if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");

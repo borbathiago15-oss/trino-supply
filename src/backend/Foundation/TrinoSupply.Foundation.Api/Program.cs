@@ -812,6 +812,45 @@ app.MapGet("/api/v1/dashboard", async (AppDbContext db, RequisitionService prSvc
         });
     }
 
+    // Contratos e certidões (V2-P3): vencimentos avisados na Central de Avisos
+    if ((mods.Contains(AppModules.Contratos) || mods.Contains(AppModules.Fornecedores))
+        && (PurchaseOrderService.CanManage(role) || role == Roles.Auditor))
+    {
+        var hoje = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var contratos = await db.Suppliers
+            .Where(s => s.Active && s.ContractValidUntil != null && s.ContractItems.Any())
+            .Select(s => new { s.ContractNumber, s.ContractValidUntil }).ToListAsync();
+        var vencidos = contratos.Count(c => c.ContractValidUntil < hoje);
+        if (vencidos > 0) alerts.Add(new
+        {
+            kind = "CONTRATO_VENCIDO", severity = "alta", count = vencidos, view = "contracts",
+            text = $"{vencidos} contrato(s) de parceria vencido(s) — renove ou encerre.",
+        });
+        var d30 = contratos.Count(c => c.ContractValidUntil >= hoje && c.ContractValidUntil <= hoje.AddDays(30));
+        var d60 = contratos.Count(c => c.ContractValidUntil > hoje.AddDays(30) && c.ContractValidUntil <= hoje.AddDays(60));
+        var d90 = contratos.Count(c => c.ContractValidUntil > hoje.AddDays(60) && c.ContractValidUntil <= hoje.AddDays(90));
+        if (d30 + d60 + d90 > 0) alerts.Add(new
+        {
+            kind = "CONTRATO_VENCENDO", severity = d30 > 0 ? "alta" : d60 > 0 ? "media" : "info",
+            count = d30 + d60 + d90, view = "contracts",
+            text = $"Contrato(s) de parceria vencendo: {d30} em 30 dias, {d60} em 60, {d90} em 90.",
+        });
+        var certidoes = await db.SupplierDocuments.Where(d => d.ValidUntil != null)
+            .Select(d => d.ValidUntil!.Value).ToListAsync();
+        var certVencidas = certidoes.Count(v => v < hoje);
+        if (certVencidas > 0) alerts.Add(new
+        {
+            kind = "CERTIDAO_VENCIDA", severity = "alta", count = certVencidas, view = "suppliers",
+            text = $"{certVencidas} certidão(ões) de fornecedor vencida(s) — a homologação fica RESTRITA até regularizar.",
+        });
+        var certVencendo = certidoes.Count(v => v >= hoje && v <= hoje.AddDays(30));
+        if (certVencendo > 0) alerts.Add(new
+        {
+            kind = "CERTIDAO_VENCENDO", severity = "media", count = certVencendo, view = "suppliers",
+            text = $"{certVencendo} certidão(ões) de fornecedor vencendo nos próximos 30 dias.",
+        });
+    }
+
     // Processo de cotação (RFQ-001): cada etapa avisa o responsável da vez
     if (mods.Contains(AppModules.Compras) || mods.Contains(AppModules.Aprovacao))
     {

@@ -70,6 +70,9 @@ public class ProductFamily
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Name { get; set; } = string.Empty;   // único, caixa alta (ex.: MATERIAL DE LIMPEZA)
     public string? Notes { get; set; }
+    // categoria (V2-P3): agrupador de famílias para spend/insights (ex.: MRO, EPI, EMBALAGENS).
+    // Opcional — família sem categoria continua valendo (decisão C7 da análise de evolução).
+    public string? Category { get; set; }
 
     // prazos-meta do processo, em dias corridos (slide 4): o dashboard compara meta × realizado
     public int? LeadRequestToQuote { get; set; }    // solicitação → cotação

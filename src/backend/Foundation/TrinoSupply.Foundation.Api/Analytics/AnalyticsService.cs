@@ -156,12 +156,26 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
             Value = (i.EstimatedUnitPrice ?? 0) * i.Quantity,
         })).ToList();
 
+        // categoria (V2-P3): agrupador de famílias — o spend real das O.C.s consolidado por categoria
+        var categoryByFamily = (await db.ProductFamilies
+                .Select(f => new { f.Name, f.Category }).ToListAsync(ct))
+            .ToDictionary(x => x.Name, x => x.Category, StringComparer.OrdinalIgnoreCase);
+        string CategoryOf(string familyName) =>
+            categoryByFamily.TryGetValue(familyName, out var c) && !string.IsNullOrWhiteSpace(c)
+                ? c! : "SEM CATEGORIA";
+        var poItemValues = activePos.SelectMany(o => o.Items.Select(i => new
+        {
+            Family = FamilyOf(i.CatalogItemId) ?? "SEM FAMÍLIA",
+            Value = (i.UnitPrice ?? 0) * i.Quantity,
+        })).ToList();
+
         var rankings = new
         {
             suppliers = Rank(activePos, o => o.SupplierName, o => o.TotalValue),
             buyers = Rank(activePos, o => o.IssuedByLabel, o => o.TotalValue),
             requesters = Rank(prs, r => r.RequesterLabel, r => r.TotalEstimatedValue),
             families = Rank(prItemValues, x => x.Family, x => x.Value),
+            categories = Rank(poItemValues, x => CategoryOf(x.Family), x => x.Value),
             costCenters = Rank(prs, r => r.CostCenter, r => r.TotalEstimatedValue),
             regions = Rank(prs, r => RegionOf(r.CostCenter), r => r.TotalEstimatedValue),
             managers = Rank(prs, r => ManagerOf(r.CostCenter), r => r.TotalEstimatedValue),

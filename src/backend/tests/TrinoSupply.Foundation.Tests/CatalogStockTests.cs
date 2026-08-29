@@ -229,6 +229,23 @@ public class CatalogStockTests
     }
 
     [Fact]
+    public async Task Categoria_da_familia_e_normalizada_e_pode_ser_removida()
+    {
+        var svc = Build(out _);
+        var (family, error) = await svc.CreateFamilyAsync(Actor, "LUVAS", null, category: "  epi ");
+        Assert.Null(error);
+        Assert.Equal("EPI", family!.Category);
+
+        var (updated, e2) = await svc.UpdateFamilyAsync(family.Id, null, null, null, category: "seguranca");
+        Assert.Null(e2);
+        Assert.Equal("SEGURANCA", updated!.Category);
+
+        var (cleared, e3) = await svc.UpdateFamilyAsync(family.Id, null, null, null, clearCategory: true);
+        Assert.Null(e3);
+        Assert.Null(cleared!.Category);
+    }
+
+    [Fact]
     public async Task Renomear_para_familia_existente_unifica_as_duas()
     {
         var svc = Build(out var db);

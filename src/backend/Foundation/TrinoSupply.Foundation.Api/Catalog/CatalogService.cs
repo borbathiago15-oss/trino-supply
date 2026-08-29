@@ -48,8 +48,16 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         return null;
     }
 
+    /// <summary>Categoria (V2-P3): agrupador livre, normalizado em caixa alta; vazio = sem categoria.</summary>
+    private static string? CleanCategory(string? category)
+    {
+        var c = category?.Trim().ToUpperInvariant();
+        return string.IsNullOrWhiteSpace(c) ? null : c[..Math.Min(c.Length, 120)];
+    }
+
     public async Task<(ProductFamily? family, UserError? error)> CreateFamilyAsync(
-        Guid actorId, string name, string? notes, FamilyLeadTimes? lead = null, CancellationToken ct = default)
+        Guid actorId, string name, string? notes, FamilyLeadTimes? lead = null,
+        string? category = null, CancellationToken ct = default)
     {
         var clean = (name ?? "").Trim().ToUpperInvariant();
         if (clean.Length < 3) return (null, new("IC-ERR-020", "Informe o nome da família (mín. 3 caracteres)."));
@@ -57,7 +65,8 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
             return (null, new("IC-ERR-021", "Já existe uma família com este nome."));
 
         var now = clock.GetUtcNow();
-        var family = new ProductFamily { Name = clean, Notes = Clean(notes), CreatedAt = now, UpdatedAt = now, CreatedBy = actorId };
+        var family = new ProductFamily { Name = clean, Notes = Clean(notes), Category = CleanCategory(category),
+            CreatedAt = now, UpdatedAt = now, CreatedBy = actorId };
         if (ApplyLeadTimes(family, lead) is { } leadError) return (null, leadError);
         db.ProductFamilies.Add(family);
         await db.SaveChangesAsync(ct);
@@ -66,7 +75,8 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
 
     /// <summary>Renomear a família também renomeia os produtos que a usam (a identidade é o nome).</summary>
     public async Task<(ProductFamily? family, UserError? error)> UpdateFamilyAsync(
-        Guid id, string? name, string? notes, bool? active, FamilyLeadTimes? lead = null, CancellationToken ct = default)
+        Guid id, string? name, string? notes, bool? active, FamilyLeadTimes? lead = null,
+        string? category = null, bool clearCategory = false, CancellationToken ct = default)
     {
         var family = await db.ProductFamilies.SingleOrDefaultAsync(f => f.Id == id, ct);
         if (family is null) return (null, new("IC-ERR-404", "Família não encontrada."));
@@ -90,6 +100,8 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
                     db.ProductFamilies.Remove(family);
                     if (notes is not null) existing.Notes = Clean(notes);
                     if (active is not null) existing.Active = active.Value;
+                    if (clearCategory) existing.Category = null;
+                    else if (category is not null) existing.Category = CleanCategory(category);
                     if (ApplyLeadTimes(existing, lead) is { } mergeError) return (null, mergeError);
                     existing.UpdatedAt = clock.GetUtcNow();
                     await db.SaveChangesAsync(ct);
@@ -100,6 +112,8 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         }
         if (notes is not null) family.Notes = Clean(notes);
         if (active is not null) family.Active = active.Value;
+        if (clearCategory) family.Category = null;
+        else if (category is not null) family.Category = CleanCategory(category);
         if (ApplyLeadTimes(family, lead) is { } leadError) return (null, leadError);
         family.UpdatedAt = clock.GetUtcNow();
         await db.SaveChangesAsync(ct);

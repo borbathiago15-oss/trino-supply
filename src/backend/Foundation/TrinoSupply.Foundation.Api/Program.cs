@@ -371,7 +371,7 @@ app.MapPost("/api/v1/items/{id:guid}/image", async (Guid id, HttpRequest request
 // ---- famílias de produtos (cadastro próprio: evita a mesma família escrita de vários jeitos)
 static object FamilyView(ProductFamily f) => new
 {
-    id = f.Id, name = f.Name, notes = f.Notes, active = f.Active,
+    id = f.Id, name = f.Name, notes = f.Notes, active = f.Active, category = f.Category,
     // prazos-meta do processo, em dias: o dashboard compara com o realizado
     leadRequestToQuote = f.LeadRequestToQuote, leadQuoteToApproval = f.LeadQuoteToApproval,
     leadApprovalToPo = f.LeadApprovalToPo, leadPoToDelivery = f.LeadPoToDelivery,
@@ -399,7 +399,7 @@ families.MapPost("/", async (ProductFamilyRequest body, CatalogService svc, Clai
 {
     if (!CatalogService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.Produtos))
         return Error(ctx, 403, "IC-ERR-900", "Seu usuário não mantém o catálogo.");
-    var (family, error) = await svc.CreateFamilyAsync(ActorId(p), body.Name ?? "", body.Notes, LeadOf(body));
+    var (family, error) = await svc.CreateFamilyAsync(ActorId(p), body.Name ?? "", body.Notes, LeadOf(body), body.Category);
     return error is not null ? Error(ctx, error.Code == "IC-ERR-021" ? 409 : 400, error.Code, error.Message)
         : Results.Json(new { data = FamilyView(family!), correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
@@ -408,7 +408,8 @@ families.MapPatch("/{id:guid}", async (Guid id, UpdateProductFamilyRequest body,
 {
     if (!CatalogService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.Produtos))
         return Error(ctx, 403, "IC-ERR-900", "Seu usuário não mantém o catálogo.");
-    var (family, error) = await svc.UpdateFamilyAsync(id, body.Name, body.Notes, body.Active, LeadOf(body));
+    var (family, error) = await svc.UpdateFamilyAsync(id, body.Name, body.Notes, body.Active, LeadOf(body),
+        body.Category, body.ClearCategory == true);
     return error is not null ? Error(ctx, error.Code == "IC-ERR-404" ? 404 : 400, error.Code, error.Message)
         : Ok(FamilyView(family!), ctx);
 });
@@ -2396,10 +2397,11 @@ public interface IFamilyLeadTimes
     /// <summary>Formulário das famílias: manda as quatro etapas, então vazio limpa a meta.</summary>
     bool? ApplyLeadTimes { get; }
 }
-public record ProductFamilyRequest(string? Name, string? Notes,
+public record ProductFamilyRequest(string? Name, string? Notes, string? Category = null,
     int? LeadRequestToQuote = null, int? LeadQuoteToApproval = null,
     int? LeadApprovalToPo = null, int? LeadPoToDelivery = null, bool? ApplyLeadTimes = null) : IFamilyLeadTimes;
-public record UpdateProductFamilyRequest(string? Name, string? Notes, bool? Active,
+public record UpdateProductFamilyRequest(string? Name, string? Notes, bool? Active, string? Category = null,
+    bool? ClearCategory = null,
     int? LeadRequestToQuote = null, int? LeadQuoteToApproval = null,
     int? LeadApprovalToPo = null, int? LeadPoToDelivery = null, bool? ApplyLeadTimes = null) : IFamilyLeadTimes;
 public record ItemSupplierRequest(string? SupplierName, string? TaxId, string? Contact,

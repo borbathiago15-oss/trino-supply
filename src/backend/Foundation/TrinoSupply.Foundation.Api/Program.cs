@@ -1533,6 +1533,7 @@ static object TicketView(TriageTicket t) => new
     processStatusTone = t.Process?.Tone, processStatusHint = t.Process?.Explanation,
     priority = t.Priority, neededBy = t.NeededBy, justification = t.Justification,
     urgencyReason = t.UrgencyReason, urgencyImpact = t.UrgencyImpact,
+    priorityChangedByLabel = t.PriorityChangedByLabel, priorityChangeReason = t.PriorityChangeReason,
     items = (t.Items ?? []).Select(i => new
     {
         id = i.Id, sequence = i.Sequence, code = i.Code, description = i.Description,
@@ -1590,6 +1591,35 @@ triage.MapPost("/assign", async (AssignTicketRequest body, TriageService svc, Cl
         ? Error(ctx, error.Code switch { "TRI-ERR-404" => 404, "TRI-ERR-900" => 403, "TRI-ERR-020" => 409, _ => 400 },
                 error.Code, error.Message)
         : Ok(TicketView(ticket!), ctx);
+});
+
+// redistribuição em lote (V2-P3): várias demandas para o mesmo responsável de uma vez
+triage.MapPost("/assign-batch", async (AssignBatchRequest body, TriageService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (BuildActor(p) is not { } actor) return Error(ctx, 403, "TRI-ERR-900", "Seu papel não acessa a triagem.");
+    var alvos = body.Items ?? [];
+    if (alvos.Count == 0) return Error(ctx, 400, "TRI-ERR-010", "Selecione ao menos uma demanda.");
+    var okCount = 0;
+    var falhas = new List<object>();
+    foreach (var alvo in alvos)
+    {
+        var (_, error) = await svc.AssignAsync(actor, alvo.Kind ?? "", alvo.Id, body.ResponsibleId);
+        if (error is null) okCount++;
+        else falhas.Add(new { alvo.Id, code = error.Code, message = error.Message });
+    }
+    return Ok(new { assigned = okCount, failed = falhas }, ctx);
+});
+
+// alteração de prioridade com justificativa (V2-P3)
+triage.MapPost("/priority", async (ChangePriorityRequest body, TriageService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (BuildActor(p) is not { } actor) return Error(ctx, 403, "TRI-ERR-900", "Seu papel não acessa a triagem.");
+    var (pr, error) = await svc.ChangePriorityAsync(actor, body.Id, body.Priority ?? "", body.Reason, body.Impact);
+    return error is not null
+        ? Error(ctx, error.Code switch { "TRI-ERR-404" => 404, "TRI-ERR-900" => 403, "TRI-ERR-020" => 409, _ => 422 },
+                error.Code, error.Message)
+        : Ok(new { id = pr!.Id, priority = pr.Priority, reason = pr.PriorityChangeReason,
+                   byLabel = pr.PriorityChangedByLabel, at = pr.PriorityChangedAt }, ctx);
 });
 
 // ---- Empresas do grupo (CNPJs) — cada CC pode apontar para um CNPJ -----------
@@ -2451,6 +2481,9 @@ public record ReceiveOrderRequest(Guid LocationId);
 public record CreateCostCenterRequest(string? Code, string Name, string? Region, Guid? ManagerUserId, string? ClientName, Guid? CompanyId, IReadOnlyList<Guid>? Level1UserIds = null, IReadOnlyList<Guid>? Level2UserIds = null);
 public record UpdateCostCenterRequest(string? Name, string? Region, Guid? ManagerUserId, string? ClientName, bool? Active, Guid? CompanyId, IReadOnlyList<Guid>? Level1UserIds = null, IReadOnlyList<Guid>? Level2UserIds = null);
 public record AssignTicketRequest(string? Kind, Guid Id, Guid? ResponsibleId);
+public record AssignBatchRequest(List<AssignBatchItem>? Items, Guid? ResponsibleId);
+public record AssignBatchItem(string? Kind, Guid Id);
+public record ChangePriorityRequest(Guid Id, string? Priority, string? Reason, string? Impact);
 public record CreateCompanyRequest(string LegalName, string TaxId, string? StateRegistration, string Address,
     string? District, string City, string State, string Zip, string? Phone, string? Email);
 public record UpdateCompanyRequest(string? LegalName, string? StateRegistration, string? Address, string? District,

@@ -15,7 +15,8 @@ public record TriageTicket(
     ProcessStatusView? Process = null,    // situação do fluxo de compras (slide "Status das Solicitações")
     string Priority = "NORMAL", DateOnly? NeededBy = null, string? Justification = null,
     IReadOnlyList<TriageTicketItem>? Items = null,
-    string? UrgencyReason = null, string? UrgencyImpact = null);
+    string? UrgencyReason = null, string? UrgencyImpact = null,
+    string? PriorityChangedByLabel = null, string? PriorityChangeReason = null);
 
 /// <summary>Item da demanda: a tela lista uma linha por item, como no ERP (slides 8 e 9).</summary>
 public record TriageTicketItem(
@@ -123,7 +124,8 @@ public class TriageService(AppDbContext db, TimeProvider clock)
                 i.Id, i.Sequence, i.CatalogCode, i.Description,
                 sizeByItem.GetValueOrDefault(i.CatalogItemId ?? Guid.Empty),
                 i.Quantity, i.UnitOfMeasure, i.Notes)).ToList(),
-            r.UrgencyReason, r.UrgencyImpact)).ToList();
+            r.UrgencyReason, r.UrgencyImpact,
+            r.PriorityChangedByLabel, r.PriorityChangeReason)).ToList();
 
         var mrs = await db.MaterialRequisitions.Include(r => r.Items)
             .Where(r => r.Status == MaterialRequisitionStatus.Submitted
@@ -152,6 +154,50 @@ public class TriageService(AppDbContext db, TimeProvider clock)
             _ => tickets,
         };
         return tickets.OrderBy(t => t.AssignedToId is not null).ThenBy(t => t.OpenedAt).ToList();
+    }
+
+    /// <summary>
+    /// Alteração de prioridade pela triagem (V2-P3): sempre com justificativa. Subir para
+    /// URGENTE exige também o impacto (mesma régua do PR-ERR-050); voltar a NORMAL limpa a urgência.
+    /// </summary>
+    public async Task<(PurchaseRequisition? pr, UserError? error)> ChangePriorityAsync(
+        Actor actor, Guid prId, string priority, string? reason, string? impact, CancellationToken ct = default)
+    {
+        if (!CanTriage(actor.Role))
+            return (null, new("TRI-ERR-900", "Seu papel não altera a prioridade das demandas."));
+        priority = priority.Trim().ToUpperInvariant();
+        if (priority is not ("NORMAL" or "URGENT"))
+            return (null, new("TRI-ERR-030", "Prioridade inválida: use NORMAL ou URGENT."));
+        if (string.IsNullOrWhiteSpace(reason))
+            return (null, new("TRI-ERR-031", "A alteração de prioridade exige justificativa."));
+
+        var pr = await db.Requisitions.SingleOrDefaultAsync(r => r.Id == prId && r.DeletedAt == null, ct);
+        if (pr is null) return (null, new("TRI-ERR-404", "Demanda não encontrada."));
+        if (pr.Status is not (RequisitionStatus.Submitted or RequisitionStatus.Approved
+                              or RequisitionStatus.InApproval))
+            return (null, new("TRI-ERR-020", "Só demandas em andamento têm a prioridade alterada."));
+
+        if (priority == "URGENT")
+        {
+            if (string.IsNullOrWhiteSpace(impact))
+                return (null, new("TRI-ERR-031",
+                    "Para tornar a demanda URGENTE informe também o impacto de não comprar (mesma régua da SC urgente)."));
+            pr.UrgencyReason = reason.Trim();
+            pr.UrgencyImpact = impact.Trim();
+        }
+        else
+        {
+            pr.UrgencyReason = null;
+            pr.UrgencyImpact = null;
+        }
+        pr.Priority = priority;
+        pr.PriorityChangedByLabel = actor.Label;
+        pr.PriorityChangedAt = clock.GetUtcNow();
+        pr.PriorityChangeReason = reason.Trim();
+        pr.UpdatedAt = clock.GetUtcNow();
+        pr.Version += 1;
+        await db.SaveChangesAsync(ct);
+        return (pr, null);
     }
 
     /// <summary>Designa (ou redesigna) o responsável pela continuidade da demanda.</summary>

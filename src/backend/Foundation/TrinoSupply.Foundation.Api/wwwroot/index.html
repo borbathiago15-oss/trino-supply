@@ -681,6 +681,12 @@
             <div><button type="button" class="secondary" id="tri-clear">Limpar filtros</button></div>
           </div>
           <p class="hello">Toda solicitação de compra e toda solicitação de material entra aqui: designe o responsável pela continuidade (comprador ou almoxarife) e acompanhe a situação de cada pedido.</p>
+          <!-- redistribuição em lote (V2-P3) -->
+          <div id="tri-batch-bar" hidden style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+            <span class="sub">Marque demandas e mande todas para:</span>
+            <select id="tri-batch-resp" style="width:auto"></select>
+            <button id="tri-batch-btn" disabled>Designar selecionadas (0)</button>
+          </div>
           <p class="hello" id="tri-legend" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
             <span class="badge">Pendente</span><span class="badge warn">Em Cotação</span>
             <span class="badge teal">Aguardando Aprovação</span><span class="badge on">Pedido Aprovado</span>
@@ -3639,6 +3645,10 @@
       if (mayAssign && !triResponsibles.length) {
         try { triResponsibles = (await api('/api/v1/triage/responsibles')).items; } catch {}
       }
+      $('tri-batch-bar').hidden = !mayAssign;
+      if (mayAssign) $('tri-batch-resp').innerHTML =
+        triResponsibles.map(r => `<option value="${r.id}">${escapeHtml(r.name)} (${ROLE_LABELS[r.role] || r.role})</option>`).join('');
+      updateTriBatchButton();
       try {
         const q = new URLSearchParams({ filter });
         if ($('tri-requester').value) q.set('requester', $('tri-requester').value);
@@ -3671,7 +3681,7 @@
           const urgente = t.priority === 'URGENT';
           return its.map((i, idx) => `
             <tr data-id="${t.id}" data-kind="${t.kind}"${urgente ? ' style="color:var(--danger)"' : ''}>
-              <td style="white-space:nowrap">${idx === 0 ? '<strong>' + escapeHtml(t.number) + '</strong>' : ''}
+              <td style="white-space:nowrap">${idx === 0 ? (mayAssign ? `<input type="checkbox" class="tri-sel" style="width:auto;margin-right:6px" title="Selecionar para designar em lote">` : '') + '<strong>' + escapeHtml(t.number) + '</strong>' : ''}
                   <div class="sub">${escapeHtml(t.number)}/${String(i.sequence || idx + 1).padStart(4, '0')}</div></td>
               <td>${i.code ? '<span class="sub">[' + escapeHtml(i.code) + ']</span> ' : ''}${escapeHtml(i.description)}
                   ${idx === 0 && t.justification ? `<div class="sub">${escapeHtml(t.justification)}</div>` : ''}</td>
@@ -3684,7 +3694,9 @@
               <td style="white-space:nowrap">${t.neededBy || '—'}</td>
               <td style="white-space:nowrap">${urgente
                 ? `<strong title="${escapeHtml((t.urgencyReason || '') + (t.urgencyImpact ? ' — Impacto: ' + t.urgencyImpact : ''))}">URGENTE</strong>${t.urgencyReason ? `<div class="sub" style="white-space:normal;max-width:180px">${escapeHtml(t.urgencyReason)}</div>` : ''}`
-                : 'Normal'}</td>
+                : 'Normal'}
+                ${idx === 0 && t.priorityChangedByLabel ? `<div class="sub" style="white-space:normal;max-width:180px" title="${escapeHtml(t.priorityChangeReason || '')}">alterada por ${escapeHtml(t.priorityChangedByLabel)}</div>` : ''}
+                ${idx === 0 && mayAssign && t.kind === 'SC' ? `<div><button class="secondary" data-act="tri-priority" data-to="${urgente ? 'NORMAL' : 'URGENT'}" style="padding:2px 8px;font-size:11px;margin-top:2px">${urgente ? 'Voltar a Normal' : 'Tornar Urgente'}</button></div>` : ''}</td>
               ${idx === 0 ? `<td rowspan="${its.length}">${mayAssign
                     ? `<select class="tri-assign" style="width:100%">${options(t.assignedToId)}</select>${t.assignedByLabel ? `<div class="sub">designado por ${escapeHtml(t.assignedByLabel)}</div>` : ''}`
                     : `${escapeHtml(t.assignedToLabel || '—')}${t.assignedByLabel ? `<div class="sub">por ${escapeHtml(t.assignedByLabel)}</div>` : ''}`}</td>
@@ -3714,7 +3726,48 @@
       $('tri-assignee').value = ''; $('tri-status').value = ''; $('tri-aging').value = '';
       LOADERS['triage']();
     });
+    // redistribuição em lote (V2-P3)
+    function updateTriBatchButton() {
+      const n = document.querySelectorAll('#tri-list .tri-sel:checked').length;
+      $('tri-batch-btn').disabled = n === 0;
+      $('tri-batch-btn').textContent = `Designar selecionadas (${n})`;
+    }
+    $('tri-batch-btn').addEventListener('click', async () => {
+      const rows = [...document.querySelectorAll('#tri-list .tri-sel:checked')].map(c => c.closest('tr'));
+      if (!rows.length) return;
+      try {
+        const r = await api('/api/v1/triage/assign-batch', { method: 'POST', body: {
+          items: rows.map(tr => ({ kind: tr.dataset.kind, id: tr.dataset.id })),
+          responsibleId: $('tri-batch-resp').value,
+        }});
+        toast(`${r.assigned} demanda(s) designada(s)` + (r.failed.length ? ` · ${r.failed.length} falhou(aram)` : '') + '.',
+          r.failed.length ? 'error' : 'ok');
+        LOADERS['triage']();
+      } catch (err) { toast(err.message, 'error'); }
+    });
+    // alteração de prioridade com justificativa (V2-P3)
+    $('tri-list').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act="tri-priority"]');
+      if (!btn) return;
+      const row = btn.closest('tr');
+      const to = btn.dataset.to;
+      const reason = prompt(to === 'URGENT'
+        ? 'Por que esta demanda virou URGENTE? (obrigatório)'
+        : 'Por que esta demanda volta a NORMAL? (obrigatório)');
+      if (!reason) return;
+      let impact = null;
+      if (to === 'URGENT') {
+        impact = prompt('Qual o impacto de não comprar? (obrigatório — mesma régua da SC urgente)');
+        if (!impact) return;
+      }
+      try {
+        await api('/api/v1/triage/priority', { method: 'POST', body: { id: row.dataset.id, priority: to, reason, impact } });
+        toast('Prioridade alterada com justificativa registrada.', 'ok');
+        LOADERS['triage']();
+      } catch (err) { toast(err.message, 'error'); }
+    });
     $('tri-list').addEventListener('change', async (ev) => {
+      if (ev.target.classList.contains('tri-sel')) { updateTriBatchButton(); return; }
       const sel = ev.target.closest('.tri-assign');
       if (!sel) return;
       const row = sel.closest('tr');

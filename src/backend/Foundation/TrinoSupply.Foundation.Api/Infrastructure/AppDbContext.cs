@@ -251,6 +251,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(r => r.Status).HasColumnName("status").HasConversion<short>();
             e.Property(r => r.Cycle).HasColumnName("cycle");
             e.Property(r => r.Priority).HasColumnName("priority").HasMaxLength(10);
+            e.Property(r => r.UrgencyReason).HasColumnName("urgency_reason").HasMaxLength(500);
+            e.Property(r => r.UrgencyImpact).HasColumnName("urgency_impact").HasMaxLength(500);
             e.Property(r => r.NeededBy).HasColumnName("needed_by");
             e.Property(r => r.Justification).HasColumnName("justification").HasMaxLength(2000).IsRequired();
             e.Property(r => r.CostCenter).HasColumnName("cost_center").HasMaxLength(120).IsRequired();
@@ -426,6 +428,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(o => o.CancelReason).HasColumnName("cancel_reason").HasMaxLength(500);
             e.Property(o => o.ErpNumber).HasColumnName("erp_number").HasMaxLength(60);
             e.Property(o => o.ErpIssuedOn).HasColumnName("erp_issued_on");
+            e.Property(o => o.PromisedDate).HasColumnName("promised_date");
+            e.Ignore(o => o.OnTime); e.Ignore(o => o.InFull); e.Ignore(o => o.Otif);
             e.Property(o => o.ErpDocumentId).HasColumnName("erp_document_id");
             e.Property(o => o.ErpFileName).HasColumnName("erp_file_name").HasMaxLength(260);
             e.Property(o => o.DeliveryCompletedAt).HasColumnName("delivery_completed_at");

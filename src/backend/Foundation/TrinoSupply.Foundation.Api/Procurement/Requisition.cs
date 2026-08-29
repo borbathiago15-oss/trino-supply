@@ -35,6 +35,9 @@ public class PurchaseRequisition
     public RequisitionStatus Status { get; set; } = RequisitionStatus.Draft;
     public int Cycle { get; set; } = 1;                          // incrementa a cada resubmissão (PR-001-03)
     public string Priority { get; set; } = "NORMAL";
+    // compra urgente exige dizer por quê e o que acontece se não comprar (PR-ERR-050)
+    public string? UrgencyReason { get; set; }
+    public string? UrgencyImpact { get; set; }
     public DateOnly? NeededBy { get; set; }
     public string Justification { get; set; } = string.Empty;
     public string CostCenter { get; set; } = string.Empty;       // referência textual até FD-001-02/09 existirem

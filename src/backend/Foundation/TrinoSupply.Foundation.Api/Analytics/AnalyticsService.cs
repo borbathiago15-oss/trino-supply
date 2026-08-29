@@ -170,13 +170,22 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
 
         // ---- tabela fornecedor --------------------------------------------------
         var supplierTable = activePos.GroupBy(o => o.SupplierName)
-            .Select(g => new
+            .Select(g =>
             {
-                supplier = g.Key,
-                orders = g.Count(),
-                quantity = g.Sum(o => o.Items.Sum(i => i.Quantity)),
-                value = g.Sum(o => o.TotalValue),
-                open = g.Count(o => o.Status == PurchaseOrderStatus.Issued),
+                // OTIF: só pedidos com entrega encerrada e data prometida registrada contam
+                var medidos = g.Where(o => o.Otif is not null).ToList();
+                return new
+                {
+                    supplier = g.Key,
+                    orders = g.Count(),
+                    quantity = g.Sum(o => o.Items.Sum(i => i.Quantity)),
+                    value = g.Sum(o => o.TotalValue),
+                    open = g.Count(o => o.Status == PurchaseOrderStatus.Issued),
+                    otifMeasured = medidos.Count,
+                    otifPercent = medidos.Count > 0
+                        ? Math.Round(medidos.Count(o => o.Otif == true) * 100.0 / medidos.Count, 1)
+                        : (double?)null,
+                };
             })
             .OrderByDescending(x => x.value).Take(20).ToList();
 

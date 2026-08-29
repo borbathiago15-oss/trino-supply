@@ -129,7 +129,14 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
     }
 
     // ---- ciclo de vida ------------------------------------------------------
-    public record ScHeaderInput(string? NeedType, string? DeliveryLocation, string? Company, string? InternalNotes);
+    public record ScHeaderInput(string? NeedType, string? DeliveryLocation, string? Company, string? InternalNotes,
+        string? UrgencyReason = null, string? UrgencyImpact = null);
+
+    /// <summary>Compra urgente sem justificativa e impacto não entra (insumo do compliance).</summary>
+    private static UserError? UrgencyError(string priority, string? reason, string? impact) =>
+        priority == "URGENT" && (string.IsNullOrWhiteSpace(reason) || string.IsNullOrWhiteSpace(impact))
+            ? new("PR-ERR-050", "Compra urgente exige a justificativa da urgência e o impacto de não comprar.")
+            : null;
 
     private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
@@ -144,6 +151,8 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         priority ??= "NORMAL";
         if (!RequisitionPriorities.All.Contains(priority))
             return (null, new("PR-ERR-030", "Prioridade inválida."));
+        if (UrgencyError(priority, header?.UrgencyReason, header?.UrgencyImpact) is { } urgencyError)
+            return (null, urgencyError);
         kind = (kind ?? "AVULSA").ToUpperInvariant();
         if (kind is not ("AVULSA" or "CATALOGO"))
             return (null, new("PR-ERR-030", "Tipo de requisição inválido (AVULSA ou CATALOGO)."));
@@ -166,6 +175,8 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
             Justification = justification.Trim(),
             CostCenter = costCenter.Trim(),
             Priority = priority,
+            UrgencyReason = priority == "URGENT" ? Clean(header?.UrgencyReason) : null,
+            UrgencyImpact = priority == "URGENT" ? Clean(header?.UrgencyImpact) : null,
             NeededBy = neededBy,
             NeedType = Clean(header?.NeedType)?.ToUpperInvariant(),
             DeliveryLocation = Clean(header?.DeliveryLocation),
@@ -201,7 +212,7 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
 
     public async Task<(PurchaseRequisition? pr, UserError? error)> UpdateHeaderAsync(
         Actor actor, Guid id, string? justification, string? costCenter, string? priority, DateOnly? neededBy,
-        bool clearNeededBy, CancellationToken ct = default)
+        bool clearNeededBy, string? urgencyReason = null, string? urgencyImpact = null, CancellationToken ct = default)
     {
         var (pr, error) = await GetEditableAsync(actor, id, ct);
         if (error is not null) return (null, error);
@@ -220,8 +231,13 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         if (priority is not null)
         {
             if (!RequisitionPriorities.All.Contains(priority)) return (null, new("PR-ERR-030", "Prioridade inválida."));
+            if (UrgencyError(priority, urgencyReason ?? pr!.UrgencyReason, urgencyImpact ?? pr!.UrgencyImpact) is { } urgencyError)
+                return (null, urgencyError);
             pr!.Priority = priority;
+            if (priority != "URGENT") { pr.UrgencyReason = null; pr.UrgencyImpact = null; }
         }
+        if (urgencyReason is not null && pr!.Priority == "URGENT") pr.UrgencyReason = Clean(urgencyReason);
+        if (urgencyImpact is not null && pr!.Priority == "URGENT") pr.UrgencyImpact = Clean(urgencyImpact);
         if (clearNeededBy) pr!.NeededBy = null;
         else if (neededBy is not null) pr!.NeededBy = neededBy;
 

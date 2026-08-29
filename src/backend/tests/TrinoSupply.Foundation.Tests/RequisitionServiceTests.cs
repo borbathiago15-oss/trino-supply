@@ -27,6 +27,58 @@ public class RequisitionServiceTests
 
     private static readonly ItemInput Notebook = new("Notebook 14\" i7", 10, "UN", 1523.06m, null);
 
+    // ---- urgência justificada (V2-P1) ---------------------------------------
+
+    /// <summary>Compra urgente sem dizer o porquê e o impacto não entra (PR-ERR-050).</summary>
+    [Fact]
+    public async Task Urgente_exige_justificativa_e_impacto()
+    {
+        var (svc, _, _) = Build();
+
+        var (semNada, e1) = await svc.CreateAsync(Ana, "Peça quebrou", "CC-01", "URGENT", null, [Notebook]);
+        Assert.Null(semNada);
+        Assert.Equal("PR-ERR-050", e1!.Code);
+
+        var (soMotivo, e2) = await svc.CreateAsync(Ana, "Peça quebrou", "CC-01", "URGENT", null, [Notebook],
+            header: new RequisitionService.ScHeaderInput(null, null, null, null, "linha parada", null));
+        Assert.Null(soMotivo);
+        Assert.Equal("PR-ERR-050", e2!.Code);
+
+        var (ok, e3) = await svc.CreateAsync(Ana, "Peça quebrou", "CC-01", "URGENT", null, [Notebook],
+            header: new RequisitionService.ScHeaderInput(null, null, null, null,
+                "linha parada na obra", "multa contratual por atraso"));
+        Assert.Null(e3);
+        Assert.Equal("linha parada na obra", ok!.UrgencyReason);
+        Assert.Equal("multa contratual por atraso", ok.UrgencyImpact);
+
+        // normal não exige nada e não guarda urgência
+        var (normal, e4) = await svc.CreateAsync(Ana, "Reposição", "CC-01", "NORMAL", null, [Notebook],
+            header: new RequisitionService.ScHeaderInput(null, null, null, null, "ignorado", "ignorado"));
+        Assert.Null(e4);
+        Assert.Null(normal!.UrgencyReason);
+    }
+
+    [Fact]
+    public async Task Elevar_para_urgente_na_edicao_exige_os_campos()
+    {
+        var (svc, _, _) = Build();
+        var (pr, _) = await svc.CreateAsync(Ana, "Reposição", "CC-01", "NORMAL", null, [Notebook]);
+
+        var (_, semCampos) = await svc.UpdateHeaderAsync(Ana, pr!.Id, null, null, "URGENT", null, false);
+        Assert.Equal("PR-ERR-050", semCampos!.Code);
+
+        var (elevada, ok) = await svc.UpdateHeaderAsync(Ana, pr.Id, null, null, "URGENT", null, false,
+            "cliente exigiu antecipação", "perda do contrato");
+        Assert.Null(ok);
+        Assert.Equal("URGENT", elevada!.Priority);
+        Assert.Equal("cliente exigiu antecipação", elevada.UrgencyReason);
+
+        // voltar para normal limpa a urgência
+        var (normal, _) = await svc.UpdateHeaderAsync(Ana, pr.Id, null, null, "NORMAL", null, false);
+        Assert.Null(normal!.UrgencyReason);
+        Assert.Null(normal.UrgencyImpact);
+    }
+
     private static (RequisitionService svc, AppDbContext db, FixedTimeProvider clock) Build()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()

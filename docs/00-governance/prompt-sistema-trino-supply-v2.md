@@ -1,6 +1,8 @@
 # PROMPT OFICIAL V2 — TRINO SUPPLY
 
-> **Status: PROPOSTA — substitui o `prompt-sistema-trino-supply.md` somente após validação.**
+> **Status: OFICIAL — aprovado pelo responsável do produto em 2026-08-29.**
+> Substitui o `prompt-sistema-trino-supply.md` como especificação de referência; a aprovação
+> cobre também a generalização da regra 1 (cotação a partir de itens de várias SCs — §8/§20-1).
 > Construído como **superconjunto** do documento oficial atual: tudo o que existe está preservado;
 > as evoluções aprovadas na `analise-evolucao-trino-supply.md` entram marcadas com a prioridade.
 >
@@ -494,5 +496,6 @@ contrato/certidão → dashboards novos → insights → limite de alçada.
 
 ---
 
-*V2 proposto em 2026-08-29. Substitui o `prompt-sistema-trino-supply.md` somente após validação
-do responsável pelo produto — em particular da única alteração de regra existente (§8/§20-1).*
+*V2 aprovado em 2026-08-29. Fase 1 (P1) implementada na mesma data: urgência justificada
+(PR-ERR-050), aging na Gestão de Solicitações e OTIF (data prometida + consolidação por
+fornecedor no dashboard).*

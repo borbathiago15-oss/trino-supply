@@ -154,6 +154,9 @@ public class InsightsService(AppDbContext db, ComplianceService compliance, Time
             closedProcesses = quotes.Count(q => q.Status == QuotationStatus.PoIssued),
             savingTotal = quotes.Sum(q => q.SavingValue ?? 0),
             referenceSavingTotal = pos.Sum(o => o.Items.Sum(i => i.ReferenceSaving ?? 0)),
+            // cost avoidance (V2-P4): reajustes pleiteados × fechados, congelados no registro
+            costAvoidanceTotal = await db.ContractAdjustments
+                .Where(a => a.CreatedAt >= from).SumAsync(a => a.CostAvoidance, ct),
             otifPercent = otifMedidas.Count > 0
                 ? Math.Round(otifMedidas.Count(o => o.Otif == true) * 100.0 / otifMedidas.Count, 1) : (double?)null,
             complianceAverage = cp.AverageScore,

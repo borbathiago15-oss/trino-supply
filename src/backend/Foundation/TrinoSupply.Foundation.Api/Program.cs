@@ -1266,6 +1266,38 @@ sup.MapPut("/{id:guid}/contract", async (Guid id, SupplierContractRequest body, 
         : Ok(SupplierView(supplier!), ctx);
 });
 
+// pleito de reajuste do contrato (V2-P4 — Cost Avoidance): registro imutável do custo evitado
+static object AdjustmentView(ContractAdjustment a) => new
+{
+    id = a.Id, requestedPercent = a.RequestedPercent, agreedPercent = a.AgreedPercent,
+    baseValue = a.BaseValue, costAvoidance = a.CostAvoidance, appliedToPrices = a.AppliedToPrices,
+    notes = a.Notes, createdByLabel = a.CreatedByLabel, createdAt = a.CreatedAt,
+};
+
+sup.MapPost("/{id:guid}/contract/adjustments", async (Guid id, ContractAdjustmentRequest body,
+    SupplierService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    var role = RoleOf(p);
+    var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+    var (adj, error) = await svc.RegisterContractAdjustmentAsync(
+        actor, id, body.RequestedPercent ?? 0, body.AgreedPercent ?? 0, body.Notes, body.ApplyToPrices == true);
+    return error is not null
+        ? Error(ctx, error.Code switch { "SUP-ERR-404" => 404, "CT-ERR-900" => 403, _ => 422 }, error.Code, error.Message)
+        : Results.Json(new { data = AdjustmentView(adj!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+});
+
+sup.MapGet("/{id:guid}/contract/adjustments", async (Guid id, SupplierService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!SupplierService.CanView(RoleOf(p)))
+        return Error(ctx, 403, "SUP-ERR-900", "Seu papel não acessa contratos de fornecedor.");
+    var items = await svc.ContractAdjustmentsAsync(id);
+    return Ok(new
+    {
+        items = items.Select(AdjustmentView),
+        costAvoidanceTotal = items.Sum(a => a.CostAvoidance),
+    }, ctx);
+});
+
 // homologação do fornecedor: decisão do gestor de suprimentos (V2-P2)
 sup.MapPatch("/{id:guid}/homologation", async (Guid id, HomologationRequest body, SupplierService svc,
     ClaimsPrincipal p, HttpContext ctx) =>
@@ -2525,6 +2557,8 @@ public record SupplierContractItemRequest(Guid? CatalogItemId, string? Descripti
     string? UnitOfMeasure, decimal UnitPrice, string? PaymentTerms, int? PaymentDays, int? DeliveryDays, string? Notes);
 public record SupplierContractRequest(string? Number, DateOnly? ValidFrom, DateOnly? ValidUntil, string? Notes,
     List<SupplierContractItemRequest>? Items, decimal? ValueLimit = null);
+public record ContractAdjustmentRequest(decimal? RequestedPercent, decimal? AgreedPercent, string? Notes,
+    bool? ApplyToPrices = null);
 public record CreateSupplierRequest(string LegalName, string? TradeName, string TaxId, string? Email, string? Phone);
 public record UpdateSupplierRequest(string? TradeName, string? Email, string? Phone, bool? Active);
 public record PoItemRequest(string Description, decimal Quantity, string? UnitOfMeasure, decimal? UnitPrice, Guid? CatalogItemId);

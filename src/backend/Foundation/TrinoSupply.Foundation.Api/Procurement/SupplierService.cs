@@ -212,6 +212,61 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
         return (await db.Suppliers.Include(s => s.ContractItems).SingleAsync(s => s.Id == id, ct), null);
     }
 
+    // ==== pleito de reajuste do contrato (V2-P4 — Cost Avoidance) =================
+
+    /// <summary>
+    /// Registra o pleito de reajuste: o fornecedor pediu X%, fechou em Y%. O custo evitado
+    /// ((X−Y)% sobre o consumo dos últimos 12 meses) é CONGELADO no registro — imutável.
+    /// Opcionalmente aplica o % aceito aos preços dos produtos do contrato.
+    /// </summary>
+    public async Task<(ContractAdjustment? adjustment, UserError? error)> RegisterContractAdjustmentAsync(
+        Actor actor, Guid supplierId, decimal requestedPercent, decimal agreedPercent,
+        string? notes, bool applyToPrices, CancellationToken ct = default)
+    {
+        if (!CanMaintain(actor.Role))
+            return (null, new("CT-ERR-900", "Seu papel não registra reajustes de contrato."));
+        if (requestedPercent <= 0 || requestedPercent > 500)
+            return (null, new("CT-ERR-020", "Informe o percentual pleiteado pelo fornecedor (maior que zero)."));
+        if (agreedPercent < 0 || agreedPercent > requestedPercent)
+            return (null, new("CT-ERR-021", "O percentual aceito vai de 0 até o pleiteado — acima disso não há custo evitado."));
+
+        var supplier = await db.Suppliers.Include(s => s.ContractItems)
+            .SingleOrDefaultAsync(s => s.Id == supplierId, ct);
+        if (supplier is null) return (null, new("SUP-ERR-404", "Fornecedor não encontrado."));
+        if (supplier.ContractItems.Count == 0)
+            return (null, new("CT-ERR-022", "Cadastre o contrato de parceria (com produtos) antes de registrar reajuste."));
+
+        var now = clock.GetUtcNow();
+        var base12m = await db.PurchaseOrders
+            .Where(o => o.SupplierId == supplierId && o.Status != PurchaseOrderStatus.Cancelled
+                        && o.CreatedAt >= now.AddMonths(-12))
+            .SumAsync(o => o.TotalValue, ct);
+        var adjustment = new ContractAdjustment
+        {
+            SupplierId = supplierId,
+            RequestedPercent = requestedPercent,
+            AgreedPercent = agreedPercent,
+            BaseValue = base12m,
+            CostAvoidance = Math.Round((requestedPercent - agreedPercent) / 100m * base12m, 2),
+            AppliedToPrices = applyToPrices && agreedPercent > 0,
+            Notes = Clean(notes),
+            CreatedBy = actor.Id,
+            CreatedByLabel = actor.Label,
+            CreatedAt = now,
+        };
+        db.ContractAdjustments.Add(adjustment);
+        if (adjustment.AppliedToPrices)
+            foreach (var item in supplier.ContractItems)
+                item.UnitPrice = Math.Round(item.UnitPrice * (1 + agreedPercent / 100m), 4);
+        supplier.UpdatedAt = now;
+        await db.SaveChangesAsync(ct);
+        return (adjustment, null);
+    }
+
+    public Task<List<ContractAdjustment>> ContractAdjustmentsAsync(Guid supplierId, CancellationToken ct = default) =>
+        db.ContractAdjustments.Where(a => a.SupplierId == supplierId)
+            .OrderByDescending(a => a.CreatedAt).Take(50).ToListAsync(ct);
+
     private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
     // ---- Portal do Fornecedor (RFQ-001 §5) ----------------------------------

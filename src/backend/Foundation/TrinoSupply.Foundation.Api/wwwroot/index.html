@@ -4532,11 +4532,11 @@
           ['Saldo disponível', money(tetoTotal - consumido), tetoTotal > 0 ? Math.round(consumido * 100 / tetoTotal) + '% consumido' : '—'],
         ].map(([l, v, d]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="d flat">${d}</div></div>`).join('');
         $('contracts-list').innerHTML = comContrato.length
-          ? '<table><thead><tr><th>Fornecedor</th><th>Contrato</th><th>Vigência</th><th>Produtos</th><th>Teto</th><th>Consumido</th><th>Saldo</th><th>Situação</th></tr></thead><tbody>' +
+          ? '<table><thead><tr><th>Fornecedor</th><th>Contrato</th><th>Vigência</th><th>Produtos</th><th>Teto</th><th>Consumido</th><th>Saldo</th><th>Situação</th><th>Reajuste</th></tr></thead><tbody>' +
             comContrato.map(s => {
               const c = s.contract;
               const pct = c.valueLimit ? Math.min(100, Math.round((c.consumed || 0) * 100 / c.valueLimit)) : null;
-              return `<tr>
+              return `<tr data-sup="${s.id}" data-name="${escapeHtml(s.legalName)}">
                 <td>${escapeHtml(s.legalName)}</td>
                 <td>${escapeHtml(c.number || '—')}</td>
                 <td class="sub">${c.validFrom ? new Date(c.validFrom).toLocaleDateString('pt-BR') : '—'} → ${c.validUntil ? new Date(c.validUntil).toLocaleDateString('pt-BR') : '—'}</td>
@@ -4545,11 +4545,42 @@
                 <td>${c.valueLimit != null ? money(c.consumed || 0) + (pct != null ? ` <span class="sub">(${pct}%)</span>` : '') : '—'}</td>
                 <td>${c.balance != null ? `<strong${c.balance < (c.valueLimit || 0) * 0.2 ? ' style="color:var(--danger)"' : ''}>${money(c.balance)}</strong>` : '—'}</td>
                 <td><span class="badge ${c.current ? 'on' : 'off'}">${c.current ? 'VIGENTE' : 'FORA DA VIGÊNCIA'}</span></td>
+                <td class="row-actions">
+                  <button class="secondary" data-act="ct-adjust">Registrar reajuste</button>
+                  <button class="secondary" data-act="ct-adjust-history">Histórico</button>
+                </td>
               </tr>`;
             }).join('') + '</tbody></table>'
           : '<p class="hello">Nenhum contrato de parceria cadastrado. Cadastre em Cadastros → Fornecedores → Contrato.</p>';
       } catch (err) { $('contracts-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
+    // pleito de reajuste (V2-P4 — cost avoidance): pediu X%, fechou Y%; o evitado fica congelado
+    $('contracts-list').addEventListener('click', async (ev) => {
+      const btn = ev.target.closest('button[data-act]');
+      if (!btn) return;
+      const row = btn.closest('tr');
+      try {
+        if (btn.dataset.act === 'ct-adjust') {
+          const pedido = parseFloat(prompt(`Reajuste pleiteado por ${row.dataset.name} (%):`) || '');
+          if (!pedido) return;
+          const aceito = parseFloat(prompt('Percentual fechado na negociação (%): 0 = reajuste totalmente evitado') ?? '');
+          if (isNaN(aceito)) return;
+          const aplicar = aceito > 0 && confirm('Aplicar o % fechado aos preços dos produtos do contrato?');
+          const notes = prompt('Observação (opcional):') || null;
+          const a = await api(`/api/v1/suppliers/${row.dataset.sup}/contract/adjustments`, { method: 'POST', body: {
+            requestedPercent: pedido, agreedPercent: aceito, notes, applyToPrices: aplicar } });
+          toast(`Reajuste registrado — custo evitado de ${money(a.costAvoidance)} (base 12m ${money(a.baseValue)}).`, 'ok');
+          LOADERS['contracts']();
+        } else if (btn.dataset.act === 'ct-adjust-history') {
+          const r = await api(`/api/v1/suppliers/${row.dataset.sup}/contract/adjustments`);
+          alert(r.items.length
+            ? `Reajustes de ${row.dataset.name} — custo evitado total ${money(r.costAvoidanceTotal)}\n\n` +
+              r.items.map(a => `${new Date(a.createdAt).toLocaleDateString('pt-BR')}: pleiteado ${a.requestedPercent}% → fechado ${a.agreedPercent}%` +
+                ` · evitado ${money(a.costAvoidance)}${a.appliedToPrices ? ' · preços reajustados' : ''} (${a.createdByLabel})`).join('\n')
+            : 'Nenhum reajuste registrado para este contrato.');
+        }
+      } catch (err) { toast(err.message, 'error'); }
+    });
 
     // ============ GESTÃO: INSIGHTS & EXECUTIVO (V2-P3) ============
     const INS_SEV = { alta: 'off', media: 'warn', info: '' };
@@ -4562,6 +4593,7 @@
           ['Processos', fmtInt(ex.processes), `${fmtInt(ex.closedProcesses)} com O.C. registrada`],
           ['Saving negociado', money(ex.savingTotal), 'ganho de negociação'],
           ['Saving de referência', money(ex.referenceSavingTotal), 'vs último preço pago'],
+          ['Cost avoidance', money(ex.costAvoidanceTotal || 0), 'reajustes evitados no contrato'],
           ['OTIF médio', ex.otifPercent != null ? ex.otifPercent + '%' : '—', 'entregas medidas'],
           ['Compliance médio', ex.complianceAverage != null ? ex.complianceAverage : '—', 'score dos processos'],
         ].map(([l, v, d]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="d flat">${d}</div></div>`).join('');

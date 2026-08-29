@@ -421,15 +421,28 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
         };
     }
 
+    /// <summary>Linha do scorecard — tipada para o mapa multicritério e os testes reutilizarem.</summary>
+    public record ScorecardRow(
+        Guid SupplierId, string SupplierName, string? Homologation,
+        double? Score, string? Grade,
+        double? OtifPercent, int OtifMeasured, double? QualityPercent,
+        decimal DeliveredQuantity, decimal RejectedQuantity,
+        double? WinRatePercent, int Proposals, int Wins, int Orders, decimal TotalValue,
+        int RiskScore, string RiskLevel, IReadOnlyList<string> RiskFactors);
+
     /// <summary>
     /// Scorecard de fornecedores (V2-P3 §14): classes A/B/C/D na janela, derivadas de
     /// OTIF (peso 50), qualidade = 1 − devolvido/entregue (peso 30) e competitividade =
     /// vitórias/participações em cotações (peso 20). Componentes sem medição saem da conta
     /// (os pesos são renormalizados) — nada é persistido, nada bloqueia.
+    /// (V2-P4) Cada linha ganha o risco interno: sinais do próprio sistema — homologação,
+    /// certidões, contrato, OTIF, qualidade e concentração; dependência financeira (dado
+    /// externo) fica fora, como a análise previu.
     /// </summary>
-    public async Task<object> SupplierScorecardAsync(int monthsBack, CancellationToken ct = default)
+    public async Task<List<ScorecardRow>> ScorecardRowsAsync(int monthsBack, CancellationToken ct = default)
     {
         var now = clock.GetUtcNow();
+        var today = DateOnly.FromDateTime(now.UtcDateTime);
         var from = now.AddMonths(-Math.Clamp(monthsBack, 1, 36));
 
         var pos = await db.PurchaseOrders.Include(o => o.Items)
@@ -442,11 +455,14 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
             .Where(q => q.SelectedAt >= from && q.WinnerSupplierId != null
                         && q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected)
             .Select(q => new { SupplierId = q.WinnerSupplierId!.Value, q.Id }).ToListAsync(ct);
-        var suppliers = await db.Suppliers.ToDictionaryAsync(s => s.Id, ct);
+        var suppliers = await db.Suppliers.Include(s => s.Documents)
+            .ToDictionaryAsync(s => s.Id, ct);
+        var spendTotal = pos.Sum(o => o.TotalValue);
+        var fornecedoresDistintos = pos.Select(o => o.SupplierId).Distinct().Count();
 
         var ids = pos.Select(o => o.SupplierId)
             .Concat(proposals.Select(p => p.SupplierId)).Distinct().ToList();
-        var rows = new List<(double? score, object view)>();
+        var rows = new List<ScorecardRow>();
         foreach (var sid in ids)
         {
             suppliers.TryGetValue(sid, out var sup);
@@ -476,28 +492,48 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
             var classe = score is null ? null
                 : score >= 90 ? "A" : score >= 75 ? "B" : score >= 60 ? "C" : "D";
 
-            rows.Add((score, new
+            // risco interno (V2-P4): sinais do próprio sistema, cada um com o motivo
+            var risco = 0;
+            var fatores = new List<string>();
+            void Fator(int pontos, string motivo) { risco += pontos; fatores.Add($"{motivo} (+{pontos})"); }
+            if (sup is not null)
             {
-                supplierId = sid,
-                supplierName = sup?.TradeName ?? sup?.LegalName ?? "—",
-                homologation = sup?.HomologationStatus,
-                score, grade = classe,
-                otifPercent = otif is null ? (double?)null : Math.Round(otif.Value, 1),
-                otifMeasured = medidas.Count,
-                qualityPercent = qualidade is null ? (double?)null : Math.Round(qualidade.Value, 1),
-                deliveredQuantity = entregue, rejectedQuantity = devolvido,
-                winRatePercent = competitividade is null ? (double?)null : Math.Round(competitividade.Value, 1),
-                proposals = participacoes, wins = vitorias,
-                orders = minhasPos.Count,
-                totalValue = minhasPos.Sum(o => o.TotalValue),
-            }));
+                var situacao = sup.EffectiveHomologation(today);
+                if (situacao == SupplierHomologation.Bloqueado) Fator(40, "homologação BLOQUEADA");
+                else if (situacao == SupplierHomologation.Restrito) Fator(20, "homologação RESTRITA");
+                else if (situacao != SupplierHomologation.Homologado) Fator(10, $"homologação {situacao}");
+                if (sup.Documents.Any(d => d.ValidUntil < today)) Fator(30, "certidão vencida");
+                if (sup.ContractNumber is not null && sup.ContractValidUntil is { } fim)
+                {
+                    if (fim < today) Fator(10, "contrato vencido");
+                    else if (fim <= today.AddDays(30)) Fator(10, "contrato vencendo em 30 dias");
+                }
+            }
+            if (otif is { } o2 && o2 < 70 && medidas.Count >= 2) Fator(20, $"OTIF baixo ({Math.Round(o2, 1)}%)");
+            if (qualidade is { } q2 && q2 < 90) Fator(15, $"qualidade baixa ({Math.Round(q2, 1)}%)");
+            var minhaFatia = spendTotal > 0 ? (double)(minhasPos.Sum(o => o.TotalValue) * 100 / spendTotal) : 0;
+            if (minhaFatia >= 40 && fornecedoresDistintos > 1)
+                Fator(15, $"concentração ({Math.Round(minhaFatia, 1)}% do spend)");
+            risco = Math.Min(100, risco);
+
+            rows.Add(new ScorecardRow(
+                sid, sup?.TradeName ?? sup?.LegalName ?? "—", sup?.HomologationStatus,
+                score, classe,
+                otif is null ? null : Math.Round(otif.Value, 1), medidas.Count,
+                qualidade is null ? null : Math.Round(qualidade.Value, 1),
+                entregue, devolvido,
+                competitividade is null ? null : Math.Round(competitividade.Value, 1),
+                participacoes, vitorias, minhasPos.Count, minhasPos.Sum(o => o.TotalValue),
+                risco, risco >= 50 ? "ALTO" : risco >= 20 ? "MEDIO" : "BAIXO", fatores));
         }
-        return new
-        {
-            months = Math.Clamp(monthsBack, 1, 36),
-            items = rows.OrderByDescending(r => r.score ?? -1).Select(r => r.view).ToList(),
-        };
+        return rows.OrderByDescending(r => r.Score ?? -1).ToList();
     }
+
+    public async Task<object> SupplierScorecardAsync(int monthsBack, CancellationToken ct = default) => new
+    {
+        months = Math.Clamp(monthsBack, 1, 36),
+        items = await ScorecardRowsAsync(monthsBack, ct),
+    };
 
     public async Task<object> StockAsync(Guid? locationId, string? family, int monthsBack, CancellationToken ct = default)
     {

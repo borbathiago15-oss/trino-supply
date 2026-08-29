@@ -4274,6 +4274,10 @@
       if (q.purchaseOrderId)
         html += '<div class="panel" id="rfq-po"><h2>O.C., faturamento e entrega</h2><p class="hello">Carregando…</p></div>';
 
+      // score multicritério informativo (V2-P4, decisão C5): compara, nunca decide
+      if (latest.length >= 2)
+        html += '<div class="panel" id="rfq-score" hidden></div>';
+
       // selo de compliance (V2 §14): quem tem o módulo vê o score e as penalidades do processo
       if (canViewCompliance() && hasModule('COMPLIANCE'))
         html += '<div class="panel" id="rfq-compliance" hidden></div>';
@@ -4283,6 +4287,21 @@
       $('rfq-lists').hidden = true;
       $('rfq-detail').hidden = false;
       $('rfq-detail').innerHTML = html;
+      if (latest.length >= 2)
+        api(`/api/v1/quotations/${q.id}/score-map`).then(r => {
+          if (!r.items.length) return;
+          const c = (v) => v == null ? '<span class="sub">—</span>' : v;
+          $('rfq-score').hidden = false;
+          $('rfq-score').innerHTML = '<h2>Score multicritério (informativo)</h2>' +
+            `<p class="hello">${escapeHtml(r.note)}</p>` +
+            '<div class="tablewrap"><table><thead><tr><th>Fornecedor</th><th>Score</th><th>Preço (40)</th><th>Prazo entrega (20)</th><th>Prazo pgto (10)</th><th>OTIF (20)</th><th>Risco (10)</th></tr></thead><tbody>' +
+            r.items.map((s, i) => `<tr>
+              <td>${escapeHtml(s.supplierName)}${i === 0 ? ' <span class="badge on">melhor score</span>' : ''}</td>
+              <td><strong>${s.score}</strong></td>
+              <td>${c(s.pricePct)}</td><td>${c(s.deliveryPct)}</td><td>${c(s.paymentPct)}</td>
+              <td>${c(s.otifPct)}</td><td>${c(s.riskPct)}</td>
+            </tr>`).join('') + '</tbody></table></div>';
+        }).catch(() => {});
       if (canViewCompliance() && hasModule('COMPLIANCE'))
         api('/api/v1/analytics/compliance?quotationId=' + q.id).then(r => {
           const row = r.items[0];
@@ -4623,12 +4642,15 @@
       try {
         const r = await api('/api/v1/analytics/supplier-scorecard?months=' + $('sc-months').value);
         const pct = (v) => v == null ? '<span class="sub">sem medição</span>' : v + '%';
+        const RISK_CLS = { BAIXO: 'on', MEDIO: 'warn', ALTO: 'off' };
         $('scorecard-list').innerHTML = r.items.length
-          ? '<table><thead><tr><th>Fornecedor</th><th>Classe</th><th>Score</th><th>OTIF</th><th>Qualidade</th><th>Competitividade</th><th>O.C.s</th><th>Valor comprado</th></tr></thead><tbody>' +
+          ? '<table><thead><tr><th>Fornecedor</th><th>Classe</th><th>Score</th><th>Risco</th><th>OTIF</th><th>Qualidade</th><th>Competitividade</th><th>O.C.s</th><th>Valor comprado</th></tr></thead><tbody>' +
             r.items.map(s => `<tr>
               <td>${escapeHtml(s.supplierName)}</td>
               <td>${s.grade ? `<span class="badge ${GRADE_CLS[s.grade] || ''}" style="font-size:14px;font-weight:800">${s.grade}</span>` : '<span class="sub">—</span>'}</td>
               <td>${s.score != null ? s.score : '<span class="sub">sem medição</span>'}</td>
+              <td><span class="badge ${RISK_CLS[s.riskLevel] || ''}" title="${escapeHtml((s.riskFactors || []).join(' · '))}">${s.riskLevel} ${s.riskScore}</span>
+                  ${(s.riskFactors || []).length ? `<div class="sub" style="white-space:normal;max-width:220px">${escapeHtml(s.riskFactors.join(' · '))}</div>` : ''}</td>
               <td>${pct(s.otifPercent)}${s.otifMeasured ? `<div class="sub">${fmtInt(s.otifMeasured)} entrega(s) medida(s)</div>` : ''}</td>
               <td>${pct(s.qualityPercent)}${s.rejectedQuantity > 0 ? `<div class="sub">${fmtInt(s.rejectedQuantity)} devolvido(s) de ${fmtInt(s.deliveredQuantity)}</div>` : ''}</td>
               <td>${pct(s.winRatePercent)}<div class="sub">${fmtInt(s.wins)} vitória(s) em ${fmtInt(s.proposals)} cotação(ões)</div></td>

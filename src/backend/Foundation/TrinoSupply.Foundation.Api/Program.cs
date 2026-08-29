@@ -1764,6 +1764,17 @@ analytics.MapGet("/insights", async (TrinoSupply.Foundation.Api.Insights.Insight
     return Ok(await svc.ReportAsync(months ?? 6), ctx);
 });
 
+// TCO por produto (V2-P4): custo total de aquisição com frete/impostos rateados
+analytics.MapGet("/tco", async (TrinoSupply.Foundation.Api.Analytics.AnalyticsService svc,
+    ClaimsPrincipal p, HttpContext ctx, int? months) =>
+{
+    if (!TrinoSupply.Foundation.Api.Insights.InsightsService.CanView(RoleOf(p)))
+        return Error(ctx, 403, "INS-ERR-900", "Seu papel não acessa o painel de TCO.");
+    if (!ModulesOf(p).Contains(AppModules.Insights))
+        return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para este módulo.");
+    return Ok(await svc.TcoAsync(months ?? 6), ctx);
+});
+
 // Scorecard de fornecedores (V2-P3): classes A/B/C/D por OTIF + qualidade + competitividade
 analytics.MapGet("/supplier-scorecard", async (TrinoSupply.Foundation.Api.Analytics.AnalyticsService svc,
     ClaimsPrincipal p, HttpContext ctx, int? months) =>

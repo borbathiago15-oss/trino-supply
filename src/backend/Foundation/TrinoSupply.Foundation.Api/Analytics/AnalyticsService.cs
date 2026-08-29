@@ -325,7 +325,7 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
                 .GroupBy(r => r.AssignedToLabel!)
                 .Select(g => new { Label = g.Key, Count = g.Count() }).ToListAsync(ct))
             .ToDictionary(x => x.Label, x => x.Count);
-        var buyerPanel = windowQuotes.GroupBy(q => q.CreatedByLabel)
+        var buyerRaw = windowQuotes.GroupBy(q => q.CreatedByLabel)
             .Select(g =>
             {
                 var comOc = g.Where(q => q.PurchaseOrderId is not null
@@ -348,6 +348,16 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
                 };
             })
             .OrderByDescending(b => b.poValue).ToList();
+        // score composto do comprador (V2-P4, item 28): informativo, relativo ao período
+        var compostos = BuyerScore.Compute(buyerRaw
+                .Select(b => new BuyerInput(b.label, b.otifPercent, b.avgDaysToPo, b.savingTotal, b.poValue)).ToList())
+            .ToDictionary(r => r.Label);
+        var buyerPanel = buyerRaw.Select(b => new
+        {
+            b.label, b.processes, b.closed, b.savingTotal, b.poValue,
+            b.avgDaysToPo, b.backlog, b.otifPercent,
+            compositeScore = compostos.TryGetValue(b.label, out var cs) ? cs.Score : null,
+        }).ToList();
 
         // ---- opções de filtro (para os selects da UI) ---------------------------
         var filterOptions = new
@@ -534,6 +544,63 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
         months = Math.Clamp(monthsBack, 1, 36),
         items = await ScorecardRowsAsync(monthsBack, ct),
     };
+
+    /// <summary>
+    /// TCO por produto (V2-P4, item 23): custo total de aquisição no período. O extra de cada
+    /// O.C. (frete + impostos + outros − desconto, já embutidos no total) é rateado entre os
+    /// itens proporcionalmente ao valor; o TCO unitário compara com o preço unitário puro.
+    /// </summary>
+    public async Task<object> TcoAsync(int monthsBack, CancellationToken ct = default)
+    {
+        var now = clock.GetUtcNow();
+        var from = now.AddMonths(-Math.Clamp(monthsBack, 1, 36));
+        var pos = await db.PurchaseOrders.Include(o => o.Items)
+            .Where(o => o.CreatedAt >= from && o.Status != PurchaseOrderStatus.Cancelled)
+            .OrderByDescending(o => o.CreatedAt).Take(Cap).ToListAsync(ct);
+
+        var acumulado = new Dictionary<Guid, (decimal qty, decimal itens, decimal extras, int orders)>();
+        foreach (var o in pos)
+        {
+            var somaItens = o.Items.Sum(i => (i.UnitPrice ?? 0) * i.Quantity);
+            if (somaItens <= 0) continue;
+            var extra = o.TotalValue - somaItens;   // frete + impostos + outros − desconto
+            foreach (var i in o.Items.Where(i => i.CatalogItemId is not null && i.UnitPrice > 0))
+            {
+                var valor = i.UnitPrice!.Value * i.Quantity;
+                var rateio = extra * (valor / somaItens);
+                var atual = acumulado.GetValueOrDefault(i.CatalogItemId!.Value);
+                acumulado[i.CatalogItemId.Value] =
+                    (atual.qty + i.Quantity, atual.itens + valor, atual.extras + rateio, atual.orders + 1);
+            }
+        }
+
+        var ids = acumulado.Keys.ToList();
+        var catalogo = await db.CatalogItems.Where(c => ids.Contains(c.Id))
+            .Select(c => new { c.Id, c.Code, c.Description, c.Family, c.UnitOfMeasure }).ToListAsync(ct);
+        var categoria = (await db.ProductFamilies.Select(f => new { f.Name, f.Category }).ToListAsync(ct))
+            .ToDictionary(x => x.Name, x => x.Category, StringComparer.OrdinalIgnoreCase);
+        var items = catalogo.Select(c =>
+        {
+            var (qty, itens, extras, orders) = acumulado[c.Id];
+            var total = itens + extras;
+            return new
+            {
+                catalogItemId = c.Id, code = c.Code, description = c.Description,
+                family = c.Family,
+                category = categoria.TryGetValue(c.Family, out var cat) && !string.IsNullOrWhiteSpace(cat)
+                    ? cat : null,
+                unitOfMeasure = c.UnitOfMeasure,
+                quantity = qty, orders,
+                itemsValue = Math.Round(itens, 2), extrasValue = Math.Round(extras, 2),
+                tcoTotal = Math.Round(total, 2),
+                unitPriceAvg = qty > 0 ? Math.Round(itens / qty, 4) : 0,
+                tcoUnitAvg = qty > 0 ? Math.Round(total / qty, 4) : 0,
+                extrasPercent = total != 0 ? Math.Round((double)(extras * 100 / total), 1) : 0,
+            };
+        }).OrderByDescending(x => x.tcoTotal).Take(100).ToList();
+
+        return new { months = Math.Clamp(monthsBack, 1, 36), items };
+    }
 
     public async Task<object> StockAsync(Guid? locationId, string? family, int monthsBack, CancellationToken ct = default)
     {

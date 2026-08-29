@@ -321,6 +321,40 @@ public class PurchaseOrderServiceTests
     }
 
     [Fact]
+    public async Task Devolucao_no_recebimento_exige_motivo_e_nao_entra_no_estoque_nem_no_recebido()
+    {
+        var w = await BuildAsync();
+        var (order, _) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null,
+            [new PoItemInput("Detergente neutro", 10, "UN", 3.5m, w.Detergente.Id)], null);
+        var itemId = order!.Items.Single().Id;
+
+        // devolver sem motivo não passa (PO-ERR-058)
+        var (_, semMotivo) = await w.Pos.RegisterDeliveryAsync(Otavio, order.Id, w.Local.Id,
+            [new PurchaseOrderService.ReceiptLine(itemId, 6, Rejected: 2)], false, null);
+        Assert.Equal("PO-ERR-058", semMotivo!.Code);
+
+        // 6 aceitos + 2 devolvidos: recebido = 6, devolvido = 2, saldo continua pendente (2)
+        var (entrega, e1) = await w.Pos.RegisterDeliveryAsync(Otavio, order.Id, w.Local.Id,
+            [new PurchaseOrderService.ReceiptLine(itemId, 6, Rejected: 2)], false, null,
+            rejectReason: "qualidade fora do padrão");
+        Assert.Null(e1);
+        var item = entrega!.Items.Single();
+        Assert.Equal(6m, item.ReceivedQuantity);
+        Assert.Equal(2m, item.RejectedQuantity);
+        Assert.Equal("qualidade fora do padrão", item.RejectionReason);
+        Assert.True(entrega.HasPendingDelivery);
+
+        // o estoque só recebeu o aceito
+        var saldo = await w.Db.StockBalances.SingleAsync(b => b.CatalogItemId == w.Detergente.Id);
+        Assert.Equal(6m, saldo.TotalQty);
+
+        // aceito + devolvido não podem passar do que falta (faltam 4)
+        var (_, excesso) = await w.Pos.RegisterDeliveryAsync(Otavio, order.Id, w.Local.Id,
+            [new PurchaseOrderService.ReceiptLine(itemId, 3, Rejected: 2)], false, null, rejectReason: "avaria");
+        Assert.Equal("PO-ERR-055", excesso!.Code);
+    }
+
+    [Fact]
     public void Status_do_processo_cobre_as_oito_situacoes_do_fluxo()
     {
         var pr = new PurchaseRequisition { Status = RequisitionStatus.Submitted };

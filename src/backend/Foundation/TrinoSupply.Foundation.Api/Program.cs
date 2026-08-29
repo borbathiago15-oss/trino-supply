@@ -1332,6 +1332,7 @@ static object PoView(PurchaseOrder o) => new
     {
         itemId = i.Id, description = i.Description, unitOfMeasure = i.UnitOfMeasure, quantity = i.Quantity,
         receivedQuantity = i.ReceivedQuantity, pendingQuantity = i.Quantity - i.ReceivedQuantity,
+        rejectedQuantity = i.RejectedQuantity, rejectionReason = i.RejectionReason,
         lastPaidUnitPrice = i.LastPaidUnitPrice, referenceSaving = i.ReferenceSaving,
         sourcePrNumber = i.SourcePrNumber ?? o.SourcePrNumber,
         unitPrice = i.UnitPrice, catalogCode = i.CatalogCode, catalogItemId = i.CatalogItemId,
@@ -1448,9 +1449,9 @@ pos.MapPost("/{id:guid}/deliveries", async (Guid id, DeliveryRequest body, Purch
     if (!PurchaseOrderService.CanManage(role) && !CanOperateStock(p))
         return Error(ctx, 403, "PO-ERR-900", "Seu usuário não confirma entregas.");
     var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
-    var lines = (body.Items ?? []).Select(i => new PurchaseOrderService.ReceiptLine(i.ItemId, i.Quantity)).ToList();
+    var lines = (body.Items ?? []).Select(i => new PurchaseOrderService.ReceiptLine(i.ItemId, i.Quantity, i.Rejected)).ToList();
     var (order, error) = await svc.RegisterDeliveryAsync(
-        actor, id, body.LocationId, lines, body.CloseRemaining == true, body.CloseReason);
+        actor, id, body.LocationId, lines, body.CloseRemaining == true, body.CloseReason, body.RejectReason);
     return error is not null
         ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, _ => 400 }, error.Code, error.Message)
         : Ok(PoView(order!), ctx);
@@ -1647,6 +1648,17 @@ analytics.MapGet("/supply", async (TrinoSupply.Foundation.Api.Analytics.Analytic
     var t = to ?? today;
     if (t < f) (f, t) = (t, f);
     return Ok(await svc.SupplyAsync(f, t, supplierId, buyerId, requesterId, family, costCenter, region, manager, client), ctx);
+});
+
+// Scorecard de fornecedores (V2-P3): classes A/B/C/D por OTIF + qualidade + competitividade
+analytics.MapGet("/supplier-scorecard", async (TrinoSupply.Foundation.Api.Analytics.AnalyticsService svc,
+    ClaimsPrincipal p, HttpContext ctx, int? months) =>
+{
+    if (!TrinoSupply.Foundation.Api.Analytics.AnalyticsService.CanViewSupply(RoleOf(p)))
+        return Error(ctx, 403, "AN-ERR-900", "Seu papel não acessa o scorecard de fornecedores.");
+    if (!ModulesOf(p).Contains(AppModules.Compras) && !ModulesOf(p).Contains(AppModules.Fornecedores))
+        return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para este módulo.");
+    return Ok(await svc.SupplierScorecardAsync(months ?? 6), ctx);
 });
 
 // Compliance Score (V2-P2 §14): derivado dos fatos do processo; mede e expõe, nunca bloqueia
@@ -2418,8 +2430,9 @@ public record MaterialLineRequest(Guid ItemId, decimal Quantity);
 public record ApproveMaterialRequest(List<MaterialLineRequest>? Items, string? Notes);
 public record ErpOrderRequest(string? ErpNumber, DateOnly? IssuedOn);
 public record InvoiceRequest(string? Number, DateOnly? IssuedOn, decimal? Value);
-public record DeliveryLineRequest(Guid ItemId, decimal Quantity);
-public record DeliveryRequest(Guid? LocationId, List<DeliveryLineRequest>? Items, bool? CloseRemaining, string? CloseReason);
+public record DeliveryLineRequest(Guid ItemId, decimal Quantity, decimal? Rejected = null);
+public record DeliveryRequest(Guid? LocationId, List<DeliveryLineRequest>? Items, bool? CloseRemaining, string? CloseReason,
+    string? RejectReason = null);
 public record EntryRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity, string OriginReference, string? Origin);
 public record IssueRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity, string OriginReference);
 public record MaterialItemRequest(Guid CatalogItemId, decimal Quantity);

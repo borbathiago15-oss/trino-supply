@@ -799,6 +799,22 @@
         </div>
       </section>
 
+      <!-- Compras: Scorecard de Fornecedores (V2-P3 — classes A/B/C/D) -->
+      <section class="view" id="view-scorecard">
+        <div class="panel">
+          <div class="topbar" style="margin-bottom:6px">
+            <h2 style="margin:0">Scorecard de Fornecedores</h2>
+            <select id="sc-months" style="width:auto">
+              <option value="3">Últimos 3 meses</option>
+              <option value="6" selected>Últimos 6 meses</option>
+              <option value="12">Últimos 12 meses</option>
+            </select>
+          </div>
+          <p class="hello">Classe derivada dos fatos do período: <strong>OTIF (peso 50)</strong> · <strong>qualidade = 1 − devolvido/entregue (peso 30)</strong> · <strong>competitividade = vitórias/participações (peso 20)</strong>. Componente sem medição sai da conta. A ≥ 90 · B ≥ 75 · C ≥ 60 · D &lt; 60.</p>
+          <div id="scorecard-list" class="tablewrap"></div>
+        </div>
+      </section>
+
       <!-- Gestão: Compliance Score (V2 §14 — mede, não bloqueia) -->
       <section class="view" id="view-compliance">
         <div class="panel">
@@ -1307,6 +1323,7 @@
         ]},
         { id: 'buy-orders', label: 'Pedidos de Compra', show: () => true },
         { id: 'contracts', label: 'Contratos', module: 'CONTRATOS', show: () => canBuy() || isAdmin() },
+        { id: 'scorecard', label: 'Scorecard de Fornecedores', show: () => canBuy() || canViewCompliance() },
       ]},
       { title: 'Cadastros', items: [
         { label: 'Produtos', children: [
@@ -1333,7 +1350,7 @@
       families: 'Famílias de Produtos',
       'supply-dash': 'Dashboard de Suprimentos', 'cost-centers': 'Centros de Custo',
       quotations: 'Processos de Cotação', company: 'Empresas do Grupo (CNPJs)',
-      compliance: 'Compliance',
+      compliance: 'Compliance', scorecard: 'Scorecard de Fornecedores',
     };
     const LOADERS = {};
     let currentView = 'supply-dash';
@@ -2275,15 +2292,20 @@
 
       // encerrado = entrega concluída ou saldo cancelado; aí o pedido não recebe mais nada
       const encerrado = !!o.deliveryCompletedAt || ['RECEBIDO', 'CANCELADO'].includes(o.status);
-      $('po-delivery-items').innerHTML = '<table><thead><tr><th>Item</th><th>Pedido</th><th>Recebido</th><th>Falta</th><th>Chegou agora</th></tr></thead><tbody>' +
+      $('po-delivery-items').innerHTML = '<table><thead><tr><th>Item</th><th>Pedido</th><th>Recebido</th><th>Devolvido</th><th>Falta</th><th>Chegou agora</th><th>Devolvido agora</th></tr></thead><tbody>' +
         o.items.map(i => `<tr data-item="${i.itemId}">
           <td>${i.catalogCode ? '[' + escapeHtml(i.catalogCode) + '] ' : ''}${escapeHtml(i.description)}</td>
           <td>${fmtInt(i.quantity)} ${escapeHtml(i.unitOfMeasure)}</td>
           <td>${fmtInt(i.receivedQuantity)}</td>
+          <td>${i.rejectedQuantity > 0 ? `<span class="badge warn" title="${escapeHtml(i.rejectionReason || '')}">${fmtInt(i.rejectedQuantity)}</span>` : '0'}</td>
           <td>${fmtInt(i.pendingQuantity)}</td>
           <td><input type="number" class="po-qty" min="0" step="0.01" max="${i.pendingQuantity}"
                      placeholder="0" style="width:90px" ${i.pendingQuantity > 0 && !encerrado ? '' : 'disabled'} /></td>
-        </tr>`).join('') + '</tbody></table>';
+          <td><input type="number" class="po-rej" min="0" step="0.01" max="${i.pendingQuantity}" title="Chegou mas foi recusado/devolvido ao fornecedor"
+                     placeholder="0" style="width:90px" ${i.pendingQuantity > 0 && !encerrado ? '' : 'disabled'} /></td>
+        </tr>`).join('') + '</tbody></table>' +
+        (encerrado ? '' : `<div style="margin-top:8px"><label for="po-reject-reason" class="sub">Motivo da devolução (obrigatório quando algo for devolvido)</label>
+          <input id="po-reject-reason" placeholder="ex.: qualidade fora do padrão, avaria no transporte, item divergente" /></div>`);
       $('po-loc').innerHTML = whLocations.length
         ? whLocations.map(l => `<option value="${l.id}">${escapeHtml(l.code)} — ${escapeHtml(l.name)}</option>`).join('')
         : '<option value="">(nenhum local cadastrado)</option>';
@@ -2326,16 +2348,25 @@
     async function enviarEntrega(closeRemaining) {
       if (!poOpenId) return;
       const items = [...$('po-delivery-items').querySelectorAll('tr[data-item]')]
-        .map(tr => ({ itemId: tr.dataset.item, quantity: parseFloat(tr.querySelector('.po-qty').value) || 0 }))
-        .filter(i => i.quantity > 0);
+        .map(tr => ({
+          itemId: tr.dataset.item,
+          quantity: parseFloat(tr.querySelector('.po-qty').value) || 0,
+          rejected: parseFloat((tr.querySelector('.po-rej') || {}).value) || 0,
+        }))
+        .filter(i => i.quantity > 0 || i.rejected > 0);
       if (!items.length && !closeRemaining) { toast('Informe o que chegou.', 'error'); return; }
       if (closeRemaining && !$('po-close-reason').value.trim()) {
         toast('Informe o motivo do cancelamento do saldo.', 'error'); return;
+      }
+      const rejectReason = ($('po-reject-reason') || {}).value || '';
+      if (items.some(i => i.rejected > 0) && !rejectReason.trim()) {
+        toast('Informe o motivo da devolução.', 'error'); return;
       }
       try {
         await api(`/api/v1/purchase-orders/${poOpenId}/deliveries`, { method: 'POST', body: {
           locationId: $('po-loc').value || null, items,
           closeRemaining, closeReason: $('po-close-reason').value || null,
+          rejectReason: rejectReason || null,
         }});
         $('po-close-reason').value = '';
         toast(closeRemaining ? 'Saldo encerrado.' : 'Entrega registrada.', 'ok');
@@ -3937,12 +3968,15 @@
         ? `<p class="hello">Entrega encerrada em <strong>${dt(o.deliveryCompletedAt)}</strong>${o.promisedDate ? ' · prometida para ' + dt(o.promisedDate) : ''}${o.cancelReason ? ' · saldo cancelado: “' + escapeHtml(o.cancelReason) + '”' : ''}
            ${o.otif != null ? ` · <span class="badge ${o.otif ? 'on' : 'off'}" title="No prazo: ${o.onTime ? 'sim' : 'não'} · Completa: ${o.inFull ? 'sim' : 'não'}">OTIF ${o.otif ? 'OK' : 'FALHOU'}</span>` : ''}</p>`
         : `<p class="hello">Informe o que chegou. O que faltar continua pendente até a próxima entrega.${o.promisedDate ? ' Entrega prometida para <strong>' + dt(o.promisedDate) + '</strong>.' : ''}</p>`;
-      html += '<div class="tablewrap"><table><thead><tr><th>Item</th><th>Pedido</th><th>Entregue</th><th>Pendente</th>' +
-        (conduct && !o.deliveryCompletedAt ? '<th>Chegou agora</th>' : '') + '</tr></thead><tbody>' +
+      html += '<div class="tablewrap"><table><thead><tr><th>Item</th><th>Pedido</th><th>Entregue</th><th>Devolvido</th><th>Pendente</th>' +
+        (conduct && !o.deliveryCompletedAt ? '<th>Chegou agora</th><th>Devolvido agora</th>' : '') + '</tr></thead><tbody>' +
         o.items.map(i => `<tr><td>${escapeHtml(i.description)}${new Set(o.items.map(x => x.sourcePrNumber).filter(Boolean)).size > 1 && i.sourcePrNumber ? `<div class="sub">${escapeHtml(i.sourcePrNumber)}</div>` : ''}</td><td>${i.quantity} ${escapeHtml(i.unitOfMeasure || '')}</td>
-          <td>${i.receivedQuantity}</td><td>${i.pendingQuantity > 0 ? `<span class="badge warn">${i.pendingQuantity}</span>` : '<span class="badge on">0</span>'}</td>` +
+          <td>${i.receivedQuantity}</td>
+          <td>${i.rejectedQuantity > 0 ? `<span class="badge warn" title="${escapeHtml(i.rejectionReason || '')}">${i.rejectedQuantity}</span>` : '0'}</td>
+          <td>${i.pendingQuantity > 0 ? `<span class="badge warn">${i.pendingQuantity}</span>` : '<span class="badge on">0</span>'}</td>` +
           (conduct && !o.deliveryCompletedAt
-            ? `<td><input class="rfq-recv" data-item="${i.itemId}" type="number" min="0" max="${i.pendingQuantity}" step="0.01" style="width:100px" ${i.pendingQuantity > 0 ? '' : 'disabled'} /></td>`
+            ? `<td><input class="rfq-recv" data-item="${i.itemId}" type="number" min="0" max="${i.pendingQuantity}" step="0.01" style="width:100px" ${i.pendingQuantity > 0 ? '' : 'disabled'} /></td>
+               <td><input class="rfq-rej" data-item="${i.itemId}" type="number" min="0" max="${i.pendingQuantity}" step="0.01" style="width:100px" title="Chegou mas foi recusado/devolvido" ${i.pendingQuantity > 0 ? '' : 'disabled'} /></td>`
             : '') + '</tr>').join('') + '</tbody></table></div>';
       if (conduct && !o.deliveryCompletedAt)
         html += `<label style="margin-top:8px"><input type="checkbox" id="rfq-close-remaining" style="width:auto" /> encerrar o saldo que não vai chegar</label>
@@ -4331,8 +4365,16 @@
           toast('Faturamento lançado.', 'ok');
           await refreshRfqDetail();
         } else if (act === 'rfq-delivery') {
-          const linhas = [...document.querySelectorAll('.rfq-recv')]
-            .filter(i => i.value).map(i => ({ itemId: i.dataset.item, quantity: parseFloat(i.value) }));
+          const porItem = {};
+          document.querySelectorAll('.rfq-recv').forEach(i => {
+            if (i.value) porItem[i.dataset.item] = { itemId: i.dataset.item, quantity: parseFloat(i.value), rejected: 0 };
+          });
+          document.querySelectorAll('.rfq-rej').forEach(i => {
+            if (!i.value) return;
+            porItem[i.dataset.item] = porItem[i.dataset.item] || { itemId: i.dataset.item, quantity: 0, rejected: 0 };
+            porItem[i.dataset.item].rejected = parseFloat(i.value);
+          });
+          const linhas = Object.values(porItem);
           if (!linhas.length) { toast('Informe o que foi entregue.', 'error'); return; }
           const encerrar = $('rfq-close-remaining').checked;
           let motivo = null;
@@ -4340,8 +4382,13 @@
             motivo = prompt('Por que o saldo não virá? (obrigatório)');
             if (!motivo) return;
           }
+          let motivoDevolucao = null;
+          if (linhas.some(l => l.rejected > 0)) {
+            motivoDevolucao = prompt('Motivo da devolução (obrigatório): qualidade, avaria, divergência…');
+            if (!motivoDevolucao) return;
+          }
           await api(`/api/v1/purchase-orders/${rfqCache[rfqOpenId].purchaseOrderId}/deliveries`, { method: 'POST', body: {
-            items: linhas, closeRemaining: encerrar, closeReason: motivo,
+            items: linhas, closeRemaining: encerrar, closeReason: motivo, rejectReason: motivoDevolucao,
           }});
           toast('Entrega registrada.', 'ok');
           await refreshRfqDetail();
@@ -4395,6 +4442,29 @@
           : '<p class="hello">Nenhum contrato de parceria cadastrado. Cadastre em Cadastros → Fornecedores → Contrato.</p>';
       } catch (err) { $('contracts-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
+
+    // ============ COMPRAS: SCORECARD DE FORNECEDORES (V2-P3) ============
+    const GRADE_CLS = { A: 'on', B: 'teal', C: 'warn', D: 'off' };
+    LOADERS['scorecard'] = async () => {
+      try {
+        const r = await api('/api/v1/analytics/supplier-scorecard?months=' + $('sc-months').value);
+        const pct = (v) => v == null ? '<span class="sub">sem medição</span>' : v + '%';
+        $('scorecard-list').innerHTML = r.items.length
+          ? '<table><thead><tr><th>Fornecedor</th><th>Classe</th><th>Score</th><th>OTIF</th><th>Qualidade</th><th>Competitividade</th><th>O.C.s</th><th>Valor comprado</th></tr></thead><tbody>' +
+            r.items.map(s => `<tr>
+              <td>${escapeHtml(s.supplierName)}</td>
+              <td>${s.grade ? `<span class="badge ${GRADE_CLS[s.grade] || ''}" style="font-size:14px;font-weight:800">${s.grade}</span>` : '<span class="sub">—</span>'}</td>
+              <td>${s.score != null ? s.score : '<span class="sub">sem medição</span>'}</td>
+              <td>${pct(s.otifPercent)}${s.otifMeasured ? `<div class="sub">${fmtInt(s.otifMeasured)} entrega(s) medida(s)</div>` : ''}</td>
+              <td>${pct(s.qualityPercent)}${s.rejectedQuantity > 0 ? `<div class="sub">${fmtInt(s.rejectedQuantity)} devolvido(s) de ${fmtInt(s.deliveredQuantity)}</div>` : ''}</td>
+              <td>${pct(s.winRatePercent)}<div class="sub">${fmtInt(s.wins)} vitória(s) em ${fmtInt(s.proposals)} cotação(ões)</div></td>
+              <td>${fmtInt(s.orders)}</td>
+              <td>${money(s.totalValue)}</td>
+            </tr>`).join('') + '</tbody></table>'
+          : '<p class="hello">Nenhum fornecedor com atividade no período.</p>';
+      } catch (err) { $('scorecard-list').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
+    };
+    $('sc-months').addEventListener('change', () => LOADERS['scorecard']());
 
     // ============ GESTÃO: COMPLIANCE SCORE (V2 §14) ============
     const cpScoreBadge = (s) =>

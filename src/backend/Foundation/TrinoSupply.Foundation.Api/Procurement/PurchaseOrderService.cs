@@ -158,7 +158,7 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
         return (invoice, null);
     }
 
-    public record ReceiptLine(Guid ItemId, decimal Quantity);
+    public record ReceiptLine(Guid ItemId, decimal Quantity, decimal? Rejected = null);
 
     /// <summary>
     /// Confirmação de entrega em três desfechos (revisão de telas 2026-08-26): total, parcial
@@ -166,7 +166,7 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
     /// </summary>
     public async Task<(PurchaseOrder? order, UserError? error)> RegisterDeliveryAsync(
         Actor actor, Guid id, Guid? locationId, IReadOnlyList<ReceiptLine> lines,
-        bool closeRemaining, string? closeReason, CancellationToken ct = default)
+        bool closeRemaining, string? closeReason, string? rejectReason = null, CancellationToken ct = default)
     {
         var order = await LoadAsync(id, ct);
         if (order is null) return (null, new("PO-ERR-404", "Pedido não encontrado."));
@@ -177,17 +177,25 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
             return (null, new("PO-ERR-040", "A entrega deste pedido já foi encerrada."));
 
         var received = new List<(PurchaseOrderItem item, decimal qty)>();
-        foreach (var line in lines.Where(l => l.Quantity > 0))
+        // devolução (V2-P3): o que chegou mas foi recusado — não entra no estoque nem no recebido
+        var rejected = new List<(PurchaseOrderItem item, decimal qty)>();
+        foreach (var line in lines.Where(l => l.Quantity > 0 || l.Rejected > 0))
         {
             var item = order.Items.SingleOrDefault(i => i.Id == line.ItemId);
             if (item is null) return (null, new("PO-ERR-054", "Item informado não pertence a este pedido."));
+            var devolvida = line.Rejected ?? 0;
+            if (line.Quantity < 0 || devolvida < 0)
+                return (null, new("PO-ERR-055", $"{item.Description}: quantidades negativas não são aceitas."));
             var pending = item.Quantity - item.ReceivedQuantity;
-            if (line.Quantity > pending)
+            if (line.Quantity + devolvida > pending)
                 return (null, new("PO-ERR-055",
-                    $"{item.Description}: chegaram {line.Quantity}, mas faltavam apenas {pending}."));
-            received.Add((item, line.Quantity));
+                    $"{item.Description}: chegaram {line.Quantity + devolvida}, mas faltavam apenas {pending}."));
+            if (line.Quantity > 0) received.Add((item, line.Quantity));
+            if (devolvida > 0) rejected.Add((item, devolvida));
         }
-        if (received.Count == 0 && !closeRemaining)
+        if (rejected.Count > 0 && string.IsNullOrWhiteSpace(rejectReason))
+            return (null, new("PO-ERR-058", "Informe o motivo da devolução (qualidade, avaria, divergência…)."));
+        if (received.Count == 0 && rejected.Count == 0 && !closeRemaining)
             return (null, new("PO-ERR-056", "Informe as quantidades que chegaram ou encerre o saldo pendente."));
 
         // o saldo de estoque vive no sistema do almoxarifado: só lançamos entrada quando o
@@ -216,6 +224,11 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
 
         var now = clock.GetUtcNow();
         foreach (var (item, qty) in received) item.ReceivedQuantity += qty;
+        foreach (var (item, qty) in rejected)
+        {
+            item.RejectedQuantity += qty;
+            item.RejectionReason = rejectReason!.Trim();
+        }
 
         if (closeRemaining && order.HasPendingDelivery)
         {

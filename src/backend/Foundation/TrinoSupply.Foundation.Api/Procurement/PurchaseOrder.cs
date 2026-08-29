@@ -92,6 +92,10 @@ public class PurchaseOrderItem
     public Guid? CatalogItemId { get; set; }   // com vínculo → recebimento gera entrada de estoque
     public string? CatalogCode { get; set; }   // snapshot
     public decimal ReceivedQuantity { get; set; }   // acumulado das entregas (parciais ou total)
+    // devolução no recebimento (V2-P3): o que chegou mas foi recusado/devolvido ao fornecedor.
+    // Não entra no estoque nem no recebido — o saldo segue pendente até nova entrega ou encerramento.
+    public decimal RejectedQuantity { get; set; }
+    public string? RejectionReason { get; set; }    // último motivo registrado para o item
     // saving de referência (V2-P2): congelado no registro da O.C. — último preço pago do item
     // de catálogo e a diferença para o preço fechado; nunca se mistura ao saving de negociação
     public decimal? LastPaidUnitPrice { get; set; }

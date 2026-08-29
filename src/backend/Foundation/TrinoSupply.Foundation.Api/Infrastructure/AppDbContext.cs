@@ -501,6 +501,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.CatalogItemId).HasColumnName("catalog_item_id");
             e.Property(i => i.CatalogCode).HasColumnName("catalog_code").HasMaxLength(50);
             e.Property(i => i.ReceivedQuantity).HasColumnName("received_quantity").HasPrecision(18, 4);
+            e.Property(i => i.RejectedQuantity).HasColumnName("rejected_quantity").HasPrecision(18, 4).HasDefaultValue(0m);
+            e.Property(i => i.RejectionReason).HasColumnName("rejection_reason").HasMaxLength(300);
             e.Property(i => i.LastPaidUnitPrice).HasColumnName("last_paid_unit_price").HasPrecision(18, 4);
             e.Property(i => i.ReferenceSaving).HasColumnName("reference_saving").HasPrecision(18, 4);
             e.Property(i => i.SourcePrNumber).HasColumnName("source_pr_number").HasMaxLength(30);

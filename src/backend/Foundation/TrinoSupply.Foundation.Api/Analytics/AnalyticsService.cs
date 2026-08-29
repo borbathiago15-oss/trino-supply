@@ -383,6 +383,84 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
         };
     }
 
+    /// <summary>
+    /// Scorecard de fornecedores (V2-P3 §14): classes A/B/C/D na janela, derivadas de
+    /// OTIF (peso 50), qualidade = 1 − devolvido/entregue (peso 30) e competitividade =
+    /// vitórias/participações em cotações (peso 20). Componentes sem medição saem da conta
+    /// (os pesos são renormalizados) — nada é persistido, nada bloqueia.
+    /// </summary>
+    public async Task<object> SupplierScorecardAsync(int monthsBack, CancellationToken ct = default)
+    {
+        var now = clock.GetUtcNow();
+        var from = now.AddMonths(-Math.Clamp(monthsBack, 1, 36));
+
+        var pos = await db.PurchaseOrders.Include(o => o.Items)
+            .Where(o => o.CreatedAt >= from && o.Status != PurchaseOrderStatus.Cancelled)
+            .OrderByDescending(o => o.CreatedAt).Take(Cap).ToListAsync(ct);
+        var proposals = await db.Proposals
+            .Where(p => p.SubmittedAt >= from)
+            .Select(p => new { p.SupplierId, p.QuotationId }).ToListAsync(ct);
+        var wins = await db.Quotations
+            .Where(q => q.SelectedAt >= from && q.WinnerSupplierId != null
+                        && q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected)
+            .Select(q => new { SupplierId = q.WinnerSupplierId!.Value, q.Id }).ToListAsync(ct);
+        var suppliers = await db.Suppliers.ToDictionaryAsync(s => s.Id, ct);
+
+        var ids = pos.Select(o => o.SupplierId)
+            .Concat(proposals.Select(p => p.SupplierId)).Distinct().ToList();
+        var rows = new List<(double? score, object view)>();
+        foreach (var sid in ids)
+        {
+            suppliers.TryGetValue(sid, out var sup);
+            var minhasPos = pos.Where(o => o.SupplierId == sid).ToList();
+            var medidas = minhasPos.Where(o => o.Otif is not null).ToList();
+            double? otif = medidas.Count > 0
+                ? medidas.Count(o => o.Otif == true) * 100.0 / medidas.Count : null;
+
+            var entregue = minhasPos.SelectMany(o => o.Items).Sum(i => i.ReceivedQuantity + i.RejectedQuantity);
+            var devolvido = minhasPos.SelectMany(o => o.Items).Sum(i => i.RejectedQuantity);
+            double? qualidade = entregue > 0
+                ? (double)((entregue - devolvido) * 100 / entregue) : null;
+
+            var participacoes = proposals.Where(p => p.SupplierId == sid)
+                .Select(p => p.QuotationId).Distinct().Count();
+            var vitorias = wins.Count(w => w.SupplierId == sid);
+            double? competitividade = participacoes > 0
+                ? Math.Min(100.0, vitorias * 100.0 / participacoes) : null;
+
+            // média ponderada só dos componentes medidos (pesos renormalizados)
+            var partes = new List<(double valor, double peso)>();
+            if (otif is not null) partes.Add((otif.Value, 0.5));
+            if (qualidade is not null) partes.Add((qualidade.Value, 0.3));
+            if (competitividade is not null) partes.Add((competitividade.Value, 0.2));
+            double? score = partes.Count > 0
+                ? Math.Round(partes.Sum(p => p.valor * p.peso) / partes.Sum(p => p.peso), 1) : null;
+            var classe = score is null ? null
+                : score >= 90 ? "A" : score >= 75 ? "B" : score >= 60 ? "C" : "D";
+
+            rows.Add((score, new
+            {
+                supplierId = sid,
+                supplierName = sup?.TradeName ?? sup?.LegalName ?? "—",
+                homologation = sup?.HomologationStatus,
+                score, grade = classe,
+                otifPercent = otif is null ? (double?)null : Math.Round(otif.Value, 1),
+                otifMeasured = medidas.Count,
+                qualityPercent = qualidade is null ? (double?)null : Math.Round(qualidade.Value, 1),
+                deliveredQuantity = entregue, rejectedQuantity = devolvido,
+                winRatePercent = competitividade is null ? (double?)null : Math.Round(competitividade.Value, 1),
+                proposals = participacoes, wins = vitorias,
+                orders = minhasPos.Count,
+                totalValue = minhasPos.Sum(o => o.TotalValue),
+            }));
+        }
+        return new
+        {
+            months = Math.Clamp(monthsBack, 1, 36),
+            items = rows.OrderByDescending(r => r.score ?? -1).Select(r => r.view).ToList(),
+        };
+    }
+
     public async Task<object> StockAsync(Guid? locationId, string? family, int monthsBack, CancellationToken ct = default)
     {
         monthsBack = Math.Clamp(monthsBack, 1, 24);

@@ -828,7 +828,7 @@
       <section class="view" id="view-compliance">
         <div class="panel">
           <h2>Compliance Score dos processos</h2>
-          <p class="hello">Todo processo recebe <strong>100 − penalizações</strong>, derivado dos fatos já gravados: sem cotação competitiva −25 · emergencial −20 · fornecedor não homologado −30 · demanda atendida após a data da necessidade −20. O score <strong>mede e expõe — nunca bloqueia</strong>.</p>
+          <p class="hello">Todo processo recebe <strong>100 − penalizações</strong>, derivado dos fatos já gravados: sem cotação competitiva −25 · emergencial −20 · fornecedor não homologado −30 · demanda atendida após a data da necessidade −20 · acima do limite de alçada do centro −10. O score <strong>mede e expõe — nunca bloqueia</strong>.</p>
           <div id="cp-kpis" class="kpis"></div>
           <div id="cp-list" class="tablewrap"></div>
         </div>
@@ -989,6 +989,11 @@
               </div>
             </div>
             <p class="hello" style="margin:6px 0 0">Sem ninguém marcado, o centro segue como hoje: Nível 1 com o gerente responsável e Nível 2 com o diretor vinculado a ele.</p>
+            <label style="margin-top:14px">Limite de valor por nível <span class="sub">(opcional — só MEDE: processo acima do limite vira penalidade no Compliance, nada é bloqueado)</span></label>
+            <div class="grid2">
+              <div><label for="ncc-lim1" class="sub">Nível 1 (R$)</label><input id="ncc-lim1" type="number" min="0" step="0.01" placeholder="ex.: 50000" /></div>
+              <div><label for="ncc-lim2" class="sub">Nível 2 (R$)</label><input id="ncc-lim2" type="number" min="0" step="0.01" placeholder="ex.: 200000" /></div>
+            </div>
             <button type="submit" class="full" id="cc-form-submit">Cadastrar centro de custo</button>
             <button type="button" class="secondary full" id="cc-form-cancel" style="margin-top:8px" hidden>Cancelar edição</button>
           </form>
@@ -3562,6 +3567,7 @@
         $('ncc-manager').value = c.managerUserId || '';
         $('ncc-company').value = c.companyId || '';
         $('ncc-client').value = c.clientName || '';
+        $('ncc-lim1').value = c.level1ValueLimit ?? ''; $('ncc-lim2').value = c.level2ValueLimit ?? '';
         renderApproverChecks((c.level1 || []).map(a => a.userId), (c.level2 || []).map(a => a.userId));
       } else { $('cc-form').reset(); renderApproverChecks([], []); }
     }
@@ -3633,6 +3639,9 @@
         companyId: $('ncc-company').value || null,
         level1UserIds: approverIds('ncc-level1'),
         level2UserIds: approverIds('ncc-level2'),
+        level1ValueLimit: $('ncc-lim1').value ? parseFloat($('ncc-lim1').value) : null,
+        level2ValueLimit: $('ncc-lim2').value ? parseFloat($('ncc-lim2').value) : null,
+        clearValueLimits: !$('ncc-lim1').value && !$('ncc-lim2').value,   // apagar os campos remove os limites
       };
       try {
         if (editingCcId) {

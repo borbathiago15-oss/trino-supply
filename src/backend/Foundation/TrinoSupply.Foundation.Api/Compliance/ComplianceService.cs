@@ -50,6 +50,12 @@ public class ComplianceService(AppDbContext db, TimeProvider clock)
         var winners = await db.Suppliers.Include(s => s.Documents)
             .Where(s => winnerIds.Contains(s.Id)).ToDictionaryAsync(s => s.Id, ct);
 
+        // limites de alçada por CC (V2-P3): configurados no cadastro do centro; só medem
+        var limites = (await db.CostCenters
+                .Where(c => c.Level1ValueLimit != null || c.Level2ValueLimit != null)
+                .Select(c => new { c.Code, c.Level1ValueLimit, c.Level2ValueLimit }).ToListAsync(ct))
+            .ToDictionary(c => c.Code.ToUpperInvariant(), c => (c.Level1ValueLimit, c.Level2ValueLimit));
+
         var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
         var rows = new List<ComplianceRow>();
         foreach (var q in quotes)
@@ -92,6 +98,23 @@ public class ComplianceService(AppDbContext db, TimeProvider clock)
                 penalties.Add(new("CP-04", "Atendida após a necessidade", 20,
                     string.Join("; ", atrasadas.Select(s =>
                         $"{s.Number} precisava do material até {s.NeededBy:dd/MM/yyyy}; o processo só abriu em {abertura:dd/MM/yyyy}"))));
+
+            // CP-05 — acima do limite de alçada configurado no centro (V2-P3, decisão C8: mede)
+            if (q.WinnerProposalId is not null
+                && limites.TryGetValue(q.CostCenter.Trim().ToUpperInvariant(), out var lim))
+            {
+                var valor = q.NegotiatedValue
+                    ?? q.Proposals.FirstOrDefault(p => p.Id == q.WinnerProposalId)?.TotalValue;
+                var estourados = new List<string>();
+                if (valor is { } v)
+                {
+                    if (lim.Level1ValueLimit is { } l1 && v > l1) estourados.Add($"Nível 1 ({l1:0.00})");
+                    if (lim.Level2ValueLimit is { } l2 && v > l2) estourados.Add($"Nível 2 ({l2:0.00})");
+                    if (estourados.Count > 0)
+                        penalties.Add(new("CP-05", "Acima do limite de alçada", 10,
+                            $"Processo de {v:0.00} acima do limite configurado no centro {q.CostCenter}: {string.Join(" e ", estourados)}."));
+                }
+            }
 
             var score = Math.Max(0, 100 - penalties.Sum(p => p.Points));
             rows.Add(new ComplianceRow(q.Id, q.Number, q.Kind.ToString().ToUpperInvariant(), q.Status,

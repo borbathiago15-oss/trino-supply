@@ -15,6 +15,10 @@ public class CostCenter
     public Guid? ManagerUserId { get; set; }                // vínculo antigo: gerente responsável
     public string? ManagerName { get; set; }                // snapshot do nome do gerente
     public List<CostCenterApprover> Approvers { get; set; } = [];   // alçadas por nível (1 e 2)
+    // limite de valor opcional por nível (V2-P3 — decisão C8): MEDE, não bloqueia.
+    // Processo aprovado acima do limite do nível vira penalidade no Compliance (−10).
+    public decimal? Level1ValueLimit { get; set; }
+    public decimal? Level2ValueLimit { get; set; }
     public string? ClientName { get; set; }                 // cliente/contrato atendido
     public bool Active { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }

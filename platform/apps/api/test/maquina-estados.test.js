@@ -63,15 +63,20 @@ const TODOS_ESTADOS = [
 ];
 
 console.log('== a tabela de transições é a especificação');
-check('as 10 transições T01..T10 estão declaradas', Object.keys(TRANSICOES).length === 10);
+check('as 15 transições da esteira estão declaradas', Object.keys(TRANSICOES).length === 15,
+  String(Object.keys(TRANSICOES).length));
 check('T01 nasce em RASCUNHO', TRANSICOES.T01_CRIAR.para === 'RASCUNHO' && TRANSICOES.T01_CRIAR.de.length === 0);
 check('do RASCUNHO saem editar, submeter e cancelar',
   transicoesDisponiveis('RASCUNHO').sort().join() === ['T02_EDITAR', 'T03_SUBMETER', 'T04_CANCELAR'].sort().join(),
   transicoesDisponiveis('RASCUNHO').join());
 check('estado terminal não oferece transição',
   transicoesDisponiveis('CANCELADA').length === 0 && transicoesDisponiveis('REJEITADA').length === 0);
-check('PEDIDO_GERADO não é mais cancelável por esta máquina',
-  transicoesDisponiveis('PEDIDO_GERADO').length === 0);
+check('PEDIDO_GERADO não é mais cancelável, só recebido',
+  transicoesDisponiveis('PEDIDO_GERADO').sort().join() === ['T17_RECEBER_PARCIAL', 'T18_RECEBER_TOTAL'].sort().join(),
+  transicoesDisponiveis('PEDIDO_GERADO').join());
+check('RECEBIDA_TOTAL é terminal', transicoesDisponiveis('RECEBIDA_TOTAL').length === 0);
+check('recebimento parcial aceita nova remessa',
+  transicoesDisponiveis('RECEBIDA_PARCIAL').includes('T18_RECEBER_TOTAL'));
 
 console.log('== transições válidas (caminho feliz da esteira)');
 const submetida = aplicarTransicao(estado(), { transicao: 'T03_SUBMETER', agora: AGORA });

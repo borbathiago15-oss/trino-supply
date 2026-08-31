@@ -57,6 +57,17 @@ model Tenant {
   etapasAprovacao        EtapaAprovacao[]
   requisicoes            RequisicaoCompra[]
   itensRequisicao        ItemRequisicao[]
+  cotacoes               ProcessoCotacao[]
+  rfqItens               RfqItem[]
+  convites               ConviteFornecedor[]
+  propostas              Proposta[]
+  itensProposta          ItemProposta[]
+  equalizacoes           Equalizacao[]
+  pedidos                PedidoCompra[]
+  itensPedido            ItemPedido[]
+  notasFiscais           NotaFiscalEntrada[]
+  recebimentos           Recebimento[]
+  itensRecebimento       ItemRecebimento[]
 
   @@map("tenant")
   @@schema("core")
@@ -91,6 +102,10 @@ model Usuario {
   requisicoesSolicitadas RequisicaoCompra[]     @relation("RequisicaoSolicitante")
   requisicoesCompradas   RequisicaoCompra[]     @relation("RequisicaoComprador")
   estourosAutorizados    RequisicaoCompra[]     @relation("RequisicaoAutorizadorEstouro")
+  cotacoesConduzidas     ProcessoCotacao[]      @relation("CotacaoComprador")
+  equalizacoesFeitas     Equalizacao[]          @relation("EqualizacaoResponsavel")
+  pedidosEmitidos        PedidoCompra[]         @relation("PedidoEmissor")
+  recebimentosFeitos     Recebimento[]          @relation("RecebimentoRecebedor")
 
   @@unique([tenantId, email], map: "uq_usuario_email")
   @@index([tenantId, ativo], map: "ix_usuario_tenant_ativo")
@@ -142,6 +157,7 @@ model CentroCusto {
   aprovadores      AprovadorCentroCusto[]
   delegacoesAlcada DelegacaoAlcada[]
   requisicoes      RequisicaoCompra[]
+  pedidos          PedidoCompra[]
 
   @@unique([tenantId, codigo], map: "uq_centro_custo_codigo")
   @@index([tenantId, ativo], map: "ix_centro_custo_tenant")
@@ -403,6 +419,7 @@ model VarianteSku {
   certificados    CertificadoAprovacao[]
   fornecedores    FornecedorSku[]
   itensRequisicao ItemRequisicao[]
+  itensPedido     ItemPedido[]
 
   @@unique([tenantId, codigo], map: "uq_variante_codigo")
   @@unique([skuBaseId, grade, tamanho, cor], map: "uq_variante_atributos")
@@ -470,6 +487,10 @@ model Fornecedor {
   documentos   DocumentoFornecedor[]
   certificados CertificadoAprovacao[]
   skus         FornecedorSku[]
+  convites     ConviteFornecedor[]
+  propostas    Proposta[]
+  pedidos      PedidoCompra[]
+  notasFiscais NotaFiscalEntrada[]
 
   @@unique([tenantId, cnpj], map: "uq_fornecedor_cnpj")
   @@index([tenantId, statusHomologacao], map: "ix_fornecedor_status")
@@ -765,6 +786,7 @@ model RequisicaoCompra {
   comprador          Usuario?          @relation("RequisicaoComprador", fields: [compradorId], references: [id], onDelete: SetNull)
   autorizadorEstouro Usuario?          @relation("RequisicaoAutorizadorEstouro", fields: [estouroAutorizadoPor], references: [id], onDelete: SetNull)
   itens              ItemRequisicao[]
+  pedidoCompras      PedidoCompra[]
 
   @@unique([tenantId, numero], map: "uq_requisicao_numero")
   @@index([tenantId, status, criadoEm(sort: Desc)], map: "ix_requisicao_esteira")
@@ -785,13 +807,339 @@ model ItemRequisicao {
   status          StatusItemRequisicao @default(ATIVO)
   observacao      String?              @db.VarChar(500)
 
-  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  requisicao RequisicaoCompra @relation(fields: [requisicaoId], references: [id], onDelete: Cascade)
-  variante   VarianteSku      @relation(fields: [varianteId], references: [id], onDelete: Restrict)
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  requisicao  RequisicaoCompra @relation(fields: [requisicaoId], references: [id], onDelete: Cascade)
+  variante    VarianteSku      @relation(fields: [varianteId], references: [id], onDelete: Restrict)
+  rfqItens    RfqItem[]
+  itensPedido ItemPedido[]
 
   @@unique([requisicaoId, sequencia], map: "uq_item_requisicao_seq")
   @@index([requisicaoId, status], map: "ix_item_requisicao")
   @@index([varianteId], map: "ix_item_variante")
   @@map("item_requisicao")
+  @@schema("compras")
+}
+
+// ---------------------------------------------------------------------------
+// Fases F5 e F6 — cotação (RFQ), propostas, equalização, pedido, NF-e e
+// recebimento (schema compras, fiel ao DDL).
+// Fora do Prisma, na migration init_cotacao_pedido_recebimento:
+//   - as sequências seq_cotacao e seq_pedido (numeração);
+//   - proposta.valor_total como COLUNA GERADA (valor_itens + frete - desconto);
+//   - todos os CHECKs, inclusive ck_cotacao_pesos, que valida em SQL que os
+//     pesos da equalização somam 1.0000.
+// Nunca remova ao regenerar.
+// ---------------------------------------------------------------------------
+
+enum StatusCotacao {
+  ABERTA
+  ENCERRADA
+  CANCELADA
+
+  @@map("status_cotacao")
+  @@schema("compras")
+}
+
+enum StatusConvite {
+  ENVIADO
+  VISUALIZADO
+  RESPONDIDO
+  RECUSADO
+  EXPIRADO
+
+  @@map("status_convite")
+  @@schema("compras")
+}
+
+enum StatusPedido {
+  EMITIDO
+  ENVIADO
+  CONFIRMADO
+  RECEBIDO_PARCIAL
+  RECEBIDO_TOTAL
+  CANCELADO
+
+  @@map("status_pedido")
+  @@schema("compras")
+}
+
+enum TipoRecebimento {
+  TOTAL
+  PARCIAL
+
+  @@map("tipo_recebimento")
+  @@schema("compras")
+}
+
+enum OcorrenciaRecebimento {
+  SEM_OCORRENCIA
+  AVARIA
+  DIVERGENCIA_QUANTIDADE
+  DIVERGENCIA_ESPECIFICACAO
+  ATRASO
+  RECUSA_TOTAL
+
+  @@map("ocorrencia_recebimento")
+  @@schema("compras")
+}
+
+model ProcessoCotacao {
+  id                    String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId              String        @map("tenant_id") @db.Uuid
+  numero                String        @db.VarChar(20)
+  compradorId           String        @map("comprador_id") @db.Uuid
+  status                StatusCotacao @default(ABERTA)
+  dataLimiteResposta    DateTime      @map("data_limite_resposta") @db.Timestamptz(6)
+  /// Pesos da equalização; o banco exige que somem 1.0000 (ck_cotacao_pesos).
+  criterioEqualizacao   Json          @default("{\"preco\":0.60,\"lead_time\":0.20,\"frete\":0.10,\"cond_pagto\":0.10}") @map("criterio_equalizacao") @db.JsonB
+  dispensaCotacao       Boolean       @default(false) @map("dispensa_cotacao")
+  justificativaDispensa String?       @map("justificativa_dispensa")
+  motivoCancelamento    String?       @map("motivo_cancelamento")
+  encerradaEm           DateTime?     @map("encerrada_em") @db.Timestamptz(6)
+  version               Int           @default(0)
+  criadoEm              DateTime      @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  comprador   Usuario             @relation("CotacaoComprador", fields: [compradorId], references: [id], onDelete: Restrict)
+  itens       RfqItem[]
+  convites    ConviteFornecedor[]
+  propostas   Proposta[]
+  equalizacao Equalizacao[]
+  pedidos     PedidoCompra[]
+
+  @@unique([tenantId, numero], map: "uq_cotacao_numero")
+  @@index([tenantId, status, dataLimiteResposta], map: "ix_cotacao_status")
+  @@map("processo_cotacao")
+  @@schema("compras")
+}
+
+model RfqItem {
+  id                    String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId              String  @map("tenant_id") @db.Uuid
+  cotacaoId             String  @map("cotacao_id") @db.Uuid
+  itemRequisicaoId      String  @map("item_requisicao_id") @db.Uuid
+  quantidadeConsolidada Decimal @map("quantidade_consolidada") @db.Decimal(15, 4)
+
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  cotacao        ProcessoCotacao @relation(fields: [cotacaoId], references: [id], onDelete: Cascade)
+  itemRequisicao ItemRequisicao  @relation(fields: [itemRequisicaoId], references: [id], onDelete: Restrict)
+  itensProposta  ItemProposta[]
+
+  @@unique([cotacaoId, itemRequisicaoId], map: "uq_rfq_item")
+  @@index([itemRequisicaoId], map: "ix_rfq_item_requisicao")
+  @@map("rfq_item")
+  @@schema("compras")
+}
+
+model ConviteFornecedor {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String        @map("tenant_id") @db.Uuid
+  cotacaoId    String        @map("cotacao_id") @db.Uuid
+  fornecedorId String        @map("fornecedor_id") @db.Uuid
+  status       StatusConvite @default(ENVIADO)
+  dataEnvio    DateTime      @default(now()) @map("data_envio") @db.Timestamptz(6)
+  tokenAcesso  String?       @map("token_acesso")
+
+  tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  cotacao    ProcessoCotacao @relation(fields: [cotacaoId], references: [id], onDelete: Cascade)
+  fornecedor Fornecedor      @relation(fields: [fornecedorId], references: [id], onDelete: Restrict)
+
+  @@unique([cotacaoId, fornecedorId], map: "uq_convite")
+  @@index([fornecedorId, status], map: "ix_convite_fornecedor")
+  @@map("convite_fornecedor")
+  @@schema("compras")
+}
+
+model Proposta {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  cotacaoId         String   @map("cotacao_id") @db.Uuid
+  fornecedorId      String   @map("fornecedor_id") @db.Uuid
+  valorItens        Decimal  @default(0) @map("valor_itens") @db.Decimal(15, 2)
+  frete             Decimal  @default(0) @db.Decimal(15, 2)
+  desconto          Decimal  @default(0) @db.Decimal(15, 2)
+  /// COLUNA GERADA no banco: valor_itens + frete - desconto. Nunca escreva
+  /// nela — o Postgres recusa, e é justamente essa a garantia.
+  valorTotal        Decimal  @default(dbgenerated("0")) @map("valor_total") @db.Decimal(15, 2)
+  condicaoPagamento String   @map("condicao_pagamento") @db.VarChar(60)
+  prazoEntregaDias  Int      @map("prazo_entrega_dias") @db.SmallInt
+  validadeProposta  DateTime @map("validade_proposta") @db.Date
+  recebidaEm        DateTime @default(now()) @map("recebida_em") @db.Timestamptz(6)
+
+  tenant     Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  cotacao    ProcessoCotacao @relation(fields: [cotacaoId], references: [id], onDelete: Cascade)
+  fornecedor Fornecedor      @relation(fields: [fornecedorId], references: [id], onDelete: Restrict)
+  itens      ItemProposta[]
+
+  equalizacoesComoVencedora  Equalizacao[] @relation("EqualizacaoVencedora")
+  equalizacoesComoMenorPreco Equalizacao[] @relation("EqualizacaoMenorPreco")
+
+  @@unique([cotacaoId, fornecedorId], map: "uq_proposta")
+  @@index([cotacaoId], map: "ix_proposta_cotacao")
+  @@map("proposta")
+  @@schema("compras")
+}
+
+model ItemProposta {
+  id            String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String  @map("tenant_id") @db.Uuid
+  propostaId    String  @map("proposta_id") @db.Uuid
+  rfqItemId     String  @map("rfq_item_id") @db.Uuid
+  precoUnitario Decimal @map("preco_unitario") @db.Decimal(15, 4)
+  marca         String? @db.VarChar(120)
+  prazoItemDias Int?    @map("prazo_item_dias") @db.SmallInt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  proposta Proposta @relation(fields: [propostaId], references: [id], onDelete: Cascade)
+  rfqItem  RfqItem  @relation(fields: [rfqItemId], references: [id], onDelete: Cascade)
+
+  @@unique([propostaId, rfqItemId], map: "uq_item_proposta")
+  @@map("item_proposta")
+  @@schema("compras")
+}
+
+model Equalizacao {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId             String   @map("tenant_id") @db.Uuid
+  cotacaoId            String   @map("cotacao_id") @db.Uuid
+  propostaVencedoraId  String   @map("proposta_vencedora_id") @db.Uuid
+  propostaMenorPrecoId String   @map("proposta_menor_preco_id") @db.Uuid
+  /// Matriz completa: nota por critério, nota final e posição de cada proposta.
+  notas                Json     @db.JsonB
+  justificativaDesvio  String?  @map("justificativa_desvio")
+  equalizadoPor        String   @map("equalizado_por") @db.Uuid
+  equalizadoEm         DateTime @default(now()) @map("equalizado_em") @db.Timestamptz(6)
+
+  tenant             Tenant          @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  cotacao            ProcessoCotacao @relation(fields: [cotacaoId], references: [id], onDelete: Cascade)
+  propostaVencedora  Proposta        @relation("EqualizacaoVencedora", fields: [propostaVencedoraId], references: [id], onDelete: Restrict)
+  propostaMenorPreco Proposta        @relation("EqualizacaoMenorPreco", fields: [propostaMenorPrecoId], references: [id], onDelete: Restrict)
+  responsavel        Usuario         @relation("EqualizacaoResponsavel", fields: [equalizadoPor], references: [id], onDelete: Restrict)
+
+  @@unique([cotacaoId], map: "uq_equalizacao")
+  @@map("equalizacao")
+  @@schema("compras")
+}
+
+model PedidoCompra {
+  id                 String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId           String       @map("tenant_id") @db.Uuid
+  numero             String       @db.VarChar(20)
+  requisicaoId       String       @map("requisicao_id") @db.Uuid
+  cotacaoId          String?      @map("cotacao_id") @db.Uuid
+  fornecedorId       String       @map("fornecedor_id") @db.Uuid
+  centroCustoId      String       @map("centro_custo_id") @db.Uuid
+  status             StatusPedido @default(EMITIDO)
+  valorTotal         Decimal      @map("valor_total") @db.Decimal(15, 2)
+  condicaoPagamento  String       @map("condicao_pagamento") @db.VarChar(60)
+  prazoEntrega       DateTime     @map("prazo_entrega") @db.Date
+  emitidoPor         String       @map("emitido_por") @db.Uuid
+  emitidoEm          DateTime     @default(now()) @map("emitido_em") @db.Timestamptz(6)
+  enviadoEm          DateTime?    @map("enviado_em") @db.Timestamptz(6)
+  canceladoEm        DateTime?    @map("cancelado_em") @db.Timestamptz(6)
+  motivoCancelamento String?      @map("motivo_cancelamento")
+  version            Int          @default(0)
+
+  tenant       Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  requisicao   RequisicaoCompra @relation(fields: [requisicaoId], references: [id], onDelete: Restrict)
+  cotacao      ProcessoCotacao? @relation(fields: [cotacaoId], references: [id], onDelete: SetNull)
+  fornecedor   Fornecedor       @relation(fields: [fornecedorId], references: [id], onDelete: Restrict)
+  centroCusto  CentroCusto      @relation(fields: [centroCustoId], references: [id], onDelete: Restrict)
+  emissor      Usuario          @relation("PedidoEmissor", fields: [emitidoPor], references: [id], onDelete: Restrict)
+  itens        ItemPedido[]
+  recebimentos Recebimento[]
+
+  @@unique([tenantId, numero], map: "uq_pedido_numero")
+  @@index([fornecedorId, status], map: "ix_pedido_fornecedor")
+  @@index([centroCustoId, emitidoEm(sort: Desc)], map: "ix_pedido_cc")
+  @@index([tenantId, status], map: "ix_pedido_status")
+  @@map("pedido_compra")
+  @@schema("compras")
+}
+
+model ItemPedido {
+  id               String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId         String  @map("tenant_id") @db.Uuid
+  pedidoId         String  @map("pedido_id") @db.Uuid
+  itemRequisicaoId String  @map("item_requisicao_id") @db.Uuid
+  varianteId       String  @map("variante_id") @db.Uuid
+  sequencia        Int     @db.SmallInt
+  qtdPedida        Decimal @map("qtd_pedida") @db.Decimal(15, 4)
+  /// Tolerância de 10% acima do pedido é o teto do banco (ck_item_pedido_qtd).
+  qtdRecebida      Decimal @default(0) @map("qtd_recebida") @db.Decimal(15, 4)
+  precoUnitario    Decimal @map("preco_unitario") @db.Decimal(15, 4)
+  version          Int     @default(0)
+
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  pedido           PedidoCompra      @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  itemRequisicao   ItemRequisicao    @relation(fields: [itemRequisicaoId], references: [id], onDelete: Restrict)
+  variante         VarianteSku       @relation(fields: [varianteId], references: [id], onDelete: Restrict)
+  itensRecebimento ItemRecebimento[]
+
+  @@unique([pedidoId, sequencia], map: "uq_item_pedido_seq")
+  @@index([pedidoId], map: "ix_item_pedido")
+  @@map("item_pedido")
+  @@schema("compras")
+}
+
+model NotaFiscalEntrada {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  fornecedorId  String   @map("fornecedor_id") @db.Uuid
+  chaveAcesso   String   @map("chave_acesso") @db.VarChar(44)
+  numero        String   @db.VarChar(20)
+  serie         String   @db.VarChar(5)
+  valorTotal    Decimal  @map("valor_total") @db.Decimal(15, 2)
+  dataEmissao   DateTime @map("data_emissao") @db.Date
+  arquivoXmlUri String?  @map("arquivo_xml_uri")
+  criadoEm      DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  fornecedor   Fornecedor    @relation(fields: [fornecedorId], references: [id], onDelete: Restrict)
+  recebimentos Recebimento[]
+
+  @@unique([tenantId, chaveAcesso], map: "uq_nfe_chave")
+  @@map("nota_fiscal_entrada")
+  @@schema("compras")
+}
+
+model Recebimento {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String          @map("tenant_id") @db.Uuid
+  pedidoId        String          @map("pedido_id") @db.Uuid
+  notaFiscalId    String?         @map("nota_fiscal_id") @db.Uuid
+  tipo            TipoRecebimento
+  dataRecebimento DateTime        @default(now()) @map("data_recebimento") @db.Timestamptz(6)
+  recebedorId     String          @map("recebedor_id") @db.Uuid
+  observacao      String?
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  pedido     PedidoCompra       @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
+  notaFiscal NotaFiscalEntrada? @relation(fields: [notaFiscalId], references: [id], onDelete: SetNull)
+  recebedor  Usuario            @relation("RecebimentoRecebedor", fields: [recebedorId], references: [id], onDelete: Restrict)
+  itens      ItemRecebimento[]
+
+  @@index([pedidoId, dataRecebimento], map: "ix_recebimento_pedido")
+  @@map("recebimento")
+  @@schema("compras")
+}
+
+model ItemRecebimento {
+  id                  String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String                @map("tenant_id") @db.Uuid
+  recebimentoId       String                @map("recebimento_id") @db.Uuid
+  itemPedidoId        String                @map("item_pedido_id") @db.Uuid
+  qtdRecebida         Decimal               @map("qtd_recebida") @db.Decimal(15, 4)
+  qtdAvariada         Decimal               @default(0) @map("qtd_avariada") @db.Decimal(15, 4)
+  ocorrencia          OcorrenciaRecebimento @default(SEM_OCORRENCIA)
+  descricaoOcorrencia String?               @map("descricao_ocorrencia")
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  recebimento Recebimento @relation(fields: [recebimentoId], references: [id], onDelete: Cascade)
+  itemPedido  ItemPedido  @relation(fields: [itemPedidoId], references: [id], onDelete: Restrict)
+
+  @@unique([recebimentoId, itemPedidoId], map: "uq_item_recebimento")
+  @@index([itemPedidoId], map: "ix_item_recebimento_pedido")
+  @@map("item_recebimento")
   @@schema("compras")
 }

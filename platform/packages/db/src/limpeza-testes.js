@@ -11,6 +11,18 @@
  * A ordem vai dos filhos para os pais.
  */
 const ORDEM_EXCLUSAO = [
+  // compras (F5/F6) — dos filhos do recebimento até a cotação
+  'itemRecebimento',
+  'recebimento',
+  'itemPedido',
+  'pedidoCompra',
+  'notaFiscalEntrada',
+  'equalizacao',
+  'itemProposta',
+  'proposta',
+  'conviteFornecedor',
+  'rfqItem',
+  'processoCotacao',
   // compras (F4) — itens antes da requisição
   'itemRequisicao',
   'requisicaoCompra',

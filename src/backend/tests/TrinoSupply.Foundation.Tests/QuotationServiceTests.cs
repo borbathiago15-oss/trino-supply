@@ -659,7 +659,7 @@ public class QuotationServiceTests
 
         // as duas SCs saem da fila de "aguardando cotação"
         var (ready, _) = await w.Rfq.QueueAsync();
-        Assert.DoesNotContain(ready, r => r.Id == w.Pr.Id || r.Id == pr2.Id);
+        Assert.DoesNotContain(ready, e => e.Pr.Id == w.Pr.Id || e.Pr.Id == pr2.Id);
 
         // fluxo completo: proposta → seleção → alçadas → O.C. registrada
         await w.Rfq.InviteSuppliersAsync(Carla, q.Id, [w.Alfa.Id]);
@@ -1001,5 +1001,100 @@ public class QuotationServiceTests
         var fim = await w.Rfq.GetAsync(q.Id);
         Assert.Equal(QuotationStatus.PoIssued, fim!.Status);
         Assert.Single(await w.Db.PurchaseOrders.Where(o => o.QuotationId == q.Id).ToListAsync());
+    }
+
+    // ================= separação na origem: um processo por família =================
+
+    /// <summary>
+    /// O pedido do cliente: a SC tem EPI e ferramenta, e cada um precisa ir para um processo
+    /// diferente. Ao cotar só o EPI, a SC CONTINUA na fila com a ferramenta — o que sobrou não
+    /// some junto com o primeiro processo.
+    /// </summary>
+    [Fact]
+    public async Task Sc_com_duas_familias_pode_ser_separada_em_processos_diferentes()
+    {
+        var w = await BuildSplitAsync();
+        var pr = await w.Db.Requisitions.Include(r => r.Items).SingleAsync(r => r.Id == w.Pr.Id);
+        var luva = pr.Items.Single(i => i.Description.Contains("Luva"));
+        var chave = pr.Items.Single(i => i.Description.Contains("Chave"));
+
+        // a fila mostra a SC com os dois itens e as duas famílias
+        var (fila, _) = await w.Rfq.QueueAsync();
+        var antes = Assert.Single(fila, e => e.Pr.Id == pr.Id);
+        Assert.Equal(2, antes.Pending.Count);
+        Assert.False(antes.Partial);
+        Assert.Equal(["EPI", "FERRAMENTAS"], antes.Pending.Select(i => i.Family).OrderBy(f => f).ToArray());
+
+        // processo só do EPI
+        var (epi, e1) = await w.Rfq.CreateFromItemsAsync(Carla, [luva.Id], QuotationKind.Purchase, null, null);
+        Assert.Null(e1);
+        Assert.Equal("EPI", Assert.Single(epi!.Items).Family);
+
+        // a SC continua na fila, agora só com a ferramenta
+        (fila, _) = await w.Rfq.QueueAsync();
+        var depois = Assert.Single(fila, e => e.Pr.Id == pr.Id);
+        var pendente = Assert.Single(depois.Pending);
+        Assert.Equal("FERRAMENTAS", pendente.Family);
+        Assert.True(depois.Partial);
+
+        // o item já cotado não entra em outro processo
+        var (repetido, e2) = await w.Rfq.CreateFromItemsAsync(Carla, [luva.Id], QuotationKind.Purchase, null, null);
+        Assert.Null(repetido);
+        Assert.Equal("RFQ-ERR-062", e2!.Code);
+
+        // segundo processo com o que sobrou: a SC sai da fila
+        var (fer, e3) = await w.Rfq.CreateFromItemsAsync(Carla, [chave.Id], QuotationKind.Purchase, null, null);
+        Assert.Null(e3);
+        Assert.Equal("FERRAMENTAS", Assert.Single(fer!.Items).Family);
+        Assert.NotEqual(epi.Id, fer.Id);
+        (fila, _) = await w.Rfq.QueueAsync();
+        Assert.DoesNotContain(fila, e => e.Pr.Id == pr.Id);
+    }
+
+    /// <summary>"Abrir tudo" depois de uma separação leva apenas os itens que sobraram.</summary>
+    [Fact]
+    public async Task Abrir_a_sc_inteira_leva_so_os_itens_ainda_sem_processo()
+    {
+        var w = await BuildSplitAsync();
+        var pr = await w.Db.Requisitions.Include(r => r.Items).SingleAsync(r => r.Id == w.Pr.Id);
+        var luva = pr.Items.Single(i => i.Description.Contains("Luva"));
+
+        await w.Rfq.CreateFromItemsAsync(Carla, [luva.Id], QuotationKind.Purchase, null, null);
+        var (resto, error) = await w.Rfq.CreateFromPrAsync(Carla, pr.Id, QuotationKind.Purchase, null, null);
+        Assert.Null(error);
+        var item = Assert.Single(resto!.Items);
+        Assert.Equal("FERRAMENTAS", item.Family);
+
+        // sem itens livres, a SC não abre um terceiro processo
+        var (nada, esgotada) = await w.Rfq.CreateFromPrAsync(Carla, pr.Id, QuotationKind.Purchase, null, null);
+        Assert.Null(nada);
+        Assert.Equal("RFQ-ERR-001", esgotada!.Code);
+    }
+
+    /// <summary>
+    /// Com a SC separada, a Gestão de Solicitações mostra a situação POR ITEM: um item pode estar
+    /// em cotação enquanto o outro ainda espera o comprador.
+    /// </summary>
+    [Fact]
+    public async Task Gestao_de_solicitacoes_mostra_a_situacao_de_cada_item_quando_a_sc_e_separada()
+    {
+        var w = await BuildSplitAsync();
+        var pr = await w.Db.Requisitions.Include(r => r.Items).SingleAsync(r => r.Id == w.Pr.Id);
+        var luva = pr.Items.Single(i => i.Description.Contains("Luva"));
+        var chave = pr.Items.Single(i => i.Description.Contains("Chave"));
+        var (epi, _) = await w.Rfq.CreateFromItemsAsync(Carla, [luva.Id], QuotationKind.Purchase, null, null);
+
+        var triagem = new TriageService(w.Db, new FixedTimeProvider(new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero)));
+        var ticket = Assert.Single((await triagem.ListAsync(Carla, "TODAS")).Where(t => t.Id == pr.Id));
+        Assert.True(ticket.SplitProcesses);
+
+        var itemEpi = ticket.Items!.Single(i => i.Id == luva.Id);
+        Assert.Equal("EPI", itemEpi.Family);
+        Assert.Equal(epi!.Number, itemEpi.QuotationNumber);
+        Assert.Equal(ProcessStatus.InQuotation.Key, itemEpi.Process!.Key);
+
+        var itemFer = ticket.Items!.Single(i => i.Id == chave.Id);
+        Assert.Null(itemFer.QuotationNumber);
+        Assert.Equal(ProcessStatus.Pending.Key, itemFer.Process!.Key);
     }
 }

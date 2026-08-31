@@ -44,7 +44,12 @@ Analysis) registrada na timeline com motivo — o histórico nunca é perdido.
 
 ## 3. Regras fundamentais (RFQ-BR)
 
-- **RFQ-BR-001** — Cotação nasce somente de PR `APPROVED`; uma cotação ativa por PR; itens copiados por snapshot (sem redigitação).
+- **RFQ-BR-001** — Cotação nasce somente de PR `APPROVED`; itens copiados por snapshot (sem redigitação). A trava de duplicidade é **por item**, não pela SC: cada item de solicitação entra em no máximo um processo ativo (`RFQ-ERR-062`).
+- **RFQ-BR-001a** — **Separação na origem.** O comprador escolhe os **itens** que entram no processo, de uma ou mais SCs do mesmo centro de custo. Uma SC com EPI e informática pode virar dois processos (fornecedores, prazos e convidados distintos) — ou um só, deixando a divisão para a adjudicação por família (RFQ-BR-005a). Consequências:
+  - a SC **continua na fila** de "Abrir Cotação" enquanto sobrar item sem processo, marcada como *parcialmente cotada*, listando só o que falta;
+  - "Abrir tudo" leva apenas os itens ainda livres; sem itens livres, a SC não abre outro processo (`RFQ-ERR-001`);
+  - na Gestão de Solicitações, a situação passa a ser **por item** quando a SC estiver dividida — cada linha mostra o seu processo, a sua O.C. e a sua família;
+  - processos abertos antes desta mudança (sem rastreio por item) continuam segurando a SC inteira.
 - **RFQ-BR-002** — Numeração automática, única e nunca reutilizada: sequências `procurement.rfq_number_seq` e `procurement.bid_number_seq`. O usuário não informa número.
 - **RFQ-BR-003** — Convite apenas a fornecedores **ativos** do cadastro único (SUP-001); nada de cadastro paralelo. Convite registrado na timeline.
 - **RFQ-BR-004** — Propostas são **imutáveis e versionadas** (nova proposta supersede, nunca apaga); registram fornecedor, data/hora, versão, condições e anexos.

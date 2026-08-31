@@ -1606,6 +1606,7 @@ static object TicketView(TriageTicket t) => new
     openedAt = t.OpenedAt, status = t.Status,
     processStatus = t.Process?.Key, processStatusLabel = t.Process?.Label,
     processStatusTone = t.Process?.Tone, processStatusHint = t.Process?.Explanation,
+    splitProcesses = t.SplitProcesses,   // itens em processos diferentes: situação por linha
     priority = t.Priority, neededBy = t.NeededBy, justification = t.Justification,
     urgencyReason = t.UrgencyReason, urgencyImpact = t.UrgencyImpact,
     priorityChangedByLabel = t.PriorityChangedByLabel, priorityChangeReason = t.PriorityChangeReason,
@@ -1613,6 +1614,9 @@ static object TicketView(TriageTicket t) => new
     {
         id = i.Id, sequence = i.Sequence, code = i.Code, description = i.Description,
         size = i.Size, quantity = i.Quantity, unitOfMeasure = i.UnitOfMeasure, notes = i.Notes,
+        family = i.Family, quotationNumber = i.QuotationNumber, purchaseOrderNumber = i.PurchaseOrderNumber,
+        processStatus = i.Process?.Key, processStatusLabel = i.Process?.Label,
+        processStatusTone = i.Process?.Tone, processStatusHint = i.Process?.Explanation,
     }),
     assignedToId = t.AssignedToId, assignedToLabel = t.AssignedToLabel,
     assignedByLabel = t.AssignedByLabel, assignedAt = t.AssignedAt,
@@ -1969,19 +1973,27 @@ rfq.MapGet("/queue", async (QuotationService svc, ClaimsPrincipal p, HttpContext
 {
     if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa a fila de suprimentos.");
     var (ready, blocked) = await svc.QueueAsync();
-    static object QueueItem(PurchaseRequisition r, string? blockReason) => new
+    // itens pendentes: uma SC pode ter parte já em processo, e o que sobrou continua cotável aqui
+    static object QueueRow(PurchaseRequisition r, IReadOnlyList<TrinoSupply.Foundation.Api.Procurement.QueueItem> pending,
+        bool partial, string? blockReason) => new
     {
         id = r.Id, number = r.Number, requesterLabel = r.RequesterLabel, costCenter = r.CostCenter,
         justification = r.Justification, totalEstimatedValue = r.TotalEstimatedValue,
         neededBy = r.NeededBy, decidedAt = r.DecidedAt,
         assignedToId = r.AssignedToId, assignedToLabel = r.AssignedToLabel,
-        blockReason,
-        items = r.Items.Select(i => new { id = i.Id, description = i.Description, quantity = i.Quantity, unitOfMeasure = i.UnitOfMeasure }),
+        blockReason, partial,
+        families = pending.Select(i => i.Family).Distinct().OrderBy(f => f),
+        items = pending.Select(i => new
+        {
+            id = i.Id, sequence = i.Sequence, catalogCode = i.CatalogCode, description = i.Description,
+            quantity = i.Quantity, unitOfMeasure = i.UnitOfMeasure,
+            estimatedUnitPrice = i.EstimatedUnitPrice, family = i.Family,
+        }),
     };
     return Ok(new
     {
-        items = ready.Select(r => QueueItem(r, null))
-            .Concat(blocked.Select(b => QueueItem(b.Pr, b.Reason))),
+        items = ready.Select(e => QueueRow(e.Pr, e.Pending, e.Partial, null))
+            .Concat(blocked.Select(b => QueueRow(b.Pr, [], false, b.Reason))),
     }, ctx);
 });
 

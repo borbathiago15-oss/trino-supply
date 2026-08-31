@@ -1,13 +1,19 @@
 {
   "name": "trino-platform",
   "private": true,
-  "workspaces": ["packages/*", "apps/*"],
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
     "db:generate": "npm --workspace @trino/db run generate",
     "db:migrate": "npm --workspace @trino/db run migrate",
     "api:build": "npm --workspace @trino/api run build",
     "api:start": "npm --workspace @trino/api run start",
     "api:seed": "npm --workspace @trino/api run seed",
-    "api:test": "npm --workspace @trino/api run test:e2e"
+    "api:test": "npm --workspace @trino/api run test:e2e",
+    "web:dev": "npm --workspace @trino/web run dev",
+    "web:build": "npm --workspace @trino/contratos run build && npm --workspace @trino/web run build",
+    "contratos:build": "npm --workspace @trino/contratos run build"
   }
 }

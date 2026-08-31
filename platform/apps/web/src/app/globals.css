@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-slate-50 text-slate-800 antialiased;
+}
+
+/* Componentes recorrentes da esteira — declarados uma vez para as telas não
+   repetirem a mesma pilha de utilitários. */
+@layer components {
+  .card {
+    @apply rounded-lg border border-slate-200 bg-white shadow-sm;
+  }
+  .rotulo {
+    @apply block text-xs font-medium uppercase tracking-wide text-slate-500;
+  }
+  .campo {
+    @apply w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none
+           focus:border-trino-600 focus:ring-2 focus:ring-trino-100;
+  }
+  .botao {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium
+           transition disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .botao-primario {
+    @apply botao bg-trino-700 text-white hover:bg-trino-800;
+  }
+  .botao-secundario {
+    @apply botao border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+  }
+  .botao-perigo {
+    @apply botao bg-red-600 text-white hover:bg-red-700;
+  }
+  .etiqueta {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+  .celula {
+    @apply whitespace-nowrap px-4 py-3 text-sm;
+  }
+  .cabecalho-tabela {
+    @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500;
+  }
+}

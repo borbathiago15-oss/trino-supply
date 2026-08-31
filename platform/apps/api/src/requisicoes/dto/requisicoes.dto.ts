@@ -1,3 +1,5 @@
+// Vem do pacote compartilhado: a lista é a mesma que o frontend usa.
+import { PRIORIDADES as LISTA_PRIORIDADES, type Prioridade as TipoPrioridade } from '@trino/contratos';
 import { Type } from 'class-transformer';
 import {
   IsDateString,
@@ -11,8 +13,10 @@ import {
   Min,
 } from 'class-validator';
 
-export const PRIORIDADES = ['BAIXA', 'NORMAL', 'ALTA', 'EMERGENCIAL'] as const;
-export type Prioridade = (typeof PRIORIDADES)[number];
+export { PRIORIDADES } from '@trino/contratos';
+export type { Prioridade } from '@trino/contratos';
+
+
 
 export class CriarRequisicaoDto {
   @IsUUID()
@@ -21,8 +25,8 @@ export class CriarRequisicaoDto {
   @IsOptional() @IsUUID()
   contratoId?: string;
 
-  @IsOptional() @IsIn(PRIORIDADES, { message: `prioridade deve ser uma de: ${PRIORIDADES.join(', ')}` })
-  prioridade?: Prioridade;
+  @IsOptional() @IsIn(LISTA_PRIORIDADES, { message: `prioridade deve ser uma de: ${LISTA_PRIORIDADES.join(', ')}` })
+  prioridade?: TipoPrioridade;
 
   @IsOptional() @IsString() @Length(1, 4000)
   justificativa?: string;
@@ -39,8 +43,8 @@ export class EditarRequisicaoDto {
   @IsOptional() @IsString() @Length(1, 4000)
   justificativa?: string;
 
-  @IsOptional() @IsIn(PRIORIDADES)
-  prioridade?: Prioridade;
+  @IsOptional() @IsIn(LISTA_PRIORIDADES)
+  prioridade?: TipoPrioridade;
 
   @IsOptional() @IsDateString()
   dataNecessidade?: string;

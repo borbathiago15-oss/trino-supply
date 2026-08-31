@@ -1,6 +1,7 @@
 import { Controller, Get, Module, ValidationPipe } from '@nestjs/common';
 import { APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { AuditInterceptor } from './audit/audit.interceptor';
+import { AuditoriaController } from './audit/auditoria.controller';
 import { AprovacoesModule } from './aprovacoes/aprovacoes.module';
 import { AuthModule } from './auth/auth.module';
 import { CotacoesModule } from './cotacoes/cotacoes.module';
@@ -23,7 +24,7 @@ class HealthController {
 
 @Module({
   imports: [PrismaModule, AuthModule, UsuariosModule, CatalogoModule, FornecedoresModule, AprovacoesModule, RequisicoesModule, CotacoesModule, PedidosModule, SlaModule, ImportacaoModule],
-  controllers: [HealthController],
+  controllers: [HealthController, AuditoriaController],
   providers: [
     // Auditoria é GLOBAL: qualquer handler mutante marcado com @Auditar passa
     // pelo AuditInterceptor, em qualquer módulo presente ou futuro.

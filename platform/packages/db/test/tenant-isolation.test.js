@@ -5,7 +5,7 @@
 // Prova que a extensão injeta o tenantId em todas as operações e que registro
 // de outro tenant se comporta como inexistente.
 
-const { PrismaClient, forTenant, TenantScopeError } = require('../src');
+const { PrismaClient, forTenant, TenantScopeError, limparBancoDeTestes } = require('../src');
 
 const base = new PrismaClient();
 let ok = 0, fail = 0;
@@ -15,18 +15,8 @@ const check = (label, cond, extra = '') => {
 };
 
 async function main() {
-  // limpeza para reexecução idempotente
-  await base.auditLog.deleteMany({});
-  await base.escopoAcesso.deleteMany({});
-  await base.papelPermissao.deleteMany({});
-  await base.papel.deleteMany({});
-  await base.contratoOperacao.deleteMany({});
-  await base.orcamentoCentroCusto.deleteMany({});
-  await base.centroCusto.deleteMany({});
-  await base.regional.deleteMany({});
-  await base.usuario.deleteMany({});
-  await base.permissao.deleteMany({});
-  await base.tenant.deleteMany({});
+  // limpeza para reexecução idempotente (ordem das FKs mora no @trino/db)
+  await limparBancoDeTestes(base);
 
   console.log('== bootstrap: dois tenants (client base, sem escopo)');
   const alfa = await base.tenant.create({ data: { cnpj: '11111111000191', razaoSocial: 'Grupo Alfa LTDA' } });

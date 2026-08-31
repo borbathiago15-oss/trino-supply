@@ -10,7 +10,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["core", "auditoria"]
+  schemas  = ["core", "auditoria", "catalogo", "fornecimento"]
 }
 
 enum TipoEscopo {
@@ -39,6 +39,17 @@ model Tenant {
   papeis       Papel[]
   escopos      EscopoAcesso[]
 
+  familias              FamiliaProduto[]
+  tiposProduto          TipoProduto[]
+  skusBase              SkuBase[]
+  variantes             VarianteSku[]
+  parametrosEstoque     ParametroEstoque[]
+  saldosEstoque         SaldoEstoque[]
+  fornecedores          Fornecedor[]
+  documentosFornecedor  DocumentoFornecedor[]
+  certificadosAprovacao CertificadoAprovacao[]
+  fornecedorSkus        FornecedorSku[]
+
   @@map("tenant")
   @@schema("core")
 }
@@ -57,10 +68,10 @@ model Usuario {
   criadoEm       DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
   atualizadoEm   DateTime  @default(now()) @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  tenant               Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  regionaisGeridas     Regional[]     @relation("RegionalGestor")
-  centrosCustoGeridos  CentroCusto[]  @relation("CentroCustoGestor")
-  escopos              EscopoAcesso[]
+  tenant              Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  regionaisGeridas    Regional[]     @relation("RegionalGestor")
+  centrosCustoGeridos CentroCusto[]  @relation("CentroCustoGestor")
+  escopos             EscopoAcesso[]
 
   @@unique([tenantId, email], map: "uq_usuario_email")
   @@index([tenantId, ativo], map: "ix_usuario_tenant_ativo")
@@ -105,6 +116,9 @@ model CentroCusto {
   gestor     Usuario?               @relation("CentroCustoGestor", fields: [gestorId], references: [id], onDelete: SetNull)
   orcamentos OrcamentoCentroCusto[]
   contratos  ContratoOperacao[]
+
+  parametrosEstoque ParametroEstoque[]
+  saldosEstoque     SaldoEstoque[]
 
   @@unique([tenantId, codigo], map: "uq_centro_custo_codigo")
   @@index([tenantId, ativo], map: "ix_centro_custo_tenant")
@@ -235,4 +249,263 @@ model AuditLog {
   @@id([id, timestampUtc], map: "pk_audit_log")
   @@map("audit_log")
   @@schema("auditoria")
+}
+
+// ---------------------------------------------------------------------------
+// Fase F2 — schemas catalogo e fornecimento (tradução fiel do DDL validado).
+// O que o Prisma não expressa (CHECKs e os dois índices PARCIAIS) vive na
+// migration SQL init_catalogo_e_fornecimento — nunca remova ao regenerar.
+// ---------------------------------------------------------------------------
+
+enum UnidadeMedida {
+  UN
+  CX
+  PC
+  PAR
+  KG
+  G
+  L
+  ML
+  M
+  M2
+  M3
+  RL
+  FD
+
+  @@map("unidade_medida")
+  @@schema("catalogo")
+}
+
+enum StatusHomologacao {
+  PENDENTE
+  HOMOLOGADO
+  SUSPENSO
+  BLOQUEADO
+
+  @@map("status_homologacao")
+  @@schema("fornecimento")
+}
+
+enum TipoDocumento {
+  CND_FEDERAL
+  CND_ESTADUAL
+  CND_MUNICIPAL
+  FGTS
+  TRABALHISTA
+  CONTRATO_SOCIAL
+  ALVARA
+  CERTIFICADO_ISO
+  APOLICE_SEGURO
+  OUTRO
+
+  @@map("tipo_documento")
+  @@schema("fornecimento")
+}
+
+model FamiliaProduto {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  codigo            String   @db.VarChar(20)
+  nome              String   @db.VarChar(150)
+  leadTimeMedioDias Int      @default(0) @map("lead_time_medio_dias") @db.SmallInt
+  ativo             Boolean  @default(true)
+  criadoEm          DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  tenant Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tipos  TipoProduto[]
+
+  @@unique([tenantId, codigo], map: "uq_familia_codigo")
+  @@map("familia_produto")
+  @@schema("catalogo")
+}
+
+model TipoProduto {
+  id        String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String  @map("tenant_id") @db.Uuid
+  familiaId String  @map("familia_id") @db.Uuid
+  codigo    String  @db.VarChar(20)
+  nome      String  @db.VarChar(150)
+  ativo     Boolean @default(true)
+
+  tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  familia  FamiliaProduto @relation(fields: [familiaId], references: [id], onDelete: Restrict)
+  skusBase SkuBase[]
+
+  @@unique([tenantId, codigo], map: "uq_tipo_codigo")
+  @@index([familiaId], map: "ix_tipo_familia")
+  @@map("tipo_produto")
+  @@schema("catalogo")
+}
+
+model SkuBase {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String        @map("tenant_id") @db.Uuid
+  tipoProdutoId String        @map("tipo_produto_id") @db.Uuid
+  codigo        String        @db.VarChar(40)
+  descricao     String        @db.VarChar(255)
+  unidadeMedida UnidadeMedida @map("unidade_medida")
+  exigeCa       Boolean       @default(false) @map("exige_ca")
+  ativo         Boolean       @default(true)
+  criadoEm      DateTime      @default(now()) @map("criado_em") @db.Timestamptz(6)
+  atualizadoEm  DateTime      @default(now()) @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  tipoProduto TipoProduto   @relation(fields: [tipoProdutoId], references: [id], onDelete: Restrict)
+  variantes   VarianteSku[]
+
+  @@unique([tenantId, codigo], map: "uq_sku_base_codigo")
+  @@index([tipoProdutoId], map: "ix_sku_base_tipo")
+  @@map("sku_base")
+  @@schema("catalogo")
+}
+
+model VarianteSku {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  skuBaseId    String   @map("sku_base_id") @db.Uuid
+  codigo       String   @db.VarChar(50)
+  grade        String?  @db.VarChar(40)
+  tamanho      String?  @db.VarChar(20)
+  cor          String?  @db.VarChar(40)
+  codigoBarras String?  @map("codigo_barras") @db.VarChar(20)
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  skuBase      SkuBase                @relation(fields: [skuBaseId], references: [id], onDelete: Restrict)
+  parametros   ParametroEstoque[]
+  saldos       SaldoEstoque[]
+  certificados CertificadoAprovacao[]
+  fornecedores FornecedorSku[]
+
+  @@unique([tenantId, codigo], map: "uq_variante_codigo")
+  @@unique([skuBaseId, grade, tamanho, cor], map: "uq_variante_atributos")
+  @@index([skuBaseId], map: "ix_variante_sku_base")
+  @@map("variante_sku")
+  @@schema("catalogo")
+}
+
+model ParametroEstoque {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  varianteId        String   @map("variante_id") @db.Uuid
+  centroCustoId     String   @map("centro_custo_id") @db.Uuid
+  pontoPedidoRop    Decimal  @default(0) @map("ponto_pedido_rop") @db.Decimal(15, 4)
+  estoqueSeguranca  Decimal  @default(0) @map("estoque_seguranca") @db.Decimal(15, 4)
+  leadTimeDias      Int      @default(0) @map("lead_time_dias") @db.SmallInt
+  gerarScAutomatica Boolean  @default(false) @map("gerar_sc_automatica")
+  atualizadoEm      DateTime @default(now()) @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  variante    VarianteSku @relation(fields: [varianteId], references: [id], onDelete: Cascade)
+  centroCusto CentroCusto @relation(fields: [centroCustoId], references: [id], onDelete: Cascade)
+
+  @@unique([varianteId, centroCustoId], map: "uq_parametro_estoque")
+  @@map("parametro_estoque")
+  @@schema("catalogo")
+}
+
+model SaldoEstoque {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  varianteId    String   @map("variante_id") @db.Uuid
+  centroCustoId String   @map("centro_custo_id") @db.Uuid
+  qtdDisponivel Decimal  @default(0) @map("qtd_disponivel") @db.Decimal(15, 4)
+  qtdReservada  Decimal  @default(0) @map("qtd_reservada") @db.Decimal(15, 4)
+  version       Int      @default(0)
+  atualizadoEm  DateTime @default(now()) @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  variante    VarianteSku @relation(fields: [varianteId], references: [id], onDelete: Restrict)
+  centroCusto CentroCusto @relation(fields: [centroCustoId], references: [id], onDelete: Restrict)
+
+  @@unique([varianteId, centroCustoId], map: "uq_saldo_estoque")
+  @@index([centroCustoId, varianteId], map: "ix_saldo_cc")
+  @@map("saldo_estoque")
+  @@schema("catalogo")
+}
+
+model Fornecedor {
+  id                String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String            @map("tenant_id") @db.Uuid
+  cnpj              String            @db.VarChar(14)
+  razaoSocial       String            @map("razao_social") @db.VarChar(200)
+  nomeFantasia      String?           @map("nome_fantasia") @db.VarChar(200)
+  emailContato      String?           @map("email_contato") @db.VarChar(255)
+  telefone          String?           @db.VarChar(20)
+  statusHomologacao StatusHomologacao @default(PENDENTE) @map("status_homologacao")
+  motivoStatus      String?           @map("motivo_status") @db.VarChar(255)
+  scoreDesempenho   Decimal?          @map("score_desempenho") @db.Decimal(5, 2)
+  homologadoEm      DateTime?         @map("homologado_em") @db.Timestamptz(6)
+  criadoEm          DateTime          @default(now()) @map("criado_em") @db.Timestamptz(6)
+  atualizadoEm      DateTime          @default(now()) @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  documentos   DocumentoFornecedor[]
+  certificados CertificadoAprovacao[]
+  skus         FornecedorSku[]
+
+  @@unique([tenantId, cnpj], map: "uq_fornecedor_cnpj")
+  @@index([tenantId, statusHomologacao], map: "ix_fornecedor_status")
+  @@map("fornecedor")
+  @@schema("fornecimento")
+}
+
+model DocumentoFornecedor {
+  id           String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String        @map("tenant_id") @db.Uuid
+  fornecedorId String        @map("fornecedor_id") @db.Uuid
+  tipo         TipoDocumento
+  numero       String?       @db.VarChar(60)
+  dataEmissao  DateTime      @map("data_emissao") @db.Date
+  dataValidade DateTime      @map("data_validade") @db.Date
+  obrigatorio  Boolean       @default(true)
+  arquivoUri   String?       @map("arquivo_uri")
+  criadoEm     DateTime      @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  fornecedor Fornecedor @relation(fields: [fornecedorId], references: [id], onDelete: Cascade)
+
+  @@index([fornecedorId, tipo], map: "ix_documento_fornecedor")
+  @@map("documento_fornecedor")
+  @@schema("fornecimento")
+}
+
+model CertificadoAprovacao {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  varianteId   String   @map("variante_id") @db.Uuid
+  fornecedorId String   @map("fornecedor_id") @db.Uuid
+  numeroCa     String   @map("numero_ca") @db.VarChar(20)
+  dataValidade DateTime @map("data_validade") @db.Date
+  arquivoUri   String?  @map("arquivo_uri")
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  variante   VarianteSku @relation(fields: [varianteId], references: [id], onDelete: Cascade)
+  fornecedor Fornecedor  @relation(fields: [fornecedorId], references: [id], onDelete: Cascade)
+
+  @@unique([varianteId, fornecedorId, numeroCa], map: "uq_ca")
+  @@index([dataValidade], map: "ix_ca_validade")
+  @@map("certificado_aprovacao")
+  @@schema("fornecimento")
+}
+
+model FornecedorSku {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  fornecedorId String   @map("fornecedor_id") @db.Uuid
+  varianteId   String   @map("variante_id") @db.Uuid
+  ultimoPreco  Decimal  @map("ultimo_preco") @db.Decimal(15, 4)
+  moeda        String   @default("BRL") @db.Char(3)
+  leadTimeDias Int      @default(0) @map("lead_time_dias") @db.SmallInt
+  vigenteEm    DateTime @default(dbgenerated("CURRENT_DATE")) @map("vigente_em") @db.Date
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  fornecedor Fornecedor  @relation(fields: [fornecedorId], references: [id], onDelete: Cascade)
+  variante   VarianteSku @relation(fields: [varianteId], references: [id], onDelete: Cascade)
+
+  @@unique([fornecedorId, varianteId], map: "uq_fornecedor_sku")
+  @@map("fornecedor_sku")
+  @@schema("fornecimento")
 }

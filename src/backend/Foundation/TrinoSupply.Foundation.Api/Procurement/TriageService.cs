@@ -13,15 +13,22 @@ public record TriageTicket(
     decimal? EstimatedValue, DateTimeOffset? OpenedAt, string Status,
     Guid? AssignedToId, string? AssignedToLabel, string? AssignedByLabel, DateTimeOffset? AssignedAt,
     ProcessStatusView? Process = null,    // situação do fluxo de compras (slide "Status das Solicitações")
+    bool SplitProcesses = false,          // itens em processos diferentes: a situação é por linha
     string Priority = "NORMAL", DateOnly? NeededBy = null, string? Justification = null,
     IReadOnlyList<TriageTicketItem>? Items = null,
     string? UrgencyReason = null, string? UrgencyImpact = null,
     string? PriorityChangedByLabel = null, string? PriorityChangeReason = null);
 
-/// <summary>Item da demanda: a tela lista uma linha por item, como no ERP (slides 8 e 9).</summary>
+/// <summary>
+/// Item da demanda: a tela lista uma linha por item, como no ERP (slides 8 e 9). Com a separação
+/// por item, cada linha pode estar num processo diferente — por isso o item carrega a sua própria
+/// família, situação e número de processo, em vez de herdar tudo da SC.
+/// </summary>
 public record TriageTicketItem(
     Guid Id, int Sequence, string? Code, string Description, string? Size,
-    decimal Quantity, string UnitOfMeasure, string? Notes);
+    decimal Quantity, string UnitOfMeasure, string? Notes,
+    string? Family = null, ProcessStatusView? Process = null,
+    string? QuotationNumber = null, string? PurchaseOrderNumber = null);
 
 public record TriageResponsible(Guid Id, string Name, string Role);
 
@@ -97,19 +104,45 @@ public class TriageService(AppDbContext db, TimeProvider clock)
         // tamanho do produto (grade de EPI/fardamento) para a lista por item
         var sizeByItem = await db.CatalogItems.Where(c => c.Size != null)
             .Select(c => new { c.Id, c.Size }).ToDictionaryAsync(x => x.Id, x => x.Size, ct);
+        // família do catálogo: é ela que separa a compra em processos e lotes
+        var familyByCatalogItem = await db.CatalogItems
+            .Select(c => new { c.Id, c.Family }).ToDictionaryAsync(x => x.Id, x => x.Family, ct);
 
         // situação única do fluxo de compras, a mesma que o solicitante vê
         var prIds = prs.Select(r => r.Id).ToList();
-        var quotations = await db.Quotations.Include(q => q.Items)
+        var quotations = await db.Quotations.Include(q => q.Items).Include(q => q.Awards)
             .Where(q => prIds.Contains(q.SourcePrId)
                         || q.Items.Any(i => i.SourcePrId != null && prIds.Contains(i.SourcePrId.Value)))
             .OrderByDescending(q => q.CreatedAt).ToListAsync(ct);
+        var quotationIds = quotations.Select(q => q.Id).ToList();
         var orders = await db.PurchaseOrders.Include(o => o.Items)
-            .Where(o => o.SourcePrId != null && prIds.Contains(o.SourcePrId!.Value))
+            .Where(o => (o.SourcePrId != null && prIds.Contains(o.SourcePrId!.Value))
+                        || (o.QuotationId != null && quotationIds.Contains(o.QuotationId!.Value)))
             .OrderByDescending(o => o.CreatedAt).ToListAsync(ct);
         ProcessStatusView ProcessOf(PurchaseRequisition r) => ProcessStatus.Of(
             r, quotations.FirstOrDefault(q => q.CoversPr(r.Id)),
             orders.FirstOrDefault(o => o.SourcePrId == r.Id));
+
+        // separação por item: cada item segue o processo em que ele entrou, e a O.C. da sua
+        // família — dois itens da mesma SC podem estar em etapas diferentes
+        var familiaDoItem = prs.SelectMany(r => r.Items)
+            .Where(i => i.CatalogItemId is not null && familyByCatalogItem.ContainsKey(i.CatalogItemId.Value))
+            .ToDictionary(i => i.Id, i => QuotationAward.FamilyKey(familyByCatalogItem[i.CatalogItemId!.Value]));
+        var processoDoItem = new Dictionary<Guid, (ProcessStatusView View, string Quotation, string? Order)>();
+        foreach (var pr0 in prs)
+            foreach (var q in quotations)
+                foreach (var qi in q.Items.Where(i => i.SourcePrItemId != null
+                                                     && pr0.Items.Any(x => x.Id == i.SourcePrItemId!.Value)))
+                {
+                    var familia = QuotationAward.FamilyKey(qi.Family);
+                    var award = q.AwardList.FirstOrDefault(a => a.Family == familia);
+                    var order = award?.PurchaseOrderId is { } oid
+                        ? orders.FirstOrDefault(o => o.Id == oid)
+                        : q.PurchaseOrderId is { } pid ? orders.FirstOrDefault(o => o.Id == pid) : null;
+                    familiaDoItem[qi.SourcePrItemId!.Value] = familia;   // snapshot do processo manda
+                    processoDoItem[qi.SourcePrItemId!.Value] =
+                        (ProcessStatus.Of(pr0, q, order), q.Number, order?.Number);
+                }
 
         var tickets = prs.Select(r => new TriageTicket(
             "SC", r.Id, r.Number, r.CostCenter, r.RequesterLabel,
@@ -119,11 +152,17 @@ public class TriageService(AppDbContext db, TimeProvider clock)
             r.Status == RequisitionStatus.InApproval ? PendingApprovalStatus(r)
                 : inQuotation.TryGetValue(r.Id, out var qn) ? $"EM COTAÇÃO ({qn})" : "AGUARDANDO COMPRADOR",
             r.AssignedToId, r.AssignedToLabel, r.AssignedByLabel, r.AssignedAt, ProcessOf(r),
+            r.Items.Select(i => processoDoItem.TryGetValue(i.Id, out var p) ? p.Quotation : null)
+                .Distinct().Count() > 1,
             r.Priority, r.NeededBy, r.Justification,
             r.Items.OrderBy(i => i.Sequence).Select(i => new TriageTicketItem(
                 i.Id, i.Sequence, i.CatalogCode, i.Description,
                 sizeByItem.GetValueOrDefault(i.CatalogItemId ?? Guid.Empty),
-                i.Quantity, i.UnitOfMeasure, i.Notes)).ToList(),
+                i.Quantity, i.UnitOfMeasure, i.Notes,
+                familiaDoItem.GetValueOrDefault(i.Id),
+                processoDoItem.TryGetValue(i.Id, out var proc) ? proc.View : ProcessStatus.Of(r, null, null),
+                processoDoItem.TryGetValue(i.Id, out var pq) ? pq.Quotation : null,
+                processoDoItem.TryGetValue(i.Id, out var po) ? po.Order : null)).ToList(),
             r.UrgencyReason, r.UrgencyImpact,
             r.PriorityChangedByLabel, r.PriorityChangeReason)).ToList();
 
@@ -141,7 +180,7 @@ public class TriageService(AppDbContext db, TimeProvider clock)
             r.Status == MaterialRequisitionStatus.PurchaseRoute
                 ? new ProcessStatusView("ROTA_COMPRA", "Rota de compra", "warn", "Sem saldo no almoxarifado: segue para compra.")
                 : new ProcessStatusView("PENDENTE", "Pendente", "", "Aguardando o almoxarifado atender."),
-            "NORMAL", null, r.Notes,
+            false, "NORMAL", null, r.Notes,
             r.Items.Select((i, idx) => new TriageTicketItem(
                 i.Id, idx + 1, i.CatalogCode, i.Description,
                 sizeByItem.GetValueOrDefault(i.CatalogItemId),

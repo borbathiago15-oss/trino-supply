@@ -13,6 +13,17 @@ public record ProposalInput(
 /// <summary>SC já designada a um comprador, mas ainda retida na aprovação.</summary>
 public record QueueBlocked(PurchaseRequisition Pr, string Reason);
 
+/// <summary>Item da SC ainda sem processo, com a família que define o lote da compra.</summary>
+public record QueueItem(Guid Id, int Sequence, string? CatalogCode, string Description,
+    decimal Quantity, string UnitOfMeasure, decimal? EstimatedUnitPrice, string Family);
+
+/// <summary>
+/// SC na fila de cotação com os itens que ainda NÃO entraram em nenhum processo. A SC só sai da
+/// fila quando o último item for cotado: separar EPI de ferramenta em processos diferentes deixa
+/// o que sobrou visível aqui, em vez de sumir junto com o primeiro processo aberto.
+/// </summary>
+public record QueueEntry(PurchaseRequisition Pr, IReadOnlyList<QueueItem> Pending, bool Partial);
+
 public record ProposalItemInput(Guid QuotationItemId, decimal UnitPrice, decimal? Quantity);
 
 /// <summary>Oferta de um fornecedor para uma família inteira (mapa de adjudicação).</summary>
@@ -66,39 +77,54 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
         db.ProcessEvents.Where(e => e.QuotationId == quotationId)
             .OrderBy(e => e.OccurredAt).Take(500).ToListAsync(ct);
 
-    /// <summary>Fila de Suprimentos: PRs aprovadas sem cotação ativa e sem OC.</summary>
-    public async Task<List<PurchaseRequisition>> AwaitingQuotationAsync(CancellationToken ct = default)
+    /// <summary>Fila de Suprimentos: SCs com itens ainda sem processo de cotação.</summary>
+    public async Task<List<QueueEntry>> AwaitingQuotationAsync(CancellationToken ct = default)
     {
         var (ready, _) = await QueueAsync(ct);
         return ready;
     }
 
     /// <summary>
-    /// Fila de Suprimentos completa: as PRs prontas para cotar e as que já têm comprador designado
-    /// mas continuam retidas na aprovação — o comprador precisa enxergar o que está a caminho.
+    /// Fila de Suprimentos completa: as SCs prontas para cotar — item a item, porque uma SC pode
+    /// ter parte dos itens já em processo — e as que já têm comprador designado mas continuam
+    /// retidas na aprovação, para o comprador enxergar o que está a caminho.
     /// </summary>
-    public async Task<(List<PurchaseRequisition> ready, List<QueueBlocked> blocked)> QueueAsync(
+    public async Task<(List<QueueEntry> ready, List<QueueBlocked> blocked)> QueueAsync(
         CancellationToken ct = default)
     {
-        var activeQuotes = db.Quotations
+        var ativas = db.Quotations
             .Where(q => q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected);
-        // multi-SC (V2): além da SC primária do cabeçalho, as SCs agrupadas via itens também saem da fila
-        var activeQuotationPrs = (await activeQuotes.Select(q => q.SourcePrId).ToListAsync(ct))
-            .Concat(await activeQuotes.SelectMany(q => q.Items)
-                .Where(i => i.SourcePrId != null).Select(i => i.SourcePrId!.Value).ToListAsync(ct))
-            .Distinct().ToList();
-        var linkedPoPrs = await db.PurchaseOrders
-            .Where(o => o.SourcePrId != null && o.Status != PurchaseOrderStatus.Cancelled)
-            .Select(o => o.SourcePrId!.Value).ToListAsync(ct);
+        // itens já dentro de um processo (fluxo por item)
+        var itensEmProcesso = (await ativas.SelectMany(q => q.Items)
+            .Where(i => i.SourcePrItemId != null).Select(i => i.SourcePrItemId!.Value).ToListAsync(ct))
+            .ToHashSet();
+        // processos do fluxo antigo (sem rastreio por item) levam a SC inteira
+        var scsInteiras = (await ativas.Where(q => q.Items.All(i => i.SourcePrItemId == null))
+            .Select(q => q.SourcePrId).ToListAsync(ct)).ToHashSet();
+        // O.C. emitida fora do processo de cotação (rota de material) também encerra a SC
+        var scsComOcDireta = (await db.PurchaseOrders
+            .Where(o => o.SourcePrId != null && o.QuotationId == null && o.Status != PurchaseOrderStatus.Cancelled)
+            .Select(o => o.SourcePrId!.Value).ToListAsync(ct)).ToHashSet();
 
         var open = await db.Requisitions.Include(r => r.Items)
             .Where(r => r.DeletedAt == null
                         && (r.Status == RequisitionStatus.Submitted || r.Status == RequisitionStatus.Approved
-                            || r.Status == RequisitionStatus.InApproval)
-                        && !activeQuotationPrs.Contains(r.Id) && !linkedPoPrs.Contains(r.Id))
+                            || r.Status == RequisitionStatus.InApproval))
             .OrderBy(r => r.DecidedAt ?? r.SubmittedAt).Take(200).ToListAsync(ct);
+        open = open.Where(r => !scsInteiras.Contains(r.Id) && !scsComOcDireta.Contains(r.Id)).ToList();
 
-        var ready = open.Where(r => r.Status is RequisitionStatus.Submitted or RequisitionStatus.Approved).ToList();
+        var familias = await FamiliesOfAsync(open.SelectMany(r => r.Items).Select(i => i.CatalogItemId), ct);
+        QueueEntry? Montar(PurchaseRequisition r)
+        {
+            var pendentes = r.Items.Where(i => !itensEmProcesso.Contains(i.Id)).OrderBy(i => i.Sequence)
+                .Select(i => new QueueItem(i.Id, i.Sequence, i.CatalogCode, i.Description,
+                    i.Quantity, i.UnitOfMeasure, i.EstimatedUnitPrice, FamilyOf(i.CatalogItemId, familias)))
+                .ToList();
+            return pendentes.Count == 0 ? null : new QueueEntry(r, pendentes, pendentes.Count < r.Items.Count);
+        }
+
+        var ready = open.Where(r => r.Status is RequisitionStatus.Submitted or RequisitionStatus.Approved)
+            .Select(Montar).OfType<QueueEntry>().ToList();
         var waiting = open.Where(r => r.Status == RequisitionStatus.InApproval).ToList();   // legado
         if (waiting.Count == 0) return (ready, []);
 
@@ -122,12 +148,20 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
         var pr = await db.Requisitions.Include(r => r.Items).SingleOrDefaultAsync(r => r.Id == prId, ct);
         if (pr is null || pr.Status is not (RequisitionStatus.Submitted or RequisitionStatus.Approved))
             return (null, new("RFQ-ERR-001", "A requisição de origem precisa estar enviada (ou aprovada) para virar cotação."));
-        if (await db.Quotations.AnyAsync(q =>
-                (q.SourcePrId == prId || q.Items.Any(i => i.SourcePrId == prId))
-                && q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected, ct))
-            return (null, new("RFQ-ERR-001", "A requisição já possui um processo de cotação ativo."));
         if (pr.Items.Count == 0)
             return (null, new("RFQ-ERR-001", "A requisição não possui itens."));
+        // processo do fluxo antigo (sem rastreio por item) segura a SC inteira
+        if (await db.Quotations.AnyAsync(q => q.SourcePrId == prId && q.Items.All(i => i.SourcePrItemId == null)
+                && q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected, ct))
+            return (null, new("RFQ-ERR-001", "A requisição já possui um processo de cotação ativo."));
+        // separação por item: o que já está em outro processo fica de fora, e o resto vem para cá
+        var jaCotados = (await db.Quotations
+            .Where(q => q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected)
+            .SelectMany(q => q.Items).Where(i => i.SourcePrId == prId && i.SourcePrItemId != null)
+            .Select(i => i.SourcePrItemId!.Value).ToListAsync(ct)).ToHashSet();
+        var itens = pr.Items.Where(i => !jaCotados.Contains(i.Id)).OrderBy(i => i.Sequence).ToList();
+        if (itens.Count == 0)
+            return (null, new("RFQ-ERR-001", "Todos os itens desta requisição já estão em processos de cotação."));
 
         var now = clock.GetUtcNow();
         var prefix = kind == QuotationKind.Bid ? "BID" : "RFQ";
@@ -147,9 +181,9 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
             CreatedAt = now,
             UpdatedAt = now,
         };
-        var familias = await FamiliesOfAsync(pr.Items.Select(i => i.CatalogItemId), ct);
+        var familias = await FamiliesOfAsync(itens.Select(i => i.CatalogItemId), ct);
         var seqNo = 0;
-        foreach (var i in pr.Items.OrderBy(i => i.Sequence))
+        foreach (var i in itens)
             q.Items.Add(new QuotationItem
             {
                 QuotationId = q.Id, Sequence = ++seqNo, CatalogItemId = i.CatalogItemId,
@@ -158,7 +192,10 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
                 SourcePrId = pr.Id, SourcePrNumber = pr.Number, SourcePrItemId = i.Id,
             });
         db.Quotations.Add(q);
-        AddEvent(q, "COTACAO_ABERTA", $"Cotação {q.Number} aberta a partir da requisição {pr.Number}.",
+        AddEvent(q, "COTACAO_ABERTA", itens.Count == pr.Items.Count
+                ? $"Cotação {q.Number} aberta a partir da requisição {pr.Number}."
+                : $"Cotação {q.Number} aberta com {itens.Count} de {pr.Items.Count} itens da requisição {pr.Number} " +
+                  $"(o restante segue em outro processo).",
             actor, null, QuotationStatus.Open);
         await db.SaveChangesAsync(ct);
         return (q, null);
@@ -205,10 +242,11 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
         if (emProcesso is not null)
             return (null, new("RFQ-ERR-062",
                 $"Item da solicitação {emProcesso.SourcePrNumber} já está no processo ativo {emProcesso.Number}."));
-        // SC de fluxo antigo (sem rastreio por item) em processo ativo também bloqueia
+        // SC de fluxo antigo (sem rastreio por item) em processo ativo também bloqueia — os
+        // processos novos travam item a item, então a SC pode ter outra parte já cotada
         var prIds = prs.Select(r => r.Id).ToList();
         var scAtiva = await db.Quotations
-            .Where(q => prIds.Contains(q.SourcePrId)
+            .Where(q => prIds.Contains(q.SourcePrId) && q.Items.All(i => i.SourcePrItemId == null)
                         && q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected)
             .Select(q => q.Number).FirstOrDefaultAsync(ct);
         if (scAtiva is not null)

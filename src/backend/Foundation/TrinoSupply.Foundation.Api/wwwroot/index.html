@@ -706,12 +706,14 @@
         <div class="panel">
           <h2>Solicitações aguardando cotação</h2>
           <p class="hello">As aprovadas podem ser cotadas agora; as retidas mostram de quem está a aprovação pendente. O comprador responsável vem de Compras → Gestão de Solicitações.</p>
-          <!-- agrupamento multi-SC (V2): um processo só para várias SCs do MESMO centro de custo -->
+          <!-- seleção por ITEM: agrupa SCs do mesmo centro de custo e separa o que precisa ir para
+               fornecedores diferentes (ex.: EPI num processo, ferramenta em outro) -->
           <div id="rfq-group-bar" hidden style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-            <span class="sub">Marque solicitações do <strong>mesmo centro de custo</strong> para cotar juntas:</span>
+            <span class="sub">Marque os <strong>itens</strong> (mesmo centro de custo). Junte tudo num processo — a compra ainda pode se dividir por família na escolha do fornecedor — ou separe por família desde já:</span>
             <select id="rfq-g-kind" style="width:auto"><option value="COMPRA">Cotação de compra</option><option value="SERVICO">Cotação de serviço</option><option value="BID">BID</option></select>
             <input type="date" id="rfq-g-deadline" title="Prazo para respostas" style="width:auto;padding:5px 8px;font-size:12px" />
-            <button id="rfq-g-open" disabled>Abrir processo com as selecionadas (0)</button>
+            <button id="rfq-g-open" disabled>Um processo com os itens marcados (0)</button>
+            <button class="secondary" id="rfq-g-split" disabled>Um processo por família (0)</button>
           </div>
           <div id="rfq-queue" class="tablewrap"></div>
         </div>
@@ -3762,10 +3764,17 @@
                 ${idx === 0 && mayAssign && t.kind === 'SC' ? `<div><button class="secondary" data-act="tri-priority" data-to="${urgente ? 'NORMAL' : 'URGENT'}" style="padding:2px 8px;font-size:11px;margin-top:2px">${urgente ? 'Voltar a Normal' : 'Tornar Urgente'}</button></div>` : ''}</td>
               ${idx === 0 ? `<td rowspan="${its.length}">${mayAssign
                     ? `<select class="tri-assign" style="width:100%">${options(t.assignedToId)}</select>${t.assignedByLabel ? `<div class="sub">designado por ${escapeHtml(t.assignedByLabel)}</div>` : ''}`
-                    : `${escapeHtml(t.assignedToLabel || '—')}${t.assignedByLabel ? `<div class="sub">por ${escapeHtml(t.assignedByLabel)}</div>` : ''}`}</td>
-                <td rowspan="${its.length}"><span class="badge ${t.processStatusTone || ''}" title="${escapeHtml(t.processStatusHint || '')}">${escapeHtml(t.processStatusLabel || t.status)}</span>
-                    <div class="sub">${escapeHtml(t.status)}</div>
-                    ${t.estimatedValue ? `<div class="sub">${money(t.estimatedValue)}</div>` : ''}</td>` : ''}
+                    : `${escapeHtml(t.assignedToLabel || '—')}${t.assignedByLabel ? `<div class="sub">por ${escapeHtml(t.assignedByLabel)}</div>` : ''}`}</td>` : ''}
+              ${t.splitProcesses
+                  // SC separada em processos diferentes: cada item mostra a sua situação
+                  ? `<td><span class="badge ${i.processStatusTone || ''}" title="${escapeHtml(i.processStatusHint || '')}">${escapeHtml(i.processStatusLabel || '—')}</span>
+                      <div class="sub">${escapeHtml(i.quotationNumber || 'sem processo')}${i.purchaseOrderNumber ? ' · O.C. ' + escapeHtml(i.purchaseOrderNumber) : ''}</div>
+                      ${i.family ? `<div class="sub">${escapeHtml(i.family)}</div>` : ''}</td>`
+                  : idx === 0
+                    ? `<td rowspan="${its.length}"><span class="badge ${t.processStatusTone || ''}" title="${escapeHtml(t.processStatusHint || '')}">${escapeHtml(t.processStatusLabel || t.status)}</span>
+                      <div class="sub">${escapeHtml(t.status)}</div>
+                      ${t.estimatedValue ? `<div class="sub">${money(t.estimatedValue)}</div>` : ''}</td>`
+                    : ''}
             </tr>`).join('');
         };
         const faixaEscolhida = $('tri-aging').value;
@@ -3896,62 +3905,119 @@
       try {
         const conduct = canConductRfq();
         const queue = (await api('/api/v1/quotations/queue')).items;
-        const selectable = queue.filter(r => !r.blockReason).length;
-        $('rfq-group-bar').hidden = !(conduct && selectable > 1);
+        const selecionaveis = queue.filter(r => !r.blockReason);
+        $('rfq-group-bar').hidden = !(conduct && selecionaveis.length > 0);
         updateRfqGroupButton();
         $('rfq-queue').innerHTML = queue.length
-          ? `<table><thead><tr>${conduct ? '<th></th>' : ''}<th>Solicitação</th><th>Itens</th><th>Valor est.</th><th>Comprador responsável</th><th>Abrir cotação</th></tr></thead><tbody>` +
+          ? `<table><thead><tr>${conduct ? '<th></th>' : ''}<th>Solicitação / item</th><th>Família</th><th>Qtde.</th><th>Valor est.</th><th>Comprador responsável</th><th>Abrir cotação</th></tr></thead><tbody>` +
             queue.map(r => {
               const mine = r.assignedToId && currentUser && r.assignedToId === currentUser.id;
               const responsible = r.assignedToLabel
                 ? `<strong>${escapeHtml(r.assignedToLabel)}</strong>${mine ? '<div class="sub">designada a você</div>' : ''}`
                 : '<span class="sub">designe em Compras → Gestão de Solicitações</span>';
+              const itens = r.items || [];
               const action = r.blockReason
                 ? `<span class="badge dev">RETIDA NA APROVAÇÃO</span><div class="sub">${escapeHtml(r.blockReason)}</div>`
                 : conduct ? `
                   <select class="rfq-kind"><option value="COMPRA">Cotação de compra</option><option value="SERVICO">Cotação de serviço</option><option value="BID">BID</option></select>
                   <input type="date" class="rfq-deadline" title="Prazo para respostas" style="width:auto;padding:5px 8px;font-size:12px" />
-                  <button data-act="open-rfq">Abrir</button>` : '—';
-              const check = !conduct ? ''
-                : r.blockReason ? '<td></td>'
-                : `<td><input type="checkbox" class="rfq-sel" title="Agrupar esta SC" data-cc="${escapeHtml(r.costCenter)}"></td>`;
-              return `
-              <tr data-pr="${r.id}" data-items='${JSON.stringify(r.items.map(i => i.id))}'>
-                ${check}
-                <td>${escapeHtml(r.number)}<div class="sub">${escapeHtml(r.requesterLabel)} · CC: ${escapeHtml(r.costCenter)}</div></td>
-                <td>${escapeHtml(r.justification)}<div class="sub">${r.items.map(i => `${i.quantity}× ${escapeHtml(i.description)}`).join(' · ')}</div></td>
-                <td>${money(r.totalEstimatedValue)}</td>
-                <td>${responsible}</td>
-                <td class="row-actions">${action}</td>
-              </tr>`;
+                  <button data-act="open-rfq" title="Abre um processo com todos os itens pendentes desta solicitação">Abrir tudo</button>` : '—';
+              // cabeçalho da SC: marca/desmarca todos os itens dela de uma vez
+              const marcaTudo = !conduct || r.blockReason ? (conduct ? '<td></td>' : '')
+                : `<td><input type="checkbox" class="rfq-sel-all" title="Marcar todos os itens desta solicitação"></td>`;
+              let html = `
+                <tr data-pr="${r.id}" class="rfq-head">
+                  ${marcaTudo}
+                  <td><strong>${escapeHtml(r.number)}</strong>${r.partial ? ' <span class="badge warn">parcialmente cotada</span>' : ''}
+                      <div class="sub">${escapeHtml(r.requesterLabel)} · CC: ${escapeHtml(r.costCenter)}</div>
+                      <div class="sub">${escapeHtml(r.justification || '')}</div></td>
+                  <td class="sub">${(r.families || []).map(escapeHtml).join(', ') || '—'}</td>
+                  <td class="sub">${itens.length} item(ns)</td>
+                  <td>${money(r.totalEstimatedValue)}</td>
+                  <td>${responsible}</td>
+                  <td class="row-actions">${action}</td>
+                </tr>`;
+              if (!r.blockReason)
+                html += itens.map(i => `
+                  <tr data-pr="${r.id}" class="rfq-item">
+                    ${conduct ? `<td><input type="checkbox" class="rfq-item-sel" value="${i.id}" data-pr="${r.id}" data-cc="${escapeHtml(r.costCenter)}" data-family="${escapeHtml(i.family)}"></td>` : ''}
+                    <td style="padding-left:18px">${i.catalogCode ? `<span class="sub">[${escapeHtml(i.catalogCode)}]</span> ` : ''}${escapeHtml(i.description)}
+                        <div class="sub">${escapeHtml(r.number)}/${String(i.sequence).padStart(4, '0')}</div></td>
+                    <td>${escapeHtml(i.family)}</td>
+                    <td style="white-space:nowrap">${i.quantity} ${escapeHtml(i.unitOfMeasure || '')}</td>
+                    <td class="sub">${i.estimatedUnitPrice != null ? money(i.estimatedUnitPrice * i.quantity) : '—'}</td>
+                    <td colspan="2"></td>
+                  </tr>`).join('');
+              return html;
             }).join('') + '</tbody></table>'
           : '<p class="hello">Nenhuma solicitação aguardando cotação. ✔</p>';
       } catch (err) { $('rfq-queue').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; }
     };
 
-    /// agrupamento multi-SC (V2): habilita o botão conforme a seleção e avisa se os CCs divergem
+    /// seleção por item: habilita os dois botões e avisa quando os centros de custo divergem
     function updateRfqGroupButton() {
-      const sel = [...document.querySelectorAll('#rfq-queue .rfq-sel:checked')];
+      const sel = [...document.querySelectorAll('#rfq-queue .rfq-item-sel:checked')];
       const ccs = [...new Set(sel.map(c => c.dataset.cc.toUpperCase()))];
-      const btn = $('rfq-g-open');
-      btn.disabled = sel.length === 0 || ccs.length > 1;
-      btn.textContent = ccs.length > 1
+      const familias = [...new Set(sel.map(c => c.dataset.family))];
+      const juntos = $('rfq-g-open');
+      const separados = $('rfq-g-split');
+      const misturado = ccs.length > 1;
+      juntos.disabled = sel.length === 0 || misturado;
+      separados.disabled = sel.length === 0 || misturado || familias.length < 2;
+      juntos.textContent = misturado
         ? 'Centros de custo diferentes — desmarque'
-        : `Abrir processo com as selecionadas (${sel.length})`;
+        : `Um processo com os itens marcados (${sel.length})`;
+      separados.textContent = misturado
+        ? 'Centros de custo diferentes'
+        : `Um processo por família (${familias.length})`;
     }
     $('rfq-queue').addEventListener('change', e => {
-      if (e.target.classList.contains('rfq-sel')) updateRfqGroupButton();
+      // o checkbox do cabeçalho marca/desmarca os itens daquela solicitação
+      if (e.target.classList.contains('rfq-sel-all')) {
+        const pr = e.target.closest('tr').dataset.pr;
+        document.querySelectorAll(`#rfq-queue .rfq-item-sel[data-pr="${pr}"]`)
+          .forEach(c => { c.checked = e.target.checked; });
+      }
+      if (e.target.classList.contains('rfq-item-sel') || e.target.classList.contains('rfq-sel-all'))
+        updateRfqGroupButton();
     });
+
+    /// abre UM processo com os itens marcados
     $('rfq-g-open').addEventListener('click', async () => {
-      const rows = [...document.querySelectorAll('#rfq-queue .rfq-sel:checked')].map(c => c.closest('tr'));
-      if (!rows.length) return;
-      const prItemIds = rows.flatMap(tr => JSON.parse(tr.dataset.items));
+      const sel = [...document.querySelectorAll('#rfq-queue .rfq-item-sel:checked')];
+      if (!sel.length) return;
       try {
         const q = await api('/api/v1/quotations/', { method: 'POST', body: {
-          prItemIds, kind: $('rfq-g-kind').value, deadline: $('rfq-g-deadline').value || null } });
-        toast(`Processo ${q.number} aberto agrupando ${rows.length} solicitação(ões).`, 'ok');
+          prItemIds: sel.map(c => c.value), kind: $('rfq-g-kind').value,
+          deadline: $('rfq-g-deadline').value || null } });
+        toast(`Processo ${q.number} aberto com ${sel.length} item(ns).`, 'ok');
         goTo('quotations', () => { rfqCache[q.id] = q; renderRfqDetail(q); });
       } catch (err) { toast(err.message, 'error'); }
+    });
+
+    /// separa a compra na origem: um processo para cada família marcada
+    $('rfq-g-split').addEventListener('click', async () => {
+      const sel = [...document.querySelectorAll('#rfq-queue .rfq-item-sel:checked')];
+      const porFamilia = new Map();
+      for (const c of sel) {
+        if (!porFamilia.has(c.dataset.family)) porFamilia.set(c.dataset.family, []);
+        porFamilia.get(c.dataset.family).push(c.value);
+      }
+      if (porFamilia.size < 2) return;
+      if (!confirm(`Abrir ${porFamilia.size} processos separados, um por família (${[...porFamilia.keys()].join(', ')})?`)) return;
+      const abertos = [];
+      for (const [familia, ids] of porFamilia) {
+        try {
+          const q = await api('/api/v1/quotations/', { method: 'POST', body: {
+            prItemIds: ids, kind: $('rfq-g-kind').value,
+            deadline: $('rfq-g-deadline').value || null,
+            notes: `Processo separado da família ${familia}.` } });
+          abertos.push(`${q.number} (${familia})`);
+        } catch (err) { toast(`Família ${familia}: ${err.message}`, 'error'); }
+      }
+      if (!abertos.length) return;
+      toast(`Abertos: ${abertos.join(' · ')}.`, 'ok');
+      goTo('quotations');
     });
 
     LOADERS['quotations'] = async () => {

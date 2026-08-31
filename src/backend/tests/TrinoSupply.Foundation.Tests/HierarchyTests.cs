@@ -207,7 +207,7 @@ public class HierarchyTests
         await w.Prs.SubmitAsync(w.Junior, pr!.Id);
 
         var (ready, blocked) = await w.Rfq.QueueAsync();
-        Assert.Contains(ready, r => r.Id == pr.Id);   // sem autorização prévia: já dá para cotar
+        Assert.Contains(ready, e => e.Pr.Id == pr.Id);   // sem autorização prévia: já dá para cotar
         Assert.Empty(blocked);
 
         var (q, error) = await w.Rfq.CreateFromPrAsync(w.Carla, pr.Id, QuotationKind.Purchase, null, null);
@@ -224,13 +224,13 @@ public class HierarchyTests
         await PutInLegacyApprovalAsync(w, pr);
 
         var (ready, blocked) = await w.Rfq.QueueAsync();
-        Assert.DoesNotContain(ready, r => r.Id == pr.Id);
+        Assert.DoesNotContain(ready, e => e.Pr.Id == pr.Id);
         var retida = Assert.Single(blocked, b => b.Pr.Id == pr.Id);
         Assert.Contains(w.Pleno.Label, retida.Reason);
 
         await w.Prs.ApproveAsync(w.Pleno, pr.Id, null);
         (ready, blocked) = await w.Rfq.QueueAsync();
-        Assert.Contains(ready, r => r.Id == pr.Id);
+        Assert.Contains(ready, e => e.Pr.Id == pr.Id);
         Assert.DoesNotContain(blocked, b => b.Pr.Id == pr.Id);
     }
 

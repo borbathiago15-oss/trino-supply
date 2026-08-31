@@ -214,6 +214,52 @@ check('delegação não devolve segundo voto a quem já decidiu (APV-B4)',
     delegacoes: [delegacao({ deleganteId: GESTOR })],
   }))) === 'APV-B4');
 
+console.log('== R09: estouro de orçamento (B6 e B7)');
+const estouro = (extras = {}) => ({ estourado: true, autorizado: false, nivelFinal: 2, ...extras });
+
+check('nível final não aprova estouro sem autorizar (APV-B6)',
+  codigoDe(() => assertPodeAprovar(contexto({ raiz: { estouro: estouro() } }))) === 'APV-B6');
+check('nível final aprova quando autoriza explicitamente',
+  codigoDe(() => assertPodeAprovar(contexto({ raiz: { estouro: estouro(), autorizarEstouro: true } }))) === 'OK');
+check('a autorização volta marcada na resposta',
+  assertPodeAprovar(contexto({ raiz: { estouro: estouro(), autorizarEstouro: true } })).autorizaEstouro === true);
+check('estouro já autorizado antes não pede de novo',
+  codigoDe(() => assertPodeAprovar(contexto({ raiz: { estouro: estouro({ autorizado: true }) } }))) === 'OK');
+check('sem estouro, nada muda',
+  codigoDe(() => assertPodeAprovar(contexto({ raiz: { estouro: estouro({ estourado: false }) } }))) === 'OK');
+check('REJEITAR não exige autorizar estouro — é justamente a recusa',
+  codigoDe(() => assertPodeAprovar(contexto({ raiz: { estouro: estouro(), decisao: 'REJEITADO' } }))) === 'OK');
+check('nível intermediário aprova normalmente e passa adiante',
+  codigoDe(() => assertPodeAprovar(contexto({
+    usuarioId: GESTOR,
+    etapa: { id: 'e1', nivel: 1 },
+    etapasDaInstancia: [
+      { id: 'e1', nivel: 1, aprovadorId: null, decisao: 'PENDENTE' },
+      { id: 'e2', nivel: 2, aprovadorId: null, decisao: 'PENDENTE' },
+    ],
+    raiz: { estouro: estouro({ nivelFinal: 2 }) },
+  }))) === 'OK');
+check('nível intermediário NÃO autoriza estouro (APV-B7)',
+  codigoDe(() => assertPodeAprovar(contexto({
+    usuarioId: GESTOR,
+    etapa: { id: 'e1', nivel: 1 },
+    etapasDaInstancia: [
+      { id: 'e1', nivel: 1, aprovadorId: null, decisao: 'PENDENTE' },
+      { id: 'e2', nivel: 2, aprovadorId: null, decisao: 'PENDENTE' },
+    ],
+    raiz: { estouro: estouro({ nivelFinal: 2 }), autorizarEstouro: true },
+  }))) === 'APV-B7');
+check('não se autoriza estouro que não existe (APV-B7)',
+  codigoDe(() => assertPodeAprovar(contexto({
+    raiz: { estouro: estouro({ estourado: false }), autorizarEstouro: true },
+  }))) === 'APV-B7');
+check('instância sem requisição associada ignora B6/B7',
+  codigoDe(() => assertPodeAprovar(contexto({ raiz: { estouro: null } }))) === 'OK');
+check('B1 continua vindo antes do estouro',
+  codigoDe(() => assertPodeAprovar(contexto({
+    usuarioId: SOLICITANTE, raiz: { estouro: estouro(), autorizarEstouro: true },
+  }))) === 'APV-B1');
+
 console.log('== estado da instância e da etapa');
 check('instância já aprovada não aceita nova decisão (APV-ERR-001)',
   codigoDe(() => assertPodeAprovar(contexto({ instancia: { status: 'APROVADA' } }))) === 'APV-ERR-001');

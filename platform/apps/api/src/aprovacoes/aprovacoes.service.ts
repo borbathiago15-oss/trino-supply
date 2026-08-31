@@ -13,7 +13,7 @@ import {
   CriarRegraAlcadaDto,
   DefinirAprovadorDto,
 } from './dto/aprovacoes.dto';
-import { AlcadaError, RegraAlcadaVigente, regraParaValor } from './dominio/faixas-alcada';
+import { AlcadaError, RegraAlcadaVigente, regraParaValor, regraVigenteEm } from './dominio/faixas-alcada';
 
 const soDia = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00.000Z`);
 
@@ -150,8 +150,14 @@ export class AprovacoesService {
    * exigido pelas regras VIGENTES, e a regra usada é congelada em
    * `regra_snapshot` — mudar a alçada depois não reescreve o que já está em
    * curso. O snapshot também carrega o `centroCustoId`, que é como a política
-   * sabe onde checar vigência (a tabela de instância não tem essa coluna).
+   * sabe onde checar vigência (a tabela de instância não tem essa coluna), e o
+   * `nivelFinal`, que é quem pode autorizar estouro.
    * As etapas 1..nível exigido nascem PENDENTES.
+   *
+   * R09: se a requisição estourou o orçamento, a instância ESCALA até o
+   * aprovador final, mesmo que o valor sozinho parasse antes. Sem isso a regra
+   * seria letra morta — quem tem alçada para liberar o estouro nunca veria a
+   * requisição.
    */
   async abrirInstancia(db: ClientEscopado, dto: AbrirInstanciaDto) {
     await this.exigir(db, 'centroCusto', dto.centroCustoId, 'CAT-ERR-408', 'Centro de custo não encontrado neste tenant.');
@@ -170,9 +176,24 @@ export class AprovacoesService {
       throw e;
     }
 
+    // Aprovador final = topo das regras vigentes.
+    const nivelFinal = regras
+      .filter((r) => regraVigenteEm(r, agora))
+      .reduce((maior, r) => Math.max(maior, r.nivel), regra.nivel);
+
+    // R09: estouro sobe até o final.
+    const requisicao = await db.requisicaoCompra.findUnique({ where: { id: dto.requisicaoId } });
+    const escalonadoPorEstouro = requisicao?.orcamentoEstourado === true && regra.nivel < nivelFinal;
+    const nivelExigido = escalonadoPorEstouro ? nivelFinal : regra.nivel;
+
     const snapshot = {
       centroCustoId: dto.centroCustoId,
       capturadoEm: agora.toISOString(),
+      nivelFinal,
+      nivelPorValor: regra.nivel,
+      escalonadoPorEstouro,
+      orcamentoEstourado: requisicao?.orcamentoEstourado ?? false,
+      orcamentoSnapshot: requisicao?.orcamentoSnapshot ?? null,
       regra: {
         id: regra.id,
         nivel: regra.nivel,
@@ -189,13 +210,13 @@ export class AprovacoesService {
         data: {
           requisicaoId: dto.requisicaoId,
           valorBase: dto.valorBase,
-          nivelExigido: regra.nivel,
+          nivelExigido,
           regraSnapshot: snapshot as any,
         },
       });
 
       // Uma etapa por nível até o exigido: aprovação sobe degrau por degrau.
-      for (let nivel = 1; nivel <= regra.nivel; nivel += 1) {
+      for (let nivel = 1; nivel <= nivelExigido; nivel += 1) {
         await db.etapaAprovacao.create({
           data: {
             instanciaId: instancia.id,

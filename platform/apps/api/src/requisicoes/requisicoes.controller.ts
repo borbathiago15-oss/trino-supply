@@ -45,8 +45,14 @@ export class RequisicoesController {
     @Query('status') status?: string,
     @Query('centroCustoId', UuidOpcional) centroCustoId?: string,
     @Query('solicitanteId', UuidOpcional) solicitanteId?: string,
+    @Query('orcamentoEstourado') orcamentoEstourado?: string,
   ) {
-    return this.requisicoes.listar(req.db, { status, centroCustoId, solicitanteId });
+    return this.requisicoes.listar(req.db, {
+      status,
+      centroCustoId,
+      solicitanteId,
+      orcamentoEstourado: orcamentoEstourado === undefined ? undefined : orcamentoEstourado === 'true',
+    });
   }
 
   @Get(':id')

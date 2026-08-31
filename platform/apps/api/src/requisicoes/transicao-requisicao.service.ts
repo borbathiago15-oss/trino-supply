@@ -36,6 +36,9 @@ function snapshot(req: any, totalItensAtivos: number) {
     concluidaEm: req.concluidaEm,
     slaPausadoEm: req.slaPausadoEm,
     slaSegundosPausados: req.slaSegundosPausados,
+    orcamentoEstourado: req.orcamentoEstourado,
+    orcamentoSnapshot: req.orcamentoSnapshot,
+    estouroAutorizadoPor: req.estouroAutorizadoPor,
     version: req.version,
     totalItensAtivos,
   };
@@ -60,8 +63,17 @@ export class TransicaoRequisicaoService {
     requisicaoId: string,
     comando: ComandoTransicao,
     autor: ContextoAutor,
-    /** Validações que precisam de banco (ex.: saldo orçamentário R9). */
-    validacaoExtra?: (tx: any, estado: EstadoRequisicao, requisicao: any) => Promise<void>,
+    /**
+     * Passo que precisa de banco (ex.: avaliar o orçamento na submissão).
+     * Pode barrar lançando, ou devolver campos extras para entrarem no mesmo
+     * UPDATE da transição — assim a marcação e a mudança de estado são
+     * atômicas, e o snapshot da auditoria já sai com elas.
+     */
+    validacaoExtra?: (
+      tx: any,
+      estado: EstadoRequisicao,
+      requisicao: any,
+    ) => Promise<Record<string, unknown> | void>,
   ) {
     try {
       return await db.$transaction(async (tx: any) => {
@@ -93,14 +105,14 @@ export class TransicaoRequisicaoService {
 
         // A máquina decide primeiro: nem consulta saldo quem nem podia transicionar.
         const patch: PatchRequisicao = aplicarTransicao(estado, comando);
-        if (validacaoExtra) await validacaoExtra(tx, estado, requisicao);
+        const extras = validacaoExtra ? await validacaoExtra(tx, estado, requisicao) : null;
 
         const antes = snapshot(requisicao, totalItensAtivos);
 
         // Bloqueio otimista: a versão lida é parte do WHERE.
         const { count } = await tx.requisicaoCompra.updateMany({
           where: { id: requisicaoId, version: requisicao.version },
-          data: { ...patch, version: { increment: 1 } },
+          data: { ...patch, ...(extras ?? {}), version: { increment: 1 } },
         });
         if (count === 0) {
           throw new ConflitoDeVersao(requisicao.version, requisicao.version);

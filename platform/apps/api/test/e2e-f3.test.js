@@ -326,6 +326,109 @@ async function main() {
     check('nenhuma decisão bloqueada virou log',
       logs.every((l) => l.afterJson?.decisao !== 'PENDENTE'));
 
+    console.log('== R09: estouro sobe até o aprovador final');
+    // Requisição pequena (nível 1 por valor) mas com orçamento estourado.
+    const familia = await prisma.familiaProduto.create({
+      data: { tenantId: ids.tenant, codigo: 'EPI', nome: 'EPI' },
+    });
+    const tipo = await prisma.tipoProduto.create({
+      data: { tenantId: ids.tenant, familiaId: familia.id, codigo: 'LUV', nome: 'Luvas' },
+    });
+    const skuBase = await prisma.skuBase.create({
+      data: { tenantId: ids.tenant, tipoProdutoId: tipo.id, codigo: 'LUV-NIT', descricao: 'Luva', unidadeMedida: 'PAR' },
+    });
+    const variante = await prisma.varianteSku.create({
+      data: { tenantId: ids.tenant, skuBaseId: skuBase.id, codigo: 'LUV-M', tamanho: 'M' },
+    });
+    // Orçamento minúsculo: qualquer compra estoura.
+    await prisma.orcamentoCentroCusto.create({
+      data: { tenantId: ids.tenant, centroCustoId: ids.cc, exercicio: new Date().getUTCFullYear(), valorOrcado: 100 },
+    });
+
+    const criada = await req('/requisicoes', {
+      method: 'POST', como: 'solicitante',
+      body: { centroCustoId: ids.cc, justificativa: 'Compra necessária fora do orçamento' },
+    });
+    await req(`/requisicoes/${criada.body.id}/itens`, {
+      method: 'POST', como: 'solicitante',
+      body: { varianteId: variante.id, quantidade: 10, precoReferencia: 100 },
+    });
+    const submetida = await req(`/requisicoes/${criada.body.id}/submeter`, { method: 'POST', como: 'solicitante', body: {} });
+    check('requisição de R$ 1.000 com orçamento de R$ 100 é marcada como estourada',
+      submetida.status === 201 && submetida.body.requisicao.orcamentoEstourado === true,
+      JSON.stringify(submetida.body?.requisicao?.orcamentoSnapshot));
+
+    // Valor de R$ 1.000 sozinho pararia no nível 1; o estouro escala até o 3.
+    const instEstouro = await req('/aprovacoes/instancias', {
+      method: 'POST',
+      body: {
+        requisicaoId: criada.body.id, centroCustoId: ids.cc,
+        solicitanteId: ids.solicitante, compradorId: ids.comprador, valorBase: 1000,
+      },
+    });
+    check('a instância ESCALA até o aprovador final por causa do estouro',
+      instEstouro.body.nivelExigido === 3 && instEstouro.body.etapas.length === 3,
+      JSON.stringify({ nivel: instEstouro.body.nivelExigido, etapas: instEstouro.body.etapas.length }));
+    check('o snapshot registra a escalada e o retrato do orçamento',
+      instEstouro.body.regraSnapshot?.escalonadoPorEstouro === true &&
+      instEstouro.body.regraSnapshot?.nivelPorValor === 1 &&
+      instEstouro.body.regraSnapshot?.nivelFinal === 3 &&
+      instEstouro.body.regraSnapshot?.orcamentoSnapshot?.motivo === 'SALDO_INSUFICIENTE');
+
+    const etapasEstouro = {};
+    for (const e of instEstouro.body.etapas) etapasEstouro[e.nivel] = e.id;
+
+    const n1 = await decidir(etapasEstouro[1], 'gestor', { decisao: 'APROVADO' });
+    check('o nível 1 aprova normalmente e passa o estouro adiante',
+      n1.status === 201 && n1.body.orcamentoEstourado === true && n1.body.estouroAutorizado === false);
+    check('nível intermediário não pode autorizar o estouro (APV-B7)',
+      (await decidir(etapasEstouro[2], 'gerente', { decisao: 'APROVADO', autorizarEstouro: true })).body?.codigo === 'APV-B7');
+    const n2 = await decidir(etapasEstouro[2], 'gerente', { decisao: 'APROVADO' });
+    check('o nível 2 aprova sem autorizar', n2.status === 201 && n2.body.statusInstancia === 'PENDENTE');
+
+    const semAutorizar = await decidir(etapasEstouro[3], 'diretor', { decisao: 'APROVADO' });
+    check('o aprovador final NÃO aprova estouro sem autorizar (APV-B6)',
+      semAutorizar.status === 409 && semAutorizar.body?.codigo === 'APV-B6', JSON.stringify(semAutorizar.body));
+
+    const autorizada = await decidir(etapasEstouro[3], 'diretor', { decisao: 'APROVADO', autorizarEstouro: true });
+    check('o aprovador final aprova autorizando o estouro',
+      autorizada.status === 201 && autorizada.body.statusInstancia === 'APROVADA' &&
+      autorizada.body.estouroAutorizado === true, JSON.stringify(autorizada.body));
+    const reqAutorizada = await prisma.requisicaoCompra.findUnique({ where: { id: criada.body.id } });
+    check('a requisição registra quem autorizou e quando',
+      reqAutorizada.estouroAutorizadoPor === ids.diretor && reqAutorizada.estouroAutorizadoEm !== null);
+    check('a autorização do estouro fica na auditoria',
+      (await prisma.auditLog.findMany({ where: { entidade: 'etapa_aprovacao' } }))
+        .some((l) => l.afterJson?.estouroAutorizado === true));
+
+    console.log('== R09: recusa informa o estouro');
+    const criada2 = await req('/requisicoes', {
+      method: 'POST', como: 'solicitante',
+      body: { centroCustoId: ids.cc, justificativa: 'Outra compra fora do orçamento' },
+    });
+    await req(`/requisicoes/${criada2.body.id}/itens`, {
+      method: 'POST', como: 'solicitante',
+      body: { varianteId: variante.id, quantidade: 5, precoReferencia: 100 },
+    });
+    await req(`/requisicoes/${criada2.body.id}/submeter`, { method: 'POST', como: 'solicitante', body: {} });
+    const inst2 = await req('/aprovacoes/instancias', {
+      method: 'POST',
+      body: { requisicaoId: criada2.body.id, centroCustoId: ids.cc, solicitanteId: ids.solicitante, valorBase: 500 },
+    });
+    const etapas2 = {};
+    for (const e of inst2.body.etapas) etapas2[e.nivel] = e.id;
+    const recusada = await decidir(etapas2[1], 'gestor', {
+      decisao: 'REJEITADO', comentario: 'Não cabe no orçamento deste exercício',
+    });
+    check('rejeitar não exige autorizar estouro',
+      recusada.status === 201 && recusada.body.statusInstancia === 'REJEITADA');
+    check('a recusa informa que o orçamento estava estourado',
+      recusada.body.orcamentoEstourado === true &&
+      recusada.body.motivoOrcamento === 'Requisição recusada com orçamento estourado.',
+      JSON.stringify(recusada.body.motivoOrcamento));
+    check('a recusa carrega o retrato do orçamento para quem for ler depois',
+      recusada.body.orcamentoSnapshot?.motivo === 'SALDO_INSUFICIENTE');
+
     console.log('== isolamento por tenant');
     check('etapa de outro tenant não existe para quem não é dele',
       (await req(`/aprovacoes/etapas/${randomUUID()}/decisao`, { method: 'POST', body: { decisao: 'APROVADO' } })).status === 404);

@@ -104,4 +104,11 @@ export class DecidirEtapaDto {
   /** Obrigatório em rejeição — o banco também exige (ck_etapa_motivo_rejeicao). */
   @IsOptional() @IsString() @Length(1, 2000)
   comentario?: string;
+
+  /**
+   * R09 — autorização explícita do estouro de orçamento. Só o aprovador final
+   * pode enviar; sem isso, ele não consegue aprovar uma requisição estourada.
+   */
+  @IsOptional() @IsBoolean()
+  autorizarEstouro?: boolean;
 }

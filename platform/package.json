@@ -1,0 +1,9 @@
+{
+  "name": "trino-platform",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "db:generate": "npm --workspace @trino/db run generate",
+    "db:migrate": "npm --workspace @trino/db run migrate"
+  }
+}

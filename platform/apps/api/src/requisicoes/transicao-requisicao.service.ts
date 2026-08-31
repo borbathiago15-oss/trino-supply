@@ -82,8 +82,11 @@ export class TransicaoRequisicaoService {
           throw new NotFoundException({ codigo: 'REQ-ERR-404', mensagem: 'Requisição não encontrada neste tenant.' });
         }
 
+        // "Vivos" = tudo que não foi cancelado. Um item em cotação ou já
+        // pedido continua sendo item da requisição; contar só ATIVO faria a
+        // guarda de emissão achar que a requisição esvaziou no meio da esteira.
         const totalItensAtivos = await tx.itemRequisicao.count({
-          where: { requisicaoId, status: 'ATIVO' },
+          where: { requisicaoId, status: { not: 'CANCELADO' } },
         });
 
         const estado: EstadoRequisicao = {

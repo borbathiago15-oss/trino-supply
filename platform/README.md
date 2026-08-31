@@ -1,4 +1,4 @@
-# Trino Platform — monorepo (Fases F0 a F4)
+# Trino Platform — monorepo (Fases F0 a F6)
 
 Base multi-tenant da plataforma Trino: schemas `core` e `auditoria` no Postgres,
 Prisma com multi-schema, isolamento de tenant imposto por extensão do client
@@ -6,7 +6,8 @@ Prisma com multi-schema, isolamento de tenant imposto por extensão do client
 (F1); catálogo de materiais, fornecedores e elegibilidade nos schemas
 `catalogo` e `fornecimento` (F2); alçadas e aprovação no schema `compras`,
 com política de domínio pura e decisão sob transação serializável (F3); e a
-requisição de compra com máquina de estados determinística (F4).
+requisição de compra com máquina de estados determinística (F4); cotação,
+propostas e equalização (F5); pedido, NF-e e recebimento com 3-way match (F6).
 Convive com o app .NET do Trino Supply (`../src`) sem tocar nele.
 
 ## Estrutura
@@ -16,7 +17,9 @@ platform/
   packages/db/          @trino/db — Prisma + extensão de tenant
     prisma/schema.prisma        core, auditoria, catalogo, fornecimento e compras (fiel ao DDL)
     prisma/migrations/          init_core_and_audit, init_catalogo_e_fornecimento,
-                                init_alcadas_e_aprovacao, init_requisicao_compra
+                                init_alcadas_e_aprovacao, init_requisicao_compra,
+                                estouro_orcamentario_na_requisicao,
+                                init_cotacao_pedido_recebimento
     src/tenant-extension.js     forTenant(prisma, tenantId)
     src/limpeza-testes.js       limparBancoDeTestes (ordem das FKs, só testes)
     test/tenant-isolation.test.js
@@ -31,14 +34,21 @@ platform/
       aprovar-etapa.usecase.ts  transação serializável + SELECT ... FOR UPDATE
     src/requisicoes/            esteira da requisição de compra
       dominio/maquina-estados.ts  transições T01–T10 PURAS + guardas
-      casos-de-uso.ts           Submeter (R9), AssumirTriagem (TTO), DevolverAjuste (SLA)
+      casos-de-uso.ts           Submeter (R09), AssumirTriagem (TTO), DevolverAjuste (SLA)
+    src/cotacoes/               RFQ, propostas e equalização (F5)
+      dominio/equalizacao.ts    matriz de notas PURA (min-max ponderada)
+    src/pedidos/                pedido, NF-e e recebimento (F6)
+      dominio/conciliacao.ts    3-way match PURO (pedido × NF × recebido)
     scripts/seed.js             bootstrap de tenant + admin
     test/politica-aprovacao.test.js  unitário puro da política (CT-01..CT-08)
-    test/maquina-estados.test.js     unitário puro das transições T01..T10
+    test/maquina-estados.test.js     unitário puro das transições da esteira
+    test/equalizacao.test.js         unitário puro da matriz de equalização
+    test/conciliacao.test.js         unitário puro do 3-way match
     test/e2e.test.js            e2e da F1 contra Postgres real
     test/e2e-f2.test.js         e2e da F2 contra Postgres real
     test/e2e-f3.test.js         e2e da F3 contra Postgres real
     test/e2e-f4.test.js         e2e da F4 contra Postgres real
+    test/e2e-f5f6.test.js       e2e das F5/F6 contra Postgres real
 ```
 
 ## Rodando
@@ -322,3 +332,61 @@ alçada para isso.
 
 Reenviar após ajuste **reavalia** o orçamento e **derruba** qualquer autorização
 anterior: o que foi autorizado valia para o valor de então.
+
+## Cotação e equalização (F5)
+
+`POST /cotacoes` abre a RFQ: agrupa itens de uma ou mais SCs em `rfq_item`,
+convida **só fornecedores elegíveis** (a mesma checagem da F2 — homologação,
+certidões e CA por variante) e **congela o SLA** das requisições envolvidas.
+Fornecedor recusado volta na resposta com o motivo, em vez de sumir em silêncio.
+
+`POST /cotacoes/:id/propostas` registra a proposta: `valor_itens` é derivado
+(preço × quantidade consolidada) e **`valor_total` é COLUNA GERADA no banco**
+(`itens + frete − desconto`) — ninguém escreve o total, então ele não diverge
+das parcelas.
+
+`POST /cotacoes/:id/equalizacao` calcula a matriz em domínio puro
+(`src/cotacoes/dominio/equalizacao.ts`):
+
+- normalização **min-max dentro do conjunto**: a melhor de cada critério tira 1,
+  a pior tira 0, o resto fica proporcional; empate geral dá 1 para todos;
+- `preco`, `lead_time` e `frete` são "menor é melhor"; `cond_pagto` é "maior é
+  melhor" (mais dias para pagar), derivado da condição comercial escrita à mão
+  ("30/60/90" → 60 dias; texto ilegível → 0, nunca premia o desconhecido);
+- nota final = soma ponderada; os pesos vêm da cotação e o banco garante que
+  somam 1,0000.
+
+Escolher quem **não** é o menor preço exige justificativa (`EQL-ERR-005`, com
+`ck_equalizacao_desvio` como rede). A matriz inteira fica gravada em `notas`:
+quem auditar daqui a um ano vê as contas que levaram à escolha.
+
+## Pedido e recebimento (F6)
+
+`POST /pedidos` (T16) só emite o que já passou pelo funil: requisição em
+`APROVACAO_ALCADA` **com instância de alçada APROVADA**. Antes de emitir valida
+R09 (estouro exige a autorização do aprovador final — emitir sem ela furaria por
+baixo a decisão tomada por cima) e o **CA de EPI** de cada item, contra o
+fornecedor escolhido.
+
+`POST /pedidos/:id/recebimentos` faz a conciliação **3-way** (`Pedido × NF ×
+Recebido`) em domínio puro. Divergir não impede o registro — negar faria a
+mercadoria existir no pátio e não no sistema —, mas tudo fica marcado:
+
+| código | achado |
+| --- | --- |
+| `REC-DIV-001` | avaria |
+| `REC-DIV-002` | recebido acima do pedido, dentro da tolerância de 10% |
+| `REC-DIV-003` | item ainda pendente (curso normal do parcial, não desconcilia) |
+| `REC-DIV-004` | especificação divergente |
+| `REC-DIV-005` | NF diverge do recebido a preço de pedido |
+
+O que a conciliação **recusa** registrar: remessa vazia, item repetido, item de
+outro pedido, quantidade zero, avaria maior que o recebido e excesso acima da
+tolerância (que o banco repete em `ck_item_pedido_qtd`).
+
+Ainda na mesma transação: `qtd_recebida` acumula no item, o **saldo de estoque
+é incrementado atomicamente** (`increment`, sem ler-e-escrever) e **só com o que
+não veio avariado**, o pedido vira `RECEBIDO_PARCIAL`/`RECEBIDO_TOTAL` e a
+requisição acompanha (T17/T18). Cada avaria ou divergência gera um lançamento na
+**Conta 408**, gravado na trilha de auditoria — que é o registro durável, já que
+o DDL não prevê tabela de eventos.

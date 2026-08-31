@@ -33,7 +33,12 @@ export type Transicao =
   | 'T07_EDITAR_EM_AJUSTE'
   | 'T08_REENVIAR'
   | 'T09_REJEITAR'
-  | 'T10_ENVIAR_COTACAO';
+  | 'T10_ENVIAR_COTACAO'
+  | 'T11_ENCERRAR_COTACAO'
+  | 'T12_ENVIAR_ALCADA'
+  | 'T16_EMITIR_PEDIDO'
+  | 'T17_RECEBER_PARCIAL'
+  | 'T18_RECEBER_TOTAL';
 
 export class TransicaoNaoPermitidaException extends Error {
   readonly codigo = 'REQ-ERR-TRANSICAO';
@@ -96,7 +101,10 @@ export interface EstadoRequisicao {
   concluidaEm: Date | null;
   slaPausadoEm: Date | null;
   slaSegundosPausados: number;
-  /** Quantidade de itens ATIVOS — a máquina não precisa da lista inteira. */
+  /**
+   * Quantidade de itens VIVOS (não cancelados) — a máquina não precisa da
+   * lista inteira, só de saber se a requisição tem conteúdo.
+   */
   totalItensAtivos: number;
 }
 
@@ -150,6 +158,21 @@ export const TRANSICOES: Record<Transicao, DefinicaoTransicao> = {
   T08_REENVIAR: { rotulo: 'Reenviar após ajuste', de: ['DEVOLVIDA_AJUSTE'], para: 'SUBMETIDA' },
   T09_REJEITAR: { rotulo: 'Rejeitar', de: ['SUBMETIDA', 'EM_TRIAGEM', 'DEVOLVIDA_AJUSTE'], para: 'REJEITADA' },
   T10_ENVIAR_COTACAO: { rotulo: 'Enviar para cotação', de: ['EM_TRIAGEM'], para: 'EM_COTACAO' },
+  // F5/F6 — o resto da esteira. T13 a T15 ficam reservados para os passos do
+  // plano que ainda não chegaram; a numeração respeita T16 = emissão do pedido.
+  T11_ENCERRAR_COTACAO: { rotulo: 'Encerrar cotação', de: ['EM_COTACAO'], para: 'COTADA' },
+  T12_ENVIAR_ALCADA: { rotulo: 'Enviar para alçada', de: ['COTADA'], para: 'APROVACAO_ALCADA' },
+  T16_EMITIR_PEDIDO: { rotulo: 'Emitir pedido de compra', de: ['APROVACAO_ALCADA'], para: 'PEDIDO_GERADO' },
+  T17_RECEBER_PARCIAL: {
+    rotulo: 'Registrar recebimento parcial',
+    de: ['PEDIDO_GERADO', 'RECEBIDA_PARCIAL'],
+    para: 'RECEBIDA_PARCIAL',
+  },
+  T18_RECEBER_TOTAL: {
+    rotulo: 'Registrar recebimento total',
+    de: ['PEDIDO_GERADO', 'RECEBIDA_PARCIAL'],
+    para: 'RECEBIDA_TOTAL',
+  },
 };
 
 /** Transições possíveis a partir de um estado — serve à UI e ao teste. */
@@ -273,6 +296,29 @@ export function aplicarTransicao(estado: EstadoRequisicao, comando: ComandoTrans
       }
       break;
     }
+
+    case 'T11_ENCERRAR_COTACAO':
+    case 'T12_ENVIAR_ALCADA':
+      // Passos de trâmite: quem valida propostas e alçada são as fases F3/F5;
+      // aqui a máquina só garante que a ordem dos estados foi respeitada.
+      break;
+
+    case 'T16_EMITIR_PEDIDO': {
+      if (!estado.compradorId) {
+        throw new GuardaViolada('REQ-ERR-012', 'Pedido de compra exige comprador responsável.');
+      }
+      if (estado.totalItensAtivos <= 0) {
+        throw new GuardaViolada('REQ-ERR-002', 'Não se emite pedido de requisição sem itens ativos.');
+      }
+      break;
+    }
+
+    case 'T17_RECEBER_PARCIAL':
+      break;
+
+    case 'T18_RECEBER_TOTAL':
+      patch.concluidaEm = agora;
+      break;
 
     case 'T01_CRIAR':
       // A criação não parte de estado nenhum: assertTransicaoPermitida já barrou.

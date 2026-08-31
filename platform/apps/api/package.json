@@ -8,9 +8,9 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "seed": "node scripts/seed.js",
-    "test": "npm run build && node test/maquina-estados.test.js && node test/politica-aprovacao.test.js && node test/e2e.test.js && node test/e2e-f2.test.js && node test/e2e-f3.test.js && node test/e2e-f4.test.js",
-    "test:unit": "npm run build && node test/maquina-estados.test.js && node test/politica-aprovacao.test.js",
-    "test:e2e": "npm run build && node test/e2e.test.js && node test/e2e-f2.test.js && node test/e2e-f3.test.js && node test/e2e-f4.test.js"
+    "test": "npm run build && node test/maquina-estados.test.js && node test/politica-aprovacao.test.js && node test/equalizacao.test.js && node test/conciliacao.test.js && node test/e2e.test.js && node test/e2e-f2.test.js && node test/e2e-f3.test.js && node test/e2e-f4.test.js && node test/e2e-f5f6.test.js",
+    "test:unit": "npm run build && node test/maquina-estados.test.js && node test/politica-aprovacao.test.js && node test/equalizacao.test.js && node test/conciliacao.test.js",
+    "test:e2e": "npm run build && node test/e2e.test.js && node test/e2e-f2.test.js && node test/e2e-f3.test.js && node test/e2e-f4.test.js && node test/e2e-f5f6.test.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

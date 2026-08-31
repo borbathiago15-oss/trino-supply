@@ -14,6 +14,12 @@
     "api:test": "npm --workspace @trino/api run test:e2e",
     "web:dev": "npm --workspace @trino/web run dev",
     "web:build": "npm --workspace @trino/contratos run build && npm --workspace @trino/web run build",
-    "contratos:build": "npm --workspace @trino/contratos run build"
+    "contratos:build": "npm --workspace @trino/contratos run build",
+    "lint": "npm --workspace @trino/web run lint"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^14.2.15",
+    "wait-on": "^9.1.0"
   }
 }

@@ -1,4 +1,4 @@
-# Trino Platform — monorepo (Fases F0 a F7)
+# Trino Platform — monorepo (Fases F0 a F8)
 
 Base multi-tenant da plataforma Trino: schemas `core` e `auditoria` no Postgres,
 Prisma com multi-schema, isolamento de tenant imposto por extensão do client
@@ -8,7 +8,8 @@ Prisma com multi-schema, isolamento de tenant imposto por extensão do client
 com política de domínio pura e decisão sob transação serializável (F3); e a
 requisição de compra com máquina de estados determinística (F4); cotação,
 propostas e equalização (F5); pedido, NF-e e recebimento com 3-way match (F6); SLA em tempo útil com
-calendário comercial, feriados e pausas automáticas (F7).
+calendário comercial, feriados e pausas automáticas (F7); ingestão de arquivos
+em staging com fila BullMQ (F8).
 Convive com o app .NET do Trino Supply (`../src`) sem tocar nele.
 
 ## Estrutura
@@ -413,3 +414,42 @@ carrega os feriados do tenant (`core.feriado`, CRUD em `/feriados`) e o regime.
   cronômetro estiver congelado agora, o trecho corrente.
 - `GET /requisicoes/:id/sla` devolve TTO/TTR nos dois relógios (útil e
   corrido), o regime e o estado da pausa.
+
+## Importação em staging (F8)
+
+`POST /importacoes` recebe o arquivo (CSV) e **responde na hora**: as linhas
+entram em `core.staging_linha_importacao` como `PENDENTE` e o processamento vai
+para a fila. Nada é validado na requisição — o staging guarda o arquivo **como
+veio**, que é o que permite reprocessar e auditar depois.
+
+- **Idempotência por SHA-256**: o hash do conteúdo é a identidade do lote.
+  Reenviar o mesmo arquivo devolve o lote anterior (`jaProcessado: true`) sem
+  duplicar nada; mudar um byte é um lote novo.
+- **Worker resiliente** (`ProcessadorDeImportacaoWorker`): valida e persiste
+  **linha a linha**. Uma linha ruim vira `ERRO_VALIDACAO` (falhou a validação)
+  ou `ERRO_PERSISTENCIA` (falhou ao gravar — referência inexistente, por
+  exemplo) com a mensagem detalhada, e o laço **segue**. `FALHA_CRITICA` fica
+  para o que impede processar o lote inteiro. Os contadores fecham o lote em
+  `CONCLUIDO_COM_SUCESSO` ou `CONCLUIDO_COM_FALHAS`.
+- **Destinos**: `CATALOGO_SKU` (SKU + variante), `PARAMETRO_ESTOQUE`,
+  `FORNECEDOR` e `ORCAMENTO_CC`. As referências são resolvidas por **código de
+  negócio** — é assim que a planilha do usuário fala.
+- **Relatório de inconformidades**: `GET /importacoes/:id/inconformidades`
+  (JSON) e `GET /importacoes/:id/inconformidades.csv` (download com BOM, para o
+  Excel abrir a acentuação certa), trazendo linha do arquivo, motivo e o
+  conteúdo bruto para conferência.
+- **Fila**: BullMQ sobre Redis (`REDIS_URL` ou `REDIS_HOST`/`REDIS_PORT`),
+  3 tentativas com backoff exponencial. **Sem Redis configurado a fila degrada
+  para processamento síncrono e avisa** — melhor que um job silenciosamente
+  perdido ou um worker em laço de reconexão. `IMPORTACAO_SINCRONA=1` força o
+  modo síncrono (usado nos testes).
+- Parser de CSV próprio (separador `;` ou `,` detectado, aspas escapadas, BOM
+  do Excel, números em formato BR como `1.234,56`) — o formato de entrada é
+  planilha exportada, não um dialeto arbitrário.
+
+### Nota de manutenção sobre migrations
+
+O Prisma **não modela colunas geradas** e, a cada `migrate dev`, reemite um
+`ALTER TABLE compras.proposta ALTER COLUMN valor_total ...` que o Postgres
+recusa. Remova esse bloco à mão do arquivo gerado, como está feito em
+`init_staging_e_ingestao`.

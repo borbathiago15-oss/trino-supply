@@ -11,6 +11,9 @@
  * A ordem vai dos filhos para os pais.
  */
 const ORDEM_EXCLUSAO = [
+  // core (F8) — staging antes do lote
+  'stagingLinhaImportacao',
+  'loteImportacao',
   // compras (F5/F6) — dos filhos do recebimento até a cotação
   'itemRecebimento',
   'recebimento',
@@ -55,6 +58,7 @@ const ORDEM_EXCLUSAO = [
   'centroCusto',
   'regional',
   'usuario',
+  'feriado',
   'permissao',
   'tenant',
 ];

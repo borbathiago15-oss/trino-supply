@@ -71,7 +71,7 @@ export class AuditInterceptor implements NestInterceptor {
           actorId: request.user?.userId ?? null,
           entidade: config.entidade,
           entityId,
-          acao,
+          acao: config.acao ?? acao,
           beforeJson: snapshotJson(before) ?? undefined,
           afterJson: snapshotJson(after) ?? undefined,
           ip: request.ip ?? null,

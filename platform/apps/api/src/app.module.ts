@@ -6,18 +6,19 @@ import { AuthModule } from './auth/auth.module';
 import { CatalogoModule } from './catalogo/catalogo.module';
 import { FornecedoresModule } from './fornecedores/fornecedores.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { RequisicoesModule } from './requisicoes/requisicoes.module';
 import { UsuariosModule } from './usuarios/usuarios.module';
 
 @Controller('health')
 class HealthController {
   @Get()
   health() {
-    return { status: 'ok', servico: 'trino-platform-api', fase: 'F3' };
+    return { status: 'ok', servico: 'trino-platform-api', fase: 'F4' };
   }
 }
 
 @Module({
-  imports: [PrismaModule, AuthModule, UsuariosModule, CatalogoModule, FornecedoresModule, AprovacoesModule],
+  imports: [PrismaModule, AuthModule, UsuariosModule, CatalogoModule, FornecedoresModule, AprovacoesModule, RequisicoesModule],
   controllers: [HealthController],
   providers: [
     // Auditoria é GLOBAL: qualquer handler mutante marcado com @Auditar passa

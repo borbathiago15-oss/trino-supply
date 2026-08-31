@@ -55,6 +55,8 @@ model Tenant {
   delegacoesAlcada       DelegacaoAlcada[]
   instanciasAprovacao    InstanciaAprovacao[]
   etapasAprovacao        EtapaAprovacao[]
+  requisicoes            RequisicaoCompra[]
+  itensRequisicao        ItemRequisicao[]
 
   @@map("tenant")
   @@schema("core")
@@ -79,13 +81,15 @@ model Usuario {
   centrosCustoGeridos CentroCusto[]  @relation("CentroCustoGestor")
   escopos             EscopoAcesso[]
 
-  aprovacoesCentroCusto AprovadorCentroCusto[]
-  delegacoesFeitas      DelegacaoAlcada[]      @relation("DelegacaoDelegante")
-  delegacoesRecebidas   DelegacaoAlcada[]      @relation("DelegacaoDelegado")
-  etapasAprovadas       EtapaAprovacao[]       @relation("EtapaAprovador")
-  etapasDelegadas       EtapaAprovacao[]       @relation("EtapaDelegante")
-  etapasSolicitadas     EtapaAprovacao[]       @relation("EtapaSolicitante")
-  etapasComoComprador   EtapaAprovacao[]       @relation("EtapaComprador")
+  aprovacoesCentroCusto  AprovadorCentroCusto[]
+  delegacoesFeitas       DelegacaoAlcada[]      @relation("DelegacaoDelegante")
+  delegacoesRecebidas    DelegacaoAlcada[]      @relation("DelegacaoDelegado")
+  etapasAprovadas        EtapaAprovacao[]       @relation("EtapaAprovador")
+  etapasDelegadas        EtapaAprovacao[]       @relation("EtapaDelegante")
+  etapasSolicitadas      EtapaAprovacao[]       @relation("EtapaSolicitante")
+  etapasComoComprador    EtapaAprovacao[]       @relation("EtapaComprador")
+  requisicoesSolicitadas RequisicaoCompra[]     @relation("RequisicaoSolicitante")
+  requisicoesCompradas   RequisicaoCompra[]     @relation("RequisicaoComprador")
 
   @@unique([tenantId, email], map: "uq_usuario_email")
   @@index([tenantId, ativo], map: "ix_usuario_tenant_ativo")
@@ -136,6 +140,7 @@ model CentroCusto {
 
   aprovadores      AprovadorCentroCusto[]
   delegacoesAlcada DelegacaoAlcada[]
+  requisicoes      RequisicaoCompra[]
 
   @@unique([tenantId, codigo], map: "uq_centro_custo_codigo")
   @@index([tenantId, ativo], map: "ix_centro_custo_tenant")
@@ -178,6 +183,8 @@ model ContratoOperacao {
 
   tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   centroCusto CentroCusto @relation(fields: [centroCustoId], references: [id], onDelete: Restrict)
+
+  requisicoes RequisicaoCompra[]
 
   @@unique([tenantId, codigo], map: "uq_contrato_codigo")
   @@index([centroCustoId], map: "ix_contrato_centro_custo")
@@ -388,12 +395,13 @@ model VarianteSku {
   ativo        Boolean  @default(true)
   criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
 
-  tenant       Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  skuBase      SkuBase                @relation(fields: [skuBaseId], references: [id], onDelete: Restrict)
-  parametros   ParametroEstoque[]
-  saldos       SaldoEstoque[]
-  certificados CertificadoAprovacao[]
-  fornecedores FornecedorSku[]
+  tenant          Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  skuBase         SkuBase                @relation(fields: [skuBaseId], references: [id], onDelete: Restrict)
+  parametros      ParametroEstoque[]
+  saldos          SaldoEstoque[]
+  certificados    CertificadoAprovacao[]
+  fornecedores    FornecedorSku[]
+  itensRequisicao ItemRequisicao[]
 
   @@unique([tenantId, codigo], map: "uq_variante_codigo")
   @@unique([skuBaseId, grade, tamanho, cor], map: "uq_variante_atributos")
@@ -666,5 +674,116 @@ model EtapaAprovacao {
 
   @@unique([instanciaId, nivel], map: "uq_etapa_nivel")
   @@map("etapa_aprovacao")
+  @@schema("compras")
+}
+
+// ---------------------------------------------------------------------------
+// Fase F4 — requisição de compra e itens (schema compras, fiel ao DDL).
+// Fora do Prisma, na migration init_requisicao_compra: a sequência
+// compras.seq_requisicao (numeração), os 6 CHECKs e o índice PARCIAL
+// ix_requisicao_fracionamento. Nunca remova ao regenerar.
+// ---------------------------------------------------------------------------
+
+enum StatusRequisicao {
+  RASCUNHO
+  SUBMETIDA
+  EM_TRIAGEM
+  DEVOLVIDA_AJUSTE
+  EM_COTACAO
+  COTADA
+  APROVACAO_ALCADA
+  PEDIDO_GERADO
+  RECEBIDA_PARCIAL
+  RECEBIDA_TOTAL
+  REJEITADA
+  CANCELADA
+
+  @@map("status_requisicao")
+  @@schema("compras")
+}
+
+enum StatusItemRequisicao {
+  ATIVO
+  EM_COTACAO
+  COTADO
+  PEDIDO
+  ATENDIDO
+  CANCELADO
+
+  @@map("status_item_requisicao")
+  @@schema("compras")
+}
+
+enum Prioridade {
+  BAIXA
+  NORMAL
+  ALTA
+  EMERGENCIAL
+
+  @@map("prioridade")
+  @@schema("compras")
+}
+
+model RequisicaoCompra {
+  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId            String           @map("tenant_id") @db.Uuid
+  numero              String           @db.VarChar(20)
+  centroCustoId       String           @map("centro_custo_id") @db.Uuid
+  contratoId          String?          @map("contrato_id") @db.Uuid
+  solicitanteId       String           @map("solicitante_id") @db.Uuid
+  compradorId         String?          @map("comprador_id") @db.Uuid
+  status              StatusRequisicao @default(RASCUNHO)
+  prioridade          Prioridade       @default(NORMAL)
+  justificativa       String?
+  motivoRecusa        String?          @map("motivo_recusa")
+  valorEstimado       Decimal          @default(0) @map("valor_estimado") @db.Decimal(15, 2)
+  valorAprovado       Decimal?         @map("valor_aprovado") @db.Decimal(15, 2)
+  dataNecessidade     DateTime?        @map("data_necessidade") @db.Date
+  origemAutomatica    Boolean          @default(false) @map("origem_automatica")
+  submetidaEm         DateTime?        @map("submetida_em") @db.Timestamptz(6)
+  /// Marca o fim do TTO (tempo até o atendimento): quando alguém assume a triagem.
+  triagemEm           DateTime?        @map("triagem_em") @db.Timestamptz(6)
+  concluidaEm         DateTime?        @map("concluida_em") @db.Timestamptz(6)
+  /// Cronômetro de SLA congelado: enquanto preenchido, o relógio não corre.
+  slaPausadoEm        DateTime?        @map("sla_pausado_em") @db.Timestamptz(6)
+  slaSegundosPausados Int              @default(0) @map("sla_segundos_pausados")
+  version             Int              @default(0)
+  criadoEm            DateTime         @default(now()) @map("criado_em") @db.Timestamptz(6)
+  atualizadoEm        DateTime         @default(now()) @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  centroCusto CentroCusto       @relation(fields: [centroCustoId], references: [id], onDelete: Restrict)
+  contrato    ContratoOperacao? @relation(fields: [contratoId], references: [id], onDelete: SetNull)
+  solicitante Usuario           @relation("RequisicaoSolicitante", fields: [solicitanteId], references: [id], onDelete: Restrict)
+  comprador   Usuario?          @relation("RequisicaoComprador", fields: [compradorId], references: [id], onDelete: SetNull)
+  itens       ItemRequisicao[]
+
+  @@unique([tenantId, numero], map: "uq_requisicao_numero")
+  @@index([tenantId, status, criadoEm(sort: Desc)], map: "ix_requisicao_esteira")
+  @@index([centroCustoId, status], map: "ix_requisicao_cc")
+  @@index([solicitanteId, status], map: "ix_requisicao_solicitante")
+  @@map("requisicao_compra")
+  @@schema("compras")
+}
+
+model ItemRequisicao {
+  id              String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId        String               @map("tenant_id") @db.Uuid
+  requisicaoId    String               @map("requisicao_id") @db.Uuid
+  varianteId      String               @map("variante_id") @db.Uuid
+  sequencia       Int                  @db.SmallInt
+  quantidade      Decimal              @db.Decimal(15, 4)
+  precoReferencia Decimal?             @map("preco_referencia") @db.Decimal(15, 4)
+  status          StatusItemRequisicao @default(ATIVO)
+  observacao      String?              @db.VarChar(500)
+
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  requisicao RequisicaoCompra @relation(fields: [requisicaoId], references: [id], onDelete: Cascade)
+  variante   VarianteSku      @relation(fields: [varianteId], references: [id], onDelete: Restrict)
+
+  @@unique([requisicaoId, sequencia], map: "uq_item_requisicao_seq")
+  @@index([requisicaoId, status], map: "ix_item_requisicao")
+  @@index([varianteId], map: "ix_item_variante")
+  @@map("item_requisicao")
   @@schema("compras")
 }

@@ -1,0 +1,238 @@
+// Trino Platform — Fase F0
+// Tradução fiel do DDL validado (schemas core + auditoria).
+// O que o Prisma não expressa (CHECKs e o particionamento do audit_log) vive na
+// migration SQL editada — nunca remova essas cláusulas ao regenerar.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  schemas  = ["core", "auditoria"]
+}
+
+enum TipoEscopo {
+  REGIONAL
+  CENTRO_CUSTO
+  CONTRATO
+
+  @@map("tipo_escopo")
+  @@schema("core")
+}
+
+model Tenant {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  cnpj         String   @unique(map: "uq_tenant_cnpj") @db.VarChar(14)
+  razaoSocial  String   @map("razao_social") @db.VarChar(200)
+  nomeFantasia String?  @map("nome_fantasia") @db.VarChar(200)
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+  atualizadoEm DateTime @default(now()) @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  usuarios     Usuario[]
+  regionais    Regional[]
+  centrosCusto CentroCusto[]
+  orcamentos   OrcamentoCentroCusto[]
+  contratos    ContratoOperacao[]
+  papeis       Papel[]
+  escopos      EscopoAcesso[]
+
+  @@map("tenant")
+  @@schema("core")
+}
+
+model Usuario {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  nome           String    @db.VarChar(200)
+  email          String    @db.VarChar(255)
+  senhaHash      String    @map("senha_hash")
+  cargoFuncional String?   @map("cargo_funcional") @db.VarChar(120)
+  mfaHabilitado  Boolean   @default(false) @map("mfa_habilitado")
+  mfaSecret      String?   @map("mfa_secret")
+  ativo          Boolean   @default(true)
+  ultimoLoginEm  DateTime? @map("ultimo_login_em") @db.Timestamptz(6)
+  criadoEm       DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
+  atualizadoEm   DateTime  @default(now()) @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  tenant               Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  regionaisGeridas     Regional[]     @relation("RegionalGestor")
+  centrosCustoGeridos  CentroCusto[]  @relation("CentroCustoGestor")
+  escopos              EscopoAcesso[]
+
+  @@unique([tenantId, email], map: "uq_usuario_email")
+  @@index([tenantId, ativo], map: "ix_usuario_tenant_ativo")
+  @@map("usuario")
+  @@schema("core")
+}
+
+model Regional {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  codigo       String   @db.VarChar(20)
+  nome         String   @db.VarChar(150)
+  gestorId     String?  @map("gestor_id") @db.Uuid
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+  atualizadoEm DateTime @default(now()) @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  gestor       Usuario?      @relation("RegionalGestor", fields: [gestorId], references: [id], onDelete: SetNull)
+  centrosCusto CentroCusto[]
+
+  @@unique([tenantId, codigo], map: "uq_regional_codigo")
+  @@index([tenantId], map: "ix_regional_tenant")
+  @@map("regional")
+  @@schema("core")
+}
+
+model CentroCusto {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  regionalId     String   @map("regional_id") @db.Uuid
+  codigo         String   @db.VarChar(30)
+  nome           String   @db.VarChar(150)
+  gestorId       String?  @map("gestor_id") @db.Uuid
+  orcamentoAnual Decimal  @default(0) @map("orcamento_anual") @db.Decimal(15, 2)
+  ativo          Boolean  @default(true)
+  criadoEm       DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+  atualizadoEm   DateTime @default(now()) @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  tenant     Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  regional   Regional               @relation(fields: [regionalId], references: [id], onDelete: Restrict)
+  gestor     Usuario?               @relation("CentroCustoGestor", fields: [gestorId], references: [id], onDelete: SetNull)
+  orcamentos OrcamentoCentroCusto[]
+  contratos  ContratoOperacao[]
+
+  @@unique([tenantId, codigo], map: "uq_centro_custo_codigo")
+  @@index([tenantId, ativo], map: "ix_centro_custo_tenant")
+  @@index([regionalId], map: "ix_centro_custo_regional")
+  @@map("centro_custo")
+  @@schema("core")
+}
+
+model OrcamentoCentroCusto {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  centroCustoId     String   @map("centro_custo_id") @db.Uuid
+  exercicio         Int      @db.SmallInt
+  valorOrcado       Decimal  @default(0) @map("valor_orcado") @db.Decimal(15, 2)
+  valorComprometido Decimal  @default(0) @map("valor_comprometido") @db.Decimal(15, 2)
+  valorRealizado    Decimal  @default(0) @map("valor_realizado") @db.Decimal(15, 2)
+  version           Int      @default(0)
+  atualizadoEm      DateTime @default(now()) @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  centroCusto CentroCusto @relation(fields: [centroCustoId], references: [id], onDelete: Cascade)
+
+  @@unique([centroCustoId, exercicio], map: "uq_orcamento_cc_exercicio")
+  @@map("orcamento_centro_custo")
+  @@schema("core")
+}
+
+model ContratoOperacao {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  centroCustoId  String    @map("centro_custo_id") @db.Uuid
+  codigo         String    @db.VarChar(40)
+  clienteNome    String    @map("cliente_nome") @db.VarChar(200)
+  clienteCnpj    String?   @map("cliente_cnpj") @db.VarChar(14)
+  vigenciaInicio DateTime  @map("vigencia_inicio") @db.Date
+  vigenciaFim    DateTime? @map("vigencia_fim") @db.Date
+  ativo          Boolean   @default(true)
+  criadoEm       DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
+  atualizadoEm   DateTime  @default(now()) @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  centroCusto CentroCusto @relation(fields: [centroCustoId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, codigo], map: "uq_contrato_codigo")
+  @@index([centroCustoId], map: "ix_contrato_centro_custo")
+  @@map("contrato_operacao")
+  @@schema("core")
+}
+
+model Papel {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  nome      String   @db.VarChar(60)
+  descricao String?  @db.VarChar(255)
+  sistema   Boolean  @default(false)
+  criadoEm  DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  permissoes PapelPermissao[]
+  escopos    EscopoAcesso[]
+
+  @@unique([tenantId, nome], map: "uq_papel_nome")
+  @@map("papel")
+  @@schema("core")
+}
+
+// Catálogo GLOBAL de permissões — deliberadamente sem tenant_id (a extensão de
+// tenant o reconhece e não injeta filtro aqui).
+model Permissao {
+  id        String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  codigo    String @unique(map: "uq_permissao_codigo") @db.VarChar(80)
+  descricao String @db.VarChar(255)
+
+  papeis PapelPermissao[]
+
+  @@map("permissao")
+  @@schema("core")
+}
+
+model PapelPermissao {
+  papelId     String @map("papel_id") @db.Uuid
+  permissaoId String @map("permissao_id") @db.Uuid
+
+  papel     Papel     @relation(fields: [papelId], references: [id], onDelete: Cascade)
+  permissao Permissao @relation(fields: [permissaoId], references: [id], onDelete: Cascade)
+
+  @@id([papelId, permissaoId])
+  @@map("papel_permissao")
+  @@schema("core")
+}
+
+model EscopoAcesso {
+  id         String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String     @map("tenant_id") @db.Uuid
+  usuarioId  String     @map("usuario_id") @db.Uuid
+  papelId    String     @map("papel_id") @db.Uuid
+  tipoEscopo TipoEscopo @map("tipo_escopo")
+  escopoId   String     @map("escopo_id") @db.Uuid
+  criadoEm   DateTime   @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  papel   Papel   @relation(fields: [papelId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, papelId, tipoEscopo, escopoId], map: "uq_escopo_acesso")
+  @@index([usuarioId], map: "ix_escopo_usuario")
+  @@index([tipoEscopo, escopoId], map: "ix_escopo_alvo")
+  @@map("escopo_acesso")
+  @@schema("core")
+}
+
+// Trilha de auditoria — particionada por RANGE(timestamp_utc) na migration SQL.
+// Sem FKs de propósito: o log sobrevive a qualquer limpeza das tabelas de origem.
+model AuditLog {
+  id            BigInt   @default(autoincrement())
+  tenantId      String   @map("tenant_id") @db.Uuid
+  actorId       String?  @map("actor_id") @db.Uuid
+  entidade      String   @db.VarChar(80)
+  entityId      String   @map("entity_id") @db.Uuid
+  acao          String   @db.VarChar(40)
+  beforeJson    Json?    @map("before_json") @db.JsonB
+  afterJson     Json?    @map("after_json") @db.JsonB
+  ip            String?  @db.Inet
+  userAgent     String?  @map("user_agent")
+  correlationId String?  @map("correlation_id") @db.Uuid
+  timestampUtc  DateTime @default(now()) @map("timestamp_utc") @db.Timestamptz(6)
+
+  @@id([id, timestampUtc], map: "pk_audit_log")
+  @@map("audit_log")
+  @@schema("auditoria")
+}

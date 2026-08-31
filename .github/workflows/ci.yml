@@ -185,7 +185,7 @@ jobs:
           IMPORTACAO_SINCRONA: '1'
         run: |
           node apps/api/dist/main.js & echo $! > /tmp/api.pid
-          npx --workspace @trino/web next start -p 3002 & echo $! > /tmp/web.pid
+          npm --workspace @trino/web run start & echo $! > /tmp/web.pid
           npx wait-on http://127.0.0.1:3001/api/v1/health http://127.0.0.1:3002/login --timeout 60000
 
       - name: Semear o cenário
@@ -194,8 +194,7 @@ jobs:
 
       - name: Rodar o Playwright
         working-directory: platform/apps/web
-        env:
-          PLAYWRIGHT_CHROMIUM: ''
+        # Sem PLAYWRIGHT_CHROMIUM: o binário vem do `playwright install` acima.
         run: npx playwright test
 
       - name: Publicar o relatório em caso de falha

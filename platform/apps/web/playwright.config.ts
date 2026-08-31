@@ -1,4 +1,14 @@
+import { existsSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
+
+/**
+ * Chromium: no CI o `playwright install` já provê o binário, então não se
+ * aponta caminho nenhum; neste ambiente há um Chromium pré-instalado, que é
+ * usado quando existe. Variável vazia conta como ausente — `??` deixaria
+ * passar uma string vazia e o Playwright falharia ao abrir "".
+ */
+const CAMINHO_PADRAO = '/opt/pw-browsers/chromium';
+const chromium = process.env.PLAYWRIGHT_CHROMIUM || (existsSync(CAMINHO_PADRAO) ? CAMINHO_PADRAO : undefined);
 
 /**
  * E2E do frontend. Os servidores (API e web) sobem fora daqui — o CI os inicia
@@ -24,7 +34,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
-          executablePath: process.env.PLAYWRIGHT_CHROMIUM ?? '/opt/pw-browsers/chromium',
+          ...(chromium ? { executablePath: chromium } : {}),
           args: ['--no-sandbox'],
         },
       },

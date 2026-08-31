@@ -1,11 +1,12 @@
-# Trino Platform — monorepo (Fases F0 a F3)
+# Trino Platform — monorepo (Fases F0 a F4)
 
 Base multi-tenant da plataforma Trino: schemas `core` e `auditoria` no Postgres,
 Prisma com multi-schema, isolamento de tenant imposto por extensão do client
 (F0); API NestJS com autenticação real, escopo por token e auditoria global
 (F1); catálogo de materiais, fornecedores e elegibilidade nos schemas
 `catalogo` e `fornecimento` (F2); alçadas e aprovação no schema `compras`,
-com política de domínio pura e decisão sob transação serializável (F3).
+com política de domínio pura e decisão sob transação serializável (F3); e a
+requisição de compra com máquina de estados determinística (F4).
 Convive com o app .NET do Trino Supply (`../src`) sem tocar nele.
 
 ## Estrutura
@@ -15,7 +16,7 @@ platform/
   packages/db/          @trino/db — Prisma + extensão de tenant
     prisma/schema.prisma        core, auditoria, catalogo, fornecimento e compras (fiel ao DDL)
     prisma/migrations/          init_core_and_audit, init_catalogo_e_fornecimento,
-                                init_alcadas_e_aprovacao
+                                init_alcadas_e_aprovacao, init_requisicao_compra
     src/tenant-extension.js     forTenant(prisma, tenantId)
     src/limpeza-testes.js       limparBancoDeTestes (ordem das FKs, só testes)
     test/tenant-isolation.test.js
@@ -28,11 +29,16 @@ platform/
     src/aprovacoes/             alçadas, instâncias e decisão de etapas
       dominio/                  política PURA (sem I/O): faixas + assertPodeAprovar
       aprovar-etapa.usecase.ts  transação serializável + SELECT ... FOR UPDATE
+    src/requisicoes/            esteira da requisição de compra
+      dominio/maquina-estados.ts  transições T01–T10 PURAS + guardas
+      casos-de-uso.ts           Submeter (R9), AssumirTriagem (TTO), DevolverAjuste (SLA)
     scripts/seed.js             bootstrap de tenant + admin
     test/politica-aprovacao.test.js  unitário puro da política (CT-01..CT-08)
+    test/maquina-estados.test.js     unitário puro das transições T01..T10
     test/e2e.test.js            e2e da F1 contra Postgres real
     test/e2e-f2.test.js         e2e da F2 contra Postgres real
     test/e2e-f3.test.js         e2e da F3 contra Postgres real
+    test/e2e-f4.test.js         e2e da F4 contra Postgres real
 ```
 
 ## Rodando
@@ -52,8 +58,8 @@ cd ../../apps/api
 cp .env.example .env          # DATABASE_URL + JWT_SECRET (obrigatório)
 SEED_ADMIN_SENHA='...' npm run seed
 npm run build && npm start    # http://127.0.0.1:3001/api/v1
-npm test                      # unitários da política + e2e (F1, F2, F3)
-npm run test:unit             # só a política pura — não precisa de banco
+npm test                      # unitários + e2e de todas as fases
+npm run test:unit             # só o domínio puro — não precisa de banco
 ```
 
 Login: `POST /api/v1/auth/login` com `{ cnpj, email, senha }` devolve
@@ -74,7 +80,8 @@ Login: `POST /api/v1/auth/login` com `{ cnpj, email, senha }` devolve
   `ix_documento_validade` (parcial em `obrigatorio = TRUE`); os 14 CHECKs da F3,
   o `EXCLUDE USING gist` `ex_regra_nivel_vigencia` (que exige a extensão
   `btree_gist`) e os parciais `ux_instancia_pendente` e
-  `ux_etapa_um_aprovador_por_instancia`. Ao gerar uma
+  `ux_etapa_um_aprovador_por_instancia`; os 6 CHECKs da F4, a sequência
+  `compras.seq_requisicao` e o parcial `ix_requisicao_fracionamento`. Ao gerar uma
   migration nova, **revise o SQL antes de aplicar**: o Prisma não enxerga essas
   cláusulas e pode propor DROPs. Crie as partições anuais do `audit_log` antes
   da virada do ano (a partição DEFAULT segura o que escapar).
@@ -223,3 +230,63 @@ registrar.
 - Rejeição em qualquer nível encerra a instância inteira na hora; aprovação só
   encerra quando o último nível exigido decide.
 - `ux_instancia_pendente` garante uma única instância PENDENTE por requisição.
+
+## Requisição de compra (F4)
+
+A esteira vive numa **máquina de estados determinística**
+(`src/requisicoes/dominio/maquina-estados.ts`), também domínio puro. A tabela
+`TRANSICOES` é a especificação: cada transição declara de quais estados sai e
+para qual leva. O que não está na tabela lança `TransicaoNaoPermitidaException`
+— não existe caminho implícito, e uma transição esquecida vira erro em vez de
+comportamento silencioso.
+
+| transição | de → para |
+| --- | --- |
+| `T01_CRIAR` | (nova) → RASCUNHO |
+| `T02_EDITAR` | RASCUNHO → RASCUNHO |
+| `T03_SUBMETER` | RASCUNHO → SUBMETIDA |
+| `T04_CANCELAR` | RASCUNHO, SUBMETIDA, EM_TRIAGEM, DEVOLVIDA_AJUSTE → CANCELADA |
+| `T05_ASSUMIR_TRIAGEM` | SUBMETIDA → EM_TRIAGEM |
+| `T06_DEVOLVER_AJUSTE` | EM_TRIAGEM → DEVOLVIDA_AJUSTE |
+| `T07_EDITAR_EM_AJUSTE` | DEVOLVIDA_AJUSTE → DEVOLVIDA_AJUSTE |
+| `T08_REENVIAR` | DEVOLVIDA_AJUSTE → SUBMETIDA |
+| `T09_REJEITAR` | SUBMETIDA, EM_TRIAGEM, DEVOLVIDA_AJUSTE → REJEITADA |
+| `T10_ENVIAR_COTACAO` | EM_TRIAGEM → EM_COTACAO |
+
+`GET /requisicoes/:id` devolve `transicoesDisponiveis`, então a UI não precisa
+duplicar essa tabela para saber quais botões mostrar.
+
+### Guardas
+
+`REQ-ERR-001` justificativa obrigatória para submeter/reenviar ·
+`REQ-ERR-002` ao menos um item ativo · `REQ-ERR-003` comprador ausente na
+triagem · `REQ-ERR-004` o solicitante não assume a própria triagem ·
+`REQ-ERR-005` devolução sem motivo · `REQ-ERR-006` rejeição sem motivo ·
+`REQ-ERR-007` cotação sem comprador · `REQ-ERR-008` centro de custo sem
+orçamento do exercício · `REQ-ERR-009` saldo orçamentário insuficiente (R9) ·
+`REQ-ERR-010` itens só mudam em RASCUNHO ou DEVOLVIDA_AJUSTE ·
+`REQ-ERR-409` conflito de versão · `REQ-ERR-TRANSICAO` transição ilegal.
+
+### Decisões que valem contrato
+
+- **`valor_estimado` é derivado**, nunca digitado: toda mudança de item
+  recalcula a soma de quantidade × preço de referência dos itens ATIVOS. É o
+  que mantém a checagem de saldo honesta.
+- **R9 valida, não reserva.** A submissão confere
+  `orcado - comprometido - realizado >= valor_estimado` no exercício corrente e
+  barra quem não tem orçamento definido. Comprometer e estornar pertencem ao
+  pedido, que precisa de caminho de volta em cancelamento e rejeição — meia
+  reserva seria pior que nenhuma.
+- **TTO** (tempo até o atendimento) vai da submissão até `triagem_em`,
+  descontando o tempo congelado; volta na resposta do `assumir-triagem`.
+- **O SLA congela na devolução** (`sla_pausado_em`): enquanto a bola está com o
+  solicitante, o relógio não corre contra compras. O reenvio soma o tempo
+  parado em `sla_segundos_pausados` e destrava — e preserva a `submetida_em`
+  original, sem reiniciar o relógio.
+- **Bloqueio otimista pela coluna `version`**: o UPDATE só acerta a linha se a
+  versão ainda for a lida; zero linhas afetadas vira `409` em vez de
+  sobrescrever. Transição ilegal responde "ilegal" mesmo com versão velha —
+  é a informação útil para quem chamou.
+- Cada transição grava um `AuditLog` com snapshot antes/depois **dentro da
+  mesma transação**, com a ação nomeada pelo código da transição (inclusive a
+  criação, auditada como `T01_CRIAR`).

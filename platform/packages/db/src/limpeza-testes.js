@@ -11,6 +11,9 @@
  * A ordem vai dos filhos para os pais.
  */
 const ORDEM_EXCLUSAO = [
+  // compras (F4) — itens antes da requisição
+  'itemRequisicao',
+  'requisicaoCompra',
   // compras (F3) — apontam para usuario e centro_custo com RESTRICT
   'etapaAprovacao',
   'instanciaAprovacao',

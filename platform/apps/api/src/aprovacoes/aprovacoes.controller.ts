@@ -62,6 +62,12 @@ export class AprovacoesController {
     return this.aprovacoes.encerrarDelegacao(req.db, id, dto.ativa);
   }
 
+  /** Fila do aprovador logado — o que espera decisão dele agora. */
+  @Get('pendentes')
+  pendentes(@Req() req: any) {
+    return this.aprovacoes.pendentesDoUsuario(req.db, req.user.userId);
+  }
+
   @Post('instancias')
   @Auditar('instancia_aprovacao', 'instanciaAprovacao')
   abrirInstancia(@Req() req: any, @Body() dto: AbrirInstanciaDto) {

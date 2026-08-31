@@ -1,4 +1,4 @@
-# Trino Platform — monorepo (Fases F0 a F8)
+# Trino Platform — monorepo (Fases F0 a F8 + frontend)
 
 Base multi-tenant da plataforma Trino: schemas `core` e `auditoria` no Postgres,
 Prisma com multi-schema, isolamento de tenant imposto por extensão do client
@@ -9,7 +9,7 @@ com política de domínio pura e decisão sob transação serializável (F3); e 
 requisição de compra com máquina de estados determinística (F4); cotação,
 propostas e equalização (F5); pedido, NF-e e recebimento com 3-way match (F6); SLA em tempo útil com
 calendário comercial, feriados e pausas automáticas (F7); ingestão de arquivos
-em staging com fila BullMQ (F8).
+em staging com fila BullMQ (F8); e o frontend Next.js 14 da esteira.
 Convive com o app .NET do Trino Supply (`../src`) sem tocar nele.
 
 ## Estrutura
@@ -453,3 +453,43 @@ O Prisma **não modela colunas geradas** e, a cada `migrate dev`, reemite um
 `ALTER TABLE compras.proposta ALTER COLUMN valor_total ...` que o Postgres
 recusa. Remova esse bloco à mão do arquivo gerado, como está feito em
 `init_staging_e_ingestao`.
+
+## Frontend (Next.js 14, App Router)
+
+`apps/web` — Tailwind, Server Components e Server Actions. O token JWT fica em
+**cookie httpOnly**: nunca chega ao JavaScript do navegador, então um XSS não
+leva a sessão embora. Todas as chamadas à API saem do servidor.
+
+| rota | o que faz |
+| --- | --- |
+| `/login` | autenticação (CNPJ + e-mail + senha) |
+| `/compras/requisicoes` | esteira com paginação remota, filtros e ordenação na URL, **farol de SLA** e gaveta com itens e histórico |
+| `/compras/aprovacoes` | portal do aprovador: fila da alçada, **stepper** da cadeia e modais com confirmação explícita |
+| `/compras/cotacoes/[id]/equalizacao` | mapa comparativo com pesos e notas; justificativa obrigatória fora do menor preço |
+| `/compras/recebimento` | conferência com chave de NF-e (44 dígitos) e registro de avarias |
+
+### Contratos compartilhados (`@trino/contratos`)
+
+Enums, rótulos, tipos de request/response **e domínio puro** vivem num pacote
+que a API e o frontend importam. Não são cópias: o `PRIORIDADES` que valida o
+DTO no Nest é o mesmo que popula o `<select>` da tela, e o cálculo de **tempo
+útil de SLA** e a **matriz de equalização** rodam nos dois lados a partir do
+mesmo código — é o que permite pintar o farol da lista inteira sem uma ida ao
+servidor por linha, e mostrar as notas antes de gravar a decisão.
+
+### Farol de SLA
+
+Prazo por prioridade em horas **úteis** (`PRAZO_HORAS_UTEIS`: emergencial 4h,
+alta 8h, normal 24h, baixa 40h — padrão ajustável). Verde abaixo de 50% do
+prazo, amarelo até 80%, vermelho até 100%, preto estourado; cinza para quem
+não está em contagem. Quando o cronômetro está congelado a etiqueta diz
+"(pausado)" — senão o vermelho pareceria culpa de quem espera resposta do
+solicitante.
+
+### Como rodar
+
+```bash
+npm run contratos:build        # o web e a api importam o pacote compilado
+npm --workspace @trino/api run build && node apps/api/dist/main.js
+npm run web:build && npm --workspace @trino/web run start   # :3002
+```

@@ -30,6 +30,15 @@ const UuidOpcional = new ParseUUIDPipe({ optional: true });
 export class CatalogoController {
   constructor(private readonly catalogo: CatalogoService) {}
 
+  /**
+   * Centros de custo do tenant — leitura simples, usada pelo seletor de
+   * contexto do frontend e pelos filtros da esteira.
+   */
+  @Get('centros-custo')
+  listarCentrosCusto(@Req() req: any) {
+    return req.db.centroCusto.findMany({ where: { ativo: true }, orderBy: { codigo: 'asc' } });
+  }
+
   @Get('familias')
   listarFamilias(@Req() req: any) {
     return this.catalogo.listarFamilias(req.db);

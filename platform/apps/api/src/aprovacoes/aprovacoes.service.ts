@@ -137,6 +137,71 @@ export class AprovacoesService {
     }
   }
 
+  /**
+   * Fila do aprovador: instâncias PENDENTES cuja etapa em curso é de um nível
+   * em que ESTE usuário tem alçada vigente no centro de custo — direto ou por
+   * delegação. É a mesma noção que a política usa para decidir; aqui ela só
+   * filtra a lista, e a decisão continua sendo validada no momento de decidir.
+   */
+  async pendentesDoUsuario(db: ClientEscopado, usuarioId: string) {
+    const [instancias, atribuicoes, delegacoes] = await Promise.all([
+      db.instanciaAprovacao.findMany({ where: { status: 'PENDENTE' }, orderBy: { criadoEm: 'asc' } }),
+      db.aprovadorCentroCusto.findMany({ where: { usuarioId } }),
+      db.delegacaoAlcada.findMany({ where: { delegadoId: usuarioId, ativa: true } }),
+    ]);
+
+    const agora = new Date();
+    const hoje = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate()));
+    const vigente = (inicio: Date, fim: Date | null) => inicio <= hoje && (fim === null || hoje <= fim);
+
+    const proprias = atribuicoes.filter((a: any) => vigente(a.vigenciaInicio, a.vigenciaFim));
+    const delegacoesVigentes = delegacoes.filter(
+      (d: any) => d.vigenciaInicio <= agora && agora <= d.vigenciaFim,
+    );
+    const deleganteIds = delegacoesVigentes.map((d: any) => d.deleganteId);
+    const porDelegacao = deleganteIds.length
+      ? (await db.aprovadorCentroCusto.findMany({ where: { usuarioId: { in: deleganteIds } } })).filter((a: any) =>
+          vigente(a.vigenciaInicio, a.vigenciaFim),
+        )
+      : [];
+
+    const alcadas = [...proprias, ...porDelegacao];
+    const resultado: any[] = [];
+
+    for (const instancia of instancias) {
+      const etapas = await db.etapaAprovacao.findMany({
+        where: { instanciaId: instancia.id },
+        orderBy: { nivel: 'asc' },
+      });
+      // A etapa em curso é a de menor nível ainda pendente.
+      const etapaAtual = etapas.find((e: any) => e.decisao === 'PENDENTE');
+      if (!etapaAtual) continue;
+
+      const centroCustoId = (instancia.regraSnapshot as any)?.centroCustoId;
+      const temAlcada = alcadas.some(
+        (a: any) => a.nivel === etapaAtual.nivel && a.centroCustoId === centroCustoId,
+      );
+      if (!temAlcada) continue;
+
+      // B1/B2 já eliminam quem não pode decidir — a fila não mostra o que a
+      // política recusaria de qualquer forma.
+      if (etapaAtual.solicitanteId === usuarioId) continue;
+      if (etapaAtual.compradorId === usuarioId) continue;
+
+      const requisicao = await db.requisicaoCompra.findUnique({ where: { id: instancia.requisicaoId } });
+      resultado.push({
+        ...instancia,
+        etapas,
+        etapaAtualId: etapaAtual.id,
+        nivelAtual: etapaAtual.nivel,
+        ehNivelFinal: etapaAtual.nivel >= ((instancia.regraSnapshot as any)?.nivelFinal ?? instancia.nivelExigido),
+        requisicao,
+      });
+    }
+
+    return resultado;
+  }
+
   // ----- instâncias --------------------------------------------------------
   async obterInstancia(db: ClientEscopado, id: string) {
     const instancia = await db.instanciaAprovacao.findUnique({ where: { id } });

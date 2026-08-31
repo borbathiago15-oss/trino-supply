@@ -1,3 +1,4 @@
+import { OCORRENCIAS_RECEBIMENTO, REGEX_CHAVE_NFE } from '@trino/contratos';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
@@ -44,7 +45,7 @@ export class EmitirPedidoDto {
 
 export class NotaFiscalDto {
   /** Chave da NF-e: exatamente 44 dígitos (o banco repete em ck_nfe_chave). */
-  @Matches(/^[0-9]{44}$/, { message: 'chaveAcesso deve ter exatamente 44 dígitos numéricos.' })
+  @Matches(REGEX_CHAVE_NFE, { message: 'chaveAcesso deve ter exatamente 44 dígitos numéricos.' })
   chaveAcesso: string;
 
   @IsString() @Length(1, 20)
@@ -63,14 +64,8 @@ export class NotaFiscalDto {
   arquivoXmlUri?: string;
 }
 
-export const OCORRENCIAS = [
-  'SEM_OCORRENCIA',
-  'AVARIA',
-  'DIVERGENCIA_QUANTIDADE',
-  'DIVERGENCIA_ESPECIFICACAO',
-  'ATRASO',
-  'RECUSA_TOTAL',
-] as const;
+// Vem do pacote compartilhado — a mesma lista do frontend e do banco.
+export const OCORRENCIAS = OCORRENCIAS_RECEBIMENTO;
 
 export class LinhaRecebimentoDto {
   @IsUUID()

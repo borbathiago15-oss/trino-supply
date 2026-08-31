@@ -1,19 +1,21 @@
-# Trino Platform — monorepo (Fases F0, F1 e F2)
+# Trino Platform — monorepo (Fases F0 a F3)
 
 Base multi-tenant da plataforma Trino: schemas `core` e `auditoria` no Postgres,
 Prisma com multi-schema, isolamento de tenant imposto por extensão do client
 (F0); API NestJS com autenticação real, escopo por token e auditoria global
 (F1); catálogo de materiais, fornecedores e elegibilidade nos schemas
-`catalogo` e `fornecimento` (F2). Convive com o app .NET do Trino Supply
-(`../src`) sem tocar nele.
+`catalogo` e `fornecimento` (F2); alçadas e aprovação no schema `compras`,
+com política de domínio pura e decisão sob transação serializável (F3).
+Convive com o app .NET do Trino Supply (`../src`) sem tocar nele.
 
 ## Estrutura
 
 ```
 platform/
   packages/db/          @trino/db — Prisma + extensão de tenant
-    prisma/schema.prisma        core, auditoria, catalogo e fornecimento (tradução fiel do DDL)
-    prisma/migrations/          init_core_and_audit, init_catalogo_e_fornecimento
+    prisma/schema.prisma        core, auditoria, catalogo, fornecimento e compras (fiel ao DDL)
+    prisma/migrations/          init_core_and_audit, init_catalogo_e_fornecimento,
+                                init_alcadas_e_aprovacao
     src/tenant-extension.js     forTenant(prisma, tenantId)
     src/limpeza-testes.js       limparBancoDeTestes (ordem das FKs, só testes)
     test/tenant-isolation.test.js
@@ -23,9 +25,14 @@ platform/
     src/usuarios/               CRUD de usuários do tenant (rotas auditadas)
     src/catalogo/               família → tipo → SKU base → variante, ROP e saldo
     src/fornecedores/           fornecedores, documentos, CA e elegibilidade
+    src/aprovacoes/             alçadas, instâncias e decisão de etapas
+      dominio/                  política PURA (sem I/O): faixas + assertPodeAprovar
+      aprovar-etapa.usecase.ts  transação serializável + SELECT ... FOR UPDATE
     scripts/seed.js             bootstrap de tenant + admin
+    test/politica-aprovacao.test.js  unitário puro da política (CT-01..CT-08)
     test/e2e.test.js            e2e da F1 contra Postgres real
     test/e2e-f2.test.js         e2e da F2 contra Postgres real
+    test/e2e-f3.test.js         e2e da F3 contra Postgres real
 ```
 
 ## Rodando
@@ -45,7 +52,8 @@ cd ../../apps/api
 cp .env.example .env          # DATABASE_URL + JWT_SECRET (obrigatório)
 SEED_ADMIN_SENHA='...' npm run seed
 npm run build && npm start    # http://127.0.0.1:3001/api/v1
-npm run test:e2e              # sobe o Nest de verdade contra o Postgres (F1 + F2)
+npm test                      # unitários da política + e2e (F1, F2, F3)
+npm run test:unit             # só a política pura — não precisa de banco
 ```
 
 Login: `POST /api/v1/auth/login` com `{ cnpj, email, senha }` devolve
@@ -63,7 +71,10 @@ Login: `POST /api/v1/auth/login` com `{ cnpj, email, senha }` devolve
   expressáveis no schema.prisma: vivem nas migrations SQL (editadas via
   `--create-only`). São eles: o particionamento e os 6 CHECKs da F0; os 8 CHECKs
   da F2 mais `ux_variante_ean` (EAN único por tenant só quando preenchido) e
-  `ix_documento_validade` (parcial em `obrigatorio = TRUE`). Ao gerar uma
+  `ix_documento_validade` (parcial em `obrigatorio = TRUE`); os 14 CHECKs da F3,
+  o `EXCLUDE USING gist` `ex_regra_nivel_vigencia` (que exige a extensão
+  `btree_gist`) e os parciais `ux_instancia_pendente` e
+  `ux_etapa_um_aprovador_por_instancia`. Ao gerar uma
   migration nova, **revise o SQL antes de aplicar**: o Prisma não enxerga essas
   cláusulas e pode propor DROPs. Crie as partições anuais do `audit_log` antes
   da virada do ano (a partição DEFAULT segura o que escapar).
@@ -152,3 +163,63 @@ Detalhes que valem contrato:
   `exigirElegivel` e devolve `409 FOR-ELG-409` com os motivos. Qualquer módulo
   de compras futuro deve usar o mesmo `ElegibilidadeService`, exportado pelo
   `FornecedoresModule`.
+
+## Alçadas e aprovação (F3)
+
+Três degraus configuráveis por faixa de valor. **Convenção de fronteira**
+(o DDL não a fixa, então está decidida e testada aqui): a faixa é
+`valor_min <= valor < valor_max`, com `valor_max` nulo significando "sem teto".
+Com 0–5.000, 5.000–25.000 e 25.000+, isso dá R$ 4.999,99 → nível 1,
+R$ 5.000,00 → nível 2, R$ 24.999,99 → nível 2 e R$ 25.000,00 → nível 3. É a
+única leitura em que faixas adjacentes não disputam o valor da fronteira.
+
+Rotas: `GET|POST /aprovacoes/regras`, `/aprovacoes/aprovadores`,
+`/aprovacoes/delegacoes` (+ `PATCH /delegacoes/:id` para encerrar),
+`POST /aprovacoes/instancias`, `GET /aprovacoes/instancias/:id` e
+`POST /aprovacoes/etapas/:id/decisao`.
+
+### A política é domínio puro
+
+`src/aprovacoes/dominio/politica-aprovacao.ts` não conhece Prisma, Nest nem o
+relógio do sistema: tudo entra pelo contexto, inclusive o `agora`. Por isso ela
+roda em teste unitário sem banco e é a MESMA regra em qualquer caminho de
+entrada (API, job, importação futura).
+
+| código | bloqueio |
+| --- | --- |
+| `APV-B1` | o solicitante não aprova a própria requisição |
+| `APV-B2` | o comprador responsável não aprova |
+| `APV-B3` | delegação inativa, fora de vigência, de outro centro de custo, ou usada para burlar B1/B2 |
+| `APV-B4` | o mesmo usuário não decide dois níveis da mesma instância (vale também para o delegante) |
+| `APV-B5` | quem decide precisa de alçada **vigente** naquele nível e naquele centro de custo — inclusive o delegante, porque ninguém delega o que não tem |
+
+Erros de estado saem separados: `APV-ERR-001` (instância encerrada),
+`APV-ERR-002` (etapa já decidida), `APV-ERR-003` (nível anterior ainda pendente),
+`APV-ERR-004` (rejeição sem comentário).
+
+O banco repete B1–B4 em CHECKs e índices parciais. A política existe para dar a
+resposta certa ANTES, com código e motivo; as constraints são a rede de
+segurança para qualquer caminho que escape dela.
+
+### A decisão acontece sob lock
+
+`AprovarEtapaUseCase` roda tudo dentro de uma transação **SERIALIZABLE** que
+começa travando a instância com `SELECT ... FOR UPDATE`: dois cliques no mesmo
+segundo são serializados, e o segundo enxerga o estado já decidido em vez de
+decidir sobre leitura velha (provado no e2e). Conflito de serialização vira
+`409 APV-ERR-409`, que o cliente pode repetir.
+
+O `AuditLog` é gravado **dentro** da mesma transação, com snapshot antes/depois
+incluindo o estado da instância — por isso a rota de decisão é a única que NÃO
+usa `@Auditar`: auditar de fora, após o commit, abriria brecha entre decidir e
+registrar.
+
+### Detalhes que valem contrato
+
+- `regra_snapshot` congela a regra usada na abertura **e** o `centroCustoId`
+  (a tabela de instância não tem essa coluna, e a política precisa dele para
+  checar vigência). Mudar a alçada depois não reescreve o que já está em curso.
+- As etapas 1..nível exigido nascem PENDENTES e são decididas em ordem.
+- Rejeição em qualquer nível encerra a instância inteira na hora; aprovação só
+  encerra quando o último nível exigido decide.
+- `ux_instancia_pendente` garante uma única instância PENDENTE por requisição.

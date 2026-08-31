@@ -19,10 +19,27 @@ export type ClientEscopado = {
         [Operacao in keyof PrismaClient[Modelo]]: PrismaClient[Modelo][Operacao] extends (
           ...args: any[]
         ) => infer Retorno
-          ? (args?: any) => Retorno
+          ? (...args: any[]) => Retorno
           : PrismaClient[Modelo][Operacao];
       }
     : PrismaClient[Modelo];
+} & {
+  /**
+   * Transação interativa: o `tx` recebido continua escopado ao tenant.
+   * ATENÇÃO: `$queryRaw`/`$executeRaw` NÃO passam pela extensão — SQL cru
+   * precisa filtrar `tenant_id` explicitamente.
+   */
+  $transaction<T>(
+    fn: (tx: any) => Promise<T>,
+    opcoes?: {
+      isolationLevel?: 'ReadUncommitted' | 'ReadCommitted' | 'RepeatableRead' | 'Serializable';
+      maxWait?: number;
+      timeout?: number;
+    },
+  ): Promise<T>;
+  $queryRaw(query: any, ...valores: any[]): Promise<any>;
+  $executeRaw(query: any, ...valores: any[]): Promise<number>;
+  $disconnect(): Promise<void>;
 };
 
 /**

@@ -1,0 +1,228 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/trino_ci
+  JWT_SECRET: segredo-de-ci-nao-usar-em-producao
+  REDIS_HOST: 127.0.0.1
+  REDIS_PORT: '6379'
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Plataforma (monorepo Node/Nest/Next). Tipos, lint, schema, unitários e
+  # integração rodam no mesmo job porque compartilham o mesmo Postgres.
+  # ---------------------------------------------------------------------------
+  plataforma:
+    name: Plataforma — tipos, schema e testes
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: trino_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: platform/package-lock.json
+
+      - name: Instalar dependências
+        working-directory: platform
+        run: npm ci
+
+      - name: Validar o schema do Prisma
+        working-directory: platform/packages/db
+        run: npx prisma validate
+
+      - name: Aplicar as migrations
+        working-directory: platform/packages/db
+        run: npx prisma migrate deploy
+
+      - name: Gerar o Prisma Client
+        working-directory: platform/packages/db
+        run: npx prisma generate
+
+      # O pacote de contratos é dependência de build da API e do frontend.
+      - name: Compilar os contratos compartilhados
+        working-directory: platform
+        run: npm run contratos:build
+
+      - name: Validação de tipos — API
+        working-directory: platform/apps/api
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Validação de tipos — frontend
+        working-directory: platform/apps/web
+        run: npx tsc --noEmit
+
+      - name: Lint
+        working-directory: platform
+        run: npm run lint
+
+      - name: Build da API
+        working-directory: platform/apps/api
+        run: npm run build
+
+      # Domínio puro: sem banco, sem rede. Falha aqui é regra de negócio quebrada.
+      - name: Testes unitários (domínio puro)
+        working-directory: platform/apps/api
+        run: |
+          node test/maquina-estados.test.js
+          node test/politica-aprovacao.test.js
+          node test/equalizacao.test.js
+          node test/conciliacao.test.js
+          node test/sla.test.js
+          node test/importacao.test.js
+
+      - name: Testes de integração (API + Postgres real)
+        working-directory: platform/apps/api
+        run: |
+          node test/e2e.test.js
+          node test/e2e-f2.test.js
+          node test/e2e-f3.test.js
+          node test/e2e-f4.test.js
+          node test/e2e-f5f6.test.js
+          node test/e2e-f7.test.js
+          node test/e2e-f8.test.js
+
+      - name: Isolamento multi-tenant (extensão do Prisma)
+        working-directory: platform/packages/db
+        run: node test/tenant-isolation.test.js
+
+      # Os dois que protegem o que dói: vazamento entre tenants e corrida.
+      - name: Segurança e concorrência
+        working-directory: platform/apps/api
+        run: node test/seguranca.test.js
+
+      - name: Ciclo completo de compras
+        working-directory: platform/apps/api
+        run: node test/ciclo-completo.test.js
+
+  # ---------------------------------------------------------------------------
+  # E2E do frontend: sobe API e web de verdade e navega com o Playwright.
+  # ---------------------------------------------------------------------------
+  e2e-frontend:
+    name: E2E do frontend (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: plataforma
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: trino_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: platform/package-lock.json
+
+      - name: Instalar dependências
+        working-directory: platform
+        run: npm ci
+
+      - name: Preparar o banco
+        working-directory: platform/packages/db
+        run: npx prisma migrate deploy && npx prisma generate
+
+      - name: Build dos contratos, da API e do frontend
+        working-directory: platform
+        run: |
+          npm run contratos:build
+          npm --workspace @trino/api run build
+          npm --workspace @trino/web run build
+
+      - name: Instalar o Chromium do Playwright
+        working-directory: platform/apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Subir a API e o frontend
+        working-directory: platform
+        env:
+          # Sem Redis neste job: a importação roda em modo síncrono, que é o
+          # comportamento documentado quando não há fila configurada.
+          IMPORTACAO_SINCRONA: '1'
+        run: |
+          node apps/api/dist/main.js & echo $! > /tmp/api.pid
+          npx --workspace @trino/web next start -p 3002 & echo $! > /tmp/web.pid
+          npx wait-on http://127.0.0.1:3001/api/v1/health http://127.0.0.1:3002/login --timeout 60000
+
+      - name: Semear o cenário
+        working-directory: platform/apps/web
+        run: npm run e2e:seed
+
+      - name: Rodar o Playwright
+        working-directory: platform/apps/web
+        env:
+          PLAYWRIGHT_CHROMIUM: ''
+        run: npx playwright test
+
+      - name: Publicar o relatório em caso de falha
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: platform/apps/web/playwright-report
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
+  # App .NET (Trino Supply) — o que hoje está em produção no Railway.
+  # ---------------------------------------------------------------------------
+  dotnet:
+    name: Trino Supply (.NET)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restaurar e compilar
+        run: dotnet build src/backend/TrinoSupply.sln --configuration Release
+
+      - name: Testes
+        run: dotnet test src/backend/TrinoSupply.sln --configuration Release --no-build --verbosity minimal

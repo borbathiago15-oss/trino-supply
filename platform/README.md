@@ -493,3 +493,27 @@ npm run contratos:build        # o web e a api importam o pacote compilado
 npm --workspace @trino/api run build && node apps/api/dist/main.js
 npm run web:build && npm --workspace @trino/web run start   # :3002
 ```
+
+## Testes e hardening
+
+```bash
+npm run lint                       # ESLint do frontend
+npm --workspace @trino/api run test:unit   # domínio puro, sem banco
+npm --workspace @trino/api run test:e2e    # integração contra Postgres real
+node apps/api/test/seguranca.test.js       # vazamento entre tenants e concorrência
+node apps/api/test/ciclo-completo.test.js  # o ciclo de compras inteiro
+npm --workspace @trino/web run e2e:seed && npm --workspace @trino/web run e2e
+```
+
+| suíte | o que protege |
+| --- | --- |
+| `seguranca.test.js` | 15 rotas e 9 listagens com id de outro tenant; corrida de aprovação; 50 baixas concorrentes do mesmo SKU |
+| `ciclo-completo.test.js` | rascunho → submissão com trava orçamentária → triagem → cotação equalizada → aprovação em cascata → pedido → recebimento com 3-way |
+| `tenant-isolation.test.js` | a extensão do Prisma que injeta o `tenantId` |
+| `e2e/esteira.spec.ts` | as telas, com o Playwright contra a API real |
+
+O CI (`.github/workflows/ci.yml`) roda em três jobs: **plataforma** (schema do
+Prisma, migrations, `tsc --noEmit` da API e do web, lint, unitários,
+integração, isolamento, segurança e ciclo completo), **e2e-frontend**
+(Playwright sobre API e web de verdade) e **dotnet** (build e testes do Trino
+Supply que está em produção).

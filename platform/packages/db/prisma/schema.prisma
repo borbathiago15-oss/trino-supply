@@ -10,7 +10,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["core", "auditoria", "catalogo", "fornecimento"]
+  schemas  = ["core", "auditoria", "catalogo", "fornecimento", "compras"]
 }
 
 enum TipoEscopo {
@@ -50,6 +50,12 @@ model Tenant {
   certificadosAprovacao CertificadoAprovacao[]
   fornecedorSkus        FornecedorSku[]
 
+  regrasAlcada           RegraAlcada[]
+  aprovadoresCentroCusto AprovadorCentroCusto[]
+  delegacoesAlcada       DelegacaoAlcada[]
+  instanciasAprovacao    InstanciaAprovacao[]
+  etapasAprovacao        EtapaAprovacao[]
+
   @@map("tenant")
   @@schema("core")
 }
@@ -72,6 +78,14 @@ model Usuario {
   regionaisGeridas    Regional[]     @relation("RegionalGestor")
   centrosCustoGeridos CentroCusto[]  @relation("CentroCustoGestor")
   escopos             EscopoAcesso[]
+
+  aprovacoesCentroCusto AprovadorCentroCusto[]
+  delegacoesFeitas      DelegacaoAlcada[]      @relation("DelegacaoDelegante")
+  delegacoesRecebidas   DelegacaoAlcada[]      @relation("DelegacaoDelegado")
+  etapasAprovadas       EtapaAprovacao[]       @relation("EtapaAprovador")
+  etapasDelegadas       EtapaAprovacao[]       @relation("EtapaDelegante")
+  etapasSolicitadas     EtapaAprovacao[]       @relation("EtapaSolicitante")
+  etapasComoComprador   EtapaAprovacao[]       @relation("EtapaComprador")
 
   @@unique([tenantId, email], map: "uq_usuario_email")
   @@index([tenantId, ativo], map: "ix_usuario_tenant_ativo")
@@ -119,6 +133,9 @@ model CentroCusto {
 
   parametrosEstoque ParametroEstoque[]
   saldosEstoque     SaldoEstoque[]
+
+  aprovadores      AprovadorCentroCusto[]
+  delegacoesAlcada DelegacaoAlcada[]
 
   @@unique([tenantId, codigo], map: "uq_centro_custo_codigo")
   @@index([tenantId, ativo], map: "ix_centro_custo_tenant")
@@ -508,4 +525,146 @@ model FornecedorSku {
   @@unique([fornecedorId, varianteId], map: "uq_fornecedor_sku")
   @@map("fornecedor_sku")
   @@schema("fornecimento")
+}
+
+// ---------------------------------------------------------------------------
+// Fase F3 — schema compras: alçadas e aprovação (tradução fiel do DDL).
+// O que o Prisma não expressa vive na migration init_alcadas_e_aprovacao:
+//   - CHECKs de faixa, nível, vigência, decisão completa e motivo de rejeição;
+//   - EXCLUDE USING gist (ex_regra_nivel_vigencia), que impede duas regras do
+//     mesmo nível vigentes ao mesmo tempo (exige a extensão btree_gist);
+//   - índices parciais ux_instancia_pendente (uma instância PENDENTE por
+//     requisição) e ux_etapa_um_aprovador_por_instancia (bloqueio B4).
+// Nunca remova essas cláusulas ao regenerar.
+// ---------------------------------------------------------------------------
+
+enum StatusInstancia {
+  PENDENTE
+  APROVADA
+  REJEITADA
+  INVALIDADA
+
+  @@map("status_instancia")
+  @@schema("compras")
+}
+
+enum DecisaoEtapa {
+  PENDENTE
+  APROVADO
+  REJEITADO
+
+  @@map("decisao_etapa")
+  @@schema("compras")
+}
+
+model RegraAlcada {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  nivel          Int       @db.SmallInt
+  papelExigido   String    @map("papel_exigido") @db.VarChar(60)
+  valorMin       Decimal   @map("valor_min") @db.Decimal(15, 2)
+  /// NULL = sem teto (nível topo da alçada).
+  valorMax       Decimal?  @map("valor_max") @db.Decimal(15, 2)
+  vigenciaInicio DateTime  @map("vigencia_inicio") @db.Date
+  vigenciaFim    DateTime? @map("vigencia_fim") @db.Date
+  criadoEm       DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@map("regra_alcada")
+  @@schema("compras")
+}
+
+model AprovadorCentroCusto {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  centroCustoId  String    @map("centro_custo_id") @db.Uuid
+  usuarioId      String    @map("usuario_id") @db.Uuid
+  nivel          Int       @db.SmallInt
+  ordem          Int       @default(1) @db.SmallInt
+  vigenciaInicio DateTime  @default(dbgenerated("CURRENT_DATE")) @map("vigencia_inicio") @db.Date
+  vigenciaFim    DateTime? @map("vigencia_fim") @db.Date
+  criadoEm       DateTime  @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  centroCusto CentroCusto @relation(fields: [centroCustoId], references: [id], onDelete: Cascade)
+  usuario     Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+
+  @@unique([centroCustoId, usuarioId, nivel, vigenciaInicio], map: "uq_aprovador_cc")
+  @@index([centroCustoId, nivel], map: "ix_aprovador_cc_nivel")
+  @@map("aprovador_centro_custo")
+  @@schema("compras")
+}
+
+model DelegacaoAlcada {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  deleganteId    String   @map("delegante_id") @db.Uuid
+  delegadoId     String   @map("delegado_id") @db.Uuid
+  /// NULL = delegação vale para qualquer centro de custo do delegante.
+  centroCustoId  String?  @map("centro_custo_id") @db.Uuid
+  motivo         String   @db.VarChar(255)
+  vigenciaInicio DateTime @map("vigencia_inicio") @db.Timestamptz(6)
+  vigenciaFim    DateTime @map("vigencia_fim") @db.Timestamptz(6)
+  ativa          Boolean  @default(true)
+  criadoEm       DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  delegante   Usuario      @relation("DelegacaoDelegante", fields: [deleganteId], references: [id], onDelete: Cascade)
+  delegado    Usuario      @relation("DelegacaoDelegado", fields: [delegadoId], references: [id], onDelete: Cascade)
+  centroCusto CentroCusto? @relation(fields: [centroCustoId], references: [id], onDelete: Cascade)
+
+  @@index([delegadoId, ativa, vigenciaFim], map: "ix_delegacao_delegado")
+  @@map("delegacao_alcada")
+  @@schema("compras")
+}
+
+model InstanciaAprovacao {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId          String          @map("tenant_id") @db.Uuid
+  /// Sem FK de propósito: a requisição chega em fase posterior.
+  requisicaoId      String          @map("requisicao_id") @db.Uuid
+  valorBase         Decimal         @map("valor_base") @db.Decimal(15, 2)
+  nivelExigido      Int             @map("nivel_exigido") @db.SmallInt
+  /// Regra congelada no momento da abertura: mudar a alçada depois não
+  /// reescreve o que já estava em curso.
+  regraSnapshot     Json            @map("regra_snapshot") @db.JsonB
+  status            StatusInstancia @default(PENDENTE)
+  motivoInvalidacao String?         @map("motivo_invalidacao")
+  version           Int             @default(0)
+  criadoEm          DateTime        @default(now()) @map("criado_em") @db.Timestamptz(6)
+  encerradoEm       DateTime?       @map("encerrado_em") @db.Timestamptz(6)
+
+  tenant Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  etapas EtapaAprovacao[]
+
+  @@map("instancia_aprovacao")
+  @@schema("compras")
+}
+
+model EtapaAprovacao {
+  id            String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String       @map("tenant_id") @db.Uuid
+  instanciaId   String       @map("instancia_id") @db.Uuid
+  nivel         Int          @db.SmallInt
+  aprovadorId   String?      @map("aprovador_id") @db.Uuid
+  deleganteId   String?      @map("delegante_id") @db.Uuid
+  solicitanteId String       @map("solicitante_id") @db.Uuid
+  compradorId   String?      @map("comprador_id") @db.Uuid
+  decisao       DecisaoEtapa @default(PENDENTE)
+  comentario    String?
+  decididoEm    DateTime?    @map("decidido_em") @db.Timestamptz(6)
+  version       Int          @default(0)
+  criadoEm      DateTime     @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  instancia   InstanciaAprovacao @relation(fields: [instanciaId], references: [id], onDelete: Cascade)
+  aprovador   Usuario?           @relation("EtapaAprovador", fields: [aprovadorId], references: [id], onDelete: Restrict)
+  delegante   Usuario?           @relation("EtapaDelegante", fields: [deleganteId], references: [id], onDelete: Restrict)
+  solicitante Usuario            @relation("EtapaSolicitante", fields: [solicitanteId], references: [id], onDelete: Restrict)
+  comprador   Usuario?           @relation("EtapaComprador", fields: [compradorId], references: [id], onDelete: Restrict)
+
+  @@unique([instanciaId, nivel], map: "uq_etapa_nivel")
+  @@map("etapa_aprovacao")
+  @@schema("compras")
 }

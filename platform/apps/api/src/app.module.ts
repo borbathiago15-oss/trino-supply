@@ -1,7 +1,9 @@
-import { Controller, Get, Module } from '@nestjs/common';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { Controller, Get, Module, ValidationPipe } from '@nestjs/common';
+import { APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { AuditInterceptor } from './audit/audit.interceptor';
 import { AuthModule } from './auth/auth.module';
+import { CatalogoModule } from './catalogo/catalogo.module';
+import { FornecedoresModule } from './fornecedores/fornecedores.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UsuariosModule } from './usuarios/usuarios.module';
 
@@ -14,12 +16,23 @@ class HealthController {
 }
 
 @Module({
-  imports: [PrismaModule, AuthModule, UsuariosModule],
+  imports: [PrismaModule, AuthModule, UsuariosModule, CatalogoModule, FornecedoresModule],
   controllers: [HealthController],
   providers: [
     // Auditoria é GLOBAL: qualquer handler mutante marcado com @Auditar passa
     // pelo AuditInterceptor, em qualquer módulo presente ou futuro.
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
+    // Validação GLOBAL com class-validator: campo desconhecido no payload é
+    // erro (400), não algo silenciosamente ignorado.
+    {
+      provide: APP_PIPE,
+      useValue: new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+        transformOptions: { enableImplicitConversion: false },
+      }),
+    },
   ],
 })
 export class AppModule {}

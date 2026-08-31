@@ -12,7 +12,7 @@ process.env.JWT_SECRET = process.env.JWT_SECRET ?? 'segredo-de-teste-trino-f1';
 require('reflect-metadata');
 const argon2 = require('argon2');
 const { NestFactory } = require('@nestjs/core');
-const { PrismaClient, forTenant } = require('@trino/db');
+const { PrismaClient, forTenant, limparBancoDeTestes } = require('@trino/db');
 const { AppModule } = require('../dist/app.module');
 
 const prisma = new PrismaClient();
@@ -44,19 +44,7 @@ async function req(caminho, { method = 'GET', token, body, headers = {} } = {}) 
   return { status: resposta.status, body: json };
 }
 
-async function limpar() {
-  await prisma.auditLog.deleteMany({});
-  await prisma.escopoAcesso.deleteMany({});
-  await prisma.papelPermissao.deleteMany({});
-  await prisma.papel.deleteMany({});
-  await prisma.contratoOperacao.deleteMany({});
-  await prisma.orcamentoCentroCusto.deleteMany({});
-  await prisma.centroCusto.deleteMany({});
-  await prisma.regional.deleteMany({});
-  await prisma.usuario.deleteMany({});
-  await prisma.permissao.deleteMany({});
-  await prisma.tenant.deleteMany({});
-}
+const limpar = () => limparBancoDeTestes(prisma);
 
 async function semear() {
   const alfa = await prisma.tenant.create({ data: { cnpj: CNPJ_ALFA, razaoSocial: 'Grupo Alfa LTDA' } });

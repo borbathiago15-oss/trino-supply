@@ -33,3 +33,6 @@ export type ClientEscopado = {
 export function forTenant(prisma: PrismaClient, tenantId: string): ClientEscopado;
 
 export const MODELOS_SEM_TENANT: Set<string>;
+
+/** Apaga todas as tabelas na ordem das FKs. Somente para testes. */
+export function limparBancoDeTestes(prisma: PrismaClient): Promise<void>;

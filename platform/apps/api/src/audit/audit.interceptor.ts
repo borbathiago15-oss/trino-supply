@@ -61,7 +61,10 @@ export class AuditInterceptor implements NestInterceptor {
     const resposta = await lastValueFrom(next.handle());
 
     const after = acao === 'DELETE' ? null : resposta;
-    const entityId = entityIdParam ?? (resposta as { id?: string } | undefined)?.id;
+    const idDaResposta = (resposta as { id?: string } | undefined)?.id;
+    // Em rota aninhada (POST /fornecedores/:id/documentos) o :id é o pai, não o
+    // recurso criado: numa criação, o id auditado é sempre o da entidade nova.
+    const entityId = acao === 'CREATE' ? (idDaResposta ?? entityIdParam) : (entityIdParam ?? idDaResposta);
     if (entityId) {
       await db.auditLog.create({
         data: {

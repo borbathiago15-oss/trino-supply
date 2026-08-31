@@ -167,21 +167,33 @@ async function main() {
     check('submeter sem justificativa é 409 REQ-ERR-001',
       submeteSemJust.status === 409 && submeteSemJust.body?.codigo === 'REQ-ERR-001');
 
+    // R09: estouro NÃO barra — marca e a esteira segue para o aprovador final.
     const cara = await novaRequisicao({ quantidade: 100, preco: 500 }); // R$ 50.000
-    const semSaldo = await req(`/requisicoes/${cara.id}/submeter`, { method: 'POST', body: {} });
-    check('R9 barra valor acima do saldo (409 REQ-ERR-009)',
-      semSaldo.status === 409 && semSaldo.body?.codigo === 'REQ-ERR-009', JSON.stringify(semSaldo.body));
-    check('a resposta diz qual é o saldo disponível', semSaldo.body?.detalhe?.saldo === 10000);
+    const estourada = await req(`/requisicoes/${cara.id}/submeter`, { method: 'POST', body: {} });
+    check('R09 não barra o estouro: a submissão passa',
+      estourada.status === 201 && estourada.body.requisicao.status === 'SUBMETIDA', JSON.stringify(estourada.body));
+    check('a requisição fica marcada como orçamento estourado',
+      estourada.body.requisicao.orcamentoEstourado === true);
+    check('o snapshot do orçamento acompanha a requisição',
+      estourada.body.requisicao.orcamentoSnapshot?.saldo === 10000 &&
+      estourada.body.requisicao.orcamentoSnapshot?.excedente === 40000 &&
+      estourada.body.requisicao.orcamentoSnapshot?.motivo === 'SALDO_INSUFICIENTE',
+      JSON.stringify(estourada.body.requisicao.orcamentoSnapshot));
 
     const semOrcamento = await novaRequisicao({ centroCustoId: ids.ccSemOrcamento, quantidade: 1, preco: 5 });
-    const barrada = await req(`/requisicoes/${semOrcamento.id}/submeter`, { method: 'POST', body: {} });
-    check('centro de custo sem orçamento do exercício é 409 REQ-ERR-008',
-      barrada.status === 409 && barrada.body?.codigo === 'REQ-ERR-008');
+    const semTeto = await req(`/requisicoes/${semOrcamento.id}/submeter`, { method: 'POST', body: {} });
+    check('centro de custo sem orçamento do exercício também segue, marcado',
+      semTeto.status === 201 && semTeto.body.requisicao.orcamentoEstourado === true &&
+      semTeto.body.requisicao.orcamentoSnapshot?.motivo === 'SEM_ORCAMENTO',
+      JSON.stringify(semTeto.body.requisicao.orcamentoSnapshot));
+    check('a fila de análise lista as requisições estouradas',
+      (await req('/requisicoes?orcamentoEstourado=true')).body.length >= 2);
 
     const boa = await novaRequisicao({ quantidade: 10, preco: 100 }); // R$ 1.000
     const submetida = await req(`/requisicoes/${boa.id}/submeter`, { method: 'POST', body: {} });
     check('submissão dentro do saldo passa e vira SUBMETIDA',
       submetida.status === 201 && submetida.body.requisicao.status === 'SUBMETIDA', JSON.stringify(submetida.body));
+    check('dentro do saldo não marca estouro', submetida.body.requisicao.orcamentoEstourado === false);
     check('submetida_em foi carimbada', submetida.body.requisicao.submetidaEm !== null);
     check('version subiu no bloqueio otimista', submetida.body.requisicao.version > boa.version);
 

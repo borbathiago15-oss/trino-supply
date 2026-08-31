@@ -86,6 +86,7 @@ export class AprovacoesController {
       usuarioId: req.user.userId,
       etapaId: id,
       decisao: dto.decisao,
+      autorizarEstouro: dto.autorizarEstouro === true,
       comentario: dto.comentario ?? null,
       ip: req.ip ?? null,
       userAgent: req.headers?.['user-agent'] ?? null,

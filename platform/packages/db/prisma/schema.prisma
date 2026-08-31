@@ -90,6 +90,7 @@ model Usuario {
   etapasComoComprador    EtapaAprovacao[]       @relation("EtapaComprador")
   requisicoesSolicitadas RequisicaoCompra[]     @relation("RequisicaoSolicitante")
   requisicoesCompradas   RequisicaoCompra[]     @relation("RequisicaoComprador")
+  estourosAutorizados    RequisicaoCompra[]     @relation("RequisicaoAutorizadorEstouro")
 
   @@unique([tenantId, email], map: "uq_usuario_email")
   @@index([tenantId, ativo], map: "ix_usuario_tenant_ativo")
@@ -725,38 +726,45 @@ enum Prioridade {
 }
 
 model RequisicaoCompra {
-  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId            String           @map("tenant_id") @db.Uuid
-  numero              String           @db.VarChar(20)
-  centroCustoId       String           @map("centro_custo_id") @db.Uuid
-  contratoId          String?          @map("contrato_id") @db.Uuid
-  solicitanteId       String           @map("solicitante_id") @db.Uuid
-  compradorId         String?          @map("comprador_id") @db.Uuid
-  status              StatusRequisicao @default(RASCUNHO)
-  prioridade          Prioridade       @default(NORMAL)
-  justificativa       String?
-  motivoRecusa        String?          @map("motivo_recusa")
-  valorEstimado       Decimal          @default(0) @map("valor_estimado") @db.Decimal(15, 2)
-  valorAprovado       Decimal?         @map("valor_aprovado") @db.Decimal(15, 2)
-  dataNecessidade     DateTime?        @map("data_necessidade") @db.Date
-  origemAutomatica    Boolean          @default(false) @map("origem_automatica")
-  submetidaEm         DateTime?        @map("submetida_em") @db.Timestamptz(6)
+  id                   String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId             String           @map("tenant_id") @db.Uuid
+  numero               String           @db.VarChar(20)
+  centroCustoId        String           @map("centro_custo_id") @db.Uuid
+  contratoId           String?          @map("contrato_id") @db.Uuid
+  solicitanteId        String           @map("solicitante_id") @db.Uuid
+  compradorId          String?          @map("comprador_id") @db.Uuid
+  status               StatusRequisicao @default(RASCUNHO)
+  prioridade           Prioridade       @default(NORMAL)
+  justificativa        String?
+  motivoRecusa         String?          @map("motivo_recusa")
+  valorEstimado        Decimal          @default(0) @map("valor_estimado") @db.Decimal(15, 2)
+  valorAprovado        Decimal?         @map("valor_aprovado") @db.Decimal(15, 2)
+  dataNecessidade      DateTime?        @map("data_necessidade") @db.Date
+  origemAutomatica     Boolean          @default(false) @map("origem_automatica")
+  /// R09: a submissão não barra o estouro — ela marca, e a esteira segue para
+  /// o aprovador final decidir. orcamentoSnapshot guarda o retrato do saldo.
+  orcamentoEstourado   Boolean          @default(false) @map("orcamento_estourado")
+  orcamentoSnapshot    Json?            @map("orcamento_snapshot") @db.JsonB
+  estouroAutorizadoPor String?          @map("estouro_autorizado_por") @db.Uuid
+  estouroAutorizadoEm  DateTime?        @map("estouro_autorizado_em") @db.Timestamptz(6)
+  submetidaEm          DateTime?        @map("submetida_em") @db.Timestamptz(6)
   /// Marca o fim do TTO (tempo até o atendimento): quando alguém assume a triagem.
-  triagemEm           DateTime?        @map("triagem_em") @db.Timestamptz(6)
-  concluidaEm         DateTime?        @map("concluida_em") @db.Timestamptz(6)
+  triagemEm            DateTime?        @map("triagem_em") @db.Timestamptz(6)
+  concluidaEm          DateTime?        @map("concluida_em") @db.Timestamptz(6)
   /// Cronômetro de SLA congelado: enquanto preenchido, o relógio não corre.
-  slaPausadoEm        DateTime?        @map("sla_pausado_em") @db.Timestamptz(6)
-  slaSegundosPausados Int              @default(0) @map("sla_segundos_pausados")
-  version             Int              @default(0)
-  criadoEm            DateTime         @default(now()) @map("criado_em") @db.Timestamptz(6)
-  atualizadoEm        DateTime         @default(now()) @updatedAt @map("atualizado_em") @db.Timestamptz(6)
+  slaPausadoEm         DateTime?        @map("sla_pausado_em") @db.Timestamptz(6)
+  slaSegundosPausados  Int              @default(0) @map("sla_segundos_pausados")
+  version              Int              @default(0)
+  criadoEm             DateTime         @default(now()) @map("criado_em") @db.Timestamptz(6)
+  atualizadoEm         DateTime         @default(now()) @updatedAt @map("atualizado_em") @db.Timestamptz(6)
 
-  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  centroCusto CentroCusto       @relation(fields: [centroCustoId], references: [id], onDelete: Restrict)
-  contrato    ContratoOperacao? @relation(fields: [contratoId], references: [id], onDelete: SetNull)
-  solicitante Usuario           @relation("RequisicaoSolicitante", fields: [solicitanteId], references: [id], onDelete: Restrict)
-  comprador   Usuario?          @relation("RequisicaoComprador", fields: [compradorId], references: [id], onDelete: SetNull)
-  itens       ItemRequisicao[]
+  tenant             Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  centroCusto        CentroCusto       @relation(fields: [centroCustoId], references: [id], onDelete: Restrict)
+  contrato           ContratoOperacao? @relation(fields: [contratoId], references: [id], onDelete: SetNull)
+  solicitante        Usuario           @relation("RequisicaoSolicitante", fields: [solicitanteId], references: [id], onDelete: Restrict)
+  comprador          Usuario?          @relation("RequisicaoComprador", fields: [compradorId], references: [id], onDelete: SetNull)
+  autorizadorEstouro Usuario?          @relation("RequisicaoAutorizadorEstouro", fields: [estouroAutorizadoPor], references: [id], onDelete: SetNull)
+  itens              ItemRequisicao[]
 
   @@unique([tenantId, numero], map: "uq_requisicao_numero")
   @@index([tenantId, status, criadoEm(sort: Desc)], map: "ix_requisicao_esteira")

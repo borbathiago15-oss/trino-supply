@@ -199,6 +199,8 @@ entrada (API, job, importação futura).
 | `APV-B3` | delegação inativa, fora de vigência, de outro centro de custo, ou usada para burlar B1/B2 |
 | `APV-B4` | o mesmo usuário não decide dois níveis da mesma instância (vale também para o delegante) |
 | `APV-B5` | quem decide precisa de alçada **vigente** naquele nível e naquele centro de custo — inclusive o delegante, porque ninguém delega o que não tem |
+| `APV-B6` | requisição com orçamento estourado só é aprovada no nível final com autorização explícita (R09) |
+| `APV-B7` | e só o aprovador final autoriza: níveis intermediários não liberam estouro |
 
 Erros de estado saem separados: `APV-ERR-001` (instância encerrada),
 `APV-ERR-002` (etapa já decidida), `APV-ERR-003` (nível anterior ainda pendente),
@@ -262,9 +264,7 @@ duplicar essa tabela para saber quais botões mostrar.
 `REQ-ERR-002` ao menos um item ativo · `REQ-ERR-003` comprador ausente na
 triagem · `REQ-ERR-004` o solicitante não assume a própria triagem ·
 `REQ-ERR-005` devolução sem motivo · `REQ-ERR-006` rejeição sem motivo ·
-`REQ-ERR-007` cotação sem comprador · `REQ-ERR-008` centro de custo sem
-orçamento do exercício · `REQ-ERR-009` saldo orçamentário insuficiente (R9) ·
-`REQ-ERR-010` itens só mudam em RASCUNHO ou DEVOLVIDA_AJUSTE ·
+`REQ-ERR-007` cotação sem comprador · `REQ-ERR-010` itens só mudam em RASCUNHO ou DEVOLVIDA_AJUSTE ·
 `REQ-ERR-409` conflito de versão · `REQ-ERR-TRANSICAO` transição ilegal.
 
 ### Decisões que valem contrato
@@ -272,11 +272,12 @@ orçamento do exercício · `REQ-ERR-009` saldo orçamentário insuficiente (R9)
 - **`valor_estimado` é derivado**, nunca digitado: toda mudança de item
   recalcula a soma de quantidade × preço de referência dos itens ATIVOS. É o
   que mantém a checagem de saldo honesta.
-- **R9 valida, não reserva.** A submissão confere
-  `orcado - comprometido - realizado >= valor_estimado` no exercício corrente e
-  barra quem não tem orçamento definido. Comprometer e estornar pertencem ao
-  pedido, que precisa de caminho de volta em cancelamento e rejeição — meia
-  reserva seria pior que nenhuma.
+- **R09 informa, não barra.** Estourar o orçamento não impede a submissão: a
+  requisição segue marcada (`orcamento_estourado`) e levando o retrato do saldo
+  (`orcamento_snapshot`), para os aprovadores analisarem. Ver **R09** abaixo.
+- **R09 não reserva orçamento.** Comprometer e estornar pertencem ao pedido,
+  que precisa de caminho de volta em cancelamento e rejeição — meia reserva
+  seria pior que nenhuma.
 - **TTO** (tempo até o atendimento) vai da submissão até `triagem_em`,
   descontando o tempo congelado; volta na resposta do `assumir-triagem`.
 - **O SLA congela na devolução** (`sla_pausado_em`): enquanto a bola está com o
@@ -290,3 +291,34 @@ orçamento do exercício · `REQ-ERR-009` saldo orçamentário insuficiente (R9)
 - Cada transição grava um `AuditLog` com snapshot antes/depois **dentro da
   mesma transação**, com a ação nomeada pelo código da transição (inclusive a
   criação, auditada como `T01_CRIAR`).
+
+## R09 — estouro de orçamento
+
+Estourar o orçamento é **informação, não impedimento**. Quem barra é quem tem
+alçada para isso.
+
+1. **Submissão** avalia o orçamento do exercício e, se o valor estimado passa do
+   saldo (ou se o centro de custo não tem linha do exercício), marca
+   `orcamento_estourado` e congela o retrato em `orcamento_snapshot`
+   (orçado, comprometido, realizado, saldo, excedente e motivo —
+   `SALDO_INSUFICIENTE` ou `SEM_ORCAMENTO`). A requisição **segue**.
+   `GET /requisicoes?orcamentoEstourado=true` é a fila de análise, apoiada pelo
+   índice parcial `ix_requisicao_estouro`.
+2. **A instância de aprovação escala até o aprovador final** quando a requisição
+   está estourada, mesmo que o valor sozinho parasse num nível abaixo. Sem isso
+   a regra seria letra morta: quem pode liberar o estouro nunca veria o caso. O
+   snapshot da instância registra `nivelPorValor`, `nivelFinal` e
+   `escalonadoPorEstouro`.
+3. **Níveis intermediários aprovam normalmente**, passando o estouro adiante —
+   e não podem autorizá-lo (`APV-B7`).
+4. **O aprovador final decide.** Aprovar exige `autorizarEstouro: true` no corpo
+   da decisão; sem isso a resposta é `APV-B6`, para ninguém assinar por engano o
+   que passa do teto. Autorizado, ficam gravados `estouro_autorizado_por` e
+   `estouro_autorizado_em`.
+5. **Recusar não exige autorizar nada** — é justamente a recusa. A resposta e a
+   auditoria voltam com `orcamentoEstourado: true`, o snapshot do orçamento e
+   `motivoOrcamento`, para o solicitante saber que o que caiu foi uma compra
+   fora do orçamento.
+
+Reenviar após ajuste **reavalia** o orçamento e **derruba** qualquer autorização
+anterior: o que foi autorizado valia para o valor de então.

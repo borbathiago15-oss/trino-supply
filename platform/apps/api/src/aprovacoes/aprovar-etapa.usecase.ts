@@ -10,6 +10,8 @@ export interface EntradaAprovarEtapa {
   usuarioId: string;
   etapaId: string;
   decisao: 'APROVADO' | 'REJEITADO';
+  /** Autorização explícita do estouro de orçamento (R09), só do nível final. */
+  autorizarEstouro?: boolean;
   comentario?: string | null;
   ip?: string | null;
   userAgent?: string | null;
@@ -106,10 +108,25 @@ export class AprovarEtapaUseCase {
             });
           }
 
-          const [atribuicoes, delegacoes] = await Promise.all([
+          const [atribuicoes, delegacoes, requisicao] = await Promise.all([
             tx.aprovadorCentroCusto.findMany({ where: { centroCustoId, nivel: etapa.nivel } }),
             tx.delegacaoAlcada.findMany({ where: { delegadoId: usuarioId, ativa: true } }),
+            // A instância guarda requisicao_id sem FK: a requisição pode não
+            // existir (instâncias avulsas). Sem ela, R09 não se aplica.
+            tx.requisicaoCompra.findUnique({ where: { id: etapa.instancia.requisicaoId } }),
           ]);
+
+          // R09: nível do aprovador final vem congelado no snapshot da regra;
+          // instâncias antigas caem no nível exigido da própria instância.
+          const nivelFinal =
+            (etapa.instancia.regraSnapshot as any)?.nivelFinal ?? etapa.instancia.nivelExigido;
+          const estouro = requisicao
+            ? {
+                estourado: requisicao.orcamentoEstourado,
+                autorizado: requisicao.estouroAutorizadoPor !== null,
+                nivelFinal,
+              }
+            : null;
 
           const agora = new Date();
           const contexto: ContextoAprovacao = {
@@ -136,9 +153,21 @@ export class AprovarEtapaUseCase {
             })),
             atribuicoes,
             delegacoes,
+            decisao,
+            estouro,
+            autorizarEstouro: entrada.autorizarEstouro === true,
           };
 
           const autorizacao = assertPodeAprovar(contexto);
+
+          // A autorização do estouro é gravada na requisição, na mesma
+          // transação da decisão: quem liberou e quando ficam registrados.
+          if (autorizacao.autorizaEstouro && requisicao) {
+            await tx.requisicaoCompra.update({
+              where: { id: requisicao.id },
+              data: { estouroAutorizadoPor: usuarioId, estouroAutorizadoEm: agora },
+            });
+          }
 
           const etapaAtualizada = await tx.etapaAprovacao.update({
             where: { id: etapa.id },
@@ -183,8 +212,13 @@ export class AprovarEtapaUseCase {
               entidade: 'etapa_aprovacao',
               entityId: etapa.id,
               acao: decisao === 'APROVADO' ? 'APROVAR_ETAPA' : 'REJEITAR_ETAPA',
-              beforeJson: snapshotAntes as any,
-              afterJson: { ...snapshotDepois, viaDelegacao: autorizacao.viaDelegacao } as any,
+              beforeJson: { ...snapshotAntes, orcamentoEstourado: estouro?.estourado ?? null } as any,
+              afterJson: {
+                ...snapshotDepois,
+                viaDelegacao: autorizacao.viaDelegacao,
+                orcamentoEstourado: estouro?.estourado ?? null,
+                estouroAutorizado: autorizacao.autorizaEstouro,
+              } as any,
               ip: entrada.ip ?? null,
               userAgent: entrada.userAgent ?? null,
               correlationId: entrada.correlationId ?? null,
@@ -197,6 +231,15 @@ export class AprovarEtapaUseCase {
             statusInstancia: instanciaFinal?.status ?? 'PENDENTE',
             viaDelegacao: autorizacao.viaDelegacao,
             deleganteId: autorizacao.deleganteId,
+            // R09 na resposta: quem recusa precisa saber (e poder dizer) que o
+            // que caiu foi uma compra fora do orçamento.
+            orcamentoEstourado: estouro?.estourado ?? false,
+            orcamentoSnapshot: requisicao?.orcamentoSnapshot ?? null,
+            estouroAutorizado: autorizacao.autorizaEstouro || (estouro?.autorizado ?? false),
+            motivoOrcamento:
+              estouro?.estourado && decisao === 'REJEITADO'
+                ? 'Requisição recusada com orçamento estourado.'
+                : null,
           };
         },
         { isolationLevel: 'Serializable' },

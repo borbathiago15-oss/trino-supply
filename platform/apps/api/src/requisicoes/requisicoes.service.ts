@@ -11,12 +11,17 @@ const ESTADOS_EDITAVEIS = new Set(['RASCUNHO', 'DEVOLVIDA_AJUSTE']);
 
 @Injectable()
 export class RequisicoesService {
-  listar(db: ClientEscopado, filtros: { status?: string; centroCustoId?: string; solicitanteId?: string }) {
+  listar(
+    db: ClientEscopado,
+    filtros: { status?: string; centroCustoId?: string; solicitanteId?: string; orcamentoEstourado?: boolean },
+  ) {
     return db.requisicaoCompra.findMany({
       where: {
         ...(filtros.status ? { status: filtros.status } : {}),
         ...(filtros.centroCustoId ? { centroCustoId: filtros.centroCustoId } : {}),
         ...(filtros.solicitanteId ? { solicitanteId: filtros.solicitanteId } : {}),
+        // Fila de análise de estouro (R09) — apoiada por ix_requisicao_estouro.
+        ...(filtros.orcamentoEstourado !== undefined ? { orcamentoEstourado: filtros.orcamentoEstourado } : {}),
       },
       orderBy: { criadoEm: 'desc' },
     });

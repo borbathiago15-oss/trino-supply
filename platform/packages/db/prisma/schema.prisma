@@ -69,6 +69,8 @@ model Tenant {
   recebimentos           Recebimento[]
   itensRecebimento       ItemRecebimento[]
   feriados               Feriado[]
+  lotesImportacao        LoteImportacao[]
+  linhasStaging          StagingLinhaImportacao[]
 
   @@map("tenant")
   @@schema("core")
@@ -107,6 +109,7 @@ model Usuario {
   equalizacoesFeitas     Equalizacao[]          @relation("EqualizacaoResponsavel")
   pedidosEmitidos        PedidoCompra[]         @relation("PedidoEmissor")
   recebimentosFeitos     Recebimento[]          @relation("RecebimentoRecebedor")
+  lotesIniciados         LoteImportacao[]       @relation("LoteIniciador")
 
   @@unique([tenantId, email], map: "uq_usuario_email")
   @@index([tenantId, ativo], map: "ix_usuario_tenant_ativo")
@@ -1161,5 +1164,86 @@ model Feriado {
 
   @@unique([tenantId, data], map: "uq_feriado_data")
   @@map("feriado")
+  @@schema("core")
+}
+
+// ---------------------------------------------------------------------------
+// Fase F8 — ingestão em staging (tradução fiel do DDL).
+// A idempotência do arquivo vive em checksum_sha256 + ix_lote_checksum.
+// ---------------------------------------------------------------------------
+
+enum TipoLoteImportacao {
+  CATALOGO_SKU
+  PARAMETRO_ESTOQUE
+  FORNECEDOR
+  ORCAMENTO_CC
+
+  @@map("tipo_lote_importacao")
+  @@schema("core")
+}
+
+enum StatusLoteImportacao {
+  RECEBIDO
+  PROCESSANDO
+  CONCLUIDO_COM_SUCESSO
+  CONCLUIDO_COM_FALHAS
+  FALHA_CRITICA
+
+  @@map("status_lote_importacao")
+  @@schema("core")
+}
+
+enum StatusLinhaStaging {
+  PENDENTE
+  IMPORTADO
+  ERRO_VALIDACAO
+  ERRO_PERSISTENCIA
+
+  @@map("status_linha_staging")
+  @@schema("core")
+}
+
+model LoteImportacao {
+  id             String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId       String               @map("tenant_id") @db.Uuid
+  tipo           TipoLoteImportacao
+  nomeArquivo    String               @map("nome_arquivo") @db.VarChar(255)
+  arquivoUri     String?              @map("arquivo_uri")
+  totalLinhas    Int                  @default(0) @map("total_linhas")
+  linhasSucesso  Int                  @default(0) @map("linhas_sucesso")
+  linhasErro     Int                  @default(0) @map("linhas_erro")
+  status         StatusLoteImportacao @default(RECEBIDO)
+  iniciadoPor    String               @map("iniciado_por") @db.Uuid
+  iniciadoEm     DateTime             @default(now()) @map("iniciado_em") @db.Timestamptz(6)
+  concluidoEm    DateTime?            @map("concluido_em") @db.Timestamptz(6)
+  /// Idempotência por arquivo: mesmo conteúdo, mesmo hash, mesmo lote.
+  checksumSha256 String               @map("checksum_sha256") @db.VarChar(64)
+
+  tenant    Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  iniciador Usuario                  @relation("LoteIniciador", fields: [iniciadoPor], references: [id], onDelete: Restrict)
+  linhas    StagingLinhaImportacao[]
+
+  @@index([tenantId, status], map: "ix_lote_tenant_status")
+  @@index([tenantId, checksumSha256], map: "ix_lote_checksum")
+  @@map("lote_importacao")
+  @@schema("core")
+}
+
+model StagingLinhaImportacao {
+  id            BigInt             @id @default(autoincrement())
+  tenantId      String             @map("tenant_id") @db.Uuid
+  loteId        String             @map("lote_id") @db.Uuid
+  numeroLinha   Int                @map("numero_linha")
+  conteudoBruto Json               @map("conteudo_bruto") @db.JsonB
+  status        StatusLinhaStaging @default(PENDENTE)
+  mensagemErro  String?            @map("mensagem_erro")
+  processadoEm  DateTime?          @map("processado_em") @db.Timestamptz(6)
+
+  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  lote   LoteImportacao @relation(fields: [loteId], references: [id], onDelete: Cascade)
+
+  @@unique([loteId, numeroLinha], map: "uq_staging_linha")
+  @@index([loteId, status], map: "ix_staging_lote_status")
+  @@map("staging_linha_importacao")
   @@schema("core")
 }

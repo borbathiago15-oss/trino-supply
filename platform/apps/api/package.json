@@ -2,15 +2,15 @@
   "name": "@trino/api",
   "version": "0.1.0",
   "private": true,
-  "description": "Trino Platform API — autenticação, catálogo, fornecedores, alçadas e requisição de compra",
+  "description": "Trino Platform API — autenticação, catálogo, fornecedores, alçadas, requisição, cotação, pedido, SLA e importação",
   "main": "dist/main.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "seed": "node scripts/seed.js",
-    "test": "npm run build && node test/maquina-estados.test.js && node test/politica-aprovacao.test.js && node test/equalizacao.test.js && node test/conciliacao.test.js && node test/sla.test.js && node test/e2e.test.js && node test/e2e-f2.test.js && node test/e2e-f3.test.js && node test/e2e-f4.test.js && node test/e2e-f5f6.test.js && node test/e2e-f7.test.js",
-    "test:unit": "npm run build && node test/maquina-estados.test.js && node test/politica-aprovacao.test.js && node test/equalizacao.test.js && node test/conciliacao.test.js && node test/sla.test.js",
-    "test:e2e": "npm run build && node test/e2e.test.js && node test/e2e-f2.test.js && node test/e2e-f3.test.js && node test/e2e-f4.test.js && node test/e2e-f5f6.test.js && node test/e2e-f7.test.js"
+    "test": "npm run build && node test/maquina-estados.test.js && node test/politica-aprovacao.test.js && node test/equalizacao.test.js && node test/conciliacao.test.js && node test/sla.test.js && node test/importacao.test.js && node test/e2e.test.js && node test/e2e-f2.test.js && node test/e2e-f3.test.js && node test/e2e-f4.test.js && node test/e2e-f5f6.test.js && node test/e2e-f7.test.js && node test/e2e-f8.test.js",
+    "test:unit": "npm run build && node test/maquina-estados.test.js && node test/politica-aprovacao.test.js && node test/equalizacao.test.js && node test/conciliacao.test.js && node test/sla.test.js && node test/importacao.test.js",
+    "test:e2e": "npm run build && node test/e2e.test.js && node test/e2e-f2.test.js && node test/e2e-f3.test.js && node test/e2e-f4.test.js && node test/e2e-f5f6.test.js && node test/e2e-f7.test.js && node test/e2e-f8.test.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
@@ -20,9 +20,11 @@
     "@nestjs/platform-express": "^11.0.0",
     "@trino/db": "*",
     "argon2": "^0.41.1",
+    "bullmq": "^6.3.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "dotenv": "^16.4.5",
+    "ioredis": "^6.0.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",

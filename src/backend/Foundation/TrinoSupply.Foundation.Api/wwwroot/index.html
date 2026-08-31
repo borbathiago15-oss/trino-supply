@@ -3857,6 +3857,7 @@
     const RFQ_CRITERIA = ['Preço', 'Prazo de entrega', 'Condição de pagamento', 'Atendimento aos requisitos', 'Qualidade', 'Condição comercial', 'Histórico do fornecedor'];
     let rfqCache = {};
     let rfqOpenId = null;
+    let rfqPoSelected = null;   // compra dividida: qual O.C. está aberta no painel de faturamento
     /// envia o arquivo da cotação recebida (PDF/planilha) para a proposta registrada
     async function uploadProposalFile(quotationId, proposalId, file) {
       const fd = new FormData();
@@ -4100,6 +4101,27 @@
       return html;
     }
 
+    /// Mapa da adjudicação: uma tabela por família com quem cotou a família inteira.
+    function awardMapHtml(mapa) {
+      let html = `<p class="hello">${escapeHtml(mapa.note)}</p>`;
+      mapa.items.forEach((l, idx) => {
+        const linhas = l.offers.map(o => `<tr>
+            <td><input type="radio" name="award-${idx}" class="award-pick" data-family="${escapeHtml(l.family)}" value="${o.proposalId}"${o.complete ? '' : ' disabled'}${o.cheapest ? ' checked' : ''} /></td>
+            <td>${escapeHtml(o.supplierName)} <span class="sub">v${o.proposalVersion}</span>${o.cheapest ? ' <span class="badge on">menor preço</span>' : ''}${o.complete ? '' : ' <span class="badge off">não cotou a família inteira</span>'}</td>
+            <td><strong>${money(o.totalValue)}</strong></td>
+            <td class="sub">${o.deliveryDays == null ? '—' : o.deliveryDays + ' dias'} · ${escapeHtml(o.paymentTerms || '—')}</td>
+          </tr>`).join('');
+        html += `<h2 style="margin-top:12px">${escapeHtml(l.family)} <span class="sub">${l.itemCount} item(ns) · ${l.quantity} un.</span></h2>
+          <div class="tablewrap"><table><tbody>${linhas || '<tr><td class="sub">Nenhum fornecedor cotou esta família inteira — convide outro fornecedor ou peça a proposta completa.</td></tr>'}</tbody></table></div>
+          <label for="aj-${idx}">Justificativa da escolha em ${escapeHtml(l.family)} (obrigatória)</label>
+          <input class="award-just" id="aj-${idx}" data-family="${escapeHtml(l.family)}" placeholder="Por que este fornecedor leva ${escapeHtml(l.family)}?" />`;
+      });
+      html += `<label style="margin-top:10px">Critérios utilizados</label>
+        <div class="checks">` + RFQ_CRITERIA.map(c => `<label><input type="checkbox" class="rfq-crit" value="${c}" /> ${c}</label>`).join('') + `</div>
+        <button data-act="award" style="margin-top:10px">Confirmar a divisão e enviar ao Gerente</button>`;
+      return html;
+    }
+
     function renderRfqDetail(q) {
       rfqOpenId = q.id;
       const [label, cls] = RFQ_STATUS[q.status] || [q.status, ''];
@@ -4115,8 +4137,10 @@
         </div>
         ${q.decisionReason ? `<p class="hello">Último motivo registrado: <strong>${escapeHtml(q.decisionReason)}</strong></p>` : ''}
         <h2>Itens da cotação</h2>
-        <div class="tablewrap"><table><thead><tr><th>#</th><th>Descrição</th><th>Qtd</th><th>Unid.</th>${(q.sourcePrNumbers || []).length > 1 ? '<th>SC de origem</th>' : ''}</tr></thead><tbody>` +
-        q.items.map(i => `<tr><td>${i.sequence}</td><td>${escapeHtml(i.description)}${i.catalogCode ? `<div class="sub">${escapeHtml(i.catalogCode)}</div>` : ''}</td><td>${i.quantity}</td><td>${escapeHtml(i.unitOfMeasure)}</td>${(q.sourcePrNumbers || []).length > 1 ? `<td class="sub">${escapeHtml(i.sourcePrNumber || '—')}</td>` : ''}</tr>`).join('') +
+        <div class="tablewrap"><table><thead><tr><th>#</th><th>Descrição</th>${(q.families || []).length > 1 ? '<th>Família</th>' : ''}<th>Qtd</th><th>Unid.</th>${(q.sourcePrNumbers || []).length > 1 ? '<th>SC de origem</th>' : ''}</tr></thead><tbody>` +
+        q.items.map(i => `<tr><td>${i.sequence}</td><td>${escapeHtml(i.description)}${i.catalogCode ? `<div class="sub">${escapeHtml(i.catalogCode)}</div>` : ''}</td>` +
+          ((q.families || []).length > 1 ? `<td>${escapeHtml(i.family || '—')}${(q.awards || []).length ? `<div class="sub">${escapeHtml((q.awards.find(a => a.family === i.family) || {}).supplierName || '')}</div>` : ''}</td>` : '') +
+          `<td>${i.quantity}</td><td>${escapeHtml(i.unitOfMeasure)}</td>${(q.sourcePrNumbers || []).length > 1 ? `<td class="sub">${escapeHtml(i.sourcePrNumber || '—')}</td>` : ''}</tr>`).join('') +
         `</tbody></table></div></div>`;
 
       // fornecedores convidados
@@ -4225,7 +4249,8 @@
       if (conduct && q.status === 'COTACAO_ABERTA')
         actions.push('<button data-act="close-rfq">Encerrar para análise</button>');
       if (conduct && q.status === 'EM_ANALISE' && latest.length) {
-        actions.push('winner-form');
+        // várias famílias = a compra pode se dividir: escolhe-se um fornecedor por família
+        actions.push((q.families || []).length > 1 ? 'award-form' : 'winner-form');
       }
       if (canMgrApprove() && q.status === 'AGUARDANDO_GERENTE') actions.push('decision:manager');
       if (canDirApprove() && q.status === 'AGUARDANDO_DIRETOR') actions.push('decision:director');
@@ -4235,6 +4260,17 @@
 
       html += '<div class="panel"><h2>Ações da etapa atual</h2>';
       if (q.selection) html += `<p class="hello">Fornecedor selecionado por <strong>${escapeHtml(q.selection.byLabel)}</strong> — critérios: ${escapeHtml(q.selection.criteria || '—')} · justificativa: “${escapeHtml(q.selection.justification)}”</p>`;
+      if ((q.awards || []).length && (q.splitAward || (q.families || []).length > 1)) {
+        html += `<h2>Adjudicação por família${q.splitAward ? ' <span class="badge warn">compra dividida</span>' : ''}</h2>
+          <div class="tablewrap"><table><thead><tr><th>Família</th><th>Fornecedor</th><th>Valor</th><th>O.C.</th><th>Justificativa</th></tr></thead><tbody>` +
+          q.awards.map(a => `<tr><td><strong>${escapeHtml(a.family)}</strong></td>
+            <td>${escapeHtml(a.supplierName)} <span class="sub">v${a.proposalVersion}</span></td>
+            <td>${money(a.totalValue)}</td>
+            <td>${a.purchaseOrderNumber ? `<span class="badge on">${escapeHtml(a.purchaseOrderNumber)}</span>` : '<span class="badge">pendente</span>'}</td>
+            <td class="sub">${escapeHtml(a.justification || '—')}</td></tr>`).join('') +
+          `</tbody></table></div>
+          <p class="hello">Total da compra: <strong>${money(q.awards.reduce((t, a) => t + a.totalValue, 0))}</strong>${q.splitAward ? ` em ${new Set(q.awards.map(a => a.supplierId)).size} fornecedores` : ''}.</p>`;
+      }
       if (q.managerApproval) html += `<p class="hello">Aprovador 01 (Nível 1): <strong>${escapeHtml(q.managerApproval.byLabel)}</strong></p>`;
       if (q.directorApproval) html += `<p class="hello">Aprovador 02 (Nível 2): <strong>${escapeHtml(q.directorApproval.byLabel)}</strong></p>`;
       for (const a of actions) {
@@ -4251,11 +4287,26 @@
             <label for="rfq-just">Justificativa da escolha (obrigatória)</label>
             <input id="rfq-just" placeholder="Por que este fornecedor vence?" />
             <button data-act="select-winner" style="margin-top:10px">Confirmar escolha e enviar ao Gerente</button>`;
+        } else if (a === 'award-form') {
+          html += `<h2>Escolher o fornecedor de cada família</h2>
+            <p class="hello">Esta compra tem <strong>${(q.families || []).length} famílias</strong>. Cada família pode ficar com um fornecedor diferente — quem ganhar mais de uma família recebe as duas na mesma O.C.</p>
+            <div id="rfq-award-map"><p class="hello">Carregando o mapa por família…</p></div>`;
         } else if (a === 'register-po-form') {
+          const pendentes = q.pendingPoSuppliers || [];
           const vencedora = q.proposals.find(p => p.isWinner);
-          html += `<h2>Registrar a O.C. fechada no SENIOR</h2>
-            <p class="hello">A OC é fechada no SENIOR, que conversa com o financeiro. Aqui você registra o número dela${vencedora ? ` — fornecedor <strong>${escapeHtml(vencedora.supplierName)}</strong>, total ${money(vencedora.totalValue)}` : ''}.</p>
-            <div class="grid2">
+          html += `<h2>Registrar a O.C. fechada no SENIOR</h2>`;
+          if (pendentes.length > 1) {
+            html += `<p class="hello">Compra dividida: <strong>uma O.C. por fornecedor</strong>. Registre uma de cada vez — o processo só encerra quando todas estiverem lançadas.</p>
+              <label for="rp-supplier">Fornecedor desta O.C.</label>
+              <select id="rp-supplier">` +
+              pendentes.map(f => `<option value="${f.supplierId}">${escapeHtml(f.supplierName)} — ${escapeHtml(f.families.join(', '))} · ${money(f.totalValue)}</option>`).join('') +
+              `</select>`;
+          } else if (pendentes.length === 1) {
+            html += `<p class="hello">A OC é fechada no SENIOR, que conversa com o financeiro. Aqui você registra o número dela — fornecedor <strong>${escapeHtml(pendentes[0].supplierName)}</strong>, total ${money(pendentes[0].totalValue)}${(q.families || []).length > 1 ? ` · família(s) ${escapeHtml(pendentes[0].families.join(', '))}` : ''}.</p>`;
+          } else {
+            html += `<p class="hello">A OC é fechada no SENIOR, que conversa com o financeiro. Aqui você registra o número dela${vencedora ? ` — fornecedor <strong>${escapeHtml(vencedora.supplierName)}</strong>, total ${money(vencedora.totalValue)}` : ''}.</p>`;
+          }
+          html += `<div class="grid2">
               <div><label for="rp-number">Número da O.C. (SENIOR)</label><input id="rp-number" placeholder="ex.: 663" /></div>
               <div class="grid2">
                 <div><label for="rp-date">Data da O.C.</label><input id="rp-date" type="date" /></div>
@@ -4279,7 +4330,10 @@
       html += '</div>';
 
       // etapa final: OC registrada, faturamento e entrega — tudo dentro do processo
-      if (q.purchaseOrderId)
+      const ocs = (q.purchaseOrders || []).filter(o => o.id);
+      if (!ocs.length && q.purchaseOrderId) ocs.push({ id: q.purchaseOrderId, number: q.purchaseOrderNumber, families: [] });
+      if (!ocs.some(o => o.id === rfqPoSelected)) rfqPoSelected = ocs.length ? ocs[0].id : null;
+      if (ocs.length)
         html += '<div class="panel" id="rfq-po"><h2>O.C., faturamento e entrega</h2><p class="hello">Carregando…</p></div>';
 
       // score multicritério informativo (V2-P4, decisão C5): compara, nunca decide
@@ -4320,9 +4374,21 @@
               ? row.penalties.map(p => `<div class="alert-card warn" style="cursor:default"><span><strong>−${p.points} ${escapeHtml(p.label)}</strong><div class="sub">${escapeHtml(p.evidence)}</div></span></div>`).join('')
               : '<p class="hello">Nenhuma penalidade — processo 100% conforme. ✔</p>');
         }).catch(() => {});
-      if (q.purchaseOrderId)
-        api('/api/v1/purchase-orders/' + q.purchaseOrderId)
-          .then(order => { $('rfq-po').innerHTML = processOrderPanel(order, conduct); })
+      if (document.getElementById('rfq-award-map'))
+        api(`/api/v1/quotations/${q.id}/family-map`)
+          .then(mapa => { $('rfq-award-map').innerHTML = awardMapHtml(mapa); })
+          .catch(err => { $('rfq-award-map').innerHTML = '<p class="hello">' + escapeHtml(err.message) + '</p>'; });
+
+      if (ocs.length)
+        api('/api/v1/purchase-orders/' + rfqPoSelected)
+          .then(order => {
+            // compra dividida: uma aba por O.C., cada uma com o seu faturamento e a sua entrega
+            const abas = ocs.length > 1
+              ? '<div class="row-actions" style="margin-bottom:8px">' + ocs.map(o =>
+                  `<button class="${o.id === rfqPoSelected ? '' : 'secondary'}" data-act="rfq-po-tab" data-id="${o.id}">O.C. ${escapeHtml(o.number || '')}${o.families && o.families.length ? ' · ' + escapeHtml(o.families.join(', ')) : ''}</button>`).join('') + '</div>'
+              : '';
+            $('rfq-po').innerHTML = abas + processOrderPanel(order, conduct);
+          })
           .catch(err => { $('rfq-po').innerHTML = '<h2>O.C., faturamento e entrega</h2><p class="hello">' + escapeHtml(err.message) + '</p>'; });
 
       api(`/api/v1/quotations/${q.id}/timeline`).then(({ items }) => {
@@ -4439,6 +4505,28 @@
           }});
           toast('Fornecedor selecionado — processo enviado à aprovação gerencial.', 'ok');
           rfqCache[q.id] = q; renderRfqDetail(q);
+        } else if (act === 'award') {
+          const criteria = [...document.querySelectorAll('.rfq-crit:checked')].map(c => c.value);
+          const awards = [];
+          for (const campo of document.querySelectorAll('.award-just')) {
+            const familia = campo.dataset.family;
+            const escolha = document.querySelector(`.award-pick[data-family="${CSS.escape(familia)}"]:checked`);
+            if (!escolha) { toast(`Escolha o fornecedor da família ${familia}.`, 'error'); return; }
+            if (!campo.value.trim()) { toast(`Informe a justificativa da família ${familia}.`, 'error'); return; }
+            awards.push({ family: familia, proposalId: escolha.value, criteria, justification: campo.value.trim() });
+          }
+          if (!awards.length) { toast('Nenhuma família para adjudicar.', 'error'); return; }
+          const q = await api(`/api/v1/quotations/${rfqOpenId}/select-winner`, { method: 'POST', body: {
+            proposalId: awards[0].proposalId, criteria, justification: awards[0].justification, awards,
+          }});
+          const fornecedores = new Set(awards.map(a => a.proposalId)).size;
+          toast(fornecedores > 1
+            ? `Compra dividida entre ${fornecedores} fornecedores — processo enviado à aprovação gerencial.`
+            : 'Fornecedor selecionado — processo enviado à aprovação gerencial.', 'ok');
+          rfqCache[q.id] = q; renderRfqDetail(q);
+        } else if (act === 'rfq-po-tab') {
+          rfqPoSelected = btn.dataset.id;
+          renderRfqDetail(rfqCache[rfqOpenId]);
         } else if (act === 'decide') {
           const decision = btn.dataset.decision;
           let reason = null;
@@ -4462,33 +4550,36 @@
         } else if (act === 'register-po') {
           const numero = $('rp-number').value.trim();
           if (!numero) { toast('Informe o número da O.C. fechada no SENIOR.', 'error'); return; }
+          // compra dividida: cada O.C. é de um fornecedor
+          const fornecedorOc = $('rp-supplier') ? $('rp-supplier').value : null;
+          const corpoOc = () => ({
+            erpNumber: numero, issuedOn: $('rp-date').value || null, notes: $('rp-notes').value || null,
+            supplierId: fornecedorOc,
+          });
           let order;
           try {
-            order = await api(`/api/v1/quotations/${rfqOpenId}/register-po`, { method: 'POST', body: {
-              erpNumber: numero, issuedOn: $('rp-date').value || null, notes: $('rp-notes').value || null,
-            }});
+            order = await api(`/api/v1/quotations/${rfqOpenId}/register-po`, { method: 'POST', body: corpoOc() });
           } catch (e) {
             // teto do contrato estourado: pede a justificativa e registra mesmo assim (fica na timeline)
             if (!String(e.message).includes('teto do contrato') && !String(e.message).includes('saldo do contrato')) throw e;
             const just = prompt(e.message + '\n\nJustificativa para exceder o teto (obrigatória):');
             if (!just) return;
-            order = await api(`/api/v1/quotations/${rfqOpenId}/register-po`, { method: 'POST', body: {
-              erpNumber: numero, issuedOn: $('rp-date').value || null, notes: $('rp-notes').value || null,
-              overLimitJustification: just,
-            }});
+            order = await api(`/api/v1/quotations/${rfqOpenId}/register-po`, { method: 'POST',
+              body: { ...corpoOc(), overLimitJustification: just } });
           }
           const file = $('rp-file').files[0];
           if (file) {
             try { await sendFile(`/api/v1/purchase-orders/${order.id}/erp-order/attachment`, file); }
             catch (e) { toast('O.C. registrada, mas o anexo falhou: ' + e.message, 'error'); }
           }
+          rfqPoSelected = order.id;
           toast(`O.C. ${order.number} registrada. Agora lance o faturamento e a entrega.`, 'ok');
           await refreshRfqDetail();
         } else if (act === 'rfq-invoice') {
           const numero = $('rfq-nf-number').value.trim();
           const valor = $('rfq-nf-value').value ? parseFloat($('rfq-nf-value').value) : null;
           if (!numero || valor == null) { toast('Informe o número e o valor da nota fiscal.', 'error'); return; }
-          const poId = rfqCache[rfqOpenId].purchaseOrderId;
+          const poId = rfqPoSelected || rfqCache[rfqOpenId].purchaseOrderId;
           const nf = await api(`/api/v1/purchase-orders/${poId}/invoices`, { method: 'POST', body: {
             number: numero, issuedOn: $('rfq-nf-date').value || null, value: valor,
           }});
@@ -4522,7 +4613,7 @@
             motivoDevolucao = prompt('Motivo da devolução (obrigatório): qualidade, avaria, divergência…');
             if (!motivoDevolucao) return;
           }
-          await api(`/api/v1/purchase-orders/${rfqCache[rfqOpenId].purchaseOrderId}/deliveries`, { method: 'POST', body: {
+          await api(`/api/v1/purchase-orders/${rfqPoSelected || rfqCache[rfqOpenId].purchaseOrderId}/deliveries`, { method: 'POST', body: {
             items: linhas, closeRemaining: encerrar, closeReason: motivo, rejectReason: motivoDevolucao,
           }});
           toast('Entrega registrada.', 'ok');

@@ -87,6 +87,8 @@ public static class PurchaseOrderPdf
                     {
                         t.Span("Processo:  ").SemiBold();
                         t.Span($"Solicitação {order.SourcePrNumber ?? "—"}   ·   Cotação {order.QuotationNumber ?? "—"}");
+                        // compra dividida: esta O.C. atende só as famílias ganhas por este fornecedor
+                        if (!string.IsNullOrWhiteSpace(order.Families)) t.Span($"   ·   Família(s): {order.Families}");
                         if (quotation?.SelectedByLabel is not null) t.Span($"   ·   Comprador: {order.IssuedByLabel}");
                     });
 

@@ -732,4 +732,274 @@ public class QuotationServiceTests
         var window = await w.Prs.ChangeWindowErrorAsync(pr);
         Assert.NotNull(window);
     }
+
+    // ================= compra dividida entre vários fornecedores (por família) =================
+
+    private sealed record SplitWorld(
+        QuotationService Rfq, RequisitionService Prs, SupplierService Sup, AppDbContext Db,
+        Supplier Alfa, Supplier Beta, PurchaseRequisition Pr);
+
+    /// <summary>
+    /// SC com produtos de DUAS famílias (EPI e FERRAMENTAS) e dois fornecedores convidados:
+    /// a Alfa é a melhor em EPI, a Beta é a melhor em FERRAMENTAS.
+    /// </summary>
+    private static async Task<SplitWorld> BuildSplitAsync()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        var db = new AppDbContext(options);
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero));
+        var catalog = new CatalogService(db, clock);
+        var rfq = new QuotationService(db, clock);
+        var prs = new RequisitionService(db, new FakeNumbers(), catalog, clock);
+        var sup = new SupplierService(db, clock);
+
+        var (alfa, _) = await sup.CreateAsync(Carla.Id, "Alfa LTDA", "Alfa", "12345678000190", null, null);
+        var (beta, _) = await sup.CreateAsync(Carla.Id, "Beta LTDA", "Beta", "98765432000110", null, null);
+        var (luva, _) = await catalog.CreateAsync(Gustavo.Id, "EPI-001", "Luva de vaqueta", "EPI", "PAR", 20m);
+        var (chave, _) = await catalog.CreateAsync(Gustavo.Id, "FER-001", "Chave de fenda 1/4", "FERRAMENTAS", "UN", 30m);
+
+        var (pr, _) = await prs.CreateAsync(Ana, "Reposição de EPI e ferramentas", "CC-01", "NORMAL", null,
+            [new ItemInput("", 10, null, null, null, luva!.Id), new ItemInput("", 5, null, null, null, chave!.Id)],
+            "CATALOGO");
+        await prs.SubmitAsync(Ana, pr!.Id);
+        await prs.ApproveAsync(Bruno, pr.Id, null);
+        return new SplitWorld(rfq, prs, sup, db, alfa!, beta!, pr);
+    }
+
+    /// <summary>Cotação aberta, propostas registradas e processo em análise.</summary>
+    private static async Task<Quotation> SplitUpToAnalysisAsync(SplitWorld w)
+    {
+        var (q, e1) = await w.Rfq.CreateFromPrAsync(Carla, w.Pr.Id, QuotationKind.Purchase, null, null);
+        Assert.Null(e1);
+        await w.Rfq.InviteSuppliersAsync(Carla, q!.Id, [w.Alfa.Id, w.Beta.Id]);
+        var epi = q.Items.Single(i => i.Family == "EPI");
+        var fer = q.Items.Single(i => i.Family == "FERRAMENTAS");
+
+        // Alfa: 200 em EPI + 200 em ferramentas + 40 de frete = 440
+        await w.Rfq.SubmitProposalAsync(q.Id, w.Alfa.Id, new ProposalInput(10, "30 dias", 40m, null, null,
+            [new ProposalItemInput(epi.Id, 20m, null), new ProposalItemInput(fer.Id, 40m, null)]), "PORTAL", "Alfa");
+        // Beta: 250 em EPI + 150 em ferramentas, sem frete = 400
+        await w.Rfq.SubmitProposalAsync(q.Id, w.Beta.Id, new ProposalInput(12, "28 dias", null, null, null,
+            [new ProposalItemInput(epi.Id, 25m, null), new ProposalItemInput(fer.Id, 30m, null)]), "PORTAL", "Beta");
+        var (analise, e2) = await w.Rfq.CloseForAnalysisAsync(Carla, q.Id);
+        Assert.Null(e2);
+        return analise!;
+    }
+
+    /// <summary>A família do item vem do catálogo e é o lote da adjudicação.</summary>
+    [Fact]
+    public async Task Itens_da_cotacao_carregam_a_familia_do_catalogo()
+    {
+        var w = await BuildSplitAsync();
+        var q = await SplitUpToAnalysisAsync(w);
+        Assert.Equal(["EPI", "FERRAMENTAS"], q.Families.OrderBy(f => f).ToArray());
+        Assert.All(q.Items, i => Assert.NotEqual(string.Empty, i.Family));
+    }
+
+    /// <summary>
+    /// O pedido do cliente: uma SC com várias famílias vira UMA compra, mas cada família pode
+    /// ficar com um fornecedor diferente. O rateio de frete acompanha a fatia ganha.
+    /// </summary>
+    [Fact]
+    public async Task Compra_de_varias_familias_pode_ser_dividida_entre_fornecedores()
+    {
+        var w = await BuildSplitAsync();
+        var q = await SplitUpToAnalysisAsync(w);
+        var alfa = q.Proposals.Single(p => p.SupplierId == w.Alfa.Id);
+        var beta = q.Proposals.Single(p => p.SupplierId == w.Beta.Id);
+
+        var (dividida, error) = await w.Rfq.AwardByFamilyAsync(Carla, q.Id, [
+            new AwardInput("EPI", alfa.Id, "Preço", "Alfa tem o menor preço em EPI."),
+            new AwardInput("FERRAMENTAS", beta.Id, "Preço", "Beta tem o menor preço em ferramentas."),
+        ]);
+        Assert.Null(error);
+        Assert.True(dividida!.IsSplitAward);
+        Assert.Equal(QuotationStatus.AwaitingManager, dividida.Status);
+        Assert.Equal(2, dividida.AwardList.Count);
+
+        // EPI com a Alfa: 200 de itens + metade do frete (o valor dos itens é metade da proposta)
+        var epi = dividida.AwardList.Single(a => a.Family == "EPI");
+        Assert.Equal(w.Alfa.Id, epi.SupplierId);
+        Assert.Equal(200m, epi.ItemsValue);
+        Assert.Equal(220m, epi.TotalValue);
+        // Ferramentas com a Beta: 150, sem frete na proposta
+        var fer = dividida.AwardList.Single(a => a.Family == "FERRAMENTAS");
+        Assert.Equal(w.Beta.Id, fer.SupplierId);
+        Assert.Equal(150m, fer.TotalValue);
+        // dividir sai mais barato do que dar tudo para o melhor total (Beta, 400)
+        Assert.Equal(370m, dividida.AwardList.Sum(a => a.TotalValue));
+
+        var timeline = await w.Rfq.TimelineAsync(q.Id);
+        var evento = Assert.Single(timeline.Where(e => e.EventType == "COMPRA_DIVIDIDA"));
+        Assert.Contains("EPI → Alfa", evento.Description);
+        Assert.Contains("FERRAMENTAS → Beta", evento.Description);
+    }
+
+    /// <summary>Nenhuma família pode ficar órfã: sem vencedor, o processo não avança.</summary>
+    [Fact]
+    public async Task Adjudicacao_exige_vencedor_para_cada_familia()
+    {
+        var w = await BuildSplitAsync();
+        var q = await SplitUpToAnalysisAsync(w);
+        var alfa = q.Proposals.Single(p => p.SupplierId == w.Alfa.Id);
+
+        var (nada, faltando) = await w.Rfq.AwardByFamilyAsync(Carla, q.Id,
+            [new AwardInput("EPI", alfa.Id, null, "Só o EPI.")]);
+        Assert.Null(nada);
+        Assert.Equal("RFQ-ERR-023", faltando!.Code);
+        Assert.Contains("FERRAMENTAS", faltando.Message);
+
+        var (semFamilia, intrusa) = await w.Rfq.AwardByFamilyAsync(Carla, q.Id, [
+            new AwardInput("EPI", alfa.Id, null, "ok"),
+            new AwardInput("FERRAMENTAS", alfa.Id, null, "ok"),
+            new AwardInput("QUIMICOS", alfa.Id, null, "família que não existe"),
+        ]);
+        Assert.Null(semFamilia);
+        Assert.Equal("RFQ-ERR-023", intrusa!.Code);
+
+        var (semJustificativa, erroJust) = await w.Rfq.AwardByFamilyAsync(Carla, q.Id, [
+            new AwardInput("EPI", alfa.Id, null, "ok"),
+            new AwardInput("FERRAMENTAS", alfa.Id, null, "  "),
+        ]);
+        Assert.Null(semJustificativa);
+        Assert.Equal("RFQ-ERR-021", erroJust!.Code);
+        Assert.Contains("FERRAMENTAS", erroJust.Message);
+
+        // recusa não deixa rastro: o processo continua em análise, sem adjudicação
+        var intacta = await w.Rfq.GetAsync(q.Id);
+        Assert.Equal(QuotationStatus.Analysis, intacta!.Status);
+        Assert.Empty(intacta.AwardList);
+    }
+
+    /// <summary>Só leva a família quem cotou a família inteira — meia cotação não vira O.C.</summary>
+    [Fact]
+    public async Task Familia_so_e_adjudicada_a_quem_cotou_a_familia_inteira()
+    {
+        var w = await BuildSplitAsync();
+        var (q, _) = await w.Rfq.CreateFromPrAsync(Carla, w.Pr.Id, QuotationKind.Purchase, null, null);
+        await w.Rfq.InviteSuppliersAsync(Carla, q!.Id, [w.Alfa.Id, w.Beta.Id]);
+        var epi = q.Items.Single(i => i.Family == "EPI");
+        var fer = q.Items.Single(i => i.Family == "FERRAMENTAS");
+        await w.Rfq.SubmitProposalAsync(q.Id, w.Alfa.Id, new ProposalInput(10, "30 dias", null, null, null,
+            [new ProposalItemInput(epi.Id, 20m, null), new ProposalItemInput(fer.Id, 40m, null)]), "PORTAL", "Alfa");
+        // a Beta só cotou o EPI
+        var (parcial, _) = await w.Rfq.SubmitProposalAsync(q.Id, w.Beta.Id, new ProposalInput(12, "28 dias", null, null, null,
+            [new ProposalItemInput(epi.Id, 18m, null)]), "PORTAL", "Beta");
+        await w.Rfq.CloseForAnalysisAsync(Carla, q.Id);
+        var propostaAlfa = (await w.Rfq.GetAsync(q.Id))!.Proposals.Single(p => p.SupplierId == w.Alfa.Id);
+
+        var (nada, error) = await w.Rfq.AwardByFamilyAsync(Carla, q.Id, [
+            new AwardInput("EPI", parcial!.Id, null, "menor preço"),
+            new AwardInput("FERRAMENTAS", parcial.Id, null, "não cotou"),
+        ]);
+        Assert.Null(nada);
+        Assert.Equal("RFQ-ERR-024", error!.Code);
+        Assert.Contains("FERRAMENTAS", error.Message);
+
+        // a Beta pode, sim, levar o EPI que cotou inteiro
+        var (ok, semErro) = await w.Rfq.AwardByFamilyAsync(Carla, q.Id, [
+            new AwardInput("EPI", parcial.Id, null, "menor preço no EPI"),
+            new AwardInput("FERRAMENTAS", propostaAlfa.Id, null, "única cotação de ferramentas"),
+        ]);
+        Assert.Null(semErro);
+        Assert.True(ok!.IsSplitAward);
+
+        // mapa por família: a Beta aparece incompleta em ferramentas e não pode ser escolhida lá
+        var mapa = w.Rfq.FamilyMap(ok);
+        var ferramentas = mapa.Single(l => l.Family == "FERRAMENTAS");
+        Assert.DoesNotContain(ferramentas.Offers, o => o.SupplierId == w.Beta.Id);
+        var lote = mapa.Single(l => l.Family == "EPI");
+        Assert.True(lote.Offers.Single(o => o.SupplierId == w.Beta.Id).Cheapest);
+    }
+
+    /// <summary>
+    /// A compra dividida vira uma O.C. POR FORNECEDOR: o processo só encerra quando todas
+    /// estiverem registradas no SENIOR, e cada uma leva apenas os itens da sua família.
+    /// </summary>
+    [Fact]
+    public async Task Compra_dividida_gera_uma_OC_para_cada_fornecedor()
+    {
+        var w = await BuildSplitAsync();
+        var q = await SplitUpToAnalysisAsync(w);
+        var alfa = q.Proposals.Single(p => p.SupplierId == w.Alfa.Id);
+        var beta = q.Proposals.Single(p => p.SupplierId == w.Beta.Id);
+        await w.Rfq.AwardByFamilyAsync(Carla, q.Id, [
+            new AwardInput("EPI", alfa.Id, "Preço", "Alfa é a melhor em EPI."),
+            new AwardInput("FERRAMENTAS", beta.Id, "Preço", "Beta é a melhor em ferramentas."),
+        ]);
+        await w.Rfq.ManagerDecisionAsync(Gustavo, q.Id, "APROVAR", null);
+        var (aprovada, _) = await w.Rfq.DirectorDecisionAsync(Diana, q.Id, "APROVAR", null);
+        Assert.Equal(QuotationStatus.ApprovedForIssue, aprovada!.Status);
+
+        // com a compra dividida, é preciso dizer de qual fornecedor é a O.C.
+        var (semFornecedor, erro) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, "900", null, null);
+        Assert.Null(semFornecedor);
+        Assert.Equal("RFQ-ERR-042", erro!.Code);
+
+        var (ocAlfa, e1) = await w.Rfq.RegisterErpPurchaseOrderAsync(
+            Carla, q.Id, "900", new DateOnly(2026, 8, 31), null, null, w.Alfa.Id);
+        Assert.Null(e1);
+        Assert.Equal(220m, ocAlfa!.TotalValue);
+        Assert.Equal("EPI", ocAlfa.Families);
+        Assert.Equal(20m, ocAlfa.FreightValue);                     // rateio do frete pela fatia
+        var itemAlfa = Assert.Single(ocAlfa.Items);
+        Assert.Equal("EPI", itemAlfa.Family);
+        Assert.Equal(10m, itemAlfa.Quantity);
+
+        // o processo continua aberto: falta a O.C. da Beta
+        var meio = await w.Rfq.GetAsync(q.Id);
+        Assert.Equal(QuotationStatus.ApprovedForIssue, meio!.Status);
+        Assert.Equal("900", meio.AwardList.Single(a => a.Family == "EPI").PurchaseOrderNumber);
+        Assert.Null(meio.AwardList.Single(a => a.Family == "FERRAMENTAS").PurchaseOrderId);
+
+        var (ocBeta, e2) = await w.Rfq.RegisterErpPurchaseOrderAsync(
+            Carla, q.Id, "901", new DateOnly(2026, 8, 31), null, null, w.Beta.Id);
+        Assert.Null(e2);
+        Assert.Equal(150m, ocBeta!.TotalValue);
+        Assert.Equal("FERRAMENTAS", ocBeta.Families);
+        Assert.Equal(w.Beta.Id, ocBeta.SupplierId);
+
+        var fim = await w.Rfq.GetAsync(q.Id);
+        Assert.Equal(QuotationStatus.PoIssued, fim!.Status);
+        Assert.Equal(ocAlfa.Id, fim.PurchaseOrderId);               // cabeçalho: a primeira O.C.
+        Assert.All(fim.AwardList, a => Assert.NotNull(a.PurchaseOrderId));
+        Assert.Equal(2, await w.Db.PurchaseOrders.CountAsync(o => o.QuotationId == q.Id));
+
+        // nada sobra para registrar
+        var (repetida, esgotado) = await w.Rfq.RegisterErpPurchaseOrderAsync(
+            Carla, q.Id, "902", null, null, null, w.Alfa.Id);
+        Assert.Null(repetida);
+        Assert.Equal("RFQ-ERR-040", esgotado!.Code);
+    }
+
+    /// <summary>
+    /// Fornecedor único continua sendo uma O.C. só, mesmo com várias famílias: a divisão
+    /// depende de quem ganhou, não da quantidade de famílias.
+    /// </summary>
+    [Fact]
+    public async Task Fornecedor_unico_leva_todas_as_familias_em_uma_unica_OC()
+    {
+        var w = await BuildSplitAsync();
+        var q = await SplitUpToAnalysisAsync(w);
+        var alfa = q.Proposals.Single(p => p.SupplierId == w.Alfa.Id);
+
+        var (escolhida, error) = await w.Rfq.SelectWinnerAsync(Carla, q.Id, alfa.Id, "Preço", "Melhor pacote fechado.");
+        Assert.Null(error);
+        Assert.False(escolhida!.IsSplitAward);
+        Assert.Equal(2, escolhida.AwardList.Count);                       // uma linha por família…
+        Assert.Single(escolhida.AwardedSupplierIds);                      // …mas um fornecedor só
+        Assert.Equal(440m, escolhida.AwardList.Sum(a => a.TotalValue));   // proposta cheia, sem sobra de rateio
+
+        await w.Rfq.ManagerDecisionAsync(Gustavo, q.Id, "APROVAR", null);
+        await w.Rfq.DirectorDecisionAsync(Diana, q.Id, "APROVAR", null);
+        var (oc, e1) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, "910", new DateOnly(2026, 8, 31), null);
+        Assert.Null(e1);
+        Assert.Equal(440m, oc!.TotalValue);
+        Assert.Equal(2, oc.Items.Count);
+        Assert.Equal(40m, oc.FreightValue);
+        var fim = await w.Rfq.GetAsync(q.Id);
+        Assert.Equal(QuotationStatus.PoIssued, fim!.Status);
+        Assert.Single(await w.Db.PurchaseOrders.Where(o => o.QuotationId == q.Id).ToListAsync());
+    }
 }

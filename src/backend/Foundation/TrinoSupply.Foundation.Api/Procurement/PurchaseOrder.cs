@@ -37,6 +37,8 @@ public class PurchaseOrder
     public string? ErpFileName { get; set; }
     public DateTimeOffset? DeliveryCompletedAt { get; set; }    // data da conclusão da entrega
     public string? Notes { get; set; }
+    /// <summary>Famílias adjudicadas a este fornecedor, separadas por vírgula (compra dividida).</summary>
+    public string? Families { get; set; }
     public decimal TotalValue { get; set; }
     public List<PurchaseOrderItem> Items { get; set; } = [];
     public Guid IssuedBy { get; set; }
@@ -102,5 +104,7 @@ public class PurchaseOrderItem
     public decimal? ReferenceSaving { get; set; }
     // agrupamento multi-SC (V2): de qual SC o item veio — rateio visível dentro da O.C.
     public string? SourcePrNumber { get; set; }
+    /// <summary>Família do item: mostra, dentro da O.C., qual lote da compra ela atende.</summary>
+    public string? Family { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 }

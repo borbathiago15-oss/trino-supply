@@ -29,6 +29,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Quotation> Quotations => Set<Quotation>();
     public DbSet<QuotationItem> QuotationItems => Set<QuotationItem>();
     public DbSet<QuotationSupplier> QuotationSuppliers => Set<QuotationSupplier>();
+    public DbSet<QuotationAward> QuotationAwards => Set<QuotationAward>();
     public DbSet<Proposal> Proposals => Set<Proposal>();
     public DbSet<ProposalItem> ProposalItems => Set<ProposalItem>();
     public DbSet<ProcessEvent> ProcessEvents => Set<ProcessEvent>();
@@ -463,6 +464,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(o => o.SourcePrNumber).HasColumnName("source_pr_number").HasMaxLength(30);
             e.Property(o => o.QuotationId).HasColumnName("quotation_id");
             e.Property(o => o.QuotationNumber).HasColumnName("quotation_number").HasMaxLength(30);
+            e.Property(o => o.Families).HasColumnName("families").HasMaxLength(500);
             e.Property(o => o.PaymentTerms).HasColumnName("payment_terms").HasMaxLength(200);
             e.Property(o => o.DeliveryDays).HasColumnName("delivery_days");
             e.Property(o => o.FreightValue).HasColumnName("freight_value").HasPrecision(18, 4);
@@ -531,6 +533,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.LastPaidUnitPrice).HasColumnName("last_paid_unit_price").HasPrecision(18, 4);
             e.Property(i => i.ReferenceSaving).HasColumnName("reference_saving").HasPrecision(18, 4);
             e.Property(i => i.SourcePrNumber).HasColumnName("source_pr_number").HasMaxLength(30);
+            e.Property(i => i.Family).HasColumnName("family").HasMaxLength(120);
             e.Property(i => i.CreatedAt).HasColumnName("created_at");
             e.HasIndex(i => i.OrderId);
         });
@@ -583,6 +586,32 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasMany(q => q.Items).WithOne().HasForeignKey(i => i.QuotationId).OnDelete(DeleteBehavior.Cascade);
             e.HasMany(q => q.Suppliers).WithOne().HasForeignKey(s => s.QuotationId).OnDelete(DeleteBehavior.Cascade);
             e.HasMany(q => q.Proposals).WithOne().HasForeignKey(p => p.QuotationId).OnDelete(DeleteBehavior.Restrict);
+            e.HasMany(q => q.Awards).WithOne().HasForeignKey(a => a.QuotationId).OnDelete(DeleteBehavior.Cascade);
+            e.Ignore(q => q.AwardList);   // leitura sem repetição da coleção acima, não é navegação
+        });
+
+        modelBuilder.Entity<QuotationAward>(e =>
+        {
+            e.ToTable("quotation_award", "procurement");   // adjudicação por família (multi-fornecedor)
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Id).HasColumnName("id");
+            e.Property(a => a.QuotationId).HasColumnName("quotation_id");
+            e.Property(a => a.Family).HasColumnName("family").HasMaxLength(120).IsRequired();
+            e.Property(a => a.SupplierId).HasColumnName("supplier_id");
+            e.Property(a => a.SupplierName).HasColumnName("supplier_name").HasMaxLength(300);
+            e.Property(a => a.ProposalId).HasColumnName("proposal_id");
+            e.Property(a => a.ProposalVersion).HasColumnName("proposal_version");
+            e.Property(a => a.ItemsValue).HasColumnName("items_value").HasPrecision(18, 4);
+            e.Property(a => a.TotalValue).HasColumnName("total_value").HasPrecision(18, 4);
+            e.Property(a => a.Criteria).HasColumnName("criteria").HasMaxLength(500);
+            e.Property(a => a.Justification).HasColumnName("justification").HasMaxLength(2000);
+            e.Property(a => a.SelectedBy).HasColumnName("selected_by");
+            e.Property(a => a.SelectedByLabel).HasColumnName("selected_by_label").HasMaxLength(200);
+            e.Property(a => a.SelectedAt).HasColumnName("selected_at");
+            e.Property(a => a.PurchaseOrderId).HasColumnName("purchase_order_id");
+            e.Property(a => a.PurchaseOrderNumber).HasColumnName("purchase_order_number").HasMaxLength(30);
+            // uma família só é adjudicada uma vez por processo
+            e.HasIndex(a => new { a.QuotationId, a.Family }).IsUnique();
         });
 
         modelBuilder.Entity<QuotationItem>(e =>
@@ -597,6 +626,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.Description).HasColumnName("description").HasMaxLength(500);
             e.Property(i => i.Quantity).HasColumnName("quantity").HasPrecision(18, 4);
             e.Property(i => i.UnitOfMeasure).HasColumnName("unit_of_measure").HasMaxLength(10);
+            e.Property(i => i.Family).HasColumnName("family").HasMaxLength(120);
             e.Property(i => i.SourcePrId).HasColumnName("source_pr_id");
             e.Property(i => i.SourcePrNumber).HasColumnName("source_pr_number").HasMaxLength(30);
             e.Property(i => i.SourcePrItemId).HasColumnName("source_pr_item_id");

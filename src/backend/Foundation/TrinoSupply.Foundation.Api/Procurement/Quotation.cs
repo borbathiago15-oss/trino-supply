@@ -77,6 +77,28 @@ public class Quotation
     public List<QuotationItem> Items { get; set; } = [];
     public List<QuotationSupplier> Suppliers { get; set; } = [];
     public List<Proposal> Proposals { get; set; } = [];
+    /// <summary>Adjudicação por família (multi-fornecedor): uma linha por família cotada.</summary>
+    public List<QuotationAward> Awards { get; set; } = [];
+
+    /// <summary>Famílias em disputa no processo, na ordem em que aparecem nos itens.</summary>
+    public IReadOnlyList<string> Families =>
+        Items.OrderBy(i => i.Sequence).Select(i => QuotationAward.FamilyKey(i.Family))
+            .Distinct().ToList();
+
+    /// <summary>
+    /// Adjudicações do processo, sem repetição e em ordem de família. Use SEMPRE esta lista:
+    /// o EF pode ligar a mesma linha à coleção duas vezes quando ela é gravada e relida no
+    /// mesmo contexto, e somar duas vezes a mesma família estouraria o valor da O.C.
+    /// </summary>
+    public IReadOnlyList<QuotationAward> AwardList =>
+        Awards.DistinctBy(a => a.Id).OrderBy(a => a.Family).ToList();
+
+    /// <summary>Fornecedores que ganharam alguma família — cada um recebe a sua O.C.</summary>
+    public IReadOnlyList<Guid> AwardedSupplierIds =>
+        AwardList.Select(a => a.SupplierId).Distinct().ToList();
+
+    /// <summary>Mais de um fornecedor adjudicado: a compra se divide em várias O.C.s.</summary>
+    public bool IsSplitAward => AwardedSupplierIds.Count > 1;
 
     /// <summary>SCs atendidas pelo processo: a primária mais as agrupadas via itens (V2 — regra 1 generalizada).</summary>
     public IReadOnlyList<Guid> SourcePrIds =>
@@ -102,11 +124,49 @@ public class QuotationItem
     public string Description { get; set; } = string.Empty;
     public decimal Quantity { get; set; }
     public string UnitOfMeasure { get; set; } = "UN";
+    /// <summary>
+    /// Família do produto, em caixa alta (snapshot do catálogo). É o lote da adjudicação:
+    /// cada família pode ficar com um fornecedor diferente. Item digitado (sem catálogo)
+    /// cai em DIVERSOS. Cotações antigas ficam vazias e valem como uma família só.
+    /// </summary>
+    public string Family { get; set; } = string.Empty;
     // rastreio de origem (V2 — agrupamento multi-SC): de qual SC e de qual item da SC este item veio.
     // Cotações antigas ficam com null e continuam valendo pelo SourcePrId do cabeçalho.
     public Guid? SourcePrId { get; set; }
     public string? SourcePrNumber { get; set; }
     public Guid? SourcePrItemId { get; set; }
+}
+
+/// <summary>
+/// Adjudicação de uma família a um fornecedor (RFQ-BR-005 estendida): a mesma compra pode ser
+/// dividida entre vários fornecedores, um por família, cada um com a sua justificativa.
+/// O rateio de frete/impostos/desconto da proposta acompanha a fatia ganha pelo fornecedor.
+/// </summary>
+public class QuotationAward
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid QuotationId { get; set; }
+    public string Family { get; set; } = string.Empty;          // lote adjudicado (caixa alta)
+    public Guid SupplierId { get; set; }
+    public string SupplierName { get; set; } = string.Empty;    // snapshot
+    public Guid ProposalId { get; set; }
+    public int ProposalVersion { get; set; }
+    public decimal ItemsValue { get; set; }                     // soma dos itens da família
+    public decimal TotalValue { get; set; }                     // itens + rateio de frete/impostos/outros − desconto
+    public string? Criteria { get; set; }
+    public string Justification { get; set; } = string.Empty;
+    public Guid SelectedBy { get; set; }
+    public string SelectedByLabel { get; set; } = string.Empty;
+    public DateTimeOffset SelectedAt { get; set; }
+    // O.C. do SENIOR que atende esta família (uma O.C. por fornecedor: famílias do mesmo
+    // fornecedor compartilham o número)
+    public Guid? PurchaseOrderId { get; set; }
+    public string? PurchaseOrderNumber { get; set; }
+
+    /// <summary>Chave da família: caixa alta, sem espaços nas pontas; vazio vira DIVERSOS.</summary>
+    public const string Default = "DIVERSOS";
+    public static string FamilyKey(string? family) =>
+        string.IsNullOrWhiteSpace(family) ? Default : family.Trim().ToUpperInvariant();
 }
 
 /// <summary>Fornecedor convidado (somente ativos do cadastro único — RFQ-BR-003).</summary>

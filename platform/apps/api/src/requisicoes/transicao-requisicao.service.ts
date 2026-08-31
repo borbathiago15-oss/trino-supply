@@ -1,5 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { ClientEscopado } from '@trino/db';
+import { ajustarPausaSla, segundosUteis } from '../sla/dominio/calculadora-sla';
+import { SlaCalculatorService } from '../sla/sla.service';
 import {
   aplicarTransicao,
   calcularTtoSegundos,
@@ -58,6 +60,8 @@ function snapshot(req: any, totalItensAtivos: number) {
  */
 @Injectable()
 export class TransicaoRequisicaoService {
+  constructor(private readonly sla: SlaCalculatorService) {}
+
   async executar(
     db: ClientEscopado,
     requisicaoId: string,
@@ -108,6 +112,23 @@ export class TransicaoRequisicaoService {
 
         // A máquina decide primeiro: nem consulta saldo quem nem podia transicionar.
         const patch: PatchRequisicao = aplicarTransicao(estado, comando);
+
+        // F7 — pausa AUTOMÁTICA do cronômetro por estado: entrar em
+        // EM_TRIAGEM/DEVOLVIDA_AJUSTE/EM_COTACAO/APROVACAO_ALCADA congela;
+        // sair para fora do conjunto soma o tempo parado EM TEMPO ÚTIL do
+        // regime (comercial desconta noites, fins de semana e feriados).
+        const configSla = await this.sla.configuracao(db);
+        Object.assign(
+          patch,
+          ajustarPausaSla(
+            estado.status,
+            patch.status ?? estado.status,
+            estado,
+            comando.agora,
+            (inicio, fim) => segundosUteis(inicio, fim, configSla),
+          ),
+        );
+
         const extras = validacaoExtra ? await validacaoExtra(tx, estado, requisicao) : null;
 
         const antes = snapshot(requisicao, totalItensAtivos);

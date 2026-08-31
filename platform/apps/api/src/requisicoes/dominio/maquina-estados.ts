@@ -234,12 +234,8 @@ export function aplicarTransicao(estado: EstadoRequisicao, comando: ComandoTrans
       }
       patch.justificativa = justificativa;
       patch.submetidaEm = estado.submetidaEm ?? agora;
-      // Reenviar destrava o cronômetro parado na devolução.
-      if (transicao === 'T08_REENVIAR' && estado.slaPausadoEm) {
-        patch.slaSegundosPausados =
-          estado.slaSegundosPausados + Math.max(0, Math.round((agora.getTime() - estado.slaPausadoEm.getTime()) / 1000));
-        patch.slaPausadoEm = null;
-      }
+      // O destravamento do SLA não mora mais aqui: a pausa é AUTOMÁTICA por
+      // estado (ajustarPausaSla, F7) — sair de DEVOLVIDA_AJUSTE destrava.
       break;
     }
 
@@ -263,8 +259,8 @@ export function aplicarTransicao(estado: EstadoRequisicao, comando: ComandoTrans
         throw new GuardaViolada('REQ-ERR-005', 'Devolver para ajuste exige o motivo da devolução.');
       }
       patch.motivoRecusa = motivo;
-      // Congela o SLA: a bola está com o solicitante, o relógio não corre.
-      patch.slaPausadoEm = estado.slaPausadoEm ?? agora;
+      // O congelamento do SLA é automático por estado (ajustarPausaSla, F7):
+      // DEVOLVIDA_AJUSTE está no conjunto pausado.
       break;
     }
 

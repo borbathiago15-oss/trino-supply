@@ -1,4 +1,4 @@
-# Trino Platform — monorepo (Fases F0 a F6)
+# Trino Platform — monorepo (Fases F0 a F7)
 
 Base multi-tenant da plataforma Trino: schemas `core` e `auditoria` no Postgres,
 Prisma com multi-schema, isolamento de tenant imposto por extensão do client
@@ -7,7 +7,8 @@ Prisma com multi-schema, isolamento de tenant imposto por extensão do client
 `catalogo` e `fornecimento` (F2); alçadas e aprovação no schema `compras`,
 com política de domínio pura e decisão sob transação serializável (F3); e a
 requisição de compra com máquina de estados determinística (F4); cotação,
-propostas e equalização (F5); pedido, NF-e e recebimento com 3-way match (F6).
+propostas e equalização (F5); pedido, NF-e e recebimento com 3-way match (F6); SLA em tempo útil com
+calendário comercial, feriados e pausas automáticas (F7).
 Convive com o app .NET do Trino Supply (`../src`) sem tocar nele.
 
 ## Estrutura
@@ -390,3 +391,25 @@ não veio avariado**, o pedido vira `RECEBIDO_PARCIAL`/`RECEBIDO_TOTAL` e a
 requisição acompanha (T17/T18). Cada avaria ou divergência gera um lançamento na
 **Conta 408**, gravado na trilha de auditoria — que é o registro durável, já que
 o DDL não prevê tabela de eventos.
+
+## SLA em tempo útil (F7)
+
+`src/sla/dominio/calculadora-sla.ts` é domínio puro; `SlaCalculatorService` só
+carrega os feriados do tenant (`core.feriado`, CRUD em `/feriados`) e o regime.
+
+- **Regime COMERCIAL** (padrão): 08:00–18:00, segunda a sexta, descontando os
+  feriados. Sexta 17h → segunda 9h = 2 horas úteis, não 64 corridas.
+- **Regime 24/7**: `SLA_REGIME=24_7` — relógio corrido. `SLA_HORA_INICIO`,
+  `SLA_HORA_FIM` e `SLA_OFFSET_MINUTOS` ajustam o expediente (padrão -180 =
+  Brasília; offset fixo é decisão consciente — sem horário de verão desde 2019).
+- **Pausa automática por estado**: entrar em `EM_TRIAGEM`, `DEVOLVIDA_AJUSTE`,
+  `EM_COTACAO` ou `APROVACAO_ALCADA` congela o cronômetro; sair do conjunto
+  soma o tempo parado EM TEMPO ÚTIL em `sla_segundos_pausados` e destrava. A
+  lógica saiu da máquina de estados (T06/T08 não mexem mais em pausa) e vive em
+  `ajustarPausaSla`, aplicada pelo executor a TODA transição.
+- **TTO** = submissão → `triagem_em` (o rascunho é tempo do solicitante; a fila
+  começa na submissão). Não desconta pausas — elas começam justamente na
+  triagem. **TTR** = submissão → `concluida_em`, descontando as pausas e, se o
+  cronômetro estiver congelado agora, o trecho corrente.
+- `GET /requisicoes/:id/sla` devolve TTO/TTR nos dois relógios (útil e
+  corrido), o regime e o estado da pausa.

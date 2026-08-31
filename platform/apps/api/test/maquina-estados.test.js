@@ -17,6 +17,15 @@ const {
   GuardaViolada,
   ConflitoDeVersao,
 } = require('../dist/requisicoes/dominio/maquina-estados');
+const { ajustarPausaSla, ESTADOS_COM_SLA_PAUSADO } = require('../dist/sla/dominio/calculadora-sla');
+
+// Compõe transição + pausa automática, como faz o executor em produção.
+const segundosCorridos = (i, f) => Math.round((f - i) / 1000);
+function transicaoComPausa(est, comando) {
+  const patch = aplicarTransicao(est, comando);
+  Object.assign(patch, ajustarPausaSla(est.status, patch.status ?? est.status, est, comando.agora, segundosCorridos));
+  return patch;
+}
 
 let ok = 0, fail = 0;
 const check = (label, cond, extra = '') => {
@@ -90,16 +99,16 @@ const triagem = aplicarTransicao(
 check('T05 assumir triagem grava o comprador e fecha o TTO',
   triagem.status === 'EM_TRIAGEM' && triagem.compradorId === COMPRADOR && triagem.triagemEm.getTime() === AGORA.getTime());
 
-const devolvida = aplicarTransicao(
+const devolvida = transicaoComPausa(
   estado({ status: 'EM_TRIAGEM', compradorId: COMPRADOR }),
   { transicao: 'T06_DEVOLVER_AJUSTE', agora: AGORA, motivo: 'Faltou o centro de custo correto' },
 );
-check('T06 devolver registra o motivo e CONGELA o SLA',
+check('T06 devolver registra o motivo e o SLA fica/entra congelado',
   devolvida.status === 'DEVOLVIDA_AJUSTE' &&
   devolvida.motivoRecusa === 'Faltou o centro de custo correto' &&
   devolvida.slaPausadoEm.getTime() === AGORA.getTime());
 
-const reenviada = aplicarTransicao(
+const reenviada = transicaoComPausa(
   estado({
     status: 'DEVOLVIDA_AJUSTE',
     submetidaEm: new Date('2026-06-15T10:00:00.000Z'),
@@ -205,6 +214,29 @@ check('sem versão informada, não há checagem',
   erroDe(() => aplicarTransicao(estado({ version: 7 }), { transicao: 'T03_SUBMETER', agora: AGORA })) === 'OK');
 check('transição ilegal responde "ilegal" mesmo com versão velha',
   erroDe(() => aplicarTransicao(estado({ status: 'CANCELADA', version: 9 }), { transicao: 'T03_SUBMETER', agora: AGORA, versionEsperada: 1 })) === 'TransicaoNaoPermitida');
+
+console.log('== pausa automática por estado (F7)');
+check('o conjunto pausado é exatamente o da especificação',
+  ['EM_TRIAGEM', 'DEVOLVIDA_AJUSTE', 'EM_COTACAO', 'APROVACAO_ALCADA']
+    .every((e) => ESTADOS_COM_SLA_PAUSADO.has(e)) && ESTADOS_COM_SLA_PAUSADO.size === 4);
+const pausaTriagem = transicaoComPausa(
+  estado({ status: 'SUBMETIDA' }),
+  { transicao: 'T05_ASSUMIR_TRIAGEM', agora: AGORA, compradorId: COMPRADOR },
+);
+check('entrar em EM_TRIAGEM congela automaticamente',
+  pausaTriagem.slaPausadoEm.getTime() === AGORA.getTime());
+const seguePausada = transicaoComPausa(
+  estado({ status: 'EM_TRIAGEM', compradorId: COMPRADOR, slaPausadoEm: new Date('2026-06-15T11:00:00Z') }),
+  { transicao: 'T10_ENVIAR_COTACAO', agora: AGORA },
+);
+check('EM_TRIAGEM → EM_COTACAO não mexe na pausa em andamento',
+  seguePausada.slaPausadoEm === undefined && seguePausada.slaSegundosPausados === undefined);
+const rejeitadaPausada = transicaoComPausa(
+  estado({ status: 'EM_TRIAGEM', slaPausadoEm: new Date('2026-06-15T11:30:00Z'), slaSegundosPausados: 60 }),
+  { transicao: 'T09_REJEITAR', agora: AGORA, motivo: 'Sem cobertura' },
+);
+check('sair da zona pausada (rejeição) soma o tempo parado e destrava',
+  rejeitadaPausada.slaPausadoEm === null && rejeitadaPausada.slaSegundosPausados === 60 + 1800);
 
 console.log('== TTO (tempo até o atendimento)');
 check('TTO é null antes da triagem', calcularTtoSegundos({ submetidaEm: AGORA, triagemEm: null, slaSegundosPausados: 0 }) === null);

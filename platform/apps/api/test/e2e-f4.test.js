@@ -306,9 +306,14 @@ async function main() {
       logSubmeter?.beforeJson?.status === 'RASCUNHO' && logSubmeter?.afterJson?.status === 'SUBMETIDA');
     check('o snapshot registra a version antes e depois',
       logSubmeter?.afterJson?.version === logSubmeter?.beforeJson?.version + 1);
+    // F7: o congelamento é automático por estado — começa ao ENTRAR em
+    // EM_TRIAGEM (T05), e a devolução apenas o mantém.
+    const logTriagemPausa = logs.find((l) => l.acao === 'T05_ASSUMIR_TRIAGEM');
+    check('a auditoria mostra o SLA congelando na entrada da triagem (F7)',
+      logTriagemPausa?.beforeJson?.slaPausadoEm === null && logTriagemPausa?.afterJson?.slaPausadoEm !== null);
     const logDevolver = logs.find((l) => l.acao === 'T06_DEVOLVER_AJUSTE');
-    check('a devolução auditada mostra o congelamento do SLA',
-      logDevolver?.beforeJson?.slaPausadoEm === null && logDevolver?.afterJson?.slaPausadoEm !== null);
+    check('a devolução mantém o SLA congelado',
+      logDevolver?.afterJson?.slaPausadoEm !== null);
     check('o ator e o tenant vêm do token',
       logs.every((l) => !!l.actorId && l.tenantId === ids.tenant));
     const logTriagem = logs.find((l) => l.acao === 'T05_ASSUMIR_TRIAGEM');

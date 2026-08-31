@@ -68,6 +68,7 @@ model Tenant {
   notasFiscais           NotaFiscalEntrada[]
   recebimentos           Recebimento[]
   itensRecebimento       ItemRecebimento[]
+  feriados               Feriado[]
 
   @@map("tenant")
   @@schema("core")
@@ -1142,4 +1143,23 @@ model ItemRecebimento {
   @@index([itemPedidoId], map: "ix_item_recebimento_pedido")
   @@map("item_recebimento")
   @@schema("compras")
+}
+
+// ---------------------------------------------------------------------------
+// Fase F7 — calendário de feriados do tenant, usado pelo cálculo de tempo útil
+// do SLA (regime comercial: 08h-18h, seg-sex, menos feriados).
+// ---------------------------------------------------------------------------
+
+model Feriado {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  data      DateTime @db.Date
+  descricao String   @db.VarChar(120)
+  criadoEm  DateTime @default(now()) @map("criado_em") @db.Timestamptz(6)
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, data], map: "uq_feriado_data")
+  @@map("feriado")
+  @@schema("core")
 }

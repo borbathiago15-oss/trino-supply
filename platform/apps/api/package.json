@@ -1,0 +1,33 @@
+{
+  "name": "@trino/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Trino Platform API (Fase F1) — autenticação real, escopo de tenant via JWT e auditoria global",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "seed": "node scripts/seed.js",
+    "test:e2e": "npm run build && node test/e2e.test.js"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@nestjs/jwt": "^11.0.0",
+    "@nestjs/passport": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.0",
+    "@trino/db": "*",
+    "argon2": "^0.41.1",
+    "dotenv": "^16.4.5",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/passport-jwt": "^4.0.1",
+    "typescript": "^5.6.0"
+  }
+}

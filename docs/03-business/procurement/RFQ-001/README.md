@@ -49,6 +49,12 @@ Analysis) registrada na timeline com motivo — o histórico nunca é perdido.
 - **RFQ-BR-003** — Convite apenas a fornecedores **ativos** do cadastro único (SUP-001); nada de cadastro paralelo. Convite registrado na timeline.
 - **RFQ-BR-004** — Propostas são **imutáveis e versionadas** (nova proposta supersede, nunca apaga); registram fornecedor, data/hora, versão, condições e anexos.
 - **RFQ-BR-005** — Escolha do vencedor exige proposta existente, critérios e **justificativa obrigatória**; registra usuário, data/hora e proposta vencedora.
+- **RFQ-BR-005a** — **Adjudicação por família (compra dividida).** O lote da escolha é a **família do produto** (snapshot do catálogo; item digitado entra em `DIVERSOS`). Uma solicitação com produtos de várias famílias gera **um processo único**, e cada família pode ficar com um fornecedor diferente — ou com o mesmo, se ele for o melhor em mais de uma. Regras:
+  - toda família cotada precisa de um vencedor (nenhuma fica órfã);
+  - só leva a família quem **cotou a família inteira** (proposta parcial não adjudica o lote);
+  - cada família tem a sua justificativa, e cada vencedor passa pela homologação como no vencedor único;
+  - frete, impostos, outros custos e desconto da proposta são **rateados proporcionalmente** ao valor dos itens ganhos; quem leva a proposta inteira fica com o total cheio, sem arredondamento.
+- **RFQ-BR-005b** — **Uma O.C. por fornecedor.** Na emissão, as famílias ganhas pelo mesmo fornecedor entram na **mesma** O.C. (a família aparece linha a linha e no cabeçalho do PDF); fornecedores diferentes recebem O.C.s diferentes. O processo só chega a `OC_REGISTRADA` quando **todas** as O.C.s estiverem registradas — até lá ele permanece em `APROVADO_PARA_EMISSAO` e cada registro parcial gera evento próprio (`OC_PARCIAL_REGISTRADA`).
 - **RFQ-BR-006** — Segregação de funções: quem selecionou o vencedor não aprova como Gerente nem como Diretor; o Diretor não pode ser o mesmo usuário da aprovação gerencial.
 - **RFQ-BR-007** — Diretor só recebe o processo após aprovação do Gerente. OC só é emitida em `ApprovedForIssue` — nunca sem as duas aprovações, sem fornecedor, com fornecedor inativo, sem itens ou sem valor.
 - **RFQ-BR-008** — Após aprovação do Diretor os dados ficam **bloqueados**; qualquer alteração exige "Solicitar ajustes" (retorno formal com novo ciclo de aprovação). Sem alteração silenciosa.

@@ -15,6 +15,20 @@ public record QueueBlocked(PurchaseRequisition Pr, string Reason);
 
 public record ProposalItemInput(Guid QuotationItemId, decimal UnitPrice, decimal? Quantity);
 
+/// <summary>Oferta de um fornecedor para uma família inteira (mapa de adjudicação).</summary>
+public record FamilyOffer(Guid SupplierId, string SupplierName, Guid ProposalId, int ProposalVersion,
+    decimal ItemsValue, decimal TotalValue, int? DeliveryDays, string? PaymentTerms,
+    bool Complete, bool Cheapest);
+
+/// <summary>Lote da compra: a família, o que ela pede e quem cotou.</summary>
+public record FamilyLot(string Family, int ItemCount, decimal Quantity, IReadOnlyList<FamilyOffer> Offers);
+
+/// <summary>
+/// Escolha do fornecedor de UMA família (lote) da cotação. A mesma compra pode ter várias:
+/// cada família com o seu vencedor, a sua justificativa e, na ponta, a sua O.C.
+/// </summary>
+public record AwardInput(string Family, Guid ProposalId, string? Criteria, string Justification);
+
 /// <summary>
 /// Processo fechado de compras (RFQ-001): PR aprovada → cotação → propostas →
 /// seleção justificada → aprovação Gerente → aprovação Diretor → emissão da OC.
@@ -39,12 +53,12 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
 
     // ---- consulta -----------------------------------------------------------
     public Task<List<Quotation>> ListAsync(CancellationToken ct = default) =>
-        db.Quotations.Include(q => q.Items).Include(q => q.Suppliers)
+        db.Quotations.Include(q => q.Items).Include(q => q.Suppliers).Include(q => q.Awards)
             .Include(q => q.Proposals).ThenInclude(p => p.Items)
             .OrderByDescending(q => q.CreatedAt).Take(200).ToListAsync(ct);
 
     public Task<Quotation?> GetAsync(Guid id, CancellationToken ct = default) =>
-        db.Quotations.Include(q => q.Items).Include(q => q.Suppliers)
+        db.Quotations.Include(q => q.Items).Include(q => q.Suppliers).Include(q => q.Awards)
             .Include(q => q.Proposals).ThenInclude(p => p.Items)
             .SingleOrDefaultAsync(q => q.Id == id, ct);
 
@@ -133,13 +147,14 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
             CreatedAt = now,
             UpdatedAt = now,
         };
+        var familias = await FamiliesOfAsync(pr.Items.Select(i => i.CatalogItemId), ct);
         var seqNo = 0;
         foreach (var i in pr.Items.OrderBy(i => i.Sequence))
             q.Items.Add(new QuotationItem
             {
                 QuotationId = q.Id, Sequence = ++seqNo, CatalogItemId = i.CatalogItemId,
                 CatalogCode = i.CatalogCode, Description = i.Description,
-                Quantity = i.Quantity, UnitOfMeasure = i.UnitOfMeasure,
+                Quantity = i.Quantity, UnitOfMeasure = i.UnitOfMeasure, Family = FamilyOf(i.CatalogItemId, familias),
                 SourcePrId = pr.Id, SourcePrNumber = pr.Number, SourcePrItemId = i.Id,
             });
         db.Quotations.Add(q);
@@ -221,6 +236,8 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
             CreatedAt = now,
             UpdatedAt = now,
         };
+        var familias = await FamiliesOfAsync(
+            ordered.SelectMany(r => r.Items).Where(i => ids.Contains(i.Id)).Select(i => i.CatalogItemId), ct);
         var seqNo = 0;
         foreach (var pr0 in ordered)
             foreach (var i in pr0.Items.Where(i => ids.Contains(i.Id)).OrderBy(i => i.Sequence))
@@ -228,7 +245,7 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
                 {
                     QuotationId = q.Id, Sequence = ++seqNo, CatalogItemId = i.CatalogItemId,
                     CatalogCode = i.CatalogCode, Description = i.Description,
-                    Quantity = i.Quantity, UnitOfMeasure = i.UnitOfMeasure,
+                    Quantity = i.Quantity, UnitOfMeasure = i.UnitOfMeasure, Family = FamilyOf(i.CatalogItemId, familias),
                     SourcePrId = pr0.Id, SourcePrNumber = pr0.Number, SourcePrItemId = i.Id,
                 });
         db.Quotations.Add(q);
@@ -413,46 +430,210 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
             guard: q => q.Proposals.Count == 0 ? new("RFQ-ERR-021", "Não há propostas recebidas para analisar.") : null);
 
     // ---- escolha do fornecedor (RFQ-BR-005) ----------------------------------
-    public async Task<(Quotation? q, UserError? error)> SelectWinnerAsync(
-        Actor actor, Guid id, Guid proposalId, string? criteria, string? justification, CancellationToken ct = default)
+    /// <summary>
+    /// Vencedor único: adjudica TODAS as famílias da cotação ao mesmo fornecedor.
+    /// Continua sendo o caminho da compra que não se divide.
+    /// </summary>
+    public Task<(Quotation? q, UserError? error)> SelectWinnerAsync(
+        Actor actor, Guid id, Guid proposalId, string? criteria, string? justification, CancellationToken ct = default) =>
+        AwardAsync(actor, id, [new AwardInput(string.Empty, proposalId, criteria, justification ?? string.Empty)],
+            todasAsFamilias: true, ct);
+
+    /// <summary>
+    /// Adjudicação por família (multi-fornecedor): a mesma compra vai para vários fornecedores,
+    /// um por família, cada um com a sua justificativa. Toda família cotada precisa de vencedor.
+    /// </summary>
+    public Task<(Quotation? q, UserError? error)> AwardByFamilyAsync(
+        Actor actor, Guid id, IReadOnlyList<AwardInput> awards, CancellationToken ct = default) =>
+        AwardAsync(actor, id, awards, todasAsFamilias: false, ct);
+
+    private async Task<(Quotation? q, UserError? error)> AwardAsync(
+        Actor actor, Guid id, IReadOnlyList<AwardInput> pedidos, bool todasAsFamilias, CancellationToken ct)
     {
         var q = await GetAsync(id, ct);
         if (q is null) return (null, new("RFQ-ERR-404", "Cotação não encontrada."));
         if (q.Status != QuotationStatus.Analysis)
             return (null, new("RFQ-ERR-020", "A escolha do fornecedor acontece na etapa de análise."));
-        if (string.IsNullOrWhiteSpace(justification))
-            return (null, new("RFQ-ERR-021", "A justificativa da escolha é obrigatória."));
-        var proposal = q.Proposals.SingleOrDefault(p => p.Id == proposalId);
-        if (proposal is null) return (null, new("RFQ-ERR-021", "Proposta vencedora inexistente nesta cotação."));
-        var latest = q.Proposals.Where(p => p.SupplierId == proposal.SupplierId)
-            .OrderByDescending(p => p.VersionNumber).First();
-        if (latest.Id != proposal.Id)
-            return (null, new("RFQ-ERR-021", "Selecione a versão mais recente da proposta do fornecedor."));
+        if (pedidos.Count == 0)
+            return (null, new("RFQ-ERR-021", "Informe o fornecedor vencedor de cada família."));
 
-        // homologação (V2-P2): prospect participa da cotação, mas só homologado é selecionado
-        var vencedor = await db.Suppliers.Include(f => f.Documents)
-            .SingleAsync(f => f.Id == proposal.SupplierId, ct);
-        var situacao = vencedor.EffectiveHomologation(DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime));
-        if (situacao != SupplierHomologation.Homologado)
-            return (null, new("SUP-ERR-030",
-                $"O fornecedor {proposal.SupplierName} está {situacao} — conclua a homologação (ou regularize as certidões) antes de selecioná-lo."));
+        var familias = q.Families;
+        // vencedor único: a mesma escolha vale para todas as famílias do processo
+        if (todasAsFamilias)
+            pedidos = familias.Select(f => pedidos[0] with { Family = f }).ToList();
 
-        q.WinnerSupplierId = proposal.SupplierId;
-        q.WinnerProposalId = proposal.Id;
-        ApplySaving(q, proposal);
-        q.SelectionCriteria = string.IsNullOrWhiteSpace(criteria) ? null : criteria.Trim();
-        q.SelectionJustification = justification.Trim();
+        var chaves = pedidos.Select(a => QuotationAward.FamilyKey(a.Family)).ToList();
+        if (chaves.Distinct().Count() != chaves.Count)
+            return (null, new("RFQ-ERR-023", "Cada família só pode ser adjudicada uma vez."));
+        if (chaves.FirstOrDefault(f => !familias.Contains(f)) is { } intrusa)
+            return (null, new("RFQ-ERR-023", $"A família {intrusa} não faz parte desta cotação."));
+        var faltando = familias.Where(f => !chaves.Contains(f)).ToList();
+        if (faltando.Count > 0)
+            return (null, new("RFQ-ERR-023",
+                $"Falta escolher o fornecedor da(s) família(s) {string.Join(", ", faltando)} — toda família cotada precisa de um vencedor."));
+
+        var now = clock.GetUtcNow();
+        var hoje = DateOnly.FromDateTime(now.UtcDateTime);
+        var idsFornecedores = q.Proposals.Where(p => pedidos.Any(x => x.ProposalId == p.Id))
+            .Select(p => p.SupplierId).Distinct().ToList();
+        var fornecedores = await db.Suppliers.Include(f => f.Documents)
+            .Where(f => idsFornecedores.Contains(f.Id)).ToListAsync(ct);
+
+        // valida tudo antes de gravar: escolha parcial não pode deixar o processo pela metade
+        var novas = new List<QuotationAward>();
+        foreach (var pedido in pedidos)
+        {
+            var familia = QuotationAward.FamilyKey(pedido.Family);
+            if (string.IsNullOrWhiteSpace(pedido.Justification))
+                return (null, new("RFQ-ERR-021", familias.Count > 1
+                    ? $"A justificativa da escolha é obrigatória (família {familia})."
+                    : "A justificativa da escolha é obrigatória."));
+            var proposal = q.Proposals.SingleOrDefault(p => p.Id == pedido.ProposalId);
+            if (proposal is null) return (null, new("RFQ-ERR-021", "Proposta vencedora inexistente nesta cotação."));
+            var latest = q.Proposals.Where(p => p.SupplierId == proposal.SupplierId)
+                .OrderByDescending(p => p.VersionNumber).First();
+            if (latest.Id != proposal.Id)
+                return (null, new("RFQ-ERR-021", "Selecione a versão mais recente da proposta do fornecedor."));
+
+            var itens = ItemsOfFamily(q, familia);
+            if (itens.Any(i => proposal.Items.All(pi => pi.QuotationItemId != i)))
+                return (null, new("RFQ-ERR-024",
+                    $"{proposal.SupplierName} não cotou todos os itens da família {familia} — escolha um fornecedor que tenha cotado a família inteira."));
+
+            // homologação (V2-P2): prospect participa da cotação, mas só homologado é selecionado
+            var vencedor = fornecedores.SingleOrDefault(f => f.Id == proposal.SupplierId)
+                ?? await db.Suppliers.Include(f => f.Documents).SingleAsync(f => f.Id == proposal.SupplierId, ct);
+            var situacao = vencedor.EffectiveHomologation(hoje);
+            if (situacao != SupplierHomologation.Homologado)
+                return (null, new("SUP-ERR-030",
+                    $"O fornecedor {proposal.SupplierName} está {situacao} — conclua a homologação (ou regularize as certidões) antes de selecioná-lo."));
+
+            var (valorItens, total) = ShareOf(proposal, itens);
+            novas.Add(new QuotationAward
+            {
+                QuotationId = q.Id, Family = familia,
+                SupplierId = proposal.SupplierId, SupplierName = proposal.SupplierName,
+                ProposalId = proposal.Id, ProposalVersion = proposal.VersionNumber,
+                ItemsValue = valorItens, TotalValue = total,
+                Criteria = string.IsNullOrWhiteSpace(pedido.Criteria) ? null : pedido.Criteria.Trim(),
+                Justification = pedido.Justification.Trim(),
+                SelectedBy = actor.Id, SelectedByLabel = actor.Label, SelectedAt = now,
+            });
+        }
+
+        // reescolha depois de "solicitar ajustes": a adjudicação anterior é substituída inteira
+        foreach (var antiga in q.AwardList) db.QuotationAwards.Remove(antiga);
+        q.Awards.Clear();
+        foreach (var nova in novas) { db.QuotationAwards.Add(nova); q.Awards.Add(nova); }
+
+        // cabeçalho: continua apontando o fornecedor de maior fatia (compatibilidade das telas e alçadas)
+        var principal = novas.OrderByDescending(a => a.TotalValue).First();
+        var distintos = novas.Select(a => a.SupplierId).Distinct().Count();
+        var totalGeral = novas.Sum(a => a.TotalValue);
+        q.WinnerSupplierId = principal.SupplierId;
+        q.WinnerProposalId = principal.ProposalId;
+        var criterios = novas.Select(a => a.Criteria).Where(c => !string.IsNullOrWhiteSpace(c)).Distinct().ToList();
+        q.SelectionCriteria = criterios.Count == 0 ? null : string.Join(", ", criterios);
+        q.SelectionJustification = distintos == 1 && novas.Select(a => a.Justification).Distinct().Count() == 1
+            ? principal.Justification
+            : string.Join(" | ", novas.Select(a => $"{a.Family}: {a.Justification}"));
         q.SelectedBy = actor.Id;
         q.SelectedByLabel = actor.Label;
-        q.SelectedAt = clock.GetUtcNow();
+        q.SelectedAt = now;
+        ApplyAwardSaving(q, novas);
+
         var from = q.Status;
         q.Status = QuotationStatus.AwaitingManager;
-        AddEvent(q, "FORNECEDOR_SELECIONADO",
-            $"Fornecedor {proposal.SupplierName} selecionado (proposta v{proposal.VersionNumber}, total {proposal.TotalValue:0.00}). Processo encaminhado à aprovação gerencial.",
-            actor, from, q.Status, justification.Trim());
+        AddEvent(q, distintos == 1 ? "FORNECEDOR_SELECIONADO" : "COMPRA_DIVIDIDA",
+            distintos == 1
+                ? $"Fornecedor {principal.SupplierName} selecionado (proposta v{principal.ProposalVersion}, total {totalGeral:0.00}). Processo encaminhado à aprovação gerencial."
+                : $"Compra dividida entre {distintos} fornecedores por família — " +
+                  string.Join("; ", novas.Select(a => $"{a.Family} → {a.SupplierName} ({a.TotalValue:0.00})")) +
+                  $". Total {totalGeral:0.00}. Processo encaminhado à aprovação gerencial.",
+            actor, from, q.Status, q.SelectionJustification);
         await TouchAndSaveAsync(q, ct);
         return (q, null);
     }
+
+    /// <summary>
+    /// Mapa de adjudicação: para cada família, quanto sai com cada fornecedor. Só quem cotou a
+    /// família inteira pode levá-la; quem cotou parte aparece marcado como incompleto.
+    /// </summary>
+    public IReadOnlyList<FamilyLot> FamilyMap(Quotation q)
+    {
+        var atuais = q.Proposals.GroupBy(p => p.SupplierId)
+            .Select(g => g.OrderByDescending(p => p.VersionNumber).First()).ToList();
+        var lotes = new List<FamilyLot>();
+        foreach (var familia in q.Families)
+        {
+            var itens = ItemsOfFamily(q, familia);
+            var ofertas = new List<FamilyOffer>();
+            foreach (var p in atuais)
+            {
+                var cobre = itens.All(i => p.Items.Any(pi => pi.QuotationItemId == i));
+                var (valorItens, total) = ShareOf(p, itens);
+                if (!cobre && valorItens <= 0) continue;    // não cotou nada desta família
+                ofertas.Add(new FamilyOffer(p.SupplierId, p.SupplierName, p.Id, p.VersionNumber,
+                    valorItens, total, p.DeliveryDays, p.PaymentTerms, cobre, false));
+            }
+            var menor = ofertas.Where(o => o.Complete).OrderBy(o => o.TotalValue).FirstOrDefault();
+            lotes.Add(new FamilyLot(familia, itens.Count,
+                q.Items.Where(i => itens.Contains(i.Id)).Sum(i => i.Quantity),
+                ofertas.Select(o => o with { Cheapest = menor is not null && o.Complete && o.TotalValue == menor.TotalValue })
+                    .OrderByDescending(o => o.Complete).ThenBy(o => o.TotalValue).ToList()));
+        }
+        return lotes;
+    }
+
+    /// <summary>Itens de uma família dentro do processo (a família do item é snapshot do catálogo).</summary>
+    private static List<Guid> ItemsOfFamily(Quotation q, string familia) =>
+        q.Items.Where(i => QuotationAward.FamilyKey(i.Family) == familia).Select(i => i.Id).ToList();
+
+    /// <summary>
+    /// Fatia de uma proposta: os itens indicados pelo preço cotado mais o rateio proporcional de
+    /// frete, impostos, outros custos e desconto. Fornecedor que leva tudo fica com o total cheio.
+    /// </summary>
+    private static (decimal items, decimal total) ShareOf(Proposal p, IReadOnlyCollection<Guid> quotationItemIds)
+    {
+        var cotado = p.Items.Sum(i => i.UnitPrice * i.Quantity);
+        var fatia = p.Items.Where(i => quotationItemIds.Contains(i.QuotationItemId))
+            .Sum(i => i.UnitPrice * i.Quantity);
+        if (p.Items.All(i => quotationItemIds.Contains(i.QuotationItemId)))
+            return (fatia, p.TotalValue);          // levou a proposta inteira: sem rateio, sem arredondamento
+        var extras = (p.FreightValue ?? 0) + (p.TaxValue ?? 0) + (p.OtherCosts ?? 0) - (p.DiscountValue ?? 0);
+        var proporcao = cotado > 0 ? fatia / cotado : 0m;
+        return (fatia, Math.Round(fatia + extras * proporcao, 2));
+    }
+
+    /// <summary>Ganho agregado: primeira proposta de cada vencedor, na fatia que ele ganhou, menos o fechado.</summary>
+    private void ApplyAwardSaving(Quotation q, IReadOnlyList<QuotationAward> awards)
+    {
+        decimal baseline = 0, fechado = 0;
+        foreach (var a in awards)
+        {
+            var itens = ItemsOfFamily(q, a.Family);
+            var primeira = q.Proposals.Where(p => p.SupplierId == a.SupplierId)
+                .OrderBy(p => p.VersionNumber).First();
+            baseline += ShareOf(primeira, itens).total;
+            fechado += a.TotalValue;
+        }
+        q.BaselineValue = baseline;
+        q.NegotiatedValue = fechado;
+        q.SavingValue = baseline - fechado;
+        q.SavingPercent = baseline > 0 ? Math.Round((baseline - fechado) / baseline * 100m, 2) : 0m;
+    }
+
+    /// <summary>Famílias do catálogo, em caixa alta; item digitado (sem catálogo) entra em DIVERSOS.</summary>
+    private async Task<Dictionary<Guid, string>> FamiliesOfAsync(IEnumerable<Guid?> catalogItemIds, CancellationToken ct)
+    {
+        var ids = catalogItemIds.Where(x => x is not null).Select(x => x!.Value).Distinct().ToList();
+        if (ids.Count == 0) return [];
+        return await db.CatalogItems.Where(c => ids.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, c => QuotationAward.FamilyKey(c.Family), ct);
+    }
+
+    private static string FamilyOf(Guid? catalogItemId, IReadOnlyDictionary<Guid, string> familias) =>
+        catalogItemId is { } id && familias.TryGetValue(id, out var f) ? f : QuotationAward.Default;
 
     // ---- alçadas (RFQ-BR-006/007) --------------------------------------------
     public async Task<(Quotation? q, UserError? error)> ManagerDecisionAsync(
@@ -603,10 +784,13 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
     /// A OC não é mais emitida aqui: ela é fechada no SENIOR (que conversa com o financeiro) e o
     /// comprador registra o número dela no processo, dando origem ao pedido que recebe o
     /// faturamento e a entrega (revisão de telas 2026-08-26).
+    /// Compra dividida: uma O.C. POR FORNECEDOR — as famílias que o mesmo fornecedor ganhou
+    /// entram na mesma O.C., com a família visível linha a linha. O processo só fecha quando
+    /// todas as O.C.s estiverem registradas.
     /// </summary>
     public async Task<(PurchaseOrder? order, UserError? error)> RegisterErpPurchaseOrderAsync(
         Actor actor, Guid id, string? erpNumber, DateOnly? issuedOn, string? notes,
-        string? overLimitJustification = null, CancellationToken ct = default)
+        string? overLimitJustification = null, Guid? supplierId = null, CancellationToken ct = default)
     {
         var q = await GetAsync(id, ct);
         if (q is null) return (null, new("RFQ-ERR-404", "Cotação não encontrada."));
@@ -618,14 +802,35 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
         if (numero.Length > 30) return (null, new("RFQ-ERR-041", "O número da OC tem no máximo 30 caracteres."));
         if (await db.PurchaseOrders.AnyAsync(o => o.Number == numero, ct))
             return (null, new("RFQ-ERR-041", $"A OC {numero} já está registrada em outro processo."));
-        var proposal = q.Proposals.Single(p => p.Id == q.WinnerProposalId);
+
+        // processos anteriores à adjudicação por família continuam valendo: viram uma adjudicação única
+        await EnsureAwardsAsync(q, ct);
+        var pendentes = q.AwardList.Where(a => a.PurchaseOrderId is null).ToList();
+        if (pendentes.Count == 0)
+            return (null, new("RFQ-ERR-040", "Todas as O.C.s deste processo já foram registradas."));
+        var aguardando = pendentes.Select(a => a.SupplierId).Distinct().ToList();
+        Guid alvo;
+        if (supplierId is { } escolhido)
+        {
+            if (!aguardando.Contains(escolhido))
+                return (null, new("RFQ-ERR-042", "Este fornecedor não tem família pendente de O.C. neste processo."));
+            alvo = escolhido;
+        }
+        else if (aguardando.Count == 1) alvo = aguardando[0];
+        else return (null, new("RFQ-ERR-042",
+            $"A compra foi dividida entre {aguardando.Count} fornecedores: informe de qual fornecedor é esta O.C."));
+
+        var doFornecedor = pendentes.Where(a => a.SupplierId == alvo).ToList();
+        var proposal = q.Proposals.Single(p => p.Id == doFornecedor[0].ProposalId);
         // itens do contrato incluídos: a vigência (ContractIsCurrent) depende deles para o teto
         var supplier = await db.Suppliers.Include(s => s.ContractItems)
-            .SingleOrDefaultAsync(s => s.Id == q.WinnerSupplierId, ct);
+            .SingleOrDefaultAsync(s => s.Id == alvo, ct);
         if (supplier is null || !supplier.Active)
             return (null, new("RFQ-ERR-040", "Fornecedor vencedor inativo: regularize o cadastro ou solicite ajustes."));
 
         var now = clock.GetUtcNow();
+        var familias = doFornecedor.Select(a => a.Family).OrderBy(f => f).ToList();
+        var itensDaOc = familias.SelectMany(f => ItemsOfFamily(q, f)).Distinct().ToHashSet();
         var order = new PurchaseOrder
         {
             Number = numero,
@@ -641,9 +846,10 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
             SourcePrNumber = q.SourcePrNumber,
             QuotationId = q.Id,
             QuotationNumber = q.Number,
+            Families = q.Families.Count > 1 ? string.Join(", ", familias) : null,
             PaymentTerms = proposal.PaymentTerms,
             DeliveryDays = proposal.DeliveryDays,
-            FreightValue = proposal.FreightValue,
+            FreightValue = FreightShare(proposal, itensDaOc),
             Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
             IssuedBy = actor.Id,
             IssuedByLabel = actor.Label,
@@ -651,7 +857,7 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
             UpdatedAt = now,
         };
         // saving de referência (V2-P2): último preço pago de cada item de catálogo, congelado agora
-        var catalogIds = q.Items.Where(i => i.CatalogItemId is not null)
+        var catalogIds = q.Items.Where(i => itensDaOc.Contains(i.Id) && i.CatalogItemId is not null)
             .Select(i => i.CatalogItemId!.Value).Distinct().ToList();
         var ultimosPrecos = catalogIds.Count == 0
             ? new Dictionary<Guid, decimal>()
@@ -664,7 +870,7 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
               .GroupBy(x => x.CatalogItemId!.Value)
               .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.CreatedAt).First().UnitPrice!.Value);
 
-        foreach (var pi in proposal.Items)
+        foreach (var pi in proposal.Items.Where(pi => itensDaOc.Contains(pi.QuotationItemId)))
         {
             var qi = q.Items.Single(x => x.Id == pi.QuotationItemId);
             var ultimo = qi.CatalogItemId is not null && ultimosPrecos.TryGetValue(qi.CatalogItemId.Value, out var v)
@@ -677,11 +883,12 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
                 LastPaidUnitPrice = ultimo,
                 ReferenceSaving = ultimo is not null ? (ultimo.Value - pi.UnitPrice) * pi.Quantity : null,
                 SourcePrNumber = qi.SourcePrNumber ?? q.SourcePrNumber,
+                Family = QuotationAward.FamilyKey(qi.Family),
                 CreatedAt = now,
             });
         }
-        order.TotalValue = order.Items.Sum(i => (i.UnitPrice ?? 0) * i.Quantity) + (proposal.FreightValue ?? 0)
-            + (proposal.TaxValue ?? 0) + (proposal.OtherCosts ?? 0) - (proposal.DiscountValue ?? 0);
+        // o valor da O.C. é a soma das fatias adjudicadas (itens + rateio de frete/impostos/desconto)
+        order.TotalValue = doFornecedor.Sum(a => a.TotalValue);
         if (order.Items.Count == 0 || order.TotalValue <= 0)
             return (null, new("RFQ-ERR-040", "A OC precisa de itens e valor."));
 
@@ -699,16 +906,69 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
                     $"({consumido + order.TotalValue:0.00} de {teto:0.00}).", actor, null, null, overLimitJustification!.Trim());
         }
         db.PurchaseOrders.Add(order);
+        foreach (var a in doFornecedor) { a.PurchaseOrderId = order.Id; a.PurchaseOrderNumber = order.Number; }
 
         var from = q.Status;
-        q.Status = QuotationStatus.PoIssued;
-        q.PurchaseOrderId = order.Id;
-        q.PurchaseOrderNumber = order.Number;
-        AddEvent(q, "OC_REGISTRADA",
-            $"OC {order.Number} do SENIOR registrada para {order.SupplierName} — total {order.TotalValue:0.00}.",
-            actor, from, q.Status);
+        q.PurchaseOrderId ??= order.Id;              // a primeira O.C. mantém o vínculo histórico do cabeçalho
+        q.PurchaseOrderNumber ??= order.Number;
+        var restantes = q.AwardList.Where(a => a.PurchaseOrderId is null).Select(a => a.SupplierName)
+            .Distinct().ToList();
+        var lote = q.Families.Count > 1 ? $" (família(s) {string.Join(", ", familias)})" : "";
+        if (restantes.Count == 0)
+        {
+            q.Status = QuotationStatus.PoIssued;
+            AddEvent(q, "OC_REGISTRADA",
+                $"OC {order.Number} do SENIOR registrada para {order.SupplierName}{lote} — total {order.TotalValue:0.00}." +
+                (q.IsSplitAward ? " Todas as O.C.s da compra dividida estão registradas." : ""),
+                actor, from, q.Status);
+        }
+        else
+        {
+            AddEvent(q, "OC_PARCIAL_REGISTRADA",
+                $"OC {order.Number} do SENIOR registrada para {order.SupplierName}{lote} — total {order.TotalValue:0.00}. " +
+                $"Falta registrar a O.C. de: {string.Join(", ", restantes)}.", actor);
+        }
         await TouchAndSaveAsync(q, ct);
         return (order, null);
+    }
+
+    /// <summary>
+    /// Cotação escolhida antes da adjudicação por família (ou pelo caminho de vencedor único legado):
+    /// materializa uma adjudicação por família apontando para o vencedor do cabeçalho, para que o
+    /// registro da O.C. tenha sempre a mesma origem.
+    /// </summary>
+    private async Task EnsureAwardsAsync(Quotation q, CancellationToken ct)
+    {
+        if (q.AwardList.Count > 0 || q.WinnerProposalId is null) return;
+        var proposal = q.Proposals.Single(p => p.Id == q.WinnerProposalId);
+        foreach (var familia in q.Families)
+        {
+            var (valorItens, total) = ShareOf(proposal, ItemsOfFamily(q, familia));
+            var award = new QuotationAward
+            {
+                QuotationId = q.Id, Family = familia,
+                SupplierId = proposal.SupplierId, SupplierName = proposal.SupplierName,
+                ProposalId = proposal.Id, ProposalVersion = proposal.VersionNumber,
+                ItemsValue = valorItens, TotalValue = total,
+                Criteria = q.SelectionCriteria, Justification = q.SelectionJustification ?? string.Empty,
+                SelectedBy = q.SelectedBy ?? Guid.Empty, SelectedByLabel = q.SelectedByLabel ?? string.Empty,
+                SelectedAt = q.SelectedAt ?? clock.GetUtcNow(),
+            };
+            db.QuotationAwards.Add(award);
+            q.Awards.Add(award);
+        }
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Frete da fatia: proporcional ao valor dos itens que entram nesta O.C.</summary>
+    private static decimal? FreightShare(Proposal p, IReadOnlyCollection<Guid> quotationItemIds)
+    {
+        if (p.FreightValue is not { } frete) return null;
+        if (p.Items.All(i => quotationItemIds.Contains(i.QuotationItemId))) return frete;
+        var cotado = p.Items.Sum(i => i.UnitPrice * i.Quantity);
+        if (cotado <= 0) return frete;
+        var fatia = p.Items.Where(i => quotationItemIds.Contains(i.QuotationItemId)).Sum(i => i.UnitPrice * i.Quantity);
+        return Math.Round(frete * (fatia / cotado), 2);
     }
 
     /// <summary>Consumo do contrato: soma das O.C.s não canceladas do fornecedor dentro da vigência.</summary>

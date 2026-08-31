@@ -1384,6 +1384,7 @@ static object PoView(PurchaseOrder o) => new
     supplierId = o.SupplierId, supplierName = o.SupplierName,
     sourcePrNumber = o.SourcePrNumber, quotationNumber = o.QuotationNumber,
     paymentTerms = o.PaymentTerms, deliveryDays = o.DeliveryDays, freightValue = o.FreightValue,
+    families = o.Families,
     notes = o.Notes, totalValue = o.TotalValue,
     issuedByLabel = o.IssuedByLabel, receivedByLabel = o.ReceivedByLabel, receivedAt = o.ReceivedAt,
     cancelReason = o.CancelReason, createdAt = o.CreatedAt,
@@ -1408,6 +1409,7 @@ static object PoView(PurchaseOrder o) => new
         lastPaidUnitPrice = i.LastPaidUnitPrice, referenceSaving = i.ReferenceSaving,
         sourcePrNumber = i.SourcePrNumber ?? o.SourcePrNumber,
         unitPrice = i.UnitPrice, catalogCode = i.CatalogCode, catalogItemId = i.CatalogItemId,
+        family = i.Family,
     }),
 };
 
@@ -1867,7 +1869,9 @@ static object QuotationView(Quotation q) => new
         id = i.Id, sequence = i.Sequence, catalogItemId = i.CatalogItemId, catalogCode = i.CatalogCode,
         description = i.Description, quantity = i.Quantity, unitOfMeasure = i.UnitOfMeasure,
         sourcePrNumber = i.SourcePrNumber ?? q.SourcePrNumber,
+        family = QuotationAward.FamilyKey(i.Family),
     }),
+    families = q.Families,
     suppliers = q.Suppliers.Select(s => new
     {
         supplierId = s.SupplierId, supplierName = s.SupplierName, taxId = s.TaxId,
@@ -1884,6 +1888,34 @@ static object QuotationView(Quotation q) => new
     },
     managerApproval = q.ManagerApprovedAt is null ? null : new { byLabel = q.ManagerApprovedByLabel, at = q.ManagerApprovedAt },
     directorApproval = q.DirectorApprovedAt is null ? null : new { byLabel = q.DirectorApprovedByLabel, at = q.DirectorApprovedAt },
+    // adjudicação por família: a mesma compra pode ficar com vários fornecedores, um por família
+    awards = q.AwardList.Select(a => new
+    {
+        id = a.Id, family = a.Family, supplierId = a.SupplierId, supplierName = a.SupplierName,
+        proposalId = a.ProposalId, proposalVersion = a.ProposalVersion,
+        itemsValue = a.ItemsValue, totalValue = a.TotalValue,
+        criteria = a.Criteria, justification = a.Justification,
+        byLabel = a.SelectedByLabel, at = a.SelectedAt,
+        purchaseOrderId = a.PurchaseOrderId, purchaseOrderNumber = a.PurchaseOrderNumber,
+    }),
+    splitAward = q.IsSplitAward,
+    // fornecedores adjudicados que ainda não tiveram a O.C. registrada
+    pendingPoSuppliers = q.AwardList.Where(a => a.PurchaseOrderId is null)
+        .GroupBy(a => new { a.SupplierId, a.SupplierName })
+        .Select(g => new
+        {
+            supplierId = g.Key.SupplierId, supplierName = g.Key.SupplierName,
+            families = g.Select(a => a.Family).OrderBy(f => f).ToList(),
+            totalValue = g.Sum(a => a.TotalValue),
+        }),
+    purchaseOrders = q.AwardList.Where(a => a.PurchaseOrderId is not null)
+        .GroupBy(a => new { a.PurchaseOrderId, a.PurchaseOrderNumber, a.SupplierName })
+        .Select(g => new
+        {
+            id = g.Key.PurchaseOrderId, number = g.Key.PurchaseOrderNumber, supplierName = g.Key.SupplierName,
+            families = g.Select(a => a.Family).OrderBy(f => f).ToList(),
+            totalValue = g.Sum(a => a.TotalValue),
+        }),
     purchaseOrderId = q.PurchaseOrderId, purchaseOrderNumber = q.PurchaseOrderNumber,
     saving = q.NegotiatedValue is null ? null : new
     {
@@ -1981,6 +2013,31 @@ rfq.MapGet("/{id:guid}/score-map", async (Guid id, QuotationService svc,
     }, ctx);
 });
 
+// mapa da adjudicação por família: quem cotou cada família inteira e por quanto (V2 — compra dividida)
+rfq.MapGet("/{id:guid}/family-map", async (Guid id, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");
+    var q = await svc.GetAsync(id);
+    if (q is null) return Error(ctx, 404, "RFQ-ERR-404", "Cotação não encontrada.");
+    return Ok(new
+    {
+        note = "Cada família é um lote: só quem cotou a família inteira pode levá-la. " +
+               "O valor inclui o rateio proporcional de frete, impostos e desconto da proposta.",
+        items = svc.FamilyMap(q).Select(l => new
+        {
+            family = l.Family, itemCount = l.ItemCount, quantity = l.Quantity,
+            offers = l.Offers.Select(o => new
+            {
+                supplierId = o.SupplierId, supplierName = o.SupplierName,
+                proposalId = o.ProposalId, proposalVersion = o.ProposalVersion,
+                itemsValue = o.ItemsValue, totalValue = o.TotalValue,
+                deliveryDays = o.DeliveryDays, paymentTerms = o.PaymentTerms,
+                complete = o.Complete, cheapest = o.Cheapest,
+            }),
+        }),
+    }, ctx);
+});
+
 rfq.MapGet("/{id:guid}/timeline", async (Guid id, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
 {
     if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");
@@ -2054,7 +2111,13 @@ rfq.MapPost("/{id:guid}/select-winner", async (Guid id, SelectWinnerRequest body
     if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não seleciona fornecedores.");
     var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
     var criteria = body.Criteria is { Count: > 0 } ? string.Join(", ", body.Criteria) : null;
-    var (q, error) = await svc.SelectWinnerAsync(actor, id, body.ProposalId, criteria, body.Justification);
+    // compra dividida: uma escolha por família; sem 'awards', o vencedor leva todas as famílias
+    var (q, error) = body.Awards is { Count: > 0 }
+        ? await svc.AwardByFamilyAsync(actor, id, body.Awards.Select(a => new AwardInput(
+                a.Family, a.ProposalId,
+                a.Criteria is { Count: > 0 } ? string.Join(", ", a.Criteria) : criteria,
+                string.IsNullOrWhiteSpace(a.Justification) ? body.Justification : a.Justification)).ToList())
+        : await svc.SelectWinnerAsync(actor, id, body.ProposalId, criteria, body.Justification);
     return error is not null ? Error(ctx, error.Code == "RFQ-ERR-020" ? 409 : 422, error.Code, error.Message) : Ok(QuotationView(q!), ctx);
 });
 
@@ -2089,8 +2152,9 @@ rfq.MapPost("/{id:guid}/register-po", async (Guid id, RegisterPoRequest body, Qu
     if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não registra ordens de compra.");
     var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
     var (order, error) = await svc.RegisterErpPurchaseOrderAsync(actor, id, body.ErpNumber, body.IssuedOn, body.Notes,
-        body.OverLimitJustification);
-    return error is not null ? Error(ctx, error.Code is "RFQ-ERR-041" or "CT-ERR-010" ? 422 : 409, error.Code, error.Message)
+        body.OverLimitJustification, body.SupplierId);
+    return error is not null
+        ? Error(ctx, error.Code is "RFQ-ERR-041" or "CT-ERR-010" or "RFQ-ERR-042" ? 422 : 409, error.Code, error.Message)
         : Results.Json(new { data = PoView(order!), correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
 
@@ -2613,9 +2677,13 @@ public record ProposalItemRequest(Guid QuotationItemId, decimal UnitPrice, decim
 public record InternalProposalRequest(Guid SupplierId, int? DeliveryDays, string? PaymentTerms, decimal? FreightValue,
     DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items, decimal? DiscountValue, string? Currency,
     int? PaymentDays = null, decimal? TaxValue = null, decimal? OtherCosts = null);
-public record SelectWinnerRequest(Guid ProposalId, List<string>? Criteria, string Justification);
+public record SelectWinnerRequest(Guid ProposalId, List<string>? Criteria, string Justification,
+    List<AwardRequest>? Awards = null);
+/// <summary>Escolha do vencedor de uma família (compra dividida entre vários fornecedores).</summary>
+public record AwardRequest(string Family, Guid ProposalId, List<string>? Criteria, string? Justification);
 public record QuotationDecisionRequest(string Decision, string? Reason);
-public record RegisterPoRequest(string? ErpNumber, DateOnly? IssuedOn, string? Notes, string? OverLimitJustification = null);
+public record RegisterPoRequest(string? ErpNumber, DateOnly? IssuedOn, string? Notes,
+    string? OverLimitJustification = null, Guid? SupplierId = null);
 public record NegotiationRequest(Guid SupplierId, decimal? ClosedValue, decimal? DiscountPercent, string? Notes);
 public record PortalLoginRequest(string TaxId, string AccessKey);
 public record PortalProposalRequest(int? DeliveryDays, string? PaymentTerms, decimal? FreightValue, DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items,

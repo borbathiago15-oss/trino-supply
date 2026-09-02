@@ -12,8 +12,7 @@
     "lint": "eslint src e2e",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "playwright test",
-    "e2e:seed": "node e2e/semear.mjs"
+    "e2e": "playwright test"
   },
   "dependencies": {
     "react": "^18.3.1",

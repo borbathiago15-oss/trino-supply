@@ -292,10 +292,7 @@ jobs:
         working-directory: src/frontend
         run: npx playwright install --with-deps chromium
 
-      - name: Semear o cenário
-        working-directory: src/frontend
-        run: npm run e2e:seed
-
+      # O cenário de cada execução é montado pelo globalSetup do Playwright.
       - name: Rodar o Playwright
         working-directory: src/frontend
         run: npx playwright test

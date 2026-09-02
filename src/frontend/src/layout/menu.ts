@@ -58,7 +58,7 @@ export const MENU: GrupoMenu[] = [
   ]},
   { titulo: 'Cadastros', itens: [
     { rotulo: 'Produtos', filhos: [
-      { id: 'products', rotulo: 'Cadastro de Produtos', legado: 'products', modulo: 'PRODUTOS', mostrar: sempre },
+      { id: 'products', rotulo: 'Cadastro de Produtos', rota: '/produtos', modulo: 'PRODUTOS', mostrar: sempre },
       { id: 'families', rotulo: 'Famílias de Produtos', rota: '/familias', modulo: 'PRODUTOS', mostrar: podeManterCatalogo },
     ]},
     { rotulo: 'Estrutura da Empresa', filhos: [

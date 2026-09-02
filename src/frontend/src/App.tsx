@@ -7,6 +7,7 @@ import { PedidosLista } from '@/paginas/pedidos/PedidosLista';
 import { CentrosCusto } from '@/paginas/centros-custo/CentrosCusto';
 import { Familias } from '@/paginas/familias/Familias';
 import { Fornecedores } from '@/paginas/fornecedores/Fornecedores';
+import { Produtos } from '@/paginas/produtos/Produtos';
 import { SessaoProvider, useSessao } from '@/sessao/SessaoProvider';
 import { Carregando } from '@/componentes/basicos';
 import { LimiteErro } from '@/componentes/LimiteErro';
@@ -32,6 +33,7 @@ export function Rotas() {
           <Route path="/fornecedores" element={<Fornecedores />} />
           <Route path="/familias" element={<Familias />} />
           <Route path="/centros-custo" element={<CentrosCusto />} />
+          <Route path="/produtos" element={<Produtos />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/pedidos" replace />} />

@@ -1,27 +1,20 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { abrirAutenticado, lerCenario } from './sessao';
 
 const EMAIL = process.env.ADMIN_EMAIL ?? 'admin@trinosupply.com.br';
 const SENHA = process.env.ADMIN_PASSWORD ?? 'TrinoSupply@2026!';
 
-async function entrar(page: Page) {
-  await page.goto('/app/login');
-  await page.fill('#email', EMAIL);
-  await page.fill('#password', SENHA);
-  await page.click('button[type=submit]');
-  await expect(page).toHaveURL(/\/app\/pedidos$/);
-}
-
 test.describe('Pedidos de Compra (React)', () => {
   test('lista os pedidos, abre o detalhe e percorre OC → NF → entrega', async ({ page }) => {
-    await entrar(page);
+    await abrirAutenticado(page, '/app/pedidos');
 
-    // lista com o pedido semeado
+    // o pedido desta execução, criado pelo seed (o banco pode ter outros)
+    const { pedidoNumero: numero } = lerCenario();
     const tabela = page.getByTestId('tabela-pedidos');
     await expect(tabela).toBeVisible();
-    const linha = tabela.locator('tr[data-pedido]').filter({ hasText: 'Alfa EPIs' }).first();
+    const linha = tabela.locator(`tr[data-pedido="${numero}"]`);
     await expect(linha).toContainText('OC/Faturamento');
     await expect(linha).toContainText('a registrar');
-    const numero = (await linha.getAttribute('data-pedido'))!;
 
     // filtro em memória
     await page.getByLabel('Buscar').fill('não existe esse pedido');
@@ -56,8 +49,9 @@ test.describe('Pedidos de Compra (React)', () => {
     await page.getByRole('button', { name: 'Registrar entrega' }).click();
     await expect(page.getByTestId('toast').last()).toContainText('Entrega registrada.');
     await expect(detalhe).toHaveAttribute('data-situacao', 'PARCIAL');
-    const entrega = page.getByTestId('tabela-entrega');
-    await expect(entrega.locator('tr[data-item]').first()).toContainText('10');
+    // a ordem dos itens não é garantida: procura a linha do item que chegou
+    const linhaLuva = page.getByTestId('tabela-entrega').locator('tr[data-item]', { hasText: 'Luva nitrílica' });
+    await expect(linhaLuva).toContainText('10 PAR');
 
     // encerra o saldo que não vai chegar: parte chegou, então o pedido fica
     // "Entregue parcial" (regra do PurchaseOrderService) e não recebe mais nada
@@ -88,7 +82,7 @@ test.describe('Pedidos de Compra (React)', () => {
   });
 
   test('a sessão do legado vale no React (mesma aba, mesmos tokens)', async ({ page }) => {
-    // entra pelo index.html clássico
+    // entra pelo index.html clássico, com login de interface mesmo
     await page.goto('/');
     await page.fill('#email', EMAIL);
     await page.fill('#password', SENHA);

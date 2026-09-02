@@ -50,7 +50,7 @@ export function Sidebar() {
       <a href="/" className="block px-2 pb-4 pt-1">
         <img src="/assets/brand/trino-supply-mark.png" width={420} height={108} alt="Trino Supply" className="h-auto w-[196px] max-w-full" />
       </a>
-      <nav className="flex flex-col gap-0.5">
+      <nav className="flex flex-1 flex-col gap-0.5">
         {grupos.map((g) => {
           if (!g.titulo)
             return g.itens.map((i) => (ehSubgrupo(i) ? null : <Folha key={i.id} item={i} recuo={0} />));
@@ -74,6 +74,9 @@ export function Sidebar() {
           );
         })}
       </nav>
+      <a href="/" className="mt-4 rounded-lg px-3 py-2 text-[12px] text-slate-500 hover:bg-slate-800 hover:text-slate-200">
+        Abrir a versão clássica
+      </a>
     </aside>
   );
 }

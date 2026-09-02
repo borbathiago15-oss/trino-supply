@@ -4,6 +4,9 @@ import { AppLayout } from '@/layout/AppLayout';
 import { Login } from '@/paginas/login/Login';
 import { PedidoDetalhe } from '@/paginas/pedidos/PedidoDetalhe';
 import { PedidosLista } from '@/paginas/pedidos/PedidosLista';
+import { CentrosCusto } from '@/paginas/centros-custo/CentrosCusto';
+import { Familias } from '@/paginas/familias/Familias';
+import { Fornecedores } from '@/paginas/fornecedores/Fornecedores';
 import { SessaoProvider, useSessao } from '@/sessao/SessaoProvider';
 import { Carregando } from '@/componentes/basicos';
 import { LimiteErro } from '@/componentes/LimiteErro';
@@ -22,10 +25,13 @@ export function Rotas() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route element={<Protegida />}>
-        <Route element={<AppLayout titulo="Pedidos de Compra" />}>
+        <Route element={<AppLayout />}>
           <Route index element={<Navigate to="/pedidos" replace />} />
           <Route path="/pedidos" element={<PedidosLista />} />
           <Route path="/pedidos/:id" element={<PedidoDetalhe />} />
+          <Route path="/fornecedores" element={<Fornecedores />} />
+          <Route path="/familias" element={<Familias />} />
+          <Route path="/centros-custo" element={<CentrosCusto />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/pedidos" replace />} />

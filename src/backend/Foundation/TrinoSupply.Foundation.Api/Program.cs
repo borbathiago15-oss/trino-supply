@@ -63,13 +63,21 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(o => o.TokenValidationParameters = TokenService.BuildValidationParameters(jwtOptions));
 builder.Services.AddAuthorization();
 
-// Rate limit da rota de login (SEC-003): 10 tentativas/min por IP
+// Rate limit da autenticação (SEC-003), por IP e por rota:
+// - "auth": 10 tentativas/min, para o login — é o que barra força bruta de senha.
+// - "auth-refresh": 60/min, para a renovação de token. Ela é legítima e frequente
+//   (várias abas, recargas), então o limite serve só contra abuso.
+// Consultas de sessão (/me) e o logout ficam de fora: limitar essas rotas
+// derrubava a sessão de quem apenas navegava entre as telas.
 builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     o.AddPolicy("auth", ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+    o.AddPolicy("auth-refresh", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 60, Window = TimeSpan.FromMinutes(1) }));
 });
 
 // Descrição OpenAPI nativa (/openapi/v1.json): base para gerar os tipos do frontend React.
@@ -126,7 +134,7 @@ app.MapGet("/health", (AppDbContext db) => Results.Json(new
     timestamp = DateTimeOffset.UtcNow,
 }));
 
-var auth = app.MapGroup("/api/v1/auth").RequireRateLimiting("auth");
+var auth = app.MapGroup("/api/v1/auth");
 
 auth.MapPost("/login", async (LoginRequest body, AuthService svc, HttpContext ctx) =>
 {
@@ -140,7 +148,7 @@ auth.MapPost("/login", async (LoginRequest body, AuthService svc, HttpContext ct
     return tokens is null
         ? Error(ctx, 401, "IAM-ERR-001", "E-mail ou senha inválidos.")
         : Ok(ToResponse(tokens), ctx);
-});
+}).RequireRateLimiting("auth");
 
 auth.MapPost("/refresh", async (RefreshRequest body, AuthService svc, HttpContext ctx) =>
 {
@@ -150,7 +158,7 @@ auth.MapPost("/refresh", async (RefreshRequest body, AuthService svc, HttpContex
     return tokens is null
         ? Error(ctx, 401, "IAM-ERR-002", "Refresh token inválido, expirado ou revogado. Faça login novamente.")
         : Ok(ToResponse(tokens), ctx);
-});
+}).RequireRateLimiting("auth-refresh");
 
 auth.MapPost("/logout", async (RefreshRequest body, AuthService svc, HttpContext ctx) =>
 {

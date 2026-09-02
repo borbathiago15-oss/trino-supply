@@ -16,28 +16,37 @@ export interface OpcoesRequisicao {
 
 const MENSAGEM_EXPIROU = 'Sua sessão expirou. Entre novamente.';
 
-/** Uma renovação por vez: várias chamadas em 401 simultâneas dividem a mesma promessa. */
-let renovacaoEmCurso: Promise<boolean> | null = null;
+/**
+ * Resultado da renovação. A diferença importa: `invalida` significa que o
+ * servidor recusou o refresh (a sessão acabou), enquanto `indisponivel` é uma
+ * falha passageira (rede, 5xx, limite de tentativas) — nesse caso o usuário
+ * continua logado e a chamada apenas falha.
+ */
+export type ResultadoRenovacao = 'ok' | 'invalida' | 'indisponivel';
 
-export async function renovarSessao(): Promise<boolean> {
+/** Uma renovação por vez: várias chamadas em 401 simultâneas dividem a mesma promessa. */
+let renovacaoEmCurso: Promise<ResultadoRenovacao> | null = null;
+
+export async function renovarSessao(): Promise<ResultadoRenovacao> {
   const refreshToken = sessao.refresh;
-  if (!refreshToken) return false;
+  if (!refreshToken) return 'invalida';
   if (!renovacaoEmCurso) {
-    renovacaoEmCurso = (async () => {
+    renovacaoEmCurso = (async (): Promise<ResultadoRenovacao> => {
       try {
         const res = await fetch('/api/v1/auth/refresh', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ refreshToken }),
         });
-        if (!res.ok) return false;
+        if (res.status === 401 || res.status === 403) return 'invalida';
+        if (!res.ok) return 'indisponivel';
         const json = await res.json().catch(() => ({}));
         const data = json.data ?? json;
-        if (!data?.accessToken) return false;
+        if (!data?.accessToken) return 'indisponivel';
         sessao.set(data);
-        return true;
+        return 'ok';
       } catch {
-        return false;
+        return 'indisponivel';
       } finally {
         // quem já estava esperando recebe esta promessa; a próxima chamada renova de novo
         renovacaoEmCurso = null;
@@ -73,9 +82,14 @@ export async function api<T = unknown>(caminho: string, opcoes: OpcoesRequisicao
   });
 
   if (res.status === 401 && !_repetida && sessao.refresh && !caminho.includes('/auth/')) {
-    if (await renovarSessao()) return api<T>(caminho, opcoes, true);
-    encerrarSessao();
-    throw new ErroApi(MENSAGEM_EXPIROU, 401);
+    const renovacao = await renovarSessao();
+    if (renovacao === 'ok') return api<T>(caminho, opcoes, true);
+    // só encerra quando o servidor recusa o refresh; falha passageira mantém a sessão
+    if (renovacao === 'invalida') {
+      encerrarSessao();
+      throw new ErroApi(MENSAGEM_EXPIROU, 401);
+    }
+    throw new ErroApi('Não consegui renovar sua sessão agora. Tente de novo em instantes.', 503);
   }
 
   const json = await res.json().catch(() => ({}));
@@ -91,18 +105,23 @@ export async function api<T = unknown>(caminho: string, opcoes: OpcoesRequisicao
 /** Baixa um arquivo autenticado (PDF da OC, anexos) como Blob. */
 export async function baixar(caminho: string, mensagemErro = 'Falha ao baixar o arquivo.'): Promise<Blob> {
   let res = await fetch(caminho, { headers: cabecalhos(false) });
-  if (res.status === 401 && sessao.refresh && (await renovarSessao()))
+  if (res.status === 401 && sessao.refresh && (await renovarSessao()) === 'ok')
     res = await fetch(caminho, { headers: cabecalhos(false) });
   if (!res.ok) throw new ErroApi(mensagemErro, res.status);
   return res.blob();
 }
 
-/** Upload multipart simples com o token da sessão (campo `file`, como no legado). */
-export async function enviarArquivo(caminho: string, arquivo: File): Promise<void> {
+/**
+ * Upload multipart com o token da sessão (campo `file`, como no legado).
+ * `extras` vira campos do mesmo formulário — é assim que os documentos do
+ * fornecedor mandam tipo, validade e descrição junto com o arquivo.
+ */
+export async function enviarArquivo(caminho: string, arquivo: File, extras: Record<string, string> = {}): Promise<void> {
   const fd = new FormData();
   fd.append('file', arquivo);
+  for (const [campo, valor] of Object.entries(extras)) fd.append(campo, valor);
   let res = await fetch(caminho, { method: 'POST', headers: cabecalhos(false), body: fd });
-  if (res.status === 401 && sessao.refresh && (await renovarSessao()))
+  if (res.status === 401 && sessao.refresh && (await renovarSessao()) === 'ok')
     res = await fetch(caminho, { method: 'POST', headers: cabecalhos(false), body: fd });
   if (!res.ok) throw new ErroApi('Não consegui enviar ' + arquivo.name + '.', res.status);
 }

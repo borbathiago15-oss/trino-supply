@@ -33,7 +33,7 @@ describe('api()', () => {
     expect((fetchMock.mock.calls[2][1]?.headers as Record<string, string>).Authorization).toBe('Bearer novo');
   });
 
-  it('se a renovação falhar, limpa a sessão e avisa a aplicação', async () => {
+  it('refresh recusado pelo servidor limpa a sessão e avisa a aplicação', async () => {
     sessao.set({ accessToken: 'velho', refreshToken: 'r1' });
     const ouvinte = vi.fn();
     globalThis.addEventListener(EVENTO_SESSAO_EXPIRADA, ouvinte);
@@ -43,6 +43,19 @@ describe('api()', () => {
     await expect(api('/api/v1/purchase-orders/')).rejects.toMatchObject({ status: 401 });
     expect(sessao.access).toBeNull();
     expect(ouvinte).toHaveBeenCalledTimes(1);
+    globalThis.removeEventListener(EVENTO_SESSAO_EXPIRADA, ouvinte);
+  });
+
+  it('falha passageira na renovação mantém o usuário logado', async () => {
+    sessao.set({ accessToken: 'velho', refreshToken: 'r1' });
+    const ouvinte = vi.fn();
+    globalThis.addEventListener(EVENTO_SESSAO_EXPIRADA, ouvinte);
+    fetchMock
+      .mockResolvedValueOnce(resposta(401, {}))
+      .mockResolvedValueOnce(resposta(429, {}));   // limite de tentativas, não sessão inválida
+    await expect(api('/api/v1/purchase-orders/')).rejects.toMatchObject({ status: 503 });
+    expect(sessao.access).toBe('velho');
+    expect(ouvinte).not.toHaveBeenCalled();
     globalThis.removeEventListener(EVENTO_SESSAO_EXPIRADA, ouvinte);
   });
 

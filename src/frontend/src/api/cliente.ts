@@ -116,14 +116,17 @@ export async function baixar(caminho: string, mensagemErro = 'Falha ao baixar o 
  * `extras` vira campos do mesmo formulário — é assim que os documentos do
  * fornecedor mandam tipo, validade e descrição junto com o arquivo.
  */
-export async function enviarArquivo(caminho: string, arquivo: File, extras: Record<string, string> = {}): Promise<void> {
+export async function enviarArquivo<T = void>(caminho: string, arquivo: File, extras: Record<string, string> = {}): Promise<T> {
   const fd = new FormData();
   fd.append('file', arquivo);
   for (const [campo, valor] of Object.entries(extras)) fd.append(campo, valor);
   let res = await fetch(caminho, { method: 'POST', headers: cabecalhos(false), body: fd });
   if (res.status === 401 && sessao.refresh && (await renovarSessao()) === 'ok')
     res = await fetch(caminho, { method: 'POST', headers: cabecalhos(false), body: fd });
-  if (!res.ok) throw new ErroApi('Não consegui enviar ' + arquivo.name + '.', res.status);
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok)
+    throw new ErroApi(json?.error?.message || 'Não consegui enviar ' + arquivo.name + '.', res.status, json?.error?.code);
+  return (json.data ?? json) as T;
 }
 
 /** Abre um Blob numa nova aba (mesmo comportamento do legado para PDF e anexos). */

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { listarProdutos, type ProdutoResumo } from '@/api/catalogo';
+import { listarProdutos, type Produto } from '@/api/catalogo';
 import { salvarContrato, type Fornecedor, type ItemContrato } from '@/api/fornecedores';
 import { Painel } from '@/componentes/basicos';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
@@ -38,7 +38,7 @@ const daLinha = (i: ItemContrato): LinhaForm => ({
 });
 
 /** Linhas do formulário viram itens da API; linha sem produto e sem descrição é descartada. */
-export function itensDoFormulario(linhas: LinhaForm[], catalogo: ProdutoResumo[]): ItemContrato[] {
+export function itensDoFormulario(linhas: LinhaForm[], catalogo: Produto[]): ItemContrato[] {
   const inteiro = (v: string) => (v === '' ? null : parseInt(v, 10));
   return linhas
     .map((l) => {
@@ -62,7 +62,7 @@ export function PainelContrato({ fornecedor, aoSalvar, aoFechar }:
   { fornecedor: Fornecedor; aoSalvar: () => void; aoFechar: () => void }) {
   const { avisar } = useToast();
   const contrato = fornecedor.contract;
-  const { dados: catalogo } = useCarregar((signal) => listarProdutos(signal).catch(() => [] as ProdutoResumo[]), []);
+  const { dados: catalogo } = useCarregar((signal) => listarProdutos(signal).catch(() => [] as Produto[]), []);
   const [numero, setNumero] = useState(contrato.number ?? '');
   const [teto, setTeto] = useState(contrato.valueLimit != null ? String(contrato.valueLimit) : '');
   const [inicio, setInicio] = useState(contrato.validFrom ?? '');

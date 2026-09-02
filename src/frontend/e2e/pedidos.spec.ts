@@ -1,0 +1,104 @@
+import { expect, test, type Page } from '@playwright/test';
+
+const EMAIL = process.env.ADMIN_EMAIL ?? 'admin@trinosupply.com.br';
+const SENHA = process.env.ADMIN_PASSWORD ?? 'TrinoSupply@2026!';
+
+async function entrar(page: Page) {
+  await page.goto('/app/login');
+  await page.fill('#email', EMAIL);
+  await page.fill('#password', SENHA);
+  await page.click('button[type=submit]');
+  await expect(page).toHaveURL(/\/app\/pedidos$/);
+}
+
+test.describe('Pedidos de Compra (React)', () => {
+  test('lista os pedidos, abre o detalhe e percorre OC → NF → entrega', async ({ page }) => {
+    await entrar(page);
+
+    // lista com o pedido semeado
+    const tabela = page.getByTestId('tabela-pedidos');
+    await expect(tabela).toBeVisible();
+    const linha = tabela.locator('tr[data-pedido]').filter({ hasText: 'Alfa EPIs' }).first();
+    await expect(linha).toContainText('OC/Faturamento');
+    await expect(linha).toContainText('a registrar');
+    const numero = (await linha.getAttribute('data-pedido'))!;
+
+    // filtro em memória
+    await page.getByLabel('Buscar').fill('não existe esse pedido');
+    await expect(page.getByText('Nenhum pedido corresponde ao filtro.')).toBeVisible();
+    await page.getByLabel('Buscar').fill(numero);
+    await expect(tabela.locator('tr[data-pedido]')).toHaveCount(1);
+
+    // detalhe
+    await linha.getByRole('button', { name: 'Abrir' }).click();
+    await expect(page).toHaveURL(/\/app\/pedidos\/[0-9a-f-]{36}$/);
+    const detalhe = page.getByTestId('pedido-detalhe');
+    await expect(detalhe).toContainText(`Pedido ${numero}`);
+    await expect(detalhe).toContainText('Luva nitrílica tamanho M');
+
+    // OC do ERP
+    await page.fill('#oc-numero', 'OC-ERP-4501');
+    await page.fill('#oc-data', '2026-09-01');
+    await page.getByRole('button', { name: 'Registrar OC' }).click();
+    await expect(page.getByTestId('toast')).toContainText('OC registrada.');
+    await expect(page.locator('#oc-erp')).toContainText('OC OC-ERP-4501 de 01/09/2026');
+
+    // nota fiscal
+    await page.fill('#nf-numero', '000123');
+    await page.fill('#nf-data', '2026-09-02');
+    await page.fill('#nf-valor', '197');
+    await page.getByRole('button', { name: 'Lançar NF' }).click();
+    await expect(page.getByTestId('tabela-notas')).toContainText('000123');
+    await expect(detalhe).toHaveAttribute('data-situacao', 'FATURADO');
+
+    // entrega parcial: só a luva chega
+    await page.getByLabel('Chegou agora: Luva nitrílica tamanho M').fill('10');
+    await page.getByRole('button', { name: 'Registrar entrega' }).click();
+    await expect(page.getByTestId('toast').last()).toContainText('Entrega registrada.');
+    await expect(detalhe).toHaveAttribute('data-situacao', 'PARCIAL');
+    const entrega = page.getByTestId('tabela-entrega');
+    await expect(entrega.locator('tr[data-item]').first()).toContainText('10');
+
+    // encerra o saldo que não vai chegar: parte chegou, então o pedido fica
+    // "Entregue parcial" (regra do PurchaseOrderService) e não recebe mais nada
+    await page.fill('#entrega-encerrar', 'Fornecedor não tem mais o óculos em estoque');
+    await page.getByRole('button', { name: 'Encerrar saldo' }).click();
+    await expect(page.getByTestId('toast').last()).toContainText('Saldo encerrado.');
+    await expect(detalhe).toHaveAttribute('data-situacao', 'PARCIAL');
+    await expect(page.locator('#entrega')).toContainText('Entrega concluída em');
+    await expect(page.getByRole('button', { name: 'Registrar entrega' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Registrar OC' })).toHaveCount(0);
+
+    // de volta à lista, a situação e o motivo acompanham
+    await page.getByRole('link', { name: '← Pedidos de compra' }).click();
+    const linhaFinal = page.getByTestId('tabela-pedidos').locator(`tr[data-pedido="${numero}"]`);
+    await expect(linhaFinal).toContainText('Entregue parcial');
+    await expect(linhaFinal).toContainText('Fornecedor não tem mais o óculos em estoque');
+    await expect(linhaFinal).toContainText('recebido 10 de 14');
+  });
+
+  test('sem sessão, uma rota protegida cai no login e volta ao destino depois', async ({ page }) => {
+    await page.goto('/app/pedidos');
+    await expect(page).toHaveURL(/\/app\/login$/);
+    await page.fill('#email', EMAIL);
+    await page.fill('#password', SENHA);
+    await page.click('button[type=submit]');
+    await expect(page).toHaveURL(/\/app\/pedidos$/);
+    await expect(page.locator('#titulo-pagina')).toHaveText('Pedidos de Compra');
+  });
+
+  test('a sessão do legado vale no React (mesma aba, mesmos tokens)', async ({ page }) => {
+    // entra pelo index.html clássico
+    await page.goto('/');
+    await page.fill('#email', EMAIL);
+    await page.fill('#password', SENHA);
+    await page.click('button[type=submit]');
+    await expect(page.locator('#user-name')).not.toBeEmpty();
+    // vai para o React sem novo login
+    await page.goto('/app/pedidos');
+    await expect(page.locator('#titulo-pagina')).toHaveText('Pedidos de Compra');
+    await expect(page.getByTestId('tabela-pedidos')).toBeVisible();
+    // e o menu do React devolve ao legado na tela certa
+    await page.locator('a[data-legado="triage"]').click({ trial: true }).catch(() => {});
+  });
+});

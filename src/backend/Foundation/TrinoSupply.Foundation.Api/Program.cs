@@ -72,6 +72,9 @@ builder.Services.AddRateLimiter(o =>
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
 });
 
+// Descrição OpenAPI nativa (/openapi/v1.json): base para gerar os tipos do frontend React.
+builder.Services.AddOpenApi();
+
 var app = builder.Build();
 
 // ---- Migração + seed do admin ----------------------------------------------
@@ -97,6 +100,8 @@ var staticFiles = new StaticFileOptions
 };
 app.UseStaticFiles(staticFiles);
 app.UseRateLimiter();
+if (!app.Environment.IsProduction() || app.Configuration["OPENAPI_ENABLED"] == "1")
+    app.MapOpenApi();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -2572,6 +2577,10 @@ app.MapGet("/portal", (IWebHostEnvironment env, HttpContext ctx) =>
     return Results.File(Path.Combine(env.WebRootPath, "portal.html"), "text/html");
 }).AllowAnonymous();
 
+// Frontend React (build do Vite em wwwroot/app): qualquer rota sob /app/ cai no
+// index.html dele, e o roteador do navegador assume dali (arquivos com extensão continuam
+// com o middleware estático — sem o `nonfile`, o fallback engoliria o próprio JS). O legado segue em /.
+app.MapFallbackToFile("/app/{*path:nonfile}", "app/index.html", staticFiles);
 app.MapFallbackToFile("index.html", staticFiles);
 
 app.Run();

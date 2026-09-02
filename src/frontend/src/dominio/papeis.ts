@@ -7,6 +7,34 @@ export type Modulo =
   | 'SOLICITACOES' | 'APROVACAO' | 'MATERIAL' | 'ESTOQUE' | 'COMPRAS' | 'PRODUTOS'
   | 'FORNECEDORES' | 'CENTROS_CUSTO' | 'USUARIOS' | 'CONTRATOS' | 'COMPLIANCE' | 'INSIGHTS';
 
+export const ROTULO_MODULO: Record<Modulo, string> = {
+  SOLICITACOES: 'Solicitações de Compra', APROVACAO: 'Central de Aprovação',
+  MATERIAL: 'Solicitação de Material', ESTOQUE: 'Estoque / Almoxarifado',
+  COMPRAS: 'Compras', PRODUTOS: 'Cadastro de Produtos',
+  FORNECEDORES: 'Cadastro de Fornecedores', CENTROS_CUSTO: 'Centros de Custo',
+  USUARIOS: 'Cadastro de Usuários', CONTRATOS: 'Contratos de Parceria',
+  COMPLIANCE: 'Compliance', INSIGHTS: 'Insights & Executivo',
+};
+
+/** Autorizações sugeridas ao escolher o papel de um usuário novo. */
+export const MODULOS_PADRAO: Record<Papel, Modulo[]> = {
+  SystemAdministrator: Object.keys(ROTULO_MODULO) as Modulo[],
+  Requester: ['SOLICITACOES', 'MATERIAL'],
+  Approver: ['SOLICITACOES', 'APROVACAO'],
+  PurchasingOfficer: ['COMPRAS', 'FORNECEDORES', 'ESTOQUE'],
+  WarehouseOperator: ['ESTOQUE'],
+  WarehouseSupervisor: ['ESTOQUE', 'PRODUTOS'],
+  SupplyManager: ['SOLICITACOES', 'APROVACAO', 'MATERIAL', 'ESTOQUE', 'COMPRAS', 'PRODUTOS', 'FORNECEDORES', 'CENTROS_CUSTO'],
+  Director: ['SOLICITACOES', 'APROVACAO', 'COMPRAS'],
+  Auditor: ['SOLICITACOES', 'ESTOQUE', 'COMPRAS'],
+};
+
+/**
+ * Papéis de almoxarifado saíram do cadastro: quem opera o estoque recebe o
+ * módulo "Estoque / Almoxarifado". Gestor de Suprimentos idem.
+ */
+export const PAPEIS_OCULTOS: Papel[] = ['WarehouseOperator', 'WarehouseSupervisor', 'SupplyManager'];
+
 export const ROTULO_PAPEL: Record<Papel, string> = {
   SystemAdministrator: 'Administrador', Requester: 'Solicitante', Approver: 'Aprovador',
   PurchasingOfficer: 'Comprador', WarehouseOperator: 'Almoxarife', WarehouseSupervisor: 'Supervisor de Almoxarifado',

@@ -45,7 +45,7 @@ export function CentrosCusto() {
       centros: await listarCentrosCusto(mantem, signal),
       // pickers só existem para quem mantém o cadastro; a lista segue visível sem eles
       usuarios: mantem ? await listarUsuariosPicker(signal).catch(() => [] as UsuarioPicker[]) : [],
-      empresas: await listarEmpresas(signal).catch(() => [] as Empresa[]),
+      empresas: await listarEmpresas(false, signal).catch(() => [] as Empresa[]),
     }),
     [mantem],
   );

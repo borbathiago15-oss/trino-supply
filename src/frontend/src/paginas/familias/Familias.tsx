@@ -6,6 +6,7 @@ import { Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { useToast } from '@/componentes/Toast';
 import { podeManterCatalogo, temModulo } from '@/dominio/papeis';
 import { useUsuario } from '@/sessao/SessaoProvider';
+import { rolarPara } from '@/util/rolar';
 import { useCarregar } from '@/util/useCarregar';
 
 const VAZIO = { nome: '', observacao: '', categoria: '', l1: '', l2: '', l3: '', l4: '' };
@@ -62,7 +63,7 @@ export function Familias() {
       l1: f.leadRequestToQuote?.toString() ?? '', l2: f.leadQuoteToApproval?.toString() ?? '',
       l3: f.leadApprovalToPo?.toString() ?? '', l4: f.leadPoToDelivery?.toString() ?? '',
     });
-    document.getElementById('form-familia')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    rolarPara('form-familia');
   }
   const cancelar = () => { setEditando(null); setForm(VAZIO); };
 

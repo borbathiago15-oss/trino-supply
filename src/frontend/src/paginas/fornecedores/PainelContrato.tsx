@@ -5,6 +5,7 @@ import { Painel } from '@/componentes/basicos';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
 import { moeda } from '@/util/formato';
+import { rolarPara } from '@/util/rolar';
 import { useCarregar } from '@/util/useCarregar';
 
 interface LinhaForm {
@@ -73,7 +74,7 @@ export function PainelContrato({ fornecedor, aoSalvar, aoFechar }:
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
-    document.getElementById('contrato')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    rolarPara('contrato');
   }, []);
 
   const editar = (chave: string, campo: keyof LinhaForm, valor: string) =>

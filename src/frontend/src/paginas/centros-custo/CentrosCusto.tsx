@@ -10,6 +10,7 @@ import { useToast } from '@/componentes/Toast';
 import { ROTULO_PAPEL, podeManterCatalogo, temModulo, type Papel } from '@/dominio/papeis';
 import { useUsuario } from '@/sessao/SessaoProvider';
 import { moeda } from '@/util/formato';
+import { rolarPara } from '@/util/rolar';
 import { useCarregar } from '@/util/useCarregar';
 
 /** Quem pode ser marcado em cada nível de alçada (mesma regra do legado). */
@@ -62,7 +63,7 @@ export function CentrosCusto() {
     });
     setNivel1(c.level1.map((a) => a.userId));
     setNivel2(c.level2.map((a) => a.userId));
-    document.getElementById('form-cc')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    rolarPara('form-cc');
   }
   const cancelar = () => { setEditando(null); setForm(VAZIO); setNivel1([]); setNivel2([]); };
 

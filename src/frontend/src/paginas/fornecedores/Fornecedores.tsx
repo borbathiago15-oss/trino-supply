@@ -11,6 +11,7 @@ import { useToast } from '@/componentes/Toast';
 import { podeComprar } from '@/dominio/papeis';
 import { useUsuario } from '@/sessao/SessaoProvider';
 import { data, moeda } from '@/util/formato';
+import { rolarPara } from '@/util/rolar';
 import { useCarregar } from '@/util/useCarregar';
 import { PainelContrato } from './PainelContrato';
 import { PainelHomologacao } from './PainelHomologacao';
@@ -55,7 +56,7 @@ export function Fornecedores() {
   function editar(f: Fornecedor) {
     setEditando(f);
     setForm({ razao: f.legalName, fantasia: f.tradeName ?? '', cnpj: f.taxId, email: f.email ?? '', telefone: f.phone ?? '' });
-    document.getElementById('form-fornecedor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    rolarPara('form-fornecedor');
   }
   const cancelar = () => { setEditando(null); setForm(VAZIO); };
 

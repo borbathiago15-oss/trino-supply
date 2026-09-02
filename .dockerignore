@@ -1,0 +1,11 @@
+**/node_modules
+**/bin
+**/obj
+**/dist
+platform
+docs
+.git
+.github
+src/backend/Foundation/TrinoSupply.Foundation.Api/wwwroot/app
+src/frontend/playwright-report
+src/frontend/test-results

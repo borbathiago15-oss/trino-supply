@@ -17,3 +17,8 @@ node_modules/
 # SO
 .DS_Store
 Thumbs.db
+
+# Frontend React: build do Vite gerado dentro do wwwroot do .NET
+src/backend/Foundation/TrinoSupply.Foundation.Api/wwwroot/app/
+src/frontend/playwright-report/
+src/frontend/test-results/

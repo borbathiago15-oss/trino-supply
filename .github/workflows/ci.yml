@@ -206,6 +206,110 @@ jobs:
           retention-days: 7
 
   # ---------------------------------------------------------------------------
+  # Frontend React (src/frontend): tipos, lint, unitários, build e E2E contra
+  # a API .NET real — exatamente o que o Dockerfile empacota para o Railway.
+  # ---------------------------------------------------------------------------
+  frontend-react:
+    name: Frontend React — tipos, testes, build e E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: trino_react_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      API_URL: http://127.0.0.1:5099
+      ADMIN_EMAIL: admin@trinosupply.com.br
+      ADMIN_PASSWORD: TrinoSupply@2026!
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - name: Instalar dependências
+        working-directory: src/frontend
+        run: npm ci
+
+      - name: Validação de tipos
+        working-directory: src/frontend
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: src/frontend
+        run: npm run lint
+
+      - name: Testes unitários e de componente
+        working-directory: src/frontend
+        run: npm test
+
+      # O build sai direto em src/backend/.../wwwroot/app, como no Dockerfile.
+      - name: Build (Vite → wwwroot/app)
+        working-directory: src/frontend
+        run: npm run build
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Compilar a API .NET
+        run: dotnet build src/backend/Foundation/TrinoSupply.Foundation.Api --configuration Release
+
+      - name: Subir a API (serve /app/ e /api)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/trino_react_ci
+          JWT_SECRET: segredo-de-ci-nao-usar-em-producao-react
+          ASPNETCORE_URLS: http://127.0.0.1:5099
+          ASPNETCORE_ENVIRONMENT: Production
+        run: |
+          dotnet run --project src/backend/Foundation/TrinoSupply.Foundation.Api --configuration Release --no-build > /tmp/api.log 2>&1 &
+          for i in $(seq 1 60); do
+            curl -sf http://127.0.0.1:5099/health && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:5099/health || (cat /tmp/api.log; exit 1)
+          # o build do React tem de estar sendo servido pelo .NET
+          curl -sf http://127.0.0.1:5099/app/pedidos | grep -q '<div id="root">'
+
+      - name: Instalar o Chromium do Playwright
+        working-directory: src/frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Semear o cenário
+        working-directory: src/frontend
+        run: npm run e2e:seed
+
+      - name: Rodar o Playwright
+        working-directory: src/frontend
+        run: npx playwright test
+
+      - name: Log da API e relatório em caso de falha
+        if: failure()
+        run: cat /tmp/api.log || true
+
+      - name: Publicar o relatório em caso de falha
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-react
+          path: src/frontend/playwright-report
+          retention-days: 7
+
+  # ---------------------------------------------------------------------------
   # App .NET (Trino Supply) — o que hoje está em produção no Railway.
   # ---------------------------------------------------------------------------
   dotnet:

@@ -162,6 +162,7 @@
     }
     .sidebar .brandmark { display: block; width: 196px; max-width: 100%; height: auto; padding: 4px 8px 18px; }
     .nav-title { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: #64748b; padding: 14px 10px 5px; }
+    a.nav-item { text-decoration: none; }
     .nav-item, .nav-group, .nav-sub {
       display: flex; justify-content: space-between; align-items: center; width: 100%;
       text-align: left; background: none; border: 0; color: #cbd5e1;
@@ -1368,6 +1369,8 @@
           { id: 'quotations', label: 'Processos de Cotação', show: () => canViewRfq() },
         ]},
         { id: 'buy-orders', label: 'Pedidos de Compra', show: () => true },
+        // tela já migrada para o React: abre o app novo na mesma aba (sessão compartilhada)
+        { id: 'buy-orders-react', label: 'Pedidos de Compra (novo)', href: '/app/pedidos', show: () => true },
         { id: 'contracts', label: 'Contratos', module: 'CONTRATOS', show: () => canBuy() || isAdmin() },
         { id: 'scorecard', label: 'Scorecard de Fornecedores', show: () => canBuy() || canViewCompliance() },
       ]},
@@ -1435,8 +1438,10 @@
     }
 
     function renderNav() {
-      const leaf = (i) => `<button class="nav-item" data-view="${i.id}"><span>${escapeHtml(i.label)}</span>` +
-        `<span class="count" id="count-${i.id}" hidden></span></button>`;
+      const leaf = (i) => i.href
+        ? `<a class="nav-item" href="${i.href}" data-href="${i.id}"><span>${escapeHtml(i.label)}</span><span class="count">novo</span></a>`
+        : `<button class="nav-item" data-view="${i.id}"><span>${escapeHtml(i.label)}</span>` +
+          `<span class="count" id="count-${i.id}" hidden></span></button>`;
       const sub = (it) => {
         const open = openSub === it.label;
         const hasActive = it.children.some(c => c.id === currentView);
@@ -1498,10 +1503,16 @@
       openSub = null;
       renderNav();
       loadCcDatalist();
-      goTo('supply-dash');
+      goTo(telaInicial());
       // o login não traz os vínculos de CC: completa via /me e refaz os pickers
       if (!user.costCenters) api('/api/v1/auth/me')
         .then(u => { currentUser = u; loadCcDatalist(); }).catch(() => {});
+    }
+    // o React manda de volta para o legado com /#tela=<view>; sem isso, abre o dashboard
+    function telaInicial() {
+      const pedida = new URLSearchParams(location.hash.replace(/^#/, '')).get('tela');
+      if (pedida) history.replaceState(null, '', location.pathname);
+      return pedida && document.getElementById('view-' + pedida) ? pedida : 'supply-dash';
     }
     function showLogin() {
       store.clear(); currentUser = null;

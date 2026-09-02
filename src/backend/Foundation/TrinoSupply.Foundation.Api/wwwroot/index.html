@@ -1380,9 +1380,9 @@
         ]},
         { label: 'Estrutura da Empresa', children: [
           { id: 'cost-centers', label: 'Centros de Custo', href: '/app/centros-custo', module: 'CENTROS_CUSTO', show: canMaintainCatalog },
-          { id: 'company', label: 'Empresas (CNPJs)', show: isAdmin },
+          { id: 'company', label: 'Empresas (CNPJs)', href: '/app/empresas', show: isAdmin },
         ]},
-        { id: 'users', label: 'Usuários', module: 'USUARIOS', show: isAdmin },
+        { id: 'users', label: 'Usuários', href: '/app/usuarios', module: 'USUARIOS', show: isAdmin },
         { id: 'suppliers', label: 'Fornecedores', href: '/app/fornecedores', module: 'FORNECEDORES', show: canBuy },
       ]},
     ];

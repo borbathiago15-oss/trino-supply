@@ -52,7 +52,11 @@ describe('<CentrosCusto />', () => {
     usuarioAtual = gestor;
     vi.mocked(listarCentrosCusto).mockResolvedValue([centro]);
     vi.mocked(listarUsuariosPicker).mockResolvedValue(usuarios);
-    vi.mocked(listarEmpresas).mockResolvedValue([{ id: 'emp1', legalName: 'Trino Serviços LTDA', taxId: '11222333000144' }]);
+    vi.mocked(listarEmpresas).mockResolvedValue([{
+      id: 'emp1', legalName: 'Trino Serviços LTDA', taxId: '11222333000144', stateRegistration: null,
+      address: 'Rua A, 100', district: null, city: 'Vitória', state: 'ES', zip: '29000-000',
+      phone: null, email: null, active: true,
+    }]);
   });
 
   const montar = () => render(<ToastProvider><CentrosCusto /></ToastProvider>);

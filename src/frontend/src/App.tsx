@@ -8,6 +8,8 @@ import { CentrosCusto } from '@/paginas/centros-custo/CentrosCusto';
 import { Familias } from '@/paginas/familias/Familias';
 import { Fornecedores } from '@/paginas/fornecedores/Fornecedores';
 import { Produtos } from '@/paginas/produtos/Produtos';
+import { Usuarios } from '@/paginas/usuarios/Usuarios';
+import { Empresas } from '@/paginas/empresas/Empresas';
 import { SessaoProvider, useSessao } from '@/sessao/SessaoProvider';
 import { Carregando } from '@/componentes/basicos';
 import { LimiteErro } from '@/componentes/LimiteErro';
@@ -34,6 +36,8 @@ export function Rotas() {
           <Route path="/familias" element={<Familias />} />
           <Route path="/centros-custo" element={<CentrosCusto />} />
           <Route path="/produtos" element={<Produtos />} />
+          <Route path="/usuarios" element={<Usuarios />} />
+          <Route path="/empresas" element={<Empresas />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/pedidos" replace />} />

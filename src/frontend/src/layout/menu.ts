@@ -63,9 +63,9 @@ export const MENU: GrupoMenu[] = [
     ]},
     { rotulo: 'Estrutura da Empresa', filhos: [
       { id: 'cost-centers', rotulo: 'Centros de Custo', rota: '/centros-custo', modulo: 'CENTROS_CUSTO', mostrar: podeManterCatalogo },
-      { id: 'company', rotulo: 'Empresas (CNPJs)', legado: 'company', mostrar: ehAdmin },
+      { id: 'company', rotulo: 'Empresas (CNPJs)', rota: '/empresas', mostrar: ehAdmin },
     ]},
-    { id: 'users', rotulo: 'Usuários', legado: 'users', modulo: 'USUARIOS', mostrar: ehAdmin },
+    { id: 'users', rotulo: 'Usuários', rota: '/usuarios', modulo: 'USUARIOS', mostrar: ehAdmin },
     { id: 'suppliers', rotulo: 'Fornecedores', rota: '/fornecedores', modulo: 'FORNECEDORES', mostrar: podeComprar },
   ]},
 ];

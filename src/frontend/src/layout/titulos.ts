@@ -8,7 +8,7 @@ const porRota = new Map<string, string>(
 );
 
 export function tituloDaRota(pathname: string): string {
-  // /pedidos/{id} usa o título de /pedidos
+  // a rota exata vence; /pedidos/{id} cai no título de /pedidos
   const raiz = '/' + (pathname.split('/')[1] ?? '');
   return porRota.get(pathname) ?? porRota.get(raiz) ?? 'Trino Supply';
 }

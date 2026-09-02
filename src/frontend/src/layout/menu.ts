@@ -31,11 +31,11 @@ export const MENU: GrupoMenu[] = [
   ]},
   { titulo: 'Solicitações de Compra', modulo: 'SOLICITACOES', itens: [
     { rotulo: 'Nova Solicitação', filhos: [
-      { id: 'pr-new-unit', rotulo: 'Inclusão de SC', legado: 'pr-new-unit', mostrar: podeCriarSc },
-      { id: 'pr-new-multi', rotulo: 'Solicitação em Lote', legado: 'pr-new-multi', mostrar: podeCriarSc },
+      { id: 'pr-new-unit', rotulo: 'Inclusão de SC', rota: '/solicitacoes/nova', mostrar: podeCriarSc },
+      { id: 'pr-new-multi', rotulo: 'Solicitação em Lote', rota: '/solicitacoes/lote', mostrar: podeCriarSc },
     ]},
-    { id: 'pr-mine', rotulo: 'Meus Pedidos', legado: 'pr-mine', mostrar: sempre },
-    { id: 'pr-approvals', rotulo: 'Central de Aprovação', legado: 'pr-approvals', modulo: 'APROVACAO', mostrar: podeDecidirSc },
+    { id: 'pr-mine', rotulo: 'Meus Pedidos', rota: '/solicitacoes', mostrar: sempre },
+    { id: 'pr-approvals', rotulo: 'Central de Aprovação', rota: '/aprovacoes', modulo: 'APROVACAO', mostrar: podeDecidirSc },
   ]},
   { titulo: 'Material', modulo: 'MATERIAL', itens: [
     { id: 'mr-new', rotulo: 'Solicitar Material', legado: 'mr-new', mostrar: podePedirMaterial },

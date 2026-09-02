@@ -1348,11 +1348,11 @@
       ]},
       { title: 'Solicitações de Compra', module: 'SOLICITACOES', items: [
         { label: 'Nova Solicitação', children: [
-          { id: 'pr-new-unit', label: 'Inclusão de SC', show: canCreatePr },
-          { id: 'pr-new-multi', label: 'Solicitação em Lote', show: canCreatePr },
+          { id: 'pr-new-unit', label: 'Inclusão de SC', href: '/app/solicitacoes/nova', show: canCreatePr },
+          { id: 'pr-new-multi', label: 'Solicitação em Lote', href: '/app/solicitacoes/lote', show: canCreatePr },
         ]},
-        { id: 'pr-mine', label: 'Meus Pedidos', show: () => true },
-        { id: 'pr-approvals', label: 'Central de Aprovação', module: 'APROVACAO', show: canDecidePr },
+        { id: 'pr-mine', label: 'Meus Pedidos', href: '/app/solicitacoes', show: () => true },
+        { id: 'pr-approvals', label: 'Central de Aprovação', href: '/app/aprovacoes', module: 'APROVACAO', show: canDecidePr },
       ]},
       { title: 'Material', module: 'MATERIAL', items: [
         { id: 'mr-new', label: 'Solicitar Material', show: canRequestMr },
@@ -1502,16 +1502,23 @@
       openSub = null;
       renderNav();
       loadCcDatalist();
-      goTo(telaInicial());
+      const destino = destinoInicial();
+      goTo(destino.tela, destino.rfq ? () => openRfq(destino.rfq) : undefined);
       // o login não traz os vínculos de CC: completa via /me e refaz os pickers
       if (!user.costCenters) api('/api/v1/auth/me')
         .then(u => { currentUser = u; loadCcDatalist(); }).catch(() => {});
     }
-    // o React manda de volta para o legado com /#tela=<view>; sem isso, abre o dashboard
-    function telaInicial() {
-      const pedida = new URLSearchParams(location.hash.replace(/^#/, '')).get('tela');
+    // o React manda de volta para o legado com /#tela=<view>, e pode pedir um
+    // processo aberto com &rfq=<id>; sem nada disso, abre o dashboard
+    function destinoInicial() {
+      const params = new URLSearchParams(location.hash.replace(/^#/, ''));
+      const pedida = params.get('tela');
+      const rfq = params.get('rfq');
       if (pedida) history.replaceState(null, '', location.pathname);
-      return pedida && document.getElementById('view-' + pedida) ? pedida : 'supply-dash';
+      return {
+        tela: pedida && document.getElementById('view-' + pedida) ? pedida : 'supply-dash',
+        rfq: rfq || null,
+      };
     }
     function showLogin() {
       store.clear(); currentUser = null;

@@ -80,6 +80,34 @@ export async function contarProdutosPorFamilia(signal?: AbortSignal): Promise<Re
   return Object.fromEntries(families.map((f) => [f.family, f.count]));
 }
 
+/** Só os nomes das famílias que existem no catálogo. */
+export const familiasDoCatalogo = async (signal?: AbortSignal) =>
+  (await api<{ families: string[] }>(`${base}/families`, { signal })).families;
+
+/** Linha da grade da Solicitação em Lote: saldo, entrada prevista e cobertura. */
+export interface LinhaDeLote {
+  id: string;
+  code: string;
+  description: string;
+  family: string;
+  unitOfMeasure: string;
+  referencePrice: number | null;
+  stockAvailable: number;
+  inboundQty: number;
+  avgMonthlyConsumption: number;
+  coverageDays: number | null;
+}
+
+export async function gradeDeLote(
+  { familia, q }: { familia?: string; q?: string }, signal?: AbortSignal,
+): Promise<LinhaDeLote[]> {
+  const params = new URLSearchParams();
+  if (familia) params.set('family', familia);
+  if (q) params.set('q', q);
+  const { items } = await api<{ items: LinhaDeLote[] }>(`${base}/batch-view?${params}`, { signal });
+  return items;
+}
+
 export interface DadosProduto {
   code?: string | null;
   description: string;

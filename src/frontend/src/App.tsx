@@ -10,6 +10,10 @@ import { Fornecedores } from '@/paginas/fornecedores/Fornecedores';
 import { Produtos } from '@/paginas/produtos/Produtos';
 import { Usuarios } from '@/paginas/usuarios/Usuarios';
 import { Empresas } from '@/paginas/empresas/Empresas';
+import { NovaSolicitacao } from '@/paginas/solicitacoes/NovaSolicitacao';
+import { SolicitacaoEmLote } from '@/paginas/solicitacoes/SolicitacaoEmLote';
+import { MeusPedidos } from '@/paginas/solicitacoes/MeusPedidos';
+import { CentralDeAprovacao } from '@/paginas/aprovacoes/CentralDeAprovacao';
 import { SessaoProvider, useSessao } from '@/sessao/SessaoProvider';
 import { Carregando } from '@/componentes/basicos';
 import { LimiteErro } from '@/componentes/LimiteErro';
@@ -38,6 +42,10 @@ export function Rotas() {
           <Route path="/produtos" element={<Produtos />} />
           <Route path="/usuarios" element={<Usuarios />} />
           <Route path="/empresas" element={<Empresas />} />
+          <Route path="/solicitacoes" element={<MeusPedidos />} />
+          <Route path="/solicitacoes/nova" element={<NovaSolicitacao />} />
+          <Route path="/solicitacoes/lote" element={<SolicitacaoEmLote />} />
+          <Route path="/aprovacoes" element={<CentralDeAprovacao />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/pedidos" replace />} />

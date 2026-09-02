@@ -269,14 +269,17 @@ jobs:
       - name: Compilar a API .NET
         run: dotnet build src/backend/Foundation/TrinoSupply.Foundation.Api --configuration Release
 
+      # A DLL é executada direto (e não via `dotnet run`) para o launchSettings.json
+      # não sobrepor porta e ambiente; o diretório do projeto é o content root (wwwroot).
       - name: Subir a API (serve /app/ e /api)
+        working-directory: src/backend/Foundation/TrinoSupply.Foundation.Api
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/trino_react_ci
           JWT_SECRET: segredo-de-ci-nao-usar-em-producao-react
           ASPNETCORE_URLS: http://127.0.0.1:5099
           ASPNETCORE_ENVIRONMENT: Production
         run: |
-          dotnet run --project src/backend/Foundation/TrinoSupply.Foundation.Api --configuration Release --no-build > /tmp/api.log 2>&1 &
+          dotnet bin/Release/net9.0/TrinoSupply.Foundation.Api.dll > /tmp/api.log 2>&1 &
           for i in $(seq 1 60); do
             curl -sf http://127.0.0.1:5099/health && break
             sleep 2

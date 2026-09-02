@@ -11,6 +11,8 @@ const chromium = process.env.PLAYWRIGHT_CHROMIUM || (existsSync(CAMINHO_PADRAO) 
 
 export default defineConfig({
   testDir: './e2e',
+  // um login por execução, compartilhado pelos workers (o login é limitado por IP)
+  globalSetup: './e2e/global-setup.ts',
   timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,

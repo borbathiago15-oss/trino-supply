@@ -1368,23 +1368,22 @@
           { id: 'rfq-queue', label: 'Abrir Cotação', show: () => canViewRfq() },
           { id: 'quotations', label: 'Processos de Cotação', show: () => canViewRfq() },
         ]},
-        { id: 'buy-orders', label: 'Pedidos de Compra', show: () => true },
-        // tela já migrada para o React: abre o app novo na mesma aba (sessão compartilhada)
-        { id: 'buy-orders-react', label: 'Pedidos de Compra (novo)', href: '/app/pedidos', show: () => true },
+        // telas já migradas para o React abrem o app novo na mesma aba (sessão compartilhada)
+        { id: 'buy-orders', label: 'Pedidos de Compra', href: '/app/pedidos', show: () => true },
         { id: 'contracts', label: 'Contratos', module: 'CONTRATOS', show: () => canBuy() || isAdmin() },
         { id: 'scorecard', label: 'Scorecard de Fornecedores', show: () => canBuy() || canViewCompliance() },
       ]},
       { title: 'Cadastros', items: [
         { label: 'Produtos', children: [
           { id: 'products', label: 'Cadastro de Produtos', module: 'PRODUTOS', show: () => true },
-          { id: 'families', label: 'Famílias de Produtos', module: 'PRODUTOS', show: canMaintainCatalog },
+          { id: 'families', label: 'Famílias de Produtos', href: '/app/familias', module: 'PRODUTOS', show: canMaintainCatalog },
         ]},
         { label: 'Estrutura da Empresa', children: [
-          { id: 'cost-centers', label: 'Centros de Custo', module: 'CENTROS_CUSTO', show: canMaintainCatalog },
+          { id: 'cost-centers', label: 'Centros de Custo', href: '/app/centros-custo', module: 'CENTROS_CUSTO', show: canMaintainCatalog },
           { id: 'company', label: 'Empresas (CNPJs)', show: isAdmin },
         ]},
         { id: 'users', label: 'Usuários', module: 'USUARIOS', show: isAdmin },
-        { id: 'suppliers', label: 'Fornecedores', module: 'FORNECEDORES', show: canBuy },
+        { id: 'suppliers', label: 'Fornecedores', href: '/app/fornecedores', module: 'FORNECEDORES', show: canBuy },
       ]},
     ];
     const TITLES = {
@@ -5001,10 +5000,15 @@
       } catch (err) { toast(err.message, 'error'); }
     });
 
-    // sessão existente? valida contra /me
+    // sessão existente? valida contra /me. Só descarta a sessão quando o servidor
+    // diz que ela não vale mais (401); erro de rede ou 5xx não pode deslogar ninguém.
     (async () => {
       if (!store.access) return;
-      try { showApp(await api('/api/v1/auth/me')); } catch { store.clear(); }
+      try { showApp(await api('/api/v1/auth/me')); }
+      catch (err) {
+        if (err.status === 401) store.clear();
+        else toast('Não consegui confirmar sua sessão agora. Recarregue em instantes.', 'error');
+      }
     })();
   </script>
 </body>

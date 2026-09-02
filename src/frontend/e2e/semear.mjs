@@ -1,6 +1,11 @@
 // Cenário mínimo para o E2E: fornecedor, local de estoque e um pedido em aberto.
 // Usa só a API pública, como um usuário faria.
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 const API = process.env.API_URL ?? 'http://127.0.0.1:5099';
+const ARQUIVO_CENARIO = fileURLToPath(new URL('../.e2e/cenario.json', import.meta.url));
 const EMAIL = process.env.ADMIN_EMAIL ?? 'admin@trinosupply.com.br';
 const SENHA = process.env.ADMIN_PASSWORD ?? 'TrinoSupply@2026!';
 
@@ -45,5 +50,9 @@ const pedido = await chamar('/api/v1/purchase-orders/', {
     { description: 'Óculos de proteção incolor', quantity: 4, unitOfMeasure: 'UN', unitPrice: 18 },
   ],
 }, token);
+
+// o teste precisa saber qual pedido é o desta execução: o banco pode ter outros
+mkdirSync(dirname(ARQUIVO_CENARIO), { recursive: true });
+writeFileSync(ARQUIVO_CENARIO, JSON.stringify({ pedidoNumero: pedido.number, pedidoId: pedido.id }));
 
 console.log('pedido semeado:', pedido.number, pedido.id);

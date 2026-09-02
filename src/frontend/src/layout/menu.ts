@@ -59,14 +59,14 @@ export const MENU: GrupoMenu[] = [
   { titulo: 'Cadastros', itens: [
     { rotulo: 'Produtos', filhos: [
       { id: 'products', rotulo: 'Cadastro de Produtos', legado: 'products', modulo: 'PRODUTOS', mostrar: sempre },
-      { id: 'families', rotulo: 'Famílias de Produtos', legado: 'families', modulo: 'PRODUTOS', mostrar: podeManterCatalogo },
+      { id: 'families', rotulo: 'Famílias de Produtos', rota: '/familias', modulo: 'PRODUTOS', mostrar: podeManterCatalogo },
     ]},
     { rotulo: 'Estrutura da Empresa', filhos: [
-      { id: 'cost-centers', rotulo: 'Centros de Custo', legado: 'cost-centers', modulo: 'CENTROS_CUSTO', mostrar: podeManterCatalogo },
+      { id: 'cost-centers', rotulo: 'Centros de Custo', rota: '/centros-custo', modulo: 'CENTROS_CUSTO', mostrar: podeManterCatalogo },
       { id: 'company', rotulo: 'Empresas (CNPJs)', legado: 'company', mostrar: ehAdmin },
     ]},
     { id: 'users', rotulo: 'Usuários', legado: 'users', modulo: 'USUARIOS', mostrar: ehAdmin },
-    { id: 'suppliers', rotulo: 'Fornecedores', legado: 'suppliers', modulo: 'FORNECEDORES', mostrar: podeComprar },
+    { id: 'suppliers', rotulo: 'Fornecedores', rota: '/fornecedores', modulo: 'FORNECEDORES', mostrar: podeComprar },
   ]},
 ];
 

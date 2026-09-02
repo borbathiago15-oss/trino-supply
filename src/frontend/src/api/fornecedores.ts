@@ -1,0 +1,130 @@
+import { api, enviarArquivo } from './cliente';
+
+/** Situação de homologação. Só HOMOLOGADO pode vencer uma cotação (SUP-ERR-030). */
+export type SituacaoHomologacao = 'PROSPECT' | 'EM_HOMOLOGACAO' | 'HOMOLOGADO' | 'RESTRITO' | 'BLOQUEADO';
+
+export const ROTULO_HOMOLOGACAO: Record<SituacaoHomologacao, { rotulo: string; classe: string }> = {
+  PROSPECT: { rotulo: 'Prospect', classe: 'bg-slate-100 text-slate-600' },
+  EM_HOMOLOGACAO: { rotulo: 'Em homologação', classe: 'bg-teal-50 text-teal-800' },
+  HOMOLOGADO: { rotulo: 'Homologado', classe: 'bg-ok-fundo text-ok' },
+  RESTRITO: { rotulo: 'Restrito', classe: 'bg-aviso-fundo text-aviso' },
+  BLOQUEADO: { rotulo: 'Bloqueado', classe: 'bg-perigo-fundo text-perigo' },
+};
+
+export type TipoDocumento = 'CND_FEDERAL' | 'FGTS' | 'CNDT' | 'CONTRATO_SOCIAL' | 'OUTRO';
+
+export const ROTULO_DOCUMENTO: Record<TipoDocumento, string> = {
+  CND_FEDERAL: 'CND Federal',
+  FGTS: 'Certificado de regularidade do FGTS',
+  CNDT: 'CNDT (débitos trabalhistas)',
+  CONTRATO_SOCIAL: 'Contrato social',
+  OUTRO: 'Outro documento',
+};
+
+export interface DocumentoFornecedor {
+  id: string;
+  type: TipoDocumento;
+  label: string | null;
+  documentId: string;
+  fileName: string;
+  validUntil: string | null;
+  expired: boolean;
+  expiringDays: number | null;
+  uploadedByLabel: string | null;
+}
+
+export interface ItemContrato {
+  id?: string;
+  catalogItemId: string | null;
+  catalogCode: string | null;
+  description: string | null;
+  unitOfMeasure: string | null;
+  unitPrice: number;
+  paymentTerms: string | null;
+  paymentDays: number | null;
+  deliveryDays: number | null;
+  notes: string | null;
+}
+
+export interface ContratoFornecedor {
+  number: string | null;
+  validFrom: string | null;
+  validUntil: string | null;
+  notes: string | null;
+  valueLimit: number | null;
+  consumed: number | null;
+  balance: number | null;
+  current: boolean;
+  items: ItemContrato[];
+}
+
+export interface Fornecedor {
+  id: string;
+  legalName: string;
+  tradeName: string | null;
+  taxId: string;
+  email: string | null;
+  phone: string | null;
+  active: boolean;
+  homologationStatus: SituacaoHomologacao;
+  effectiveHomologation: SituacaoHomologacao;
+  documents: DocumentoFornecedor[];
+  contract: ContratoFornecedor;
+}
+
+/**
+ * Situação que vale hoje: a efetiva já considera certidão vencida. Quando ela
+ * restringe um fornecedor que o gestor marcou como homologado, a tela avisa
+ * que a restrição é automática.
+ */
+export function situacaoEfetiva(f: Pick<Fornecedor, 'homologationStatus' | 'effectiveHomologation'>) {
+  const efetiva = f.effectiveHomologation ?? f.homologationStatus ?? 'HOMOLOGADO';
+  return { efetiva, restritoPorCertidao: efetiva === 'RESTRITO' && f.homologationStatus === 'HOMOLOGADO' };
+}
+
+const base = '/api/v1/suppliers';
+
+export const listarFornecedores = async (incluirInativos = false, signal?: AbortSignal) =>
+  (await api<{ items: Fornecedor[] }>(`${base}/${incluirInativos ? '?all=true' : ''}`, { signal })).items;
+
+export interface DadosFornecedor {
+  legalName: string;
+  tradeName: string | null;
+  taxId: string;
+  email: string | null;
+  phone: string | null;
+}
+
+export const criarFornecedor = (dados: DadosFornecedor) => api<Fornecedor>(`${base}/`, { method: 'POST', body: dados });
+
+/** A razão social e o CNPJ não mudam depois do cadastro — a API só aceita o resto. */
+export const atualizarFornecedor = (id: string, dados: { tradeName?: string; email?: string; phone?: string; active?: boolean }) =>
+  api<Fornecedor>(`${base}/${id}`, { method: 'PATCH', body: dados });
+
+export const salvarHomologacao = (id: string, status: SituacaoHomologacao) =>
+  api<Fornecedor>(`${base}/${id}/homologation`, { method: 'PATCH', body: { status } });
+
+export async function anexarDocumento(id: string, arquivo: File, tipo: TipoDocumento, validUntil: string, rotulo: string) {
+  const extras: Record<string, string> = { type: tipo };
+  if (validUntil) extras.validUntil = validUntil;
+  if (rotulo) extras.label = rotulo;
+  await enviarArquivo(`${base}/${id}/documents`, arquivo, extras);
+}
+
+export const removerDocumento = (id: string, docId: string) =>
+  api<unknown>(`${base}/${id}/documents/${docId}`, { method: 'DELETE' });
+
+export const gerarChavePortal = (id: string) =>
+  api<{ accessKey: string }>(`${base}/${id}/portal-key`, { method: 'POST', body: {} });
+
+export interface DadosContrato {
+  number: string | null;
+  valueLimit: number | null;
+  validFrom: string | null;
+  validUntil: string | null;
+  notes: string | null;
+  items: ItemContrato[];
+}
+
+export const salvarContrato = (id: string, dados: DadosContrato) =>
+  api<Fornecedor>(`${base}/${id}/contract`, { method: 'PUT', body: dados });

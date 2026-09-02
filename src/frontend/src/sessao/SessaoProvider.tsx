@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { quemSou, sair, type Usuario } from '@/api/auth';
 import { EVENTO_SESSAO_EXPIRADA, sessao } from '@/api/sessao';
+import { ErroApi } from '@/api/cliente';
 
 interface ContextoSessao {
   usuario: Usuario | null;
@@ -24,7 +25,12 @@ export function SessaoProvider({ children }: { children: ReactNode }) {
     if (sessao.ativa) {
       quemSou()
         .then((u) => { if (vivo) setUsuario(u); })
-        .catch(() => { if (vivo) { sessao.clear(); setUsuario(null); } })
+        .catch((e: unknown) => {
+          if (!vivo) return;
+          // só descarta a sessão quando o servidor diz que ela não vale mais
+          if (e instanceof ErroApi && e.status === 401) sessao.clear();
+          setUsuario(null);
+        })
         .finally(() => { if (vivo) setCarregando(false); });
     }
     const expirou = () => { if (vivo) setUsuario(null); };

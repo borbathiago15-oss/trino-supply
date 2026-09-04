@@ -22,6 +22,8 @@ import { Compliance } from '@/paginas/compliance/Compliance';
 import { FilaDeAtendimento } from '@/paginas/estoque/FilaDeAtendimento';
 import { PainelDeAtendimentos } from '@/paginas/estoque/PainelDeAtendimentos';
 import { GestaoDeSolicitacoes } from '@/paginas/triagem/GestaoDeSolicitacoes';
+import { DashboardSuprimentos } from '@/paginas/painel/DashboardSuprimentos';
+import { Insights } from '@/paginas/insights/Insights';
 import { SessaoProvider, useSessao } from '@/sessao/SessaoProvider';
 import { Carregando } from '@/componentes/basicos';
 import { LimiteErro } from '@/componentes/LimiteErro';
@@ -41,7 +43,7 @@ export function Rotas() {
       <Route path="/login" element={<Login />} />
       <Route element={<Protegida />}>
         <Route element={<AppLayout />}>
-          <Route index element={<Navigate to="/pedidos" replace />} />
+          <Route index element={<Navigate to="/painel" replace />} />
           <Route path="/pedidos" element={<PedidosLista />} />
           <Route path="/pedidos/:id" element={<PedidoDetalhe />} />
           <Route path="/fornecedores" element={<Fornecedores />} />
@@ -62,9 +64,11 @@ export function Rotas() {
           <Route path="/estoque/fila" element={<FilaDeAtendimento />} />
           <Route path="/estoque/atendimentos" element={<PainelDeAtendimentos />} />
           <Route path="/gestao-solicitacoes" element={<GestaoDeSolicitacoes />} />
+          <Route path="/painel" element={<DashboardSuprimentos />} />
+          <Route path="/insights" element={<Insights />} />
         </Route>
       </Route>
-      <Route path="*" element={<Navigate to="/pedidos" replace />} />
+      <Route path="*" element={<Navigate to="/painel" replace />} />
     </Routes>
   );
 }

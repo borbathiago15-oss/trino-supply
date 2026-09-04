@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   abrirProcesso, agruparPorFamilia, filaDeCotacao, ROTULO_TIPO, situacaoDaSelecao,
   type ScNaFila, type TipoCotacao,
@@ -14,11 +15,8 @@ import { useCarregar } from '@/util/useCarregar';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
-/**
- * Depois de abrir, o passo seguinte é convidar fornecedores — e essa tela ainda
- * é a do sistema clássico. O deep link já abre o processo recém-criado.
- */
-export const linkDoProcesso = (id?: string) => `/#tela=quotations${id ? `&rfq=${id}` : ''}`;
+/** Depois de abrir, o passo seguinte é convidar fornecedores, no próprio processo. */
+export const linkDoProcesso = (id?: string) => (id ? `/cotacoes/${id}` : '/cotacoes');
 
 /** Um item marcado carrega o centro e a família: as duas regras da seleção. */
 interface Marcado { id: string; centroCusto: string; familia: string }
@@ -26,6 +24,7 @@ interface Marcado { id: string; centroCusto: string; familia: string }
 export function AbrirCotacao() {
   const usuario = useUsuario();
   const { avisar } = useToast();
+  const navegar = useNavigate();
   const conduz = podeConduzirCotacao(usuario);
 
   const [marcados, setMarcados] = useState<Record<string, Marcado>>({});
@@ -66,7 +65,7 @@ export function AbrirCotacao() {
     try {
       const q = await abrirProcesso({ prItemIds: lista.map((m) => m.id), kind: tipo, deadline: prazo || null });
       avisar(`Processo ${q.number} aberto com ${lista.length} item(ns). Abrindo para convidar os fornecedores…`);
-      globalThis.location.assign(linkDoProcesso(q.id));
+      navegar(linkDoProcesso(q.id));
     } catch (e) { avisar(mensagem(e, 'Falha ao abrir o processo.'), 'erro'); }
     finally { setAbrindo(false); }
   }
@@ -94,7 +93,7 @@ export function AbrirCotacao() {
     if (abertos.length) avisar(`Abertos: ${abertos.join(' · ')}.`);
     if (falhas.length) avisar(falhas.join(' · '), 'erro');
     // com falha parcial, fica na fila para o comprador ver o que sobrou
-    if (abertos.length && !falhas.length) globalThis.location.assign(linkDoProcesso());
+    if (abertos.length && !falhas.length) navegar(linkDoProcesso());
     else recarregar();
   }
 

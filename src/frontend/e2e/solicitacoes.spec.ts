@@ -95,7 +95,7 @@ test.describe('Solicitações de Compra (React)', () => {
     await expect(page.locator('tr', { hasText: justificativa })).toHaveCount(0);
   });
 
-  test('central de aprovação: filas carregam e o processo abre no sistema clássico', async ({ page }) => {
+  test('central de aprovação: as filas carregam e o processo abre no React', async ({ page }) => {
     await abrirAutenticado(page, '/app/aprovacoes');
     await expect(page.locator('#titulo-pagina')).toHaveText('Central de Aprovação');
     // a tela sempre responde: ou lista processos, ou diz que não há nenhum
@@ -104,11 +104,11 @@ test.describe('Solicitações de Compra (React)', () => {
     const processos = page.getByTestId('tabela-processos');
     if (await processos.count()) {
       const link = processos.getByRole('link', { name: 'Analisar e decidir' }).first();
-      await expect(link).toHaveAttribute('href', /#tela=quotations&rfq=/);
+      await expect(link).toHaveAttribute('href', /\/cotacoes\//);
       await link.click();
-      // o legado abre já na tela de cotações, com o processo carregado
-      await expect(page).toHaveURL(/\/$|\/#/);
-      await expect(page.locator('#view-quotations')).toHaveClass(/active/);
+      // o processo agora abre no próprio React
+      await expect(page).toHaveURL(/\/app\/cotacoes\/[0-9a-f-]+$/);
+      await expect(page.locator('#titulo-pagina')).toHaveText('Processos de Cotação');
     }
   });
 });

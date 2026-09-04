@@ -26,10 +26,10 @@ describe('endereço da tela pelo id', () => {
     expect(enderecoDoId('triage')).toBe('/gestao-solicitacoes');
     expect(ehRotaInterna(enderecoDoId('pr-mine'))).toBe(true);
   });
-  it('tela ainda no clássico vira deep link, e id desconhecido também', () => {
-    expect(enderecoDoId('quotations')).toBe('/#tela=quotations');
+  it('id desconhecido pelo menu cai no clássico, que sabe lidar com ele', () => {
+    expect(enderecoDoId('quotations')).toBe('/cotacoes');
     expect(enderecoDoId('buy-demands')).toBe('/#tela=buy-demands');
-    expect(ehRotaInterna(enderecoDoId('quotations'))).toBe(false);
+    expect(ehRotaInterna(enderecoDoId('buy-demands'))).toBe(false);
   });
 });
 
@@ -39,13 +39,13 @@ describe('Central de Avisos', () => {
   it('cada aviso leva à tela dele, por rota interna ou pelo clássico', async () => {
     vi.mocked(listarAvisos).mockResolvedValue([
       aviso({ kind: 'DEVOLVIDO', view: 'pr-mine' }),
-      aviso({ kind: 'DEMANDA', view: 'quotations', severity: 'media', count: 4, text: '4 demandas aguardando pedido.' }),
+      aviso({ kind: 'DEMANDA', view: 'buy-demands', severity: 'media', count: 4, text: '4 demandas aguardando pedido.' }),
     ]);
     abrir();
     const lista = await screen.findByTestId('lista-avisos');
     expect(within(lista).getByText(/devolvido\(s\) para ajuste/)).toBeInTheDocument();
     expect(lista.querySelector('[data-aviso="DEVOLVIDO"]')).toHaveAttribute('href', '/solicitacoes');
-    expect(lista.querySelector('[data-aviso="DEMANDA"]')).toHaveAttribute('href', '/#tela=quotations');
+    expect(lista.querySelector('[data-aviso="DEMANDA"]')).toHaveAttribute('href', '/#tela=buy-demands');
   });
 
   it('sem aviso, diz que está tudo em dia', async () => {

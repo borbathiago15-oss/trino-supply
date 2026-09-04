@@ -22,11 +22,11 @@ export const ehSubgrupo = (x: ItemMenu | SubgrupoMenu): x is SubgrupoMenu => 'fi
 
 const sempre = () => true;
 
-/** Espelho do `MENU` do legado; só "Pedidos de Compra" já vive no React. */
+/** Espelho do `MENU` do legado; `legado:` marca o que ainda não migrou. */
 export const MENU: GrupoMenu[] = [
   { titulo: null, itens: [
     { id: 'supply-dash', rotulo: 'Dashboard de Suprimentos', legado: 'supply-dash', mostrar: sempre },
-    { id: 'compliance', rotulo: 'Compliance', legado: 'compliance', modulo: 'COMPLIANCE', mostrar: podeVerCompliance },
+    { id: 'compliance', rotulo: 'Compliance', rota: '/compliance', modulo: 'COMPLIANCE', mostrar: podeVerCompliance },
     { id: 'insights', rotulo: 'Insights & Executivo', legado: 'insights', modulo: 'INSIGHTS', mostrar: podeVerCompliance },
   ]},
   { titulo: 'Solicitações de Compra', modulo: 'SOLICITACOES', itens: [
@@ -38,8 +38,8 @@ export const MENU: GrupoMenu[] = [
     { id: 'pr-approvals', rotulo: 'Central de Aprovação', rota: '/aprovacoes', modulo: 'APROVACAO', mostrar: podeDecidirSc },
   ]},
   { titulo: 'Material', modulo: 'MATERIAL', itens: [
-    { id: 'mr-new', rotulo: 'Solicitar Material', legado: 'mr-new', mostrar: podePedirMaterial },
-    { id: 'mr-mine', rotulo: 'Minhas Solicitações', legado: 'mr-mine', mostrar: sempre },
+    { id: 'mr-new', rotulo: 'Solicitar Material', rota: '/material/nova', mostrar: podePedirMaterial },
+    { id: 'mr-mine', rotulo: 'Minhas Solicitações', rota: '/material', mostrar: sempre },
   ]},
   { titulo: 'Estoque', modulo: 'ESTOQUE', itens: [
     { id: 'wh-queue', rotulo: 'Fila de Atendimento', legado: 'wh-queue', mostrar: podeAlmoxarifado },
@@ -53,8 +53,8 @@ export const MENU: GrupoMenu[] = [
       { id: 'quotations', rotulo: 'Processos de Cotação', legado: 'quotations', mostrar: podeVerCotacao },
     ]},
     { id: 'buy-orders', rotulo: 'Pedidos de Compra', rota: '/pedidos', mostrar: sempre },
-    { id: 'contracts', rotulo: 'Contratos', legado: 'contracts', modulo: 'CONTRATOS', mostrar: (u) => podeComprar(u) || ehAdmin(u) },
-    { id: 'scorecard', rotulo: 'Scorecard de Fornecedores', legado: 'scorecard', mostrar: (u) => podeComprar(u) || podeVerCompliance(u) },
+    { id: 'contracts', rotulo: 'Contratos', rota: '/contratos', modulo: 'CONTRATOS', mostrar: (u) => podeComprar(u) || ehAdmin(u) },
+    { id: 'scorecard', rotulo: 'Scorecard de Fornecedores', rota: '/scorecard', mostrar: (u) => podeComprar(u) || podeVerCompliance(u) },
   ]},
   { titulo: 'Cadastros', itens: [
     { rotulo: 'Produtos', filhos: [

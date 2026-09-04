@@ -162,7 +162,8 @@ test.describe('Cadastros (React)', () => {
     await expect(page.locator('#user-name')).not.toBeEmpty();
 
     await page.locator('.nav-group', { hasText: 'Cadastros' }).click();
-    await page.locator('a.nav-item', { hasText: 'Fornecedores' }).click();
+    // 'Fornecedores' também aparece em 'Scorecard de Fornecedores': casa o rótulo inteiro
+    await page.locator('a.nav-item[data-href="suppliers"]').click();
     await expect(page).toHaveURL(/\/app\/fornecedores$/);
     await expect(page.locator('#titulo-pagina')).toHaveText('Fornecedores');
 

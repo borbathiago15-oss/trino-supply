@@ -25,7 +25,7 @@ import { aprovarMaterial, listarSolicitacoesMaterial, recusarMaterial } from '@/
 import { aprovacoesPendentes, devolverSolicitacao } from '@/api/solicitacoes';
 
 const processo: ProcessoParaAprovar = {
-  id: 'q1', number: 'RFQ-2026-000001', status: 'AGUARDANDO_APROVACAO', costCenter: 'BAH-001',
+  id: 'q1', number: 'RFQ-2026-000001', status: 'AGUARDANDO_GERENTE', costCenter: 'BAH-001',
   sourcePrNumber: 'SC-2026-000001', justification: 'Reposição de EPI',
   selection: { winnerProposalId: 'p2', justification: 'menor preço' },
   proposals: [

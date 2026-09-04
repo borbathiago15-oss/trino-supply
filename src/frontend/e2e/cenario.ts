@@ -60,6 +60,24 @@ export async function prepararCenario() {
   if (!locais.some((l) => l.code === 'ALM-01'))
     await chamar('/api/v1/inventory/locations', token, { code: 'ALM-01', name: 'Almoxarifado Central' });
 
+  // Centro de custo, família e produto: as telas que escolhem um deles em uma
+  // lista (Material, SC, lote) não podem depender de outra spec ter rodado antes.
+  const { items: centros } = await chamar<{ items: { code: string }[] }>('/api/v1/cost-centers/', token);
+  if (!centros.some((c) => c.code === 'E2E-001'))
+    await chamar('/api/v1/cost-centers/', token, { code: 'E2E-001', name: 'Centro de Custo do Cenário E2E' });
+
+  const { items: familias } = await chamar<{ items: { name: string }[] }>('/api/v1/product-families/', token);
+  if (!familias.some((f) => f.name === 'EPI CENARIO E2E'))
+    await chamar('/api/v1/product-families/', token, { name: 'EPI CENARIO E2E' });
+
+  const { items: produtos } = await chamar<{ items: { code: string }[] }>(
+    '/api/v1/items/?family=' + encodeURIComponent('EPI CENARIO E2E'), token);
+  if (!produtos.length)
+    await chamar('/api/v1/items/', token, {
+      code: 'E2E-EPI-001', description: 'Luva nitrílica do cenário E2E', family: 'EPI CENARIO E2E',
+      unitOfMeasure: 'PAR', referencePrice: 12.5, stockControlled: true, purchasable: true,
+    });
+
   const pedido = await chamar<{ id: string; number: string }>('/api/v1/purchase-orders/', token, {
     supplierId: fornecedor.id,
     notes: 'Pedido criado pelo cenário E2E do frontend React',

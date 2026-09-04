@@ -37,3 +37,29 @@ export function Dado({ rotulo, children }: { rotulo: string; children: ReactNode
     </div>
   );
 }
+
+/** Cartão de indicador: rótulo, número grande e a leitura em uma linha. */
+export function Kpi({ rotulo, valor, detalhe }: { rotulo: string; valor: ReactNode; detalhe?: ReactNode }) {
+  return (
+    <div className="rounded-painel border border-borda bg-superficie px-4 py-3">
+      <div className="text-[11.5px] font-bold uppercase tracking-wide text-texto-suave">{rotulo}</div>
+      <div className="mt-1 text-[22px] font-bold leading-tight">{valor}</div>
+      {detalhe && <div className="sub mt-0.5">{detalhe}</div>}
+    </div>
+  );
+}
+
+/** Faixa de KPIs que quebra sozinha no celular. */
+export const FaixaKpis = ({ children }: { children: ReactNode }) =>
+  <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">{children}</div>;
+
+/** Seletor de janela dos painéis analíticos (3, 6 ou 12 meses). */
+export function SeletorJanela({ id, valor, aoMudar, opcoes }:
+  { id: string; valor: number; aoMudar: (v: number) => void; opcoes: readonly number[] }) {
+  return (
+    <select id={id} aria-label="Janela de análise" className="w-auto" value={valor}
+      onChange={(e) => aoMudar(Number(e.target.value))}>
+      {opcoes.map((m) => <option key={m} value={m}>Últimos {m} meses</option>)}
+    </select>
+  );
+}

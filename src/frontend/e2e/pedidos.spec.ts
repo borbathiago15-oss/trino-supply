@@ -92,7 +92,8 @@ test.describe('Pedidos de Compra (React)', () => {
     await page.goto('/app/pedidos');
     await expect(page.locator('#titulo-pagina')).toHaveText('Pedidos de Compra');
     await expect(page.getByTestId('tabela-pedidos')).toBeVisible();
-    // e o menu do React devolve ao legado na tela certa
-    await page.locator('a[data-legado="triage"]').click({ trial: true }).catch(() => {});
+    // e o menu do React aponta ao legado na tela certa para o que ainda não migrou
+    await expect(page.locator('a[data-legado="supply-dash"]'))
+      .toHaveAttribute('href', '/#tela=supply-dash');
   });
 });

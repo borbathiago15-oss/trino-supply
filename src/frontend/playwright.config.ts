@@ -20,6 +20,9 @@ export default defineConfig({
   reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: process.env.API_URL ?? 'http://127.0.0.1:5099',
+    // uma espera por elemento que não existe falha com a mensagem certa, em vez
+    // de consumir o timeout do teste inteiro e reportar só "Test timeout"
+    actionTimeout: 15_000,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     locale: 'pt-BR',

@@ -42,11 +42,11 @@ export const MENU: GrupoMenu[] = [
     { id: 'mr-mine', rotulo: 'Minhas Solicitações', rota: '/material', mostrar: sempre },
   ]},
   { titulo: 'Estoque', modulo: 'ESTOQUE', itens: [
-    { id: 'wh-queue', rotulo: 'Fila de Atendimento', legado: 'wh-queue', mostrar: podeAlmoxarifado },
-    { id: 'wh-panel', rotulo: 'Painel de Atendimentos', legado: 'wh-panel', mostrar: podeAlmoxarifado },
+    { id: 'wh-queue', rotulo: 'Fila de Atendimento', rota: '/estoque/fila', mostrar: podeAlmoxarifado },
+    { id: 'wh-panel', rotulo: 'Painel de Atendimentos', rota: '/estoque/atendimentos', mostrar: podeAlmoxarifado },
   ]},
   { titulo: 'Compras', modulo: 'COMPRAS', itens: [
-    { id: 'triage', rotulo: 'Gestão de Solicitações', legado: 'triage',
+    { id: 'triage', rotulo: 'Gestão de Solicitações', rota: '/gestao-solicitacoes',
       mostrar: (u) => podeTriar(u) || podeComprar(u) || podeAlmoxarifado(u) },
     { rotulo: 'Cotações', filhos: [
       { id: 'rfq-queue', rotulo: 'Abrir Cotação', legado: 'rfq-queue', mostrar: podeVerCotacao },

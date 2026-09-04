@@ -19,6 +19,9 @@ import { MinhasSolicitacoes } from '@/paginas/material/MinhasSolicitacoes';
 import { Contratos } from '@/paginas/contratos/Contratos';
 import { Scorecard } from '@/paginas/scorecard/Scorecard';
 import { Compliance } from '@/paginas/compliance/Compliance';
+import { FilaDeAtendimento } from '@/paginas/estoque/FilaDeAtendimento';
+import { PainelDeAtendimentos } from '@/paginas/estoque/PainelDeAtendimentos';
+import { GestaoDeSolicitacoes } from '@/paginas/triagem/GestaoDeSolicitacoes';
 import { SessaoProvider, useSessao } from '@/sessao/SessaoProvider';
 import { Carregando } from '@/componentes/basicos';
 import { LimiteErro } from '@/componentes/LimiteErro';
@@ -56,6 +59,9 @@ export function Rotas() {
           <Route path="/contratos" element={<Contratos />} />
           <Route path="/scorecard" element={<Scorecard />} />
           <Route path="/compliance" element={<Compliance />} />
+          <Route path="/estoque/fila" element={<FilaDeAtendimento />} />
+          <Route path="/estoque/atendimentos" element={<PainelDeAtendimentos />} />
+          <Route path="/gestao-solicitacoes" element={<GestaoDeSolicitacoes />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/pedidos" replace />} />

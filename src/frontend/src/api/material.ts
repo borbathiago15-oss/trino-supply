@@ -35,6 +35,8 @@ export interface ItemMaterial {
   quantity: number;
   unitOfMeasure: string;
   approvedQuantity?: number | null;
+  /** O que vale para o atendimento: o aprovado quando houve corte, senão o pedido. */
+  effectiveQuantity?: number;
   fulfilledQuantity?: number;
   pendingQuantity?: number;
   status?: SituacaoItemMaterial;
@@ -49,6 +51,9 @@ export interface SolicitacaoMaterial {
   requesterLabel: string;
   notes: string | null;
   fulfilledByLabel?: string | null;
+  approvedByLabel?: string | null;
+  assignedToId?: string | null;
+  assignedToLabel?: string | null;
   purchaseRequisitionNumber?: string | null;
   cancelReason?: string | null;
   decisionReason?: string | null;
@@ -86,3 +91,54 @@ export const cancelarMaterial = (id: string, reason: string) =>
 export const podeCancelarMaterial = (r: SolicitacaoMaterial, usuarioId: string) =>
   (r.status === 'AGUARDANDO_ALMOXARIFADO' || r.status === 'AGUARDANDO_APROVACAO')
   && r.requesterId === usuarioId;
+
+// ---- fila e painel do almoxarifado ----------------------------------------
+
+/** Só entra na fila o que o responsável do centro já aprovou. */
+export const filaDoAlmoxarifado = async (somenteMinhas: boolean, signal?: AbortSignal) =>
+  (await api<{ items: SolicitacaoMaterial[] }>(
+    `${base}/?queue=true${somenteMinhas ? '&mine=true' : ''}`, { signal })).items;
+
+/**
+ * Atendimento: quantidade entregue por item. O que faltar vira solicitação de
+ * compra no nome de quem pediu — por isso a resposta traz o número da SC.
+ */
+export const atenderMaterial = (id: string, items: { itemId: string; quantity: number }[]) =>
+  api<SolicitacaoMaterial>(`${base}/${id}/fulfill`, { method: 'POST', body: { items } });
+
+export interface LinhaPainel {
+  id: string;
+  number: string;
+  costCenter: string;
+  requesterLabel: string;
+  createdAt: string;
+  approvedAt: string | null;
+  fulfilledAt: string | null;
+  fulfilledByLabel: string | null;
+  purchaseRequisitionNumber: string | null;
+  items: number;
+  pending: number;
+  summary: string | null;
+}
+
+export interface GrupoPainel {
+  costCenter?: string;
+  requesterLabel?: string;
+  total: number;
+  emAndamento: number;
+  concluidos: number;
+  parciais: number;
+}
+
+export interface PainelAtendimentos {
+  totals: { aguardandoAprovacao: number; emAndamento: number; concluidos: number; parciais: number };
+  aguardandoAprovacao: LinhaPainel[];
+  emAndamento: LinhaPainel[];
+  concluidos: LinhaPainel[];
+  parciais: LinhaPainel[];
+  porCentro: GrupoPainel[];
+  porSolicitante: GrupoPainel[];
+}
+
+export const painelDeAtendimentos = (signal?: AbortSignal) =>
+  api<PainelAtendimentos>(`${base}/panel`, { signal });

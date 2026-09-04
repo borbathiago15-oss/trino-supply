@@ -1359,11 +1359,11 @@
         { id: 'mr-mine', label: 'Minhas Solicitações', href: '/app/material', show: () => true },
       ]},
       { title: 'Estoque', module: 'ESTOQUE', items: [
-        { id: 'wh-queue', label: 'Fila de Atendimento', show: canWarehouse },
-        { id: 'wh-panel', label: 'Painel de Atendimentos', show: canWarehouse },
+        { id: 'wh-queue', label: 'Fila de Atendimento', href: '/app/estoque/fila', show: canWarehouse },
+        { id: 'wh-panel', label: 'Painel de Atendimentos', href: '/app/estoque/atendimentos', show: canWarehouse },
       ]},
       { title: 'Compras', module: 'COMPRAS', items: [
-        { id: 'triage', label: 'Gestão de Solicitações', show: () => canTriage() || canBuy() || canWarehouse() },
+        { id: 'triage', label: 'Gestão de Solicitações', href: '/app/gestao-solicitacoes', show: () => canTriage() || canBuy() || canWarehouse() },
         { label: 'Cotações', children: [
           { id: 'rfq-queue', label: 'Abrir Cotação', show: () => canViewRfq() },
           { id: 'quotations', label: 'Processos de Cotação', show: () => canViewRfq() },

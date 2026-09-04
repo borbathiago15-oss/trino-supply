@@ -1,4 +1,5 @@
 import { api, enviarArquivo } from './cliente';
+import { classeDoTom } from '@/dominio/tons';
 
 /** Situação bruta da SC. A tela prefere `processStatusLabel` quando a API manda. */
 export type SituacaoSc = 'DRAFT' | 'SUBMITTED' | 'IN_APPROVAL' | 'APPROVED' | 'REJECTED' | 'RETURNED' | 'CANCELLED';
@@ -19,15 +20,6 @@ export const ROTULO_PRIORIDADE: Record<Prioridade, string> = {
 };
 
 /** Tons que a API manda no status do processo, traduzidos para classes. */
-const TOM: Record<string, string> = {
-  on: 'bg-ok-fundo text-ok',
-  off: 'bg-slate-100 text-slate-500',
-  dev: 'bg-slate-100 text-slate-600',
-  warn: 'bg-aviso-fundo text-aviso',
-  orange: 'bg-orange-50 text-orange-800',
-  purple: 'bg-purple-50 text-purple-800',
-  teal: 'bg-teal-50 text-teal-800',
-};
 
 export interface ItemSc {
   itemId: string;
@@ -86,7 +78,7 @@ export interface SolicitacaoCompra {
 /** Situação a exibir: a do processo tem prioridade sobre a bruta da SC. */
 export function situacaoDaSc(r: Pick<SolicitacaoCompra, 'status' | 'processStatusLabel' | 'processStatusTone'>) {
   if (r.processStatusLabel)
-    return { rotulo: r.processStatusLabel, classe: TOM[r.processStatusTone ?? ''] ?? 'bg-slate-100 text-slate-600' };
+    return { rotulo: r.processStatusLabel, classe: classeDoTom(r.processStatusTone) };
   return ROTULO_SC[r.status] ?? { rotulo: r.status, classe: '' };
 }
 

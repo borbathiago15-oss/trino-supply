@@ -11,9 +11,14 @@ export function Dialogo({ titulo, children, acoes, aoFechar }:
   useEffect(() => {
     const tecla = (ev: KeyboardEvent) => { if (ev.key === 'Escape') aoFechar(); };
     document.addEventListener('keydown', tecla);
-    caixa.current?.querySelector<HTMLElement>('button, input, select, textarea')?.focus();
     return () => document.removeEventListener('keydown', tecla);
   }, [aoFechar]);
+
+  // o foco inicial vai uma vez só: `aoFechar` costuma ser uma função nova a cada
+  // render, e refocar aí roubaria o cursor de quem está digitando no 2º campo
+  useEffect(() => {
+    caixa.current?.querySelector<HTMLElement>('button, input, select, textarea')?.focus();
+  }, []);
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4"

@@ -2579,11 +2579,10 @@ app.MapGet("/api/v1/purchase-orders/{id:guid}/pdf", async (Guid id, AppDbContext
     return Results.File(pdf, "application/pdf", $"{order.Number}.pdf");
 }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
 
-app.MapGet("/portal", (IWebHostEnvironment env, HttpContext ctx) =>
-{
-    ctx.Response.Headers.CacheControl = "no-cache, must-revalidate";
-    return Results.File(Path.Combine(env.WebRootPath, "portal.html"), "text/html");
-}).AllowAnonymous();
+// O portal do fornecedor agora é uma tela React. A URL antiga continua valendo —
+// ela está nos convites já enviados — e leva à rota nova. O portal.html segue no
+// wwwroot como rota de volta, acessível direto em /portal.html.
+app.MapGet("/portal", () => Results.Redirect("/app/portal")).AllowAnonymous();
 
 // Frontend React (build do Vite em wwwroot/app): qualquer rota sob /app/ cai no
 // index.html dele, e o roteador do navegador assume dali (arquivos com extensão continuam

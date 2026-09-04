@@ -39,8 +39,8 @@ const abrir = () => render(
 
 describe('destino depois de abrir', () => {
   it('vai para a tela de processos do clássico, já no processo novo', () => {
-    expect(linkDoProcesso('q1')).toBe('/#tela=quotations&rfq=q1');
-    expect(linkDoProcesso()).toBe('/#tela=quotations');
+    expect(linkDoProcesso('q1')).toBe('/cotacoes/q1');
+    expect(linkDoProcesso()).toBe('/cotacoes');
   });
 });
 

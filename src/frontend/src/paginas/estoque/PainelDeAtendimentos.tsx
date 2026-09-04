@@ -130,7 +130,7 @@ export function PainelDeAtendimentos() {
       )}
       {visivel('parcial') && (
         <Painel id="bloco-parcial" titulo="Concluídos parcialmente — aguardando a compra do faltante"
-          acoes={<a className="botao-secundario" href="/#tela=quotations">Ver os processos de compra</a>}>
+          acoes={<Link className="botao-secundario" to="/cotacoes">Ver os processos de compra</Link>}>
           <Lista linhas={dados.parciais} coluna="Faltante" marca="painel-parcial" />
         </Painel>
       )}

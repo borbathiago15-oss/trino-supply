@@ -56,7 +56,7 @@ describe('regras da central', () => {
     expect(propostaVencedora({ ...processo, selection: null })).toBeNull();
   });
   it('o processo abre no sistema clássico, que ainda tem a tela de cotações', () => {
-    expect(linkDoProcesso('q1')).toBe('/#tela=quotations&rfq=q1');
+    expect(linkDoProcesso('q1')).toBe('/cotacoes/q1');
   });
 });
 
@@ -76,7 +76,7 @@ describe('<CentralDeAprovacao />', () => {
     const proc = within(screen.getByTestId('tabela-processos'));
     expect(proc.getByText('Beta Química')).toBeInTheDocument();
     expect(proc.getByText(/980,00/)).toBeInTheDocument();
-    expect(proc.getByRole('link', { name: 'Analisar e decidir' })).toHaveAttribute('href', '/#tela=quotations&rfq=q1');
+    expect(proc.getByRole('link', { name: 'Analisar e decidir' })).toHaveAttribute('href', '/cotacoes/q1');
 
     expect(within(screen.getByTestId('tabela-material')).getByText('Ana Paula')).toBeInTheDocument();
     expect(within(screen.getByTestId('tabela-scs')).getByText('SC-2026-000009')).toBeInTheDocument();

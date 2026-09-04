@@ -21,7 +21,7 @@ const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message
  * A tela de Cotações ainda é a do sistema clássico: o botão leva para lá com o
  * processo já aberto. Sai daqui quando Cotações for migrada.
  */
-export const linkDoProcesso = (id: string) => `/#tela=quotations&rfq=${id}`;
+export const linkDoProcesso = (id: string) => `/cotacoes/${id}`;
 
 type Acao =
   | { tipo: 'aprovar-sc'; sc: SolicitacaoCompra }

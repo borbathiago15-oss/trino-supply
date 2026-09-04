@@ -25,6 +25,8 @@ import { GestaoDeSolicitacoes } from '@/paginas/triagem/GestaoDeSolicitacoes';
 import { DashboardSuprimentos } from '@/paginas/painel/DashboardSuprimentos';
 import { Insights } from '@/paginas/insights/Insights';
 import { AbrirCotacao } from '@/paginas/cotacoes/AbrirCotacao';
+import { ProcessosDeCotacao } from '@/paginas/cotacoes/ProcessosDeCotacao';
+import { ProcessoDetalhe } from '@/paginas/cotacoes/ProcessoDetalhe';
 import { SessaoProvider, useSessao } from '@/sessao/SessaoProvider';
 import { Carregando } from '@/componentes/basicos';
 import { LimiteErro } from '@/componentes/LimiteErro';
@@ -67,7 +69,9 @@ export function Rotas() {
           <Route path="/gestao-solicitacoes" element={<GestaoDeSolicitacoes />} />
           <Route path="/painel" element={<DashboardSuprimentos />} />
           <Route path="/insights" element={<Insights />} />
+          <Route path="/cotacoes" element={<ProcessosDeCotacao />} />
           <Route path="/cotacoes/abrir" element={<AbrirCotacao />} />
+          <Route path="/cotacoes/:id" element={<ProcessoDetalhe />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/painel" replace />} />

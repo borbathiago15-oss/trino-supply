@@ -49,7 +49,7 @@ export const MENU: GrupoMenu[] = [
     { id: 'triage', rotulo: 'Gestão de Solicitações', rota: '/gestao-solicitacoes',
       mostrar: (u) => podeTriar(u) || podeComprar(u) || podeAlmoxarifado(u) },
     { rotulo: 'Cotações', filhos: [
-      { id: 'rfq-queue', rotulo: 'Abrir Cotação', legado: 'rfq-queue', mostrar: podeVerCotacao },
+      { id: 'rfq-queue', rotulo: 'Abrir Cotação', rota: '/cotacoes/abrir', mostrar: podeVerCotacao },
       { id: 'quotations', rotulo: 'Processos de Cotação', legado: 'quotations', mostrar: podeVerCotacao },
     ]},
     { id: 'buy-orders', rotulo: 'Pedidos de Compra', rota: '/pedidos', mostrar: sempre },

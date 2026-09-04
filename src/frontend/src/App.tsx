@@ -24,6 +24,7 @@ import { PainelDeAtendimentos } from '@/paginas/estoque/PainelDeAtendimentos';
 import { GestaoDeSolicitacoes } from '@/paginas/triagem/GestaoDeSolicitacoes';
 import { DashboardSuprimentos } from '@/paginas/painel/DashboardSuprimentos';
 import { Insights } from '@/paginas/insights/Insights';
+import { AbrirCotacao } from '@/paginas/cotacoes/AbrirCotacao';
 import { SessaoProvider, useSessao } from '@/sessao/SessaoProvider';
 import { Carregando } from '@/componentes/basicos';
 import { LimiteErro } from '@/componentes/LimiteErro';
@@ -66,6 +67,7 @@ export function Rotas() {
           <Route path="/gestao-solicitacoes" element={<GestaoDeSolicitacoes />} />
           <Route path="/painel" element={<DashboardSuprimentos />} />
           <Route path="/insights" element={<Insights />} />
+          <Route path="/cotacoes/abrir" element={<AbrirCotacao />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/painel" replace />} />

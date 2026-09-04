@@ -1365,7 +1365,7 @@
       { title: 'Compras', module: 'COMPRAS', items: [
         { id: 'triage', label: 'Gestão de Solicitações', href: '/app/gestao-solicitacoes', show: () => canTriage() || canBuy() || canWarehouse() },
         { label: 'Cotações', children: [
-          { id: 'rfq-queue', label: 'Abrir Cotação', show: () => canViewRfq() },
+          { id: 'rfq-queue', label: 'Abrir Cotação', href: '/app/cotacoes/abrir', show: () => canViewRfq() },
           { id: 'quotations', label: 'Processos de Cotação', show: () => canViewRfq() },
         ]},
         // telas já migradas para o React abrem o app novo na mesma aba (sessão compartilhada)

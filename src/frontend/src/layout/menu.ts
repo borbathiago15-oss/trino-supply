@@ -25,9 +25,9 @@ const sempre = () => true;
 /** Espelho do `MENU` do legado; `legado:` marca o que ainda não migrou. */
 export const MENU: GrupoMenu[] = [
   { titulo: null, itens: [
-    { id: 'supply-dash', rotulo: 'Dashboard de Suprimentos', legado: 'supply-dash', mostrar: sempre },
+    { id: 'supply-dash', rotulo: 'Dashboard de Suprimentos', rota: '/painel', mostrar: sempre },
     { id: 'compliance', rotulo: 'Compliance', rota: '/compliance', modulo: 'COMPLIANCE', mostrar: podeVerCompliance },
-    { id: 'insights', rotulo: 'Insights & Executivo', legado: 'insights', modulo: 'INSIGHTS', mostrar: podeVerCompliance },
+    { id: 'insights', rotulo: 'Insights & Executivo', rota: '/insights', modulo: 'INSIGHTS', mostrar: podeVerCompliance },
   ]},
   { titulo: 'Solicitações de Compra', modulo: 'SOLICITACOES', itens: [
     { rotulo: 'Nova Solicitação', filhos: [
@@ -95,3 +95,21 @@ export function itensVisiveis(u: Perfil): GrupoMenu[] {
 
 /** Endereço de um item: rota do React ou deep link na tela do legado. */
 export const enderecoDe = (i: ItemMenu) => i.rota ?? `/#tela=${i.legado}`;
+
+/**
+ * Endereço a partir do id da tela — a Central de Avisos manda o id da view
+ * (`pr-mine`, `triage`…) e não sabe o que já migrou. Id desconhecido cai no
+ * legado, que sabe lidar com uma view que não existe mais.
+ */
+export function enderecoDoId(id: string): string {
+  for (const grupo of MENU)
+    for (const item of grupo.itens) {
+      const candidatos = ehSubgrupo(item) ? item.filhos : [item];
+      const achado = candidatos.find((i) => i.id === id);
+      if (achado) return enderecoDe(achado);
+    }
+  return `/#tela=${id}`;
+}
+
+/** Um endereço do React é uma rota interna; o resto sai para o legado. */
+export const ehRotaInterna = (endereco: string) => endereco.startsWith('/') && !endereco.startsWith('/#');

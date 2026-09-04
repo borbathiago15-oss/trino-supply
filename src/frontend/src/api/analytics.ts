@@ -87,3 +87,84 @@ export const relatorioDeCompliance = async (signal?: AbortSignal) => {
 /** 100 é conformidade plena; abaixo de 70 o processo acumulou penalidades sérias. */
 export const classeDoScore = (s: number) =>
   s === 100 ? 'bg-ok-fundo text-ok' : s >= 70 ? 'bg-aviso-fundo text-aviso' : 'bg-perigo-fundo text-perigo';
+
+// ---- Insights & Executivo --------------------------------------------------
+
+export interface VisaoExecutiva {
+  spend: number;
+  orders: number;
+  processes: number;
+  closedProcesses: number;
+  savingTotal: number;
+  referenceSavingTotal: number;
+  costAvoidanceTotal: number;
+  otifPercent: number | null;
+  complianceAverage: number | null;
+}
+
+export type SeveridadeInsight = 'alta' | 'media' | 'info';
+
+export interface Achado {
+  code: string;
+  kind: string;
+  severity: SeveridadeInsight;
+  title: string;
+  evidence: string;
+}
+
+export const CLASSE_ACHADO: Record<SeveridadeInsight, string> = {
+  alta: 'border-perigo/30 bg-perigo-fundo',
+  media: 'border-aviso/30 bg-aviso-fundo',
+  info: 'border-borda bg-superficie-suave',
+};
+
+export const BADGE_ACHADO: Record<SeveridadeInsight, string> = {
+  alta: 'bg-perigo-fundo text-perigo',
+  media: 'bg-aviso-fundo text-aviso',
+  info: 'bg-slate-100 text-slate-600',
+};
+
+export interface Backlog {
+  total: number;
+  unassigned: number;
+  aging: { label: string; count: number }[];
+  byAssignee: { label: string; count: number }[];
+}
+
+export interface RelatorioInsights {
+  months: number;
+  executive: VisaoExecutiva;
+  backlog: Backlog;
+  insights: Achado[];
+}
+
+export const relatorioDeInsights = async (meses: Janela, signal?: AbortSignal) => {
+  const r = await api<RelatorioInsights>(`/api/v1/analytics/insights?months=${meses}`, { signal });
+  return {
+    ...r,
+    insights: r.insights ?? [],
+    backlog: { ...r.backlog, aging: r.backlog?.aging ?? [], byAssignee: r.backlog?.byAssignee ?? [] },
+  };
+};
+
+// ---- TCO por produto -------------------------------------------------------
+
+export interface LinhaTco {
+  catalogItemId: string;
+  code: string | null;
+  description: string;
+  family: string | null;
+  category: string | null;
+  unitOfMeasure: string | null;
+  quantity: number;
+  orders: number;
+  itemsValue: number;
+  extrasValue: number;
+  tcoTotal: number;
+  unitPriceAvg: number;
+  tcoUnitAvg: number;
+  extrasPercent: number;
+}
+
+export const tcoPorProduto = async (meses: Janela, signal?: AbortSignal) =>
+  (await api<{ items: LinhaTco[] }>(`/api/v1/analytics/tco?months=${meses}`, { signal })).items ?? [];

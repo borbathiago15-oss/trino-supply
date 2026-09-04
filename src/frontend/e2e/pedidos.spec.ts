@@ -92,8 +92,12 @@ test.describe('Pedidos de Compra (React)', () => {
     await page.goto('/app/pedidos');
     await expect(page.locator('#titulo-pagina')).toHaveText('Pedidos de Compra');
     await expect(page.getByTestId('tabela-pedidos')).toBeVisible();
-    // e o menu do React aponta ao legado na tela certa para o que ainda não migrou
-    await expect(page.locator('a[data-legado="supply-dash"]'))
-      .toHaveAttribute('href', '/#tela=supply-dash');
+    // e todo item ainda não migrado aponta para a view certa do clássico.
+    // Sem fixar um id: conforme a migração avança, sobram menos — e quando não
+    // sobrar nenhum, a asserção deixa de ter o que verificar, sem quebrar.
+    for (const link of await page.locator('a[data-legado]').all()) {
+      const id = await link.getAttribute('data-legado');
+      await expect(link).toHaveAttribute('href', `/#tela=${id}`);
+    }
   });
 });

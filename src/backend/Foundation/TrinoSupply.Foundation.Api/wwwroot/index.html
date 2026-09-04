@@ -1342,9 +1342,9 @@
     // ---- menu lateral (grupo → subgrupo → tela) ----
     const MENU = [
       { title: null, items: [
-        { id: 'supply-dash', label: 'Dashboard de Suprimentos', show: () => true },
+        { id: 'supply-dash', label: 'Dashboard de Suprimentos', href: '/app/painel', show: () => true },
         { id: 'compliance', label: 'Compliance', href: '/app/compliance', module: 'COMPLIANCE', show: () => canViewCompliance() },
-        { id: 'insights', label: 'Insights & Executivo', module: 'INSIGHTS', show: () => canViewCompliance() },
+        { id: 'insights', label: 'Insights & Executivo', href: '/app/insights', module: 'INSIGHTS', show: () => canViewCompliance() },
       ]},
       { title: 'Solicitações de Compra', module: 'SOLICITACOES', items: [
         { label: 'Nova Solicitação', children: [

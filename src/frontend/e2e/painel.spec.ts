@@ -8,7 +8,9 @@ test.describe('Dashboard de Suprimentos e Insights (React)', () => {
     await expect(page.locator('#titulo-pagina')).toHaveText('Dashboard de Suprimentos');
     await expect(page.locator('body')).toContainText('Central de Avisos');
 
+    // espera a leitura resolver antes de ramificar: com ou sem aviso, algo aparece
     const avisos = page.getByTestId('lista-avisos');
+    await expect(avisos.or(page.getByText('Tudo em dia por aqui: nenhum aviso pendente. ✔'))).toBeVisible();
     if (await avisos.count()) {
       // todo aviso aponta para alguma tela — migrada (rota) ou clássica (deep link)
       const primeiro = avisos.locator('a').first();

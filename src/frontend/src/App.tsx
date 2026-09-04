@@ -14,6 +14,11 @@ import { NovaSolicitacao } from '@/paginas/solicitacoes/NovaSolicitacao';
 import { SolicitacaoEmLote } from '@/paginas/solicitacoes/SolicitacaoEmLote';
 import { MeusPedidos } from '@/paginas/solicitacoes/MeusPedidos';
 import { CentralDeAprovacao } from '@/paginas/aprovacoes/CentralDeAprovacao';
+import { SolicitarMaterial } from '@/paginas/material/SolicitarMaterial';
+import { MinhasSolicitacoes } from '@/paginas/material/MinhasSolicitacoes';
+import { Contratos } from '@/paginas/contratos/Contratos';
+import { Scorecard } from '@/paginas/scorecard/Scorecard';
+import { Compliance } from '@/paginas/compliance/Compliance';
 import { SessaoProvider, useSessao } from '@/sessao/SessaoProvider';
 import { Carregando } from '@/componentes/basicos';
 import { LimiteErro } from '@/componentes/LimiteErro';
@@ -46,6 +51,11 @@ export function Rotas() {
           <Route path="/solicitacoes/nova" element={<NovaSolicitacao />} />
           <Route path="/solicitacoes/lote" element={<SolicitacaoEmLote />} />
           <Route path="/aprovacoes" element={<CentralDeAprovacao />} />
+          <Route path="/material" element={<MinhasSolicitacoes />} />
+          <Route path="/material/nova" element={<SolicitarMaterial />} />
+          <Route path="/contratos" element={<Contratos />} />
+          <Route path="/scorecard" element={<Scorecard />} />
+          <Route path="/compliance" element={<Compliance />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/pedidos" replace />} />

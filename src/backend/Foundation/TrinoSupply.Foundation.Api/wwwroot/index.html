@@ -1343,7 +1343,7 @@
     const MENU = [
       { title: null, items: [
         { id: 'supply-dash', label: 'Dashboard de Suprimentos', show: () => true },
-        { id: 'compliance', label: 'Compliance', module: 'COMPLIANCE', show: () => canViewCompliance() },
+        { id: 'compliance', label: 'Compliance', href: '/app/compliance', module: 'COMPLIANCE', show: () => canViewCompliance() },
         { id: 'insights', label: 'Insights & Executivo', module: 'INSIGHTS', show: () => canViewCompliance() },
       ]},
       { title: 'Solicitações de Compra', module: 'SOLICITACOES', items: [
@@ -1355,8 +1355,8 @@
         { id: 'pr-approvals', label: 'Central de Aprovação', href: '/app/aprovacoes', module: 'APROVACAO', show: canDecidePr },
       ]},
       { title: 'Material', module: 'MATERIAL', items: [
-        { id: 'mr-new', label: 'Solicitar Material', show: canRequestMr },
-        { id: 'mr-mine', label: 'Minhas Solicitações', show: () => true },
+        { id: 'mr-new', label: 'Solicitar Material', href: '/app/material/nova', show: canRequestMr },
+        { id: 'mr-mine', label: 'Minhas Solicitações', href: '/app/material', show: () => true },
       ]},
       { title: 'Estoque', module: 'ESTOQUE', items: [
         { id: 'wh-queue', label: 'Fila de Atendimento', show: canWarehouse },
@@ -1370,8 +1370,8 @@
         ]},
         // telas já migradas para o React abrem o app novo na mesma aba (sessão compartilhada)
         { id: 'buy-orders', label: 'Pedidos de Compra', href: '/app/pedidos', show: () => true },
-        { id: 'contracts', label: 'Contratos', module: 'CONTRATOS', show: () => canBuy() || isAdmin() },
-        { id: 'scorecard', label: 'Scorecard de Fornecedores', show: () => canBuy() || canViewCompliance() },
+        { id: 'contracts', label: 'Contratos', href: '/app/contratos', module: 'CONTRATOS', show: () => canBuy() || isAdmin() },
+        { id: 'scorecard', label: 'Scorecard de Fornecedores', href: '/app/scorecard', show: () => canBuy() || canViewCompliance() },
       ]},
       { title: 'Cadastros', items: [
         { label: 'Produtos', children: [

@@ -42,11 +42,16 @@ test.describe('Dashboard de Suprimentos e Insights (React)', () => {
       const consulta = page.waitForResponse((r) => r.url().includes('analytics/supply?') && r.url().includes('costCenter='));
       await page.getByRole('button', { name: 'Aplicar filtros' }).click();
       await consulta;
-    }
 
-    const limpeza = page.waitForResponse((r) => r.url().includes('analytics/supply?'));
-    await page.getByRole('button', { name: 'Limpar' }).click();
-    await limpeza;
+      // limpar desfaz o filtro e refaz a apuração do período inteiro
+      const limpeza = page.waitForResponse((r) =>
+        r.url().includes('analytics/supply?') && !r.url().includes('costCenter='));
+      await page.getByRole('button', { name: 'Limpar' }).click();
+      await limpeza;
+    } else {
+      // sem filtro aplicado não há o que refazer: limpar só devolve os campos
+      await page.getByRole('button', { name: 'Limpar' }).click();
+    }
     await expect(page.locator('#sd-cc')).toHaveValue('');
   });
 

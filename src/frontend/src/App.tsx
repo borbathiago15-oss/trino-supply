@@ -27,6 +27,7 @@ import { Insights } from '@/paginas/insights/Insights';
 import { AbrirCotacao } from '@/paginas/cotacoes/AbrirCotacao';
 import { ProcessosDeCotacao } from '@/paginas/cotacoes/ProcessosDeCotacao';
 import { ProcessoDetalhe } from '@/paginas/cotacoes/ProcessoDetalhe';
+import { Portal } from '@/paginas/portal/Portal';
 import { SessaoProvider, useSessao } from '@/sessao/SessaoProvider';
 import { Carregando } from '@/componentes/basicos';
 import { LimiteErro } from '@/componentes/LimiteErro';
@@ -44,6 +45,8 @@ export function Rotas() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* o portal é do fornecedor: sessão própria, sem o menu nem a sessão interna */}
+      <Route path="/portal" element={<Portal />} />
       <Route element={<Protegida />}>
         <Route element={<AppLayout />}>
           <Route index element={<Navigate to="/painel" replace />} />

@@ -4,6 +4,10 @@ import { abrirAutenticado, lerCenario } from './sessao';
 const EMAIL = process.env.ADMIN_EMAIL ?? 'admin@trinosupply.com.br';
 const SENHA = process.env.ADMIN_PASSWORD ?? 'TrinoSupply@2026!';
 
+// a OC do SENIOR é única no sistema: um número fixo faria a segunda execução
+// contra o mesmo banco esbarrar na própria regra
+const ocDoErp = `OC-ERP-${Date.now().toString().slice(-6)}`;
+
 test.describe('Pedidos de Compra (React)', () => {
   test('lista os pedidos, abre o detalhe e percorre OC → NF → entrega', async ({ page }) => {
     await abrirAutenticado(page, '/pedidos');
@@ -30,11 +34,11 @@ test.describe('Pedidos de Compra (React)', () => {
     await expect(detalhe).toContainText('Luva nitrílica tamanho M');
 
     // OC do ERP
-    await page.fill('#oc-numero', 'OC-ERP-4501');
+    await page.fill('#oc-numero', ocDoErp);
     await page.fill('#oc-data', '2026-09-01');
     await page.getByRole('button', { name: 'Registrar OC' }).click();
     await expect(page.getByTestId('toast')).toContainText('OC registrada.');
-    await expect(page.locator('#oc-erp')).toContainText('OC OC-ERP-4501 de 01/09/2026');
+    await expect(page.locator('#oc-erp')).toContainText(`OC ${ocDoErp} de 01/09/2026`);
 
     // nota fiscal
     await page.fill('#nf-numero', '000123');

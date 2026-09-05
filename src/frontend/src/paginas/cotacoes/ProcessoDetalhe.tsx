@@ -8,7 +8,7 @@ import {
 } from '@/api/cotacoes';
 import { baixarDocumento } from '@/api/documentos';
 import { listarFornecedores } from '@/api/fornecedores';
-import { Badge, Carregando, Dado, Erro, Painel, Vazio } from '@/componentes/basicos';
+import { Aviso, Badge, Carregando, Dado, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { Confirmacao } from '@/componentes/Dialogo';
 import { DialogoMotivo } from '@/componentes/DialogoMotivo';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
@@ -60,6 +60,7 @@ export function ProcessoDetalhe() {
     conduz: podeConduzirCotacao(usuario),
     aprovaNivel1: podeAprovarGerente(usuario),
     aprovaNivel2: podeAprovarDiretor(usuario),
+    de: usuario?.id,
   });
   const vigentes = propostasVigentes(q);
   const origem = q.sourcePrNumbers.length ? q.sourcePrNumbers : (q.sourcePrNumber ? [q.sourcePrNumber] : []);
@@ -361,6 +362,10 @@ export function ProcessoDetalhe() {
             ? <FormAdjudicacao processo={q} aoConcluir={recarregar} aoAvisar={(t, tipo) => avisar(t, tipo === 'erro' ? 'erro' : 'ok')} />
             : <FormVencedor processo={q} aoConcluir={recarregar} aoAvisar={(t, tipo) => avisar(t, tipo === 'erro' ? 'erro' : 'ok')} />)}
 
+          {pode.conflitoSegregacao && (
+            <Aviso testid="conflito-segregacao">{pode.conflitoSegregacao}</Aviso>
+          )}
+
           {alcadaPendente && (
             <div className="flex flex-wrap gap-2" data-testid="acoes-aprovacao">
               <button type="button" className="botao"
@@ -390,7 +395,8 @@ export function ProcessoDetalhe() {
             </div>
           )}
 
-          {!pode.encerrar && !pode.escolherVencedor && !alcadaPendente && !pode.registrarOc && !pode.cancelar && (
+          {!pode.encerrar && !pode.escolherVencedor && !alcadaPendente && !pode.registrarOc && !pode.cancelar
+            && !pode.conflitoSegregacao && (
             <Vazio>Nenhuma ação disponível para o seu papel nesta etapa.</Vazio>
           )}
         </div>

@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import type { Produto } from '@/api/catalogo';
 import type { CentroCusto } from '@/api/centrosCusto';
 import { ToastProvider } from '@/componentes/Toast';
-import { casDoProduto, itensEscolhidos, SolicitarMaterial } from './SolicitarMaterial';
+import { casDoProduto, itensEscolhidos, semCaObrigatorio, SolicitarMaterial } from './SolicitarMaterial';
 
 vi.mock('@/api/catalogo', () => ({ buscarProdutos: vi.fn(), familiasDoCatalogo: vi.fn() }));
 vi.mock('@/api/centrosCusto', () => ({ listarCentrosCusto: vi.fn() }));
@@ -61,6 +61,36 @@ describe('tela Solicitar Material', () => {
     vi.mocked(listarCentrosCusto).mockResolvedValue([cc]);
     vi.mocked(familiasDoCatalogo).mockResolvedValue(['EPI', 'LIMPEZA']);
     vi.mocked(buscarProdutos).mockResolvedValue([produto({})]);
+  });
+
+  it('EPI sem C.A. não pode ser marcado e a tela diz o porquê (IC-ERR-023)', async () => {
+    const usuario = userEvent.setup();
+    const luva = produto({});
+    const bota = produto({
+      id: 'p2', code: 'EPI-002', description: 'Bota de segurança',
+      productType: 'EPI', productTypeLabel: 'EPI', compliancePending: true,
+    });
+    expect(semCaObrigatorio(bota)).toBe(true);
+    expect(semCaObrigatorio(luva)).toBe(false);
+    vi.mocked(buscarProdutos).mockResolvedValue([luva, bota]);
+    abrir();
+
+    await usuario.selectOptions(await screen.findByLabelText('Família de produtos'), 'EPI');
+    const grade = await screen.findByTestId('grade-produtos');
+
+    expect(within(grade).getByLabelText('Selecionar Bota de segurança')).toBeDisabled();
+    expect(within(grade).getByLabelText('Quantidade de Bota de segurança')).toBeDisabled();
+    expect(screen.getByTestId('epi-sem-ca')).toHaveTextContent('IC-ERR-023');
+    // o item regular da mesma família continua disponível
+    expect(within(grade).getByLabelText('Selecionar Luva nitrílica')).toBeEnabled();
+  });
+
+  it('família sem pendência de C.A. não mostra o aviso', async () => {
+    const usuario = userEvent.setup();
+    abrir();
+    await usuario.selectOptions(await screen.findByLabelText('Família de produtos'), 'EPI');
+    await screen.findByTestId('grade-produtos');
+    expect(screen.queryByTestId('epi-sem-ca')).not.toBeInTheDocument();
   });
 
   it('a grade só carrega depois de escolher a família', async () => {

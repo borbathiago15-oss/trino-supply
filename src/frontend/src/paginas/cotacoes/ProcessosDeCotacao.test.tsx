@@ -18,7 +18,7 @@ describe('leituras da lista', () => {
   it('o vencedor sai da seleção, quando já houve escolha', () => {
     expect(vencedorDe(processo({}))).toBeNull();
     expect(vencedorDe(processo({
-      selection: { winnerSupplierId: 's1', winnerProposalId: 'p1', criteria: 'Preço', justification: 'menor preço', byLabel: 'Carla' },
+      selection: { winnerSupplierId: 's1', winnerProposalId: 'p1', criteria: 'Preço', justification: 'menor preço', by: 'u9', byLabel: 'Carla' },
     }))).toBe('Alfa EPIs');
   });
   it('a origem aceita uma SC ou o agrupamento de várias', () => {

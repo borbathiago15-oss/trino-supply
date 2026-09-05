@@ -235,9 +235,12 @@ export interface Processo {
   families: string[];
   suppliers: FornecedorConvidado[];
   proposals: Proposta[];
-  selection: { winnerSupplierId: string; winnerProposalId: string; criteria: string | null; justification: string; byLabel: string | null } | null;
-  managerApproval: { byLabel: string | null; at: string } | null;
-  directorApproval: { byLabel: string | null; at: string } | null;
+  selection: {
+    winnerSupplierId: string; winnerProposalId: string; criteria: string | null;
+    justification: string; by: string | null; byLabel: string | null;
+  } | null;
+  managerApproval: { by: string | null; byLabel: string | null; at: string } | null;
+  directorApproval: { by: string | null; byLabel: string | null; at: string } | null;
   awards: Adjudicacao[];
   /** A compra ficou com mais de um fornecedor. */
   splitAward: boolean;
@@ -370,14 +373,39 @@ export function menorTotal(q: Processo): number | null {
 }
 
 /** O que o usuário pode fazer no processo, dado o papel e a etapa. */
+/**
+ * Segregação de funções (RFQ-ERR-030): quem escolheu o fornecedor não aprova a
+ * própria escolha, e o Nível 2 não pode ser quem já resolveu o Nível 1. O
+ * servidor recusa de qualquer jeito — aqui a regra existe para a tela não
+ * oferecer um botão que só vai dar erro, e para dizer o porquê.
+ *
+ * `de` é o id de quem está logado. Sem ele (ou sem os ids no processo) a tela
+ * não trava nada: prefere-se o botão que falha à ação escondida por engano.
+ */
+export function conflitoDeSegregacao(q: Processo, de: string | undefined, alcada: Alcada): string | null {
+  if (!de) return null;
+  if (q.selection?.by === de)
+    return 'Você escolheu o fornecedor deste processo — a aprovação é de outra pessoa (RFQ-ERR-030).';
+  if (alcada === 'director' && q.managerApproval?.by === de)
+    return 'Você deu a aprovação de Nível 1 deste processo — o Nível 2 é de outra pessoa (RFQ-ERR-030).';
+  return null;
+}
+
 export function acoesDisponiveis(
   q: Processo,
-  { conduz, aprovaNivel1, aprovaNivel2 }: { conduz: boolean; aprovaNivel1: boolean; aprovaNivel2: boolean },
+  { conduz, aprovaNivel1, aprovaNivel2, de }: {
+    conduz: boolean; aprovaNivel1: boolean; aprovaNivel2: boolean; de?: string;
+  },
 ) {
   const vigentes = propostasVigentes(q);
   const emAberto = q.status === 'COTACAO_ABERTA';
   const emAnalise = q.status === 'EM_ANALISE';
+  const barrado1 = conflitoDeSegregacao(q, de, 'manager');
+  const barrado2 = conflitoDeSegregacao(q, de, 'director');
   return {
+    /** Motivo pelo qual a aprovação da etapa atual está vedada a quem olha, se houver. */
+    conflitoSegregacao: q.status === 'AGUARDANDO_GERENTE' ? barrado1
+      : q.status === 'AGUARDANDO_DIRETOR' ? barrado2 : null,
     convidar: conduz && (emAberto || emAnalise),
     registrarProposta: conduz && (emAberto || emAnalise) && q.suppliers.length > 0,
     negociar: conduz && (emAberto || emAnalise) && vigentes.length > 0,
@@ -385,8 +413,8 @@ export function acoesDisponiveis(
     escolherVencedor: conduz && emAnalise && vigentes.length > 0,
     /** Mais de uma família: escolhe-se um fornecedor por família. */
     porFamilia: q.families.length > 1,
-    decidirNivel1: aprovaNivel1 && q.status === 'AGUARDANDO_GERENTE',
-    decidirNivel2: aprovaNivel2 && q.status === 'AGUARDANDO_DIRETOR',
+    decidirNivel1: aprovaNivel1 && q.status === 'AGUARDANDO_GERENTE' && !barrado1,
+    decidirNivel2: aprovaNivel2 && q.status === 'AGUARDANDO_DIRETOR' && !barrado2,
     registrarOc: conduz && q.status === 'APROVADO_PARA_EMISSAO',
     cancelar: conduz && !['OC_REGISTRADA', 'REJEITADO', 'CANCELADA'].includes(q.status),
   };

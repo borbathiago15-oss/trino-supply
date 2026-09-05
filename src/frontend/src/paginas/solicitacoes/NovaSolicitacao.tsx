@@ -5,7 +5,7 @@ import { listarCentrosCusto, type CentroCusto } from '@/api/centrosCusto';
 import { listarEmpresas, perfilDaEmpresa } from '@/api/empresas';
 import { listarLocaisDeEntrega, rotuloDoLocal, type LocalEntrega } from '@/api/locais';
 import { anexarNaSolicitacao, criarSolicitacao, ROTULO_PRIORIDADE, type ItemNovo, type Prioridade } from '@/api/solicitacoes';
-import { Painel } from '@/componentes/basicos';
+import { Aviso, Painel } from '@/componentes/basicos';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
 import { useCarregar } from '@/util/useCarregar';
@@ -23,6 +23,17 @@ type Formulario = typeof VAZIO;
 
 /** O campo do produto aceita escolher do catálogo ("CÓDIGO — descrição") ou descrever. */
 export const rotuloDoProduto = (p: Produto) => `${p.code} — ${p.description}`;
+
+/**
+ * Itens do catálogo escolhidos nas linhas que são EPI/EPC sem C.A. em nenhum
+ * fornecedor. O servidor recusa a SC inteira (IC-ERR-023, NR-06) — a tela avisa
+ * na linha para a pendência não aparecer só no envio.
+ */
+export function itensSemCa(linhas: { produto: string }[], catalogo: Produto[]): Produto[] {
+  return linhas
+    .map((l) => catalogo.find((p) => rotuloDoProduto(p) === l.produto.trim()))
+    .filter((p): p is Produto => !!p && p.compliancePending);
+}
 
 /**
  * Linhas do formulário viram itens da API: escolhido do catálogo vira vínculo,
@@ -66,6 +77,7 @@ export function NovaSolicitacao() {
   }, []);
 
   const urgente = form.prioridade === 'URGENT';
+  const semCa = itensSemCa(linhas, dados?.catalogo ?? []);
   const campo = (k: keyof Formulario) => ({
     value: form[k] as string,
     onChange: (ev: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: ev.target.value })),
@@ -88,6 +100,11 @@ export function NovaSolicitacao() {
     ev.preventDefault();
     const items = itensDoFormulario(linhas, dados?.catalogo ?? []);
     if (!items.length) { avisar('A SC precisa de ao menos um item.', 'erro'); return; }
+    if (semCa.length) {
+      avisar(`${semCa[0].description} é ${semCa[0].productTypeLabel ?? 'EPI/EPC'} sem C.A. cadastrado `
+        + '— informe o C.A. no fornecedor antes de solicitar (IC-ERR-023).', 'erro');
+      return;
+    }
     setSalvando(true);
     try {
       const criada = await criarSolicitacao({
@@ -119,7 +136,9 @@ export function NovaSolicitacao() {
       <form onSubmit={enviar}>
         <h3 className="mb-2 text-[14px] font-bold">Itens</h3>
         <div className="flex flex-col gap-3">
-          {linhas.map((l) => (
+          {linhas.map((l) => {
+            const pendente = itensSemCa([l], dados?.catalogo ?? [])[0];
+            return (
             <div key={l.chave} className="rounded-lg border border-borda p-3" data-linha-item>
               <Grade2>
                 <Campo rotulo="Produto" dica="(escolha do catálogo ou descreva)">
@@ -143,8 +162,15 @@ export function NovaSolicitacao() {
                   </Grade2>
                 </Grade2>
               </Grade2>
+              {pendente && (
+                <Aviso testid="linha-sem-ca">
+                  <strong>{pendente.description}</strong> é {pendente.productTypeLabel ?? 'EPI/EPC'} e está sem C.A.
+                  em nenhum fornecedor — informe o C.A. no cadastro antes de solicitar (IC-ERR-023).
+                </Aviso>
+              )}
             </div>
-          ))}
+            );
+          })}
         </div>
         <datalist id="produtos-catalogo">
           {(dados?.catalogo ?? []).map((p) => <option key={p.id} value={rotuloDoProduto(p)} />)}

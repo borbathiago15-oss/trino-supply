@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { buscarProdutos, familiasDoCatalogo, type Produto } from '@/api/catalogo';
 import { listarCentrosCusto } from '@/api/centrosCusto';
 import { criarSolicitacaoMaterial } from '@/api/material';
-import { Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
+import { Aviso, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
 import { useCarregar } from '@/util/useCarregar';
@@ -13,6 +13,13 @@ const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message
 /** C.A. do EPI vem do par produto+fornecedor — mostra todos os que houver. */
 export const casDoProduto = (p: Produto) =>
   (p.suppliers ?? []).filter((f) => f.caNumber).map((f) => `${f.caNumber} (${f.supplierName})`).join(' · ');
+
+/**
+ * EPI/EPC sem C.A. em nenhum fornecedor não circula (IC-ERR-023, NR-06). O
+ * servidor recusa a solicitação inteira; aqui o item já sai bloqueado, para a
+ * pendência aparecer antes de o solicitante preencher o resto.
+ */
+export const semCaObrigatorio = (p: Produto) => p.compliancePending;
 
 export interface Escolha { marcado: boolean; quantidade: string }
 const VAZIA: Escolha = { marcado: false, quantidade: '' };
@@ -52,6 +59,7 @@ export function SolicitarMaterial() {
 
   const lista = produtos.dados ?? [];
   const marcados = useMemo(() => Object.values(escolhas).filter((e) => e.marcado).length, [escolhas]);
+  const bloqueados = lista.filter(semCaObrigatorio);
 
   const mexer = (id: string, mudanca: Partial<Escolha>) =>
     setEscolhas((e) => ({ ...e, [id]: { ...VAZIA, ...e[id], ...mudanca } }));
@@ -111,8 +119,17 @@ export function SolicitarMaterial() {
             {familia && !produtos.carregando && !lista.length && (
               <Vazio>Nenhum produto cadastrado nesta família.</Vazio>
             )}
+            {bloqueados.length > 0 && (
+              <Aviso testid="epi-sem-ca">
+                {bloqueados.length === 1
+                  ? <>O item <strong>{bloqueados[0].description}</strong> é {bloqueados[0].productTypeLabel ?? 'EPI/EPC'} e </>
+                  : <><strong>{bloqueados.length} itens</strong> desta família são EPI/EPC e </>}
+                está sem C.A. em nenhum fornecedor, então não pode ser solicitado (IC-ERR-023).
+                Peça ao cadastro para informar o C.A. no par produto-fornecedor.
+              </Aviso>
+            )}
             {lista.length > 0 && (
-              <div className="overflow-x-auto">
+              <div className="mt-2 overflow-x-auto">
                 <table data-testid="grade-produtos" className="min-w-[720px]">
                   <thead>
                     <tr>
@@ -124,20 +141,24 @@ export function SolicitarMaterial() {
                     {lista.map((p) => {
                       const escolha = escolhas[p.id] ?? VAZIA;
                       const cas = casDoProduto(p);
+                      const semCa = semCaObrigatorio(p);
                       return (
-                        <tr key={p.id} data-produto={p.code}>
+                        <tr key={p.id} data-produto={p.code} className={semCa ? 'opacity-60' : undefined}>
                           <td>
-                            <input type="checkbox" className="w-auto" checked={escolha.marcado}
+                            <input type="checkbox" className="w-auto" checked={escolha.marcado} disabled={semCa}
                               aria-label={`Selecionar ${p.description}`}
+                              title={semCa ? `${p.productTypeLabel ?? 'EPI/EPC'} sem C.A. cadastrado (IC-ERR-023)` : undefined}
                               onChange={(e) => mexer(p.id, { marcado: e.target.checked })} />
                           </td>
                           <td>{p.description}<div className="sub">{p.code}</div></td>
                           <td>{p.size || '—'}</td>
-                          <td className="sub">{cas || '—'}</td>
+                          <td className={semCa ? 'text-[12.5px] font-semibold text-aviso' : 'sub'}>
+                            {semCa ? 'sem C.A. (IC-ERR-023)' : cas || '—'}
+                          </td>
                           <td>{p.unitOfMeasure}</td>
                           <td>
                             <input type="number" min="0.01" step="0.01" placeholder="0" value={escolha.quantidade}
-                              aria-label={`Quantidade de ${p.description}`}
+                              disabled={semCa} aria-label={`Quantidade de ${p.description}`}
                               onChange={(e) => mexer(p.id, { quantidade: e.target.value })} />
                           </td>
                         </tr>

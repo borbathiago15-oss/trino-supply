@@ -5,14 +5,14 @@ const marca = Date.now().toString().slice(-6);
 
 /** Cria uma SC com dois itens de famílias diferentes e a envia, para ela cair na fila. */
 async function scComDuasFamilias(page: import('@playwright/test').Page, justificativa: string) {
-  await abrirAutenticado(page, '/app/solicitacoes/nova');
+  await abrirAutenticado(page, '/solicitacoes/nova');
   await page.getByLabel('Produto').first().fill(`Luva ${marca}`);
   await page.getByLabel('Unidade').first().fill('PAR');
   await page.getByLabel('Quantidade').first().fill('10');
   await page.fill('#sc-justificativa', justificativa);
   await page.selectOption('#sc-cc', 'E2E-001');
   await page.getByRole('button', { name: 'Criar rascunho da SC' }).click();
-  await expect(page).toHaveURL(/\/app\/solicitacoes$/);
+  await expect(page).toHaveURL(/\/solicitacoes$/);
 
   const linha = page.locator('tr', { hasText: justificativa }).first();
   await linha.getByRole('button', { name: 'Enviar solicitação' }).click();
@@ -24,7 +24,7 @@ test.describe('Abrir Cotação (React)', () => {
     const justificativa = `E2E cotação ${marca}`;
     await scComDuasFamilias(page, justificativa);
 
-    await abrirAutenticado(page, '/app/cotacoes/abrir');
+    await abrirAutenticado(page, '/cotacoes/abrir');
     await expect(page.locator('#titulo-pagina')).toHaveText('Abrir Cotação');
 
     const fila = page.getByTestId('fila-cotacao');
@@ -44,13 +44,13 @@ test.describe('Abrir Cotação (React)', () => {
     await page.selectOption('select[aria-label="Tipo de cotação"]', 'COMPRA');
     await juntar.click();
     // o processo abre no React, já pronto para convidar fornecedores
-    await expect(page).toHaveURL(/\/app\/cotacoes\/[0-9a-f-]+$/);
+    await expect(page).toHaveURL(/\/cotacoes\/[0-9a-f-]+$/);
     await expect(page.locator('body')).toContainText(/RFQ-\d{4}-\d+/);
     await expect(page.getByTestId('itens-cotacao')).toBeVisible();
   });
 
   test('itens de centros de custo diferentes travam a abertura', async ({ page }) => {
-    await abrirAutenticado(page, '/app/cotacoes/abrir');
+    await abrirAutenticado(page, '/cotacoes/abrir');
     const fila = page.getByTestId('fila-cotacao');
     const vazia = page.getByText('Nenhuma solicitação aguardando cotação. ✔');
     await expect(fila.or(vazia)).toBeVisible();
@@ -76,13 +76,13 @@ test.describe('Processos de Cotação (React)', () => {
     await scComDuasFamilias(page, justificativa);
 
     // abre o processo a partir da fila
-    await abrirAutenticado(page, '/app/cotacoes/abrir');
+    await abrirAutenticado(page, '/cotacoes/abrir');
     const fila = page.getByTestId('fila-cotacao');
     await expect(fila).toBeVisible();
     const linha = fila.locator('tr', { hasText: justificativa }).first();
     await linha.locator('input[type=checkbox]').check();
     await page.getByRole('button', { name: /Um processo com os itens marcados/ }).click();
-    await expect(page).toHaveURL(/\/app\/cotacoes\/[0-9a-f-]+$/);
+    await expect(page).toHaveURL(/\/cotacoes\/[0-9a-f-]+$/);
 
     // sem proposta, o mapa diz o que fazer em vez de mostrar tabela vazia
     await expect(page.locator('body')).toContainText('Nenhuma proposta lançada ainda');
@@ -115,7 +115,7 @@ test.describe('Processos de Cotação (React)', () => {
   });
 
   test('a lista filtra por situação e abre o processo', async ({ page }) => {
-    await abrirAutenticado(page, '/app/cotacoes');
+    await abrirAutenticado(page, '/cotacoes');
     await expect(page.locator('#titulo-pagina')).toHaveText('Processos de Cotação');
 
     const tabela = page.getByTestId('tabela-processos');
@@ -128,7 +128,7 @@ test.describe('Processos de Cotação (React)', () => {
 
     await page.selectOption('#rfq-situacao', '');
     await page.getByRole('link', { name: 'Abrir processo' }).first().click();
-    await expect(page).toHaveURL(/\/app\/cotacoes\/[0-9a-f-]+$/);
+    await expect(page).toHaveURL(/\/cotacoes\/[0-9a-f-]+$/);
     await expect(page.getByTestId('itens-cotacao')).toBeVisible();
   });
 });

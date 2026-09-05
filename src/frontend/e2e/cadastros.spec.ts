@@ -6,7 +6,7 @@ const marca = Date.now().toString().slice(-6);
 
 test.describe('Cadastros (React)', () => {
   test('família: cadastra com prazos-meta, edita e inativa', async ({ page }) => {
-    await abrirAutenticado(page, '/app/familias');
+    await abrirAutenticado(page, '/familias');
     const nome = `E2E FAMILIA ${marca}`;
 
     await page.fill('#fam-nome', nome);
@@ -38,7 +38,7 @@ test.describe('Cadastros (React)', () => {
   });
 
   test('fornecedor: cadastra, homologa e gera a chave do portal', async ({ page }) => {
-    await abrirAutenticado(page, '/app/fornecedores');
+    await abrirAutenticado(page, '/fornecedores');
     const cnpj = `${marca}00000199`; // 14 dígitos, como a API exige
     const razao = `E2E Fornecedor ${marca} LTDA`;
 
@@ -80,7 +80,7 @@ test.describe('Cadastros (React)', () => {
   });
 
   test('centro de custo: cadastra com alçadas e o código sai da regional', async ({ page }) => {
-    await abrirAutenticado(page, '/app/centros-custo');
+    await abrirAutenticado(page, '/centros-custo');
     const nome = `E2E Centro ${marca}`;
 
     await page.fill('#cc-nome', nome);
@@ -101,7 +101,7 @@ test.describe('Cadastros (React)', () => {
   });
 
   test('contrato de parceria: fixa preço de um produto e depois encerra', async ({ page }) => {
-    await abrirAutenticado(page, '/app/fornecedores');
+    await abrirAutenticado(page, '/fornecedores');
     const cnpj = `${marca}00000280`;
     await page.fill('#forn-razao', `E2E Contrato ${marca} LTDA`);
     await page.fill('#forn-cnpj', cnpj);
@@ -141,7 +141,7 @@ test.describe('Cadastros (React)', () => {
   test('consultar a sessão muitas vezes não derruba o usuário', async ({ page }) => {
     // /auth/me é chamado a cada carga de tela; o limite por IP vale para o login,
     // não para a consulta da sessão (senão navegar entre telas deslogava)
-    await abrirAutenticado(page, '/app/pedidos');
+    await abrirAutenticado(page, '/pedidos');
     const status = await page.evaluate(async () => {
       const saida: number[] = [];
       for (let i = 0; i < 15; i++) {
@@ -157,18 +157,27 @@ test.describe('Cadastros (React)', () => {
     await expect(page.getByTestId('tabela-pedidos')).toBeVisible();
   });
 
-  test('o menu do legado leva às telas migradas e a sidebar volta ao clássico', async ({ page }) => {
+  test('a raiz abre o painel e o menu navega sem recarregar a página', async ({ page }) => {
     await abrirAutenticado(page, '/');
-    await expect(page.locator('#user-name')).not.toBeEmpty();
+    await expect(page).toHaveURL(/\/painel$/);
 
-    await page.locator('.nav-group', { hasText: 'Cadastros' }).click();
-    // 'Fornecedores' também aparece em 'Scorecard de Fornecedores': casa o rótulo inteiro
-    await page.locator('a.nav-item[data-href="suppliers"]').click();
-    await expect(page).toHaveURL(/\/app\/fornecedores$/);
+    const menu = page.locator('aside[aria-label="Menu"]');
+    await menu.getByRole('button', { name: 'Cadastros' }).click();
+    await menu.getByRole('link', { name: 'Fornecedores', exact: true }).click();
+    await expect(page).toHaveURL(/\/fornecedores$/);
     await expect(page.locator('#titulo-pagina')).toHaveText('Fornecedores');
 
-    await page.getByRole('link', { name: 'Abrir a versão clássica' }).click();
-    await expect(page).toHaveURL(/\/$/);
-    await expect(page.locator('#user-name')).not.toBeEmpty();
+    // navegação do roteador: o app não recarrega entre telas
+    await menu.getByRole('link', { name: 'Usuários' }).click();
+    await expect(page.locator('#titulo-pagina')).toHaveText('Usuários');
+  });
+
+  test('as URLs antigas em /app/ continuam levando à tela certa', async ({ page }) => {
+    await abrirAutenticado(page, '/app/fornecedores');
+    await expect(page).toHaveURL(/\/fornecedores$/);
+    await expect(page.locator('#titulo-pagina')).toHaveText('Fornecedores');
+
+    await page.goto('/app/pedidos');
+    await expect(page).toHaveURL(/\/pedidos$/);
   });
 });

@@ -45,7 +45,7 @@ funcionalidade de tela existe sem backend funcional correspondente (nada fictíc
 |---|---|
 | API | .NET 9, minimal APIs, projeto único `TrinoSupply.Foundation.Api` |
 | Dados | PostgreSQL + EF Core 9 (Npgsql); migrations versionadas, **sempre aditivas e preservando dados** |
-| Front | SPA de arquivo único (`wwwroot/index.html`); Portal do Fornecedor em `portal.html` |
+| Front | React 18 + TypeScript + Vite + Tailwind (`src/frontend`), servido na raiz pelo próprio .NET; o Portal do Fornecedor é a rota `/portal` |
 | Auth | JWT 15 min + refresh token com renovação automática no cliente |
 | Documentos | `foundation.stored_document` (anexos, fotos, certidões, notas — até 10 MB) |
 | PDF | QuestPDF (OC legada) |

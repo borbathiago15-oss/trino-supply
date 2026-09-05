@@ -1,11 +1,10 @@
 import { Link } from 'react-router-dom';
 import { CLASSE_AVISO, listarAvisos, type Aviso } from '@/api/painel';
 import { Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
-import { ehRotaInterna, enderecoDoId } from '@/layout/menu';
+import { enderecoDoId } from '@/layout/menu';
 import { useCarregar } from '@/util/useCarregar';
 
 function Cartao({ aviso }: { aviso: Aviso }) {
-  const endereco = enderecoDoId(aviso.view);
   const conteudo = (
     <>
       <span>{aviso.text}</span>
@@ -15,10 +14,9 @@ function Cartao({ aviso }: { aviso: Aviso }) {
   const classe = 'flex items-center justify-between rounded-lg border px-4 py-3 text-[13.5px] '
     + 'transition-opacity hover:opacity-80 ' + (CLASSE_AVISO[aviso.severity] ?? CLASSE_AVISO.info);
 
-  // a tela do aviso pode já estar no React ou ainda no clássico
-  return ehRotaInterna(endereco)
-    ? <Link to={endereco} className={classe} data-aviso={aviso.kind}>{conteudo}</Link>
-    : <a href={endereco} className={classe} data-aviso={aviso.kind}>{conteudo}</a>;
+  return (
+    <Link to={enderecoDoId(aviso.view)} className={classe} data-aviso={aviso.kind}>{conteudo}</Link>
+  );
 }
 
 export function CentralDeAvisos() {

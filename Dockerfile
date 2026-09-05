@@ -1,7 +1,7 @@
 # Trino Supply — Foundation API (.NET 9) + frontend React (Vite)
 # Build context: raiz do repositório
 
-# 1) Frontend React: o build sai em src/backend/.../wwwroot/app (base /app/)
+# 1) Frontend React: o build gera src/backend/.../wwwroot por inteiro (base /)
 FROM node:22-alpine AS frontend
 WORKDIR /src/frontend
 COPY src/frontend/package.json src/frontend/package-lock.json ./
@@ -15,7 +15,7 @@ WORKDIR /src
 COPY src/backend/Foundation/TrinoSupply.Foundation.Api/TrinoSupply.Foundation.Api.csproj Foundation/TrinoSupply.Foundation.Api/
 RUN dotnet restore Foundation/TrinoSupply.Foundation.Api/TrinoSupply.Foundation.Api.csproj
 COPY src/backend/ .
-COPY --from=frontend /src/backend/Foundation/TrinoSupply.Foundation.Api/wwwroot/app Foundation/TrinoSupply.Foundation.Api/wwwroot/app
+COPY --from=frontend /src/backend/Foundation/TrinoSupply.Foundation.Api/wwwroot Foundation/TrinoSupply.Foundation.Api/wwwroot
 RUN dotnet publish Foundation/TrinoSupply.Foundation.Api -c Release -o /app/publish --no-restore
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime

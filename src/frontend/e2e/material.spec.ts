@@ -5,7 +5,7 @@ const marca = Date.now().toString().slice(-6);
 
 test.describe('Material, Contratos, Scorecard e Compliance (React)', () => {
   test('solicitar material: a grade só vem com a família e o envio exige quantidade', async ({ page }) => {
-    await abrirAutenticado(page, '/app/material/nova');
+    await abrirAutenticado(page, '/material/nova');
     await expect(page.locator('#titulo-pagina')).toHaveText('Solicitar Material');
 
     // sem família escolhida não há o que marcar
@@ -23,12 +23,12 @@ test.describe('Material, Contratos, Scorecard e Compliance (React)', () => {
     await primeira.locator('input[type=checkbox]').check();
     await page.getByRole('button', { name: 'Enviar ao almoxarifado' }).click();
     await expect(page.getByTestId('toast')).toContainText('Informe a quantidade');
-    await expect(page).toHaveURL(/\/app\/material\/nova$/);
+    await expect(page).toHaveURL(/\/material\/nova$/);
 
     // com a quantidade, a solicitação sai e a tela leva para a lista
     await primeira.locator('input[type=number]').fill('2');
     await page.getByRole('button', { name: 'Enviar ao almoxarifado' }).click();
-    await expect(page).toHaveURL(/\/app\/material$/);
+    await expect(page).toHaveURL(/\/material$/);
     await expect(page.getByTestId('toast').last()).toContainText('enviada ao almoxarifado');
 
     const linha = page.locator('tr', { hasText: `E2E material ${marca}` }).first();
@@ -37,7 +37,7 @@ test.describe('Material, Contratos, Scorecard e Compliance (React)', () => {
   });
 
   test('cancelar a solicitação de material exige o motivo', async ({ page }) => {
-    await abrirAutenticado(page, '/app/material');
+    await abrirAutenticado(page, '/material');
     const linha = page.locator('tr', { hasText: `E2E material ${marca}` }).first();
     await expect(linha).toBeVisible();
 
@@ -53,7 +53,7 @@ test.describe('Material, Contratos, Scorecard e Compliance (React)', () => {
   });
 
   test('contratos: os KPIs abrem e o pleito valida antes de gravar', async ({ page }) => {
-    await abrirAutenticado(page, '/app/contratos');
+    await abrirAutenticado(page, '/contratos');
     await expect(page.locator('#titulo-pagina')).toHaveText('Contratos');
     await expect(page.locator('body')).toContainText('Teto contratado');
 
@@ -72,7 +72,7 @@ test.describe('Material, Contratos, Scorecard e Compliance (React)', () => {
   });
 
   test('scorecard: a janela de análise recarrega a tabela', async ({ page }) => {
-    await abrirAutenticado(page, '/app/scorecard');
+    await abrirAutenticado(page, '/scorecard');
     await expect(page.locator('#titulo-pagina')).toHaveText('Scorecard de Fornecedores');
     await expect(page.locator('body')).toContainText('OTIF (peso 50)');
 
@@ -83,7 +83,7 @@ test.describe('Material, Contratos, Scorecard e Compliance (React)', () => {
   });
 
   test('compliance: o painel mostra o score e as médias', async ({ page }) => {
-    await abrirAutenticado(page, '/app/compliance');
+    await abrirAutenticado(page, '/compliance');
     await expect(page.locator('#titulo-pagina')).toHaveText('Compliance');
     await expect(page.locator('body')).toContainText('Score médio');
     await expect(page.locator('body')).toContainText('Médias por comprador e por centro de custo');

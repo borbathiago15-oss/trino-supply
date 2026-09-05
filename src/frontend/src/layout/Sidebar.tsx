@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { ehSubgrupo, enderecoDe, itensVisiveis, type ItemMenu, type SubgrupoMenu } from './menu';
+import { ehSubgrupo, itensVisiveis, type ItemMenu, type SubgrupoMenu } from './menu';
 import { useUsuario } from '@/sessao/SessaoProvider';
 
 const classeItem = (ativo: boolean, recuo: number) =>
@@ -9,18 +9,10 @@ const classeItem = (ativo: boolean, recuo: number) =>
   (recuo === 1 ? 'pl-5' : recuo === 2 ? 'pl-8 text-[13px]' : '');
 
 function Folha({ item, recuo }: { item: ItemMenu; recuo: number }) {
-  if (item.rota)
-    return (
-      <NavLink to={item.rota} className={({ isActive }) => classeItem(isActive, recuo)} end={false}>
-        <span>{item.rotulo}</span>
-      </NavLink>
-    );
-  // tela ainda no legado: sai do React e cai direto na view certa
   return (
-    <a href={enderecoDe(item)} className={classeItem(false, recuo)} data-legado={item.legado}>
+    <NavLink to={item.rota} className={({ isActive }) => classeItem(isActive, recuo)} end={false}>
       <span>{item.rotulo}</span>
-      <span className="text-[10px] uppercase tracking-wide text-slate-500">legado</span>
-    </a>
+    </NavLink>
   );
 }
 
@@ -47,9 +39,9 @@ export function Sidebar() {
 
   return (
     <aside className="flex w-[252px] shrink-0 flex-col gap-0.5 bg-fundo px-3 pb-7 pt-5 text-slate-300" aria-label="Menu">
-      <a href="/" className="block px-2 pb-4 pt-1">
+      <NavLink to="/painel" className="block px-2 pb-4 pt-1">
         <img src="/assets/brand/trino-supply-mark.png" width={420} height={108} alt="Trino Supply" className="h-auto w-[196px] max-w-full" />
-      </a>
+      </NavLink>
       <nav className="flex flex-1 flex-col gap-0.5">
         {grupos.map((g) => {
           if (!g.titulo)
@@ -74,9 +66,6 @@ export function Sidebar() {
           );
         })}
       </nav>
-      <a href="/" className="mt-4 rounded-lg px-3 py-2 text-[12px] text-slate-500 hover:bg-slate-800 hover:text-slate-200">
-        Abrir a versão clássica
-      </a>
     </aside>
   );
 }

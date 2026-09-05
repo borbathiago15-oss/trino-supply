@@ -3,13 +3,13 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 /**
- * O build sai direto no wwwroot do app .NET, em /app/. Assim o mesmo servidor
- * (e o mesmo container no Railway) entrega o legado em / e o React em /app/.
+ * O build gera o wwwroot inteiro do app .NET. Com o legado fora, o React é o
+ * frontend: serve na raiz, e os estáticos da marca vêm de `public/`.
  */
-const saida = fileURLToPath(new URL('../backend/Foundation/TrinoSupply.Foundation.Api/wwwroot/app', import.meta.url));
+const saida = fileURLToPath(new URL('../backend/Foundation/TrinoSupply.Foundation.Api/wwwroot', import.meta.url));
 
 export default defineConfig({
-  base: '/app/',
+  base: '/',
   plugins: [react()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   build: { outDir: saida, emptyOutDir: true, sourcemap: false },

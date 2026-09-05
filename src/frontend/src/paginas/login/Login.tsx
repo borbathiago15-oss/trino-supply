@@ -49,7 +49,6 @@ export function Login() {
         </div>
         {erro && <p role="alert" className="mb-3 rounded-lg bg-perigo-fundo px-3 py-2 text-[13px] text-perigo">{erro}</p>}
         <button type="submit" className="botao w-full" disabled={enviando}>{enviando ? 'Entrando…' : 'Entrar'}</button>
-        <p className="sub mt-4 text-center">Prefere a versão anterior? <a className="text-marca underline" href="/">Abrir o Trino Supply clássico</a></p>
       </form>
     </div>
   );

@@ -6,7 +6,7 @@ const SENHA = process.env.ADMIN_PASSWORD ?? 'TrinoSupply@2026!';
 
 test.describe('Pedidos de Compra (React)', () => {
   test('lista os pedidos, abre o detalhe e percorre OC → NF → entrega', async ({ page }) => {
-    await abrirAutenticado(page, '/app/pedidos');
+    await abrirAutenticado(page, '/pedidos');
 
     // o pedido desta execução, criado pelo seed (o banco pode ter outros)
     const { pedidoNumero: numero } = lerCenario();
@@ -24,7 +24,7 @@ test.describe('Pedidos de Compra (React)', () => {
 
     // detalhe
     await linha.getByRole('button', { name: 'Abrir' }).click();
-    await expect(page).toHaveURL(/\/app\/pedidos\/[0-9a-f-]{36}$/);
+    await expect(page).toHaveURL(/\/pedidos\/[0-9a-f-]{36}$/);
     const detalhe = page.getByTestId('pedido-detalhe');
     await expect(detalhe).toContainText(`Pedido ${numero}`);
     await expect(detalhe).toContainText('Luva nitrílica tamanho M');
@@ -72,32 +72,25 @@ test.describe('Pedidos de Compra (React)', () => {
   });
 
   test('sem sessão, uma rota protegida cai no login e volta ao destino depois', async ({ page }) => {
-    await page.goto('/app/pedidos');
-    await expect(page).toHaveURL(/\/app\/login$/);
+    await page.goto('/pedidos');
+    await expect(page).toHaveURL(/\/login$/);
     await page.fill('#email', EMAIL);
     await page.fill('#password', SENHA);
     await page.click('button[type=submit]');
-    await expect(page).toHaveURL(/\/app\/pedidos$/);
+    await expect(page).toHaveURL(/\/pedidos$/);
     await expect(page.locator('#titulo-pagina')).toHaveText('Pedidos de Compra');
   });
 
-  test('a sessão do legado vale no React (mesma aba, mesmos tokens)', async ({ page }) => {
-    // entra pelo index.html clássico, com login de interface mesmo
-    await page.goto('/');
-    await page.fill('#email', EMAIL);
-    await page.fill('#password', SENHA);
-    await page.click('button[type=submit]');
-    await expect(page.locator('#user-name')).not.toBeEmpty();
-    // vai para o React sem novo login
-    await page.goto('/app/pedidos');
+  test('o login pela tela vale nas outras rotas da mesma aba', async ({ page }) => {
+    await page.goto('/login');
+    await page.locator('#email').fill(EMAIL);
+    await page.locator('#password').fill(SENHA);
+    await page.getByRole('button', { name: /Entrar/ }).click();
+    await expect(page.locator('#titulo-pagina')).toBeVisible();
+
+    // a sessão fica na aba: outra rota abre sem novo login
+    await page.goto('/pedidos');
     await expect(page.locator('#titulo-pagina')).toHaveText('Pedidos de Compra');
     await expect(page.getByTestId('tabela-pedidos')).toBeVisible();
-    // e todo item ainda não migrado aponta para a view certa do clássico.
-    // Sem fixar um id: conforme a migração avança, sobram menos — e quando não
-    // sobrar nenhum, a asserção deixa de ter o que verificar, sem quebrar.
-    for (const link of await page.locator('a[data-legado]').all()) {
-      const id = await link.getAttribute('data-legado');
-      await expect(link).toHaveAttribute('href', `/#tela=${id}`);
-    }
   });
 });

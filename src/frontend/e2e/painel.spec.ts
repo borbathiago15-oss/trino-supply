@@ -3,8 +3,8 @@ import { abrirAutenticado } from './sessao';
 
 test.describe('Dashboard de Suprimentos e Insights (React)', () => {
   test('o app abre no painel e a Central de Avisos leva à tela do aviso', async ({ page }) => {
-    await abrirAutenticado(page, '/app');
-    await expect(page).toHaveURL(/\/app\/painel$/);
+    await abrirAutenticado(page, '/');
+    await expect(page).toHaveURL(/\/painel$/);
     await expect(page.locator('#titulo-pagina')).toHaveText('Dashboard de Suprimentos');
     await expect(page.locator('body')).toContainText('Central de Avisos');
 
@@ -21,7 +21,7 @@ test.describe('Dashboard de Suprimentos e Insights (React)', () => {
   });
 
   test('painel: os KPIs, os gráficos e os rankings carregam', async ({ page }) => {
-    await abrirAutenticado(page, '/app/painel');
+    await abrirAutenticado(page, '/painel');
     await expect(page.locator('body')).toContainText('Solicitações');
     await expect(page.locator('body')).toContainText('Tempo médio de aprovação');
 
@@ -33,7 +33,7 @@ test.describe('Dashboard de Suprimentos e Insights (React)', () => {
   });
 
   test('painel: o filtro só consulta ao aplicar, e limpar devolve o período inteiro', async ({ page }) => {
-    await abrirAutenticado(page, '/app/painel');
+    await abrirAutenticado(page, '/painel');
     await expect(page.locator('#sd-cc')).toBeVisible();
 
     const opcoes = await page.locator('#sd-cc option').count();
@@ -56,7 +56,7 @@ test.describe('Dashboard de Suprimentos e Insights (React)', () => {
   });
 
   test('insights: visão executiva, achados e backlog, com a janela trocando a leitura', async ({ page }) => {
-    await abrirAutenticado(page, '/app/insights');
+    await abrirAutenticado(page, '/insights');
     await expect(page.locator('#titulo-pagina')).toHaveText('Insights & Executivo');
     await expect(page.locator('body')).toContainText('Spend (O.C.s)');
     await expect(page.locator('body')).toContainText('Compliance médio');

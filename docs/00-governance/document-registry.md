@@ -127,8 +127,8 @@
 |----|-----------|--------|--------|---------|
 | DS-001 | Brand & Logo | 1.0.0 | 🟢 Approved | `docs/05-design-system/README.md` |
 | DS-ASSET-001 | Logo oficial — área de login (PNG 1448×1086) | 1.0.0 | 🟢 Approved | `docs/05-design-system/assets/logo/trino-supply-logo-login.png` |
-| DS-ASSET-002 | Logo oficial — versão web da tela de login (PNG 640×204, recorte do DS-ASSET-001 com fundo transparente, 43 KB) | 1.0.0 | 🟢 Approved | `src/backend/Foundation/TrinoSupply.Foundation.Api/wwwroot/assets/brand/trino-supply-logo.png` |
-| DS-ASSET-003 | Logo oficial — versão compacta para o topo do sistema (PNG 420×108, sem a tagline, 16 KB) | 1.0.0 | 🟢 Approved | `src/backend/Foundation/TrinoSupply.Foundation.Api/wwwroot/assets/brand/trino-supply-mark.png` |
+| DS-ASSET-002 | Logo oficial — versão web da tela de login (PNG 640×204, recorte do DS-ASSET-001 com fundo transparente, 43 KB) | 1.0.0 | 🟢 Approved | `src/frontend/public/assets/brand/trino-supply-logo.png` |
+| DS-ASSET-003 | Logo oficial — versão compacta para o topo do sistema (PNG 420×108, sem a tagline, 16 KB) | 1.0.0 | 🟢 Approved | `src/frontend/public/assets/brand/trino-supply-mark.png` |
 
 ---
 

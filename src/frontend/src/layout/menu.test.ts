@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ehSubgrupo, enderecoDe, itensVisiveis, type ItemMenu } from './menu';
+import { ehSubgrupo, enderecoDe, itensVisiveis, MENU, type ItemMenu } from './menu';
 import type { Perfil } from '@/dominio/papeis';
 
 const folhas = (u: Perfil): ItemMenu[] =>
@@ -27,7 +27,9 @@ describe('menu', () => {
     expect(cadastros.itens.some((i) => !ehSubgrupo(i) && i.id === 'products')).toBe(true);
   });
 
-  it('telas do legado viram deep link em /#tela=', () => {
-    expect(enderecoDe({ id: 'triage', rotulo: 'x', legado: 'triage' })).toBe('/#tela=triage');
+  it('todo item do menu aponta para uma rota do app', () => {
+    const folhas = MENU.flatMap((g) => g.itens.flatMap((i) => (ehSubgrupo(i) ? i.filhos : [i])));
+    expect(folhas.length).toBeGreaterThan(0);
+    for (const f of folhas) expect(enderecoDe(f)).toMatch(/^\/[a-z]/);
   });
 });

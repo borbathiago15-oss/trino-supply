@@ -5,7 +5,7 @@ const marca = Date.now().toString().slice(-6);
 
 test.describe('Usuários e Empresas (React)', () => {
   test('usuário: cria com autorizações, edita e inativa', async ({ page }) => {
-    await abrirAutenticado(page, '/app/usuarios');
+    await abrirAutenticado(page, '/usuarios');
     const email = `e2e.${marca}@trinosupply.com.br`;
 
     await page.fill('#usu-nome', `E2E Usuário ${marca}`);
@@ -44,7 +44,7 @@ test.describe('Usuários e Empresas (React)', () => {
   });
 
   test('usuário: nova senha exige o mínimo de caracteres', async ({ page }) => {
-    await abrirAutenticado(page, '/app/usuarios');
+    await abrirAutenticado(page, '/usuarios');
     const linha = page.locator('tr[data-usuario]').first();
     await linha.getByRole('button', { name: /Mais ações de/ }).click();
     await page.getByRole('menuitem', { name: 'Nova senha' }).click();
@@ -58,7 +58,7 @@ test.describe('Usuários e Empresas (React)', () => {
   });
 
   test('empresa: cadastra CNPJ, edita com o documento travado e salva o padrão da O.C.', async ({ page }) => {
-    await abrirAutenticado(page, '/app/empresas');
+    await abrirAutenticado(page, '/empresas');
     // CNPJ de teste com 14 dígitos, único por execução
     const cnpj = `${marca}00000199`;
 

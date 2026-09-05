@@ -5,7 +5,7 @@ const marca = Date.now().toString().slice(-6);
 
 /** Cria uma solicitação de material e a aprova, para ela cair na fila do almoxarifado. */
 async function pedirEAprovar(page: import('@playwright/test').Page, observacao: string) {
-  await abrirAutenticado(page, '/app/material/nova');
+  await abrirAutenticado(page, '/material/nova');
   await page.selectOption('#mr-cc', 'E2E-001');
   await page.fill('#mr-notes', observacao);
   await page.selectOption('#mr-family', 'EPI CENARIO E2E');
@@ -15,10 +15,10 @@ async function pedirEAprovar(page: import('@playwright/test').Page, observacao: 
   await primeira.locator('input[type=checkbox]').check();
   await primeira.locator('input[type=number]').fill('6');
   await page.getByRole('button', { name: 'Enviar ao almoxarifado' }).click();
-  await expect(page).toHaveURL(/\/app\/material$/);
+  await expect(page).toHaveURL(/\/material$/);
 
   // o Nível 1 do centro libera; o admin do cenário acumula esse papel
-  await abrirAutenticado(page, '/app/aprovacoes');
+  await abrirAutenticado(page, '/aprovacoes');
   const linha = page.locator('tr', { hasText: observacao }).first();
   await expect(linha).toBeVisible();
   await linha.getByRole('button', { name: 'Aprovar' }).click();
@@ -32,7 +32,7 @@ test.describe('Estoque e Gestão de Solicitações (React)', () => {
     const observacao = `E2E fila ${marca}`;
     await pedirEAprovar(page, observacao);
 
-    await abrirAutenticado(page, '/app/estoque/fila');
+    await abrirAutenticado(page, '/estoque/fila');
     await expect(page.locator('#titulo-pagina')).toHaveText('Fila de Atendimento');
 
     const linha = page.locator('tr', { hasText: observacao }).first();
@@ -49,18 +49,18 @@ test.describe('Estoque e Gestão de Solicitações (React)', () => {
 
     // atendida em parte, some da fila e aparece como parcial em Minhas Solicitações
     await expect(page.locator('tr', { hasText: observacao })).toHaveCount(0);
-    await abrirAutenticado(page, '/app/material');
+    await abrirAutenticado(page, '/material');
     await expect(page.locator('tr', { hasText: observacao }).first()).toContainText(/Atendida parcialmente|Rota de compra/);
   });
 
   test('fila: escopo “designadas a mim” explica a lista vazia', async ({ page }) => {
-    await abrirAutenticado(page, '/app/estoque/fila');
+    await abrirAutenticado(page, '/estoque/fila');
     await page.selectOption('select[aria-label="Escopo da fila"]', 'MINHAS');
     await expect(page.locator('body')).toContainText(/designada a você|Solicitação/);
   });
 
   test('painel de atendimentos: o cartão isola o bloco e volta ao clicar de novo', async ({ page }) => {
-    await abrirAutenticado(page, '/app/estoque/atendimentos');
+    await abrirAutenticado(page, '/estoque/atendimentos');
     await expect(page.locator('#titulo-pagina')).toHaveText('Painel de Atendimentos');
     await expect(page.getByTestId('painel-por-centro').or(page.getByText('Sem dados ainda.').first())).toBeVisible();
 
@@ -76,7 +76,7 @@ test.describe('Estoque e Gestão de Solicitações (React)', () => {
   });
 
   test('gestão de solicitações: filtra, designa e muda a prioridade com justificativa', async ({ page }) => {
-    await abrirAutenticado(page, '/app/gestao-solicitacoes');
+    await abrirAutenticado(page, '/gestao-solicitacoes');
     await expect(page.locator('#titulo-pagina')).toHaveText('Gestão de Solicitações');
     const tabela = page.getByTestId('tabela-demandas');
     await expect(tabela).toBeVisible();
@@ -112,7 +112,7 @@ test.describe('Estoque e Gestão de Solicitações (React)', () => {
   });
 
   test('lote: o botão só libera com demanda marcada e responsável escolhido', async ({ page }) => {
-    await abrirAutenticado(page, '/app/gestao-solicitacoes');
+    await abrirAutenticado(page, '/gestao-solicitacoes');
     const tabela = page.getByTestId('tabela-demandas');
     await expect(tabela).toBeVisible();
 

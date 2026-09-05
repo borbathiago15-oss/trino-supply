@@ -2579,16 +2579,18 @@ app.MapGet("/api/v1/purchase-orders/{id:guid}/pdf", async (Guid id, AppDbContext
     return Results.File(pdf, "application/pdf", $"{order.Number}.pdf");
 }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
 
-// O portal do fornecedor agora é uma tela React. A URL antiga continua valendo —
-// ela está nos convites já enviados — e leva à rota nova. O portal.html segue no
-// wwwroot como rota de volta, acessível direto em /portal.html.
-app.MapGet("/portal", () => Results.Redirect("/app/portal")).AllowAnonymous();
+// O React viveu em /app/ enquanto o legado ocupava a raiz. Agora que ele é o
+// frontend, /app/... segue valendo para os links guardados e os favoritos: cada um
+// leva à mesma tela na raiz. Query e fragmento vão junto (o fragmento não chega ao
+// servidor, mas o navegador o preserva no redirecionamento).
+app.MapGet("/app/{**resto}", (string? resto, HttpContext ctx) =>
+    Results.Redirect($"/{resto}{ctx.Request.QueryString}")).AllowAnonymous();
+app.MapGet("/app", () => Results.Redirect("/")).AllowAnonymous();
 
-// Frontend React (build do Vite em wwwroot/app): qualquer rota sob /app/ cai no
-// index.html dele, e o roteador do navegador assume dali (arquivos com extensão continuam
-// com o middleware estático — sem o `nonfile`, o fallback engoliria o próprio JS). O legado segue em /.
-app.MapFallbackToFile("/app/{*path:nonfile}", "app/index.html", staticFiles);
-app.MapFallbackToFile("index.html", staticFiles);
+// Frontend React: qualquer rota que não seja arquivo cai no index.html dele, e o
+// roteador do navegador assume dali. O `nonfile` impede que o fallback engula o
+// próprio JS — sem ele, o bundle voltaria como HTML.
+app.MapFallbackToFile("{*path:nonfile}", "index.html", staticFiles);
 
 app.Run();
 

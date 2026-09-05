@@ -257,8 +257,8 @@ jobs:
         working-directory: src/frontend
         run: npm test
 
-      # O build sai direto em src/backend/.../wwwroot/app, como no Dockerfile.
-      - name: Build (Vite → wwwroot/app)
+      # O build gera o wwwroot inteiro, como no Dockerfile.
+      - name: Build (Vite → wwwroot)
         working-directory: src/frontend
         run: npm run build
 
@@ -271,7 +271,7 @@ jobs:
 
       # A DLL é executada direto (e não via `dotnet run`) para o launchSettings.json
       # não sobrepor porta e ambiente; o diretório do projeto é o content root (wwwroot).
-      - name: Subir a API (serve /app/ e /api)
+      - name: Subir a API (serve o frontend e /api)
         working-directory: src/backend/Foundation/TrinoSupply.Foundation.Api
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/trino_react_ci
@@ -285,8 +285,10 @@ jobs:
             sleep 2
           done
           curl -sf http://127.0.0.1:5099/health || (cat /tmp/api.log; exit 1)
-          # o build do React tem de estar sendo servido pelo .NET
-          curl -sf http://127.0.0.1:5099/app/pedidos | grep -q '<div id="root">'
+          # o build do React tem de estar sendo servido pelo .NET, na raiz
+          curl -sf http://127.0.0.1:5099/pedidos | grep -q '<div id="root">'
+          # e as URLs antigas continuam levando à tela certa
+          curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5099/app/pedidos | grep -q '^30'
 
       - name: Instalar o Chromium do Playwright
         working-directory: src/frontend

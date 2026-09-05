@@ -8,7 +8,7 @@ export interface Aviso {
   kind: string;
   severity: Severidade;
   count: number;
-  /** Id da tela no menu — vira rota do React ou deep link no legado. */
+  /** Id da tela (`pr-mine`, `triage`…); `enderecoDoId` resolve para a rota. */
   view: string;
   text: string;
 }

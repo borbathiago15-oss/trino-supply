@@ -1,6 +1,7 @@
 /**
- * Tokens da sessão. As chaves são as mesmas do legado (`ts.access` / `ts.refresh`)
- * de propósito: quem entrou em `/` continua logado em `/app/` na mesma aba.
+ * Tokens da sessão, guardados por aba. Os nomes vêm do sistema clássico, que
+ * conviveu com este durante a migração — mantidos para não deslogar quem já
+ * estava com a sessão aberta quando o clássico saiu.
  */
 const ACESSO = 'ts.access';
 const RENOVACAO = 'ts.refresh';

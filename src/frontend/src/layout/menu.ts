@@ -3,15 +3,11 @@ import {
   podePedirMaterial, podeTriar, podeVerCompliance, podeVerCotacao, temModulo, type Modulo, type Perfil,
 } from '@/dominio/papeis';
 
-/**
- * Uma tela do menu. `rota` aponta para uma tela já migrada (React);
- * `legado` aponta para a view do index.html — o link vai para `/#tela=<id>`.
- */
+/** Uma tela do menu. Todas vivem no React desde a remoção do sistema clássico. */
 export interface ItemMenu {
   id: string;
   rotulo: string;
-  rota?: string;
-  legado?: string;
+  rota: string;
   modulo?: Modulo;
   mostrar?: (u: Perfil) => boolean;
 }
@@ -22,7 +18,7 @@ export const ehSubgrupo = (x: ItemMenu | SubgrupoMenu): x is SubgrupoMenu => 'fi
 
 const sempre = () => true;
 
-/** Espelho do `MENU` do legado; `legado:` marca o que ainda não migrou. */
+/** O menu do sistema: cada item aponta para a sua rota. */
 export const MENU: GrupoMenu[] = [
   { titulo: null, itens: [
     { id: 'supply-dash', rotulo: 'Dashboard de Suprimentos', rota: '/painel', mostrar: sempre },
@@ -93,23 +89,27 @@ export function itensVisiveis(u: Perfil): GrupoMenu[] {
   return saida;
 }
 
-/** Endereço de um item: rota do React ou deep link na tela do legado. */
-export const enderecoDe = (i: ItemMenu) => i.rota ?? `/#tela=${i.legado}`;
+export const enderecoDe = (i: ItemMenu) => i.rota;
+
+/**
+ * Destinos que a Central de Avisos manda e que não são itens de menu.
+ * `buy-demands` é o caso vivo: a tela dele deixou de existir há tempos e o
+ * aviso ficava sem destino — quem cuida dessas demandas é a Gestão de
+ * Solicitações.
+ */
+const FORA_DO_MENU: Record<string, string> = { 'buy-demands': '/gestao-solicitacoes' };
 
 /**
  * Endereço a partir do id da tela — a Central de Avisos manda o id da view
- * (`pr-mine`, `triage`…) e não sabe o que já migrou. Id desconhecido cai no
- * legado, que sabe lidar com uma view que não existe mais.
+ * (`pr-mine`, `triage`…), não a rota. Id que não é item de menu nem tem
+ * destino conhecido cai no painel, onde o próprio aviso está.
  */
 export function enderecoDoId(id: string): string {
   for (const grupo of MENU)
     for (const item of grupo.itens) {
       const candidatos = ehSubgrupo(item) ? item.filhos : [item];
       const achado = candidatos.find((i) => i.id === id);
-      if (achado) return enderecoDe(achado);
+      if (achado) return achado.rota;
     }
-  return `/#tela=${id}`;
+  return FORA_DO_MENU[id] ?? '/painel';
 }
-
-/** Um endereço do React é uma rota interna; o resto sai para o legado. */
-export const ehRotaInterna = (endereco: string) => endereco.startsWith('/') && !endereco.startsWith('/#');

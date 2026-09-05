@@ -5,7 +5,7 @@ const marca = Date.now().toString().slice(-6);
 
 test.describe('Cadastro de Produtos (React)', () => {
   test('cadastra, busca, edita e inativa um produto', async ({ page }) => {
-    await abrirAutenticado(page, '/app/produtos');
+    await abrirAutenticado(page, '/produtos');
     const descricao = `E2E Produto ${marca}`;
 
     // o resumo do catálogo aparece antes de qualquer busca
@@ -47,7 +47,7 @@ test.describe('Cadastro de Produtos (React)', () => {
   });
 
   test('EPI sem C.A. é barrado; com C.A. de um fornecedor entra', async ({ page }) => {
-    await abrirAutenticado(page, '/app/produtos');
+    await abrirAutenticado(page, '/produtos');
     const codigo = `E2E-EPI-${marca}`;
 
     await page.getByRole('button', { name: '+ Novo produto' }).click();
@@ -78,7 +78,7 @@ test.describe('Cadastro de Produtos (React)', () => {
   });
 
   test('importação por planilha pré-visualiza antes de gravar', async ({ page }) => {
-    await abrirAutenticado(page, '/app/produtos');
+    await abrirAutenticado(page, '/produtos');
     await page.getByRole('button', { name: 'Importar planilha' }).click();
     const painel = page.locator('#importacao');
     await expect(painel).toBeVisible();

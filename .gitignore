@@ -18,7 +18,7 @@ node_modules/
 .DS_Store
 Thumbs.db
 
-# Frontend React: build do Vite gerado dentro do wwwroot do .NET
-src/backend/Foundation/TrinoSupply.Foundation.Api/wwwroot/app/
+# Frontend React: o build do Vite gera o wwwroot do .NET por inteiro
+src/backend/Foundation/TrinoSupply.Foundation.Api/wwwroot/
 src/frontend/playwright-report/
 src/frontend/test-results/

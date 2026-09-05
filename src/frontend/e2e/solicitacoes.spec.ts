@@ -5,7 +5,7 @@ const marca = Date.now().toString().slice(-6);
 
 test.describe('Solicitações de Compra (React)', () => {
   test('SC avulsa: cria rascunho, edita, envia e some das ações', async ({ page }) => {
-    await abrirAutenticado(page, '/app/solicitacoes/nova');
+    await abrirAutenticado(page, '/solicitacoes/nova');
     const justificativa = `E2E SC ${marca}`;
 
     // um item digitado à mão (o catálogo é opcional)
@@ -18,7 +18,7 @@ test.describe('Solicitações de Compra (React)', () => {
     await page.getByRole('button', { name: 'Criar rascunho da SC' }).click();
 
     // ao criar, a tela leva para Meus Pedidos
-    await expect(page).toHaveURL(/\/app\/solicitacoes$/);
+    await expect(page).toHaveURL(/\/solicitacoes$/);
     await expect(page.getByTestId('toast')).toContainText('criada como rascunho');
 
     const linha = page.locator('tr', { hasText: justificativa }).first();
@@ -44,7 +44,7 @@ test.describe('Solicitações de Compra (React)', () => {
   });
 
   test('urgência: os campos aparecem e são exigidos quando a prioridade é urgente', async ({ page }) => {
-    await abrirAutenticado(page, '/app/solicitacoes/nova');
+    await abrirAutenticado(page, '/solicitacoes/nova');
     await expect(page.locator('#sc-urg-motivo')).toHaveCount(0);
     await page.selectOption('#sc-prioridade', 'URGENT');
     await expect(page.locator('#sc-urg-motivo')).toBeVisible();
@@ -54,7 +54,7 @@ test.describe('Solicitações de Compra (React)', () => {
   });
 
   test('SC em lote: exige quantidade e gera a SC pela grade', async ({ page }) => {
-    await abrirAutenticado(page, '/app/solicitacoes/lote');
+    await abrirAutenticado(page, '/solicitacoes/lote');
     const justificativa = `E2E lote ${marca}`;
 
     await page.fill('#lote-justificativa', justificativa);
@@ -64,12 +64,12 @@ test.describe('Solicitações de Compra (React)', () => {
     // sem quantidade nenhuma, a tela recusa e não chama a API
     await page.getByRole('button', { name: 'Gerar SC com as quantidades informadas' }).click();
     await expect(page.getByTestId('toast')).toContainText('Qtd. a Solicitar');
-    await expect(page).toHaveURL(/\/app\/solicitacoes\/lote$/);
+    await expect(page).toHaveURL(/\/solicitacoes\/lote$/);
 
     const primeira = page.getByTestId('grade-lote').locator('tr[data-produto]').first();
     await primeira.locator('input[type=number]').fill('4');
     await page.getByRole('button', { name: 'Gerar SC com as quantidades informadas' }).click();
-    await expect(page).toHaveURL(/\/app\/solicitacoes$/);
+    await expect(page).toHaveURL(/\/solicitacoes$/);
 
     const linha = page.locator('tr', { hasText: justificativa }).first();
     await expect(linha).toContainText('lote');
@@ -77,14 +77,14 @@ test.describe('Solicitações de Compra (React)', () => {
   });
 
   test('excluir rascunho pede confirmação', async ({ page }) => {
-    await abrirAutenticado(page, '/app/solicitacoes/nova');
+    await abrirAutenticado(page, '/solicitacoes/nova');
     const justificativa = `E2E descartável ${marca}`;
     await page.getByLabel('Produto').first().fill(`Item descartável ${marca}`);
     await page.getByLabel('Quantidade').first().fill('1');
     await page.fill('#sc-justificativa', justificativa);
     await page.selectOption('#sc-cc', { index: 1 });
     await page.getByRole('button', { name: 'Criar rascunho da SC' }).click();
-    await expect(page).toHaveURL(/\/app\/solicitacoes$/);
+    await expect(page).toHaveURL(/\/solicitacoes$/);
 
     const linha = page.locator('tr', { hasText: justificativa }).first();
     await linha.getByRole('button', { name: 'Excluir' }).click();
@@ -96,7 +96,7 @@ test.describe('Solicitações de Compra (React)', () => {
   });
 
   test('central de aprovação: as filas carregam e o processo abre no React', async ({ page }) => {
-    await abrirAutenticado(page, '/app/aprovacoes');
+    await abrirAutenticado(page, '/aprovacoes');
     await expect(page.locator('#titulo-pagina')).toHaveText('Central de Aprovação');
     // a tela sempre responde: ou lista processos, ou diz que não há nenhum
     await expect(page.locator('body')).toContainText(/aguardando a sua aprovação|Nenhuma aprovação pendente/);
@@ -107,7 +107,7 @@ test.describe('Solicitações de Compra (React)', () => {
       await expect(link).toHaveAttribute('href', /\/cotacoes\//);
       await link.click();
       // o processo agora abre no próprio React
-      await expect(page).toHaveURL(/\/app\/cotacoes\/[0-9a-f-]+$/);
+      await expect(page).toHaveURL(/\/cotacoes\/[0-9a-f-]+$/);
       await expect(page.locator('#titulo-pagina')).toHaveText('Processos de Cotação');
     }
   });

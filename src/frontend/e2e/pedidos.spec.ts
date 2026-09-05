@@ -83,8 +83,8 @@ test.describe('Pedidos de Compra (React)', () => {
 
   test('o login pela tela vale nas outras rotas da mesma aba', async ({ page }) => {
     await page.goto('/login');
-    await page.getByLabel('E-mail').fill(EMAIL);
-    await page.getByLabel('Senha').fill(SENHA);
+    await page.locator('#email').fill(EMAIL);
+    await page.locator('#password').fill(SENHA);
     await page.getByRole('button', { name: /Entrar/ }).click();
     await expect(page.locator('#titulo-pagina')).toBeVisible();
 

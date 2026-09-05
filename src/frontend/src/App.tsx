@@ -85,7 +85,7 @@ export function Rotas() {
 export default function App() {
   return (
     <LimiteErro>
-      <BrowserRouter basename="/app">
+      <BrowserRouter>
         <ToastProvider>
           <SessaoProvider>
             <Rotas />

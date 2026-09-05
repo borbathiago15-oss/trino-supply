@@ -247,6 +247,32 @@ public class PurchaseOrderServiceTests
     }
 
     [Fact]
+    public async Task Numero_de_oc_do_erp_nao_se_repete_em_dois_pedidos()
+    {
+        var w = await BuildAsync();
+        var (primeiro, _) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null,
+            [new PoItemInput("Detergente neutro", 10, "UN", 3.5m, w.Detergente.Id)], null);
+        var (segundo, _) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null,
+            [new PoItemInput("Detergente neutro", 5, "UN", 3.5m, w.Detergente.Id)], null);
+
+        var (_, ok) = await w.Pos.RegisterErpOrderAsync(Carla, primeiro!.Id, "OC-4501", null);
+        Assert.Null(ok);
+
+        // o mesmo número em outro pedido é recusado — a OC do SENIOR é única (RFQ-ERR-041)
+        var (_, repetida) = await w.Pos.RegisterErpOrderAsync(Carla, segundo!.Id, " OC-4501 ", null);
+        Assert.Equal("PO-ERR-050", repetida!.Code);
+        Assert.Contains("já está registrada", repetida.Message);
+
+        // corrigir o número do próprio pedido continua valendo
+        var (mesmo, semErro) = await w.Pos.RegisterErpOrderAsync(Carla, primeiro.Id, "OC-4501", new DateOnly(2026, 8, 20));
+        Assert.Null(semErro);
+        Assert.Equal(new DateOnly(2026, 8, 20), mesmo!.ErpIssuedOn);
+
+        var (_, longo) = await w.Pos.RegisterErpOrderAsync(Carla, segundo.Id, new string('9', 31), null);
+        Assert.Equal("PO-ERR-050", longo!.Code);
+    }
+
+    [Fact]
     public async Task Faturamento_exige_oc_registrada_e_aceita_mais_de_uma_nota()
     {
         var w = await BuildAsync();

@@ -123,7 +123,15 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
         if (string.IsNullOrWhiteSpace(erpNumber))
             return (null, new("PO-ERR-050", "Informe o número da OC gerada no ERP."));
 
-        order.ErpNumber = erpNumber.Trim();
+        var numero = erpNumber.Trim();
+        if (numero.Length > 30)
+            return (null, new("PO-ERR-050", "O número da OC tem no máximo 30 caracteres."));
+        // a OC do SENIOR é única no sistema (RFQ-ERR-041): o caminho da cotação já
+        // garantia isso pelo número do pedido, mas por aqui dava para repetir
+        if (await db.PurchaseOrders.AnyAsync(o => o.Id != order.Id && o.ErpNumber == numero, ct))
+            return (null, new("PO-ERR-050", $"A OC {numero} já está registrada em outro pedido."));
+
+        order.ErpNumber = numero;
         order.ErpIssuedOn = issuedOn ?? DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
         Touch(order);
         await db.SaveChangesAsync(ct);

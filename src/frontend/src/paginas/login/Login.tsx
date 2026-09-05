@@ -1,6 +1,6 @@
 import { Fragment, useState, type FormEvent, type ReactNode } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { entrar } from '@/api/auth';
+import { entrar, type Usuario } from '@/api/auth';
 import { useSessao } from '@/sessao/SessaoProvider';
 
 /** Traço do ciclo de suprimentos mostrado no lado institucional. */
@@ -40,6 +40,13 @@ function Elo() {
   );
 }
 
+/**
+ * Para onde ir depois de entrar. Senha ainda provisória vence o destino
+ * guardado: nada mais abre antes da troca (SEC-004).
+ */
+export const destinoDe = (u: Usuario, de?: string) =>
+  u.mustChangePassword ? '/trocar-senha' : de ?? '/pedidos';
+
 export function Login() {
   const { usuario, entrou } = useSessao();
   const navegar = useNavigate();
@@ -50,14 +57,15 @@ export function Login() {
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
-  if (usuario) return <Navigate to={state?.de ?? '/pedidos'} replace />;
+  if (usuario) return <Navigate to={destinoDe(usuario, state?.de)} replace />;
 
   async function enviar(ev: FormEvent) {
     ev.preventDefault();
     setErro(null); setEnviando(true);
     try {
-      entrou(await entrar(email, senha));
-      navegar(state?.de ?? '/pedidos', { replace: true });
+      const logado = await entrar(email, senha);
+      entrou(logado);
+      navegar(destinoDe(logado, state?.de), { replace: true });
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao entrar.');
     } finally {

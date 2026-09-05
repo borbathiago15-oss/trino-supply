@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using TrinoSupply.Foundation.Api.Auth;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Infrastructure;
 
@@ -56,8 +57,6 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
             return (null, new("IAM-ERR-011", "Informe o nome do usuário."));
         if (!ValidRoles.Contains(role))
             return (null, new("IAM-ERR-012", "Papel inválido."));
-        if (string.IsNullOrEmpty(password) || password.Length < 12)
-            return (null, new("IAM-ERR-013", "A senha precisa ter no mínimo 12 caracteres."));
         if (await db.Users.AnyAsync(u => u.Email == normalized, ct))
             return (null, new("IAM-ERR-014", "Já existe um usuário com este e-mail."));
         var (modulesCsv, modulesError) = NormalizeModules(modules);
@@ -72,9 +71,13 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
             Modules = modulesCsv,
             CostCenters = NormalizeCostCenters(costCenters),
             DirectorId = directorId,
+            // quem cadastra escolhe a senha, então ela nasce provisória: o dono
+            // troca no primeiro acesso e ninguém fica com senha de terceiro (SEC-004)
+            MustChangePassword = true,
             CreatedAt = clock.GetUtcNow(),
             UpdatedAt = clock.GetUtcNow(),
         };
+        if (PasswordPolicy.Validar(password, user) is { } senhaFraca) return (null, senhaFraca);
         user.PasswordHash = hasher.HashPassword(user, password);
         db.Users.Add(user);
         await db.SaveChangesAsync(ct);
@@ -118,16 +121,42 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
     /// <summary>Define nova senha e revoga todas as sessões do usuário (SEC-003).</summary>
     public async Task<UserError?> ResetPasswordAsync(Guid id, string newPassword, CancellationToken ct = default)
     {
-        if (string.IsNullOrEmpty(newPassword) || newPassword.Length < 12)
-            return new("IAM-ERR-013", "A senha precisa ter no mínimo 12 caracteres.");
         var user = await db.Users.SingleOrDefaultAsync(u => u.Id == id, ct);
         if (user is null) return new("IAM-ERR-404", "Usuário não encontrado.");
+        if (PasswordPolicy.Validar(newPassword, user) is { } senhaFraca) return senhaFraca;
 
         user.PasswordHash = hasher.HashPassword(user, newPassword);
+        // senha definida por outra pessoa volta a ser provisória (SEC-004)
+        user.MustChangePassword = true;
         user.UpdatedAt = clock.GetUtcNow();
         await RevokeSessionsAsync(user.Id, ct);
         await db.SaveChangesAsync(ct);
         return null;
+    }
+
+    /// <summary>
+    /// Troca de senha pelo próprio dono: exige a senha atual, tira a marca de
+    /// provisória e derruba as outras sessões, mantendo só a de quem trocou.
+    /// </summary>
+    public async Task<(User? user, UserError? error)> ChangeOwnPasswordAsync(
+        Guid id, string currentPassword, string newPassword, CancellationToken ct = default)
+    {
+        var user = await db.Users.SingleOrDefaultAsync(u => u.Id == id && u.Active, ct);
+        if (user is null) return (null, new("IAM-ERR-404", "Usuário não encontrado."));
+        if (string.IsNullOrEmpty(currentPassword) ||
+            hasher.VerifyHashedPassword(user, user.PasswordHash, currentPassword) == PasswordVerificationResult.Failed)
+            return (null, new("IAM-ERR-020", "A senha atual não confere."));
+        if (PasswordPolicy.Validar(newPassword, user, currentPassword) is { } senhaFraca) return (null, senhaFraca);
+
+        var agora = clock.GetUtcNow();
+        user.PasswordHash = hasher.HashPassword(user, newPassword);
+        user.MustChangePassword = false;
+        user.PasswordChangedAt = agora;
+        user.UpdatedAt = agora;
+        // a senha antiga pode ter circulado: nenhuma sessão aberta com ela continua
+        await RevokeSessionsAsync(user.Id, ct);
+        await db.SaveChangesAsync(ct);
+        return (user, null);
     }
 
     private async Task<bool> AnotherActiveAdminExistsAsync(Guid exceptId, CancellationToken ct) =>

@@ -4,7 +4,7 @@ import {
   atualizarUsuario, criarUsuario, listarUsuarios, redefinirSenha, TAMANHO_MINIMO_SENHA,
   type DadosUsuario, type UsuarioCadastro,
 } from '@/api/usuarios';
-import { Carregando, Erro, Painel } from '@/componentes/basicos';
+import { Badge, Carregando, Erro, Painel } from '@/componentes/basicos';
 import { Confirmacao, Dialogo } from '@/componentes/Dialogo';
 import { BadgeAtivo, Campo, Grade2, Nota } from '@/componentes/formulario';
 import { CelulaAcoes, MenuAcoes } from '@/componentes/MenuAcoes';
@@ -147,7 +147,16 @@ export function Usuarios() {
                       {u.costCenters.join(' · ') || '—'}
                       {u.directorId && <div>Diretor: {nomeDiretor(u.directorId)}</div>}
                     </td>
-                    <td><BadgeAtivo ativo={u.active} /></td>
+                    <td>
+                      <BadgeAtivo ativo={u.active} />
+                      {u.mustChangePassword && (
+                        <div className="mt-1">
+                          <Badge classe="bg-aviso-fundo text-aviso" title="A pessoa ainda não definiu a própria senha">
+                            senha provisória
+                          </Badge>
+                        </div>
+                      )}
+                    </td>
                     <td className="whitespace-nowrap">
                       <CelulaAcoes>
                         <button type="button" className="botao-secundario" onClick={() => editar(u)}>Editar</button>
@@ -185,7 +194,8 @@ export function Usuarios() {
                 {papeis.map((p) => <option key={p} value={p}>{ROTULO_PAPEL[p] ?? p}</option>)}
               </select>
             </Campo>
-            <Campo id="usu-senha" rotulo={`Senha inicial (mín. ${TAMANHO_MINIMO_SENHA})`}>
+            <Campo id="usu-senha" rotulo={`Senha provisória (mín. ${TAMANHO_MINIMO_SENHA})`}
+              dica={editando ? undefined : '— a pessoa define a dela no primeiro acesso'}>
               <input id="usu-senha" type="password" autoComplete="new-password"
                 required={!editando} disabled={!!editando} minLength={TAMANHO_MINIMO_SENHA}
                 title={editando ? 'Use “Nova senha” na lista para trocar a senha.' : undefined} {...campo('senha')} />
@@ -255,7 +265,10 @@ export function Usuarios() {
             <input id="usu-nova-senha" type="password" autoComplete="new-password" value={novaSenha}
               onChange={(e) => setNovaSenha(e.target.value)} />
           </Campo>
-          <Nota>As sessões abertas do usuário são encerradas na hora.</Nota>
+          <Nota>
+            As sessões abertas do usuário são encerradas na hora, e esta senha volta a ser
+            provisória: a pessoa define a dela no próximo acesso.
+          </Nota>
         </Dialogo>
       )}
     </>

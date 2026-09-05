@@ -59,6 +59,12 @@ o usuário descobrir no erro do servidor:
 - **RFQ-ERR-040/041** — a O.C. nunca é emitida pelo sistema. Ela é fechada no ERP
   SENIOR e aqui só se registra o número, depois das duas aprovações.
 - **IC-ERR-023** — EPI/EPC só circula com C.A. válido no par produto-fornecedor.
+- **SEC-004** — senha definida por outra pessoa é provisória. Usuário criado pelo
+  cadastro, admin semeado pelo ambiente e senha redefinida pelo administrador
+  nascem com `must_change_password`; enquanto a marca existe, o middleware do
+  `Program.cs` recusa toda rota `/api` fora de `/auth/{change-password,me,logout,refresh,login}`
+  com **IAM-ERR-022**. A política de senha vive em `Auth/PasswordPolicy.cs` e vale
+  para os três caminhos que gravam senha.
 - O *saving* de negociação é apurado contra a **primeira** proposta do fornecedor
   vencedor.
 

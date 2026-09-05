@@ -32,7 +32,7 @@ public class AuthServiceTests
         var clock = new FixedTimeProvider(new DateTimeOffset(2026, 8, 23, 12, 0, 0, TimeSpan.Zero));
 
         var admin = new User { Email = "admin@trino.test", Name = "Admin", Role = Roles.SystemAdministrator };
-        admin.PasswordHash = hasher.HashPassword(admin, "SenhaForte#2026");
+        admin.PasswordHash = hasher.HashPassword(admin, "Hx8@baseSegura!");
         db.Users.Add(admin);
         db.SaveChanges();
 
@@ -45,7 +45,7 @@ public class AuthServiceTests
     {
         var (svc, db, _, admin) = Build();
 
-        var tokens = await svc.LoginAsync("Admin@Trino.Test", "SenhaForte#2026");
+        var tokens = await svc.LoginAsync("Admin@Trino.Test", "Hx8@baseSegura!");
 
         Assert.NotNull(tokens);
         Assert.Equal(admin.Id, tokens!.User.Id);
@@ -61,7 +61,7 @@ public class AuthServiceTests
         var (svc, _, _, _) = Build();
 
         Assert.Null(await svc.LoginAsync("admin@trino.test", "senha-errada"));
-        Assert.Null(await svc.LoginAsync("nao-existe@trino.test", "SenhaForte#2026"));
+        Assert.Null(await svc.LoginAsync("nao-existe@trino.test", "Hx8@baseSegura!"));
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public class AuthServiceTests
     {
         var (svc, _, clock, admin) = Build();
 
-        var tokens = await svc.LoginAsync("admin@trino.test", "SenhaForte#2026");
+        var tokens = await svc.LoginAsync("admin@trino.test", "Hx8@baseSegura!");
         var jwt = new JwtSecurityTokenHandler().ReadJwtToken(tokens!.AccessToken);
 
         Assert.Equal(admin.Id.ToString(), jwt.Subject);
@@ -82,7 +82,7 @@ public class AuthServiceTests
     public async Task Refresh_rotaciona_o_token_e_invalida_o_anterior()
     {
         var (svc, db, _, _) = Build();
-        var first = await svc.LoginAsync("admin@trino.test", "SenhaForte#2026");
+        var first = await svc.LoginAsync("admin@trino.test", "Hx8@baseSegura!");
 
         var second = await svc.RefreshAsync(first!.RefreshToken);
 
@@ -97,7 +97,7 @@ public class AuthServiceTests
     public async Task Reuso_de_refresh_rotacionado_revoga_a_cadeia_inteira()
     {
         var (svc, db, _, _) = Build();
-        var first = await svc.LoginAsync("admin@trino.test", "SenhaForte#2026");
+        var first = await svc.LoginAsync("admin@trino.test", "Hx8@baseSegura!");
         var second = await svc.RefreshAsync(first!.RefreshToken);
 
         // reuso do token antigo (já rotacionado) — ataque de replay
@@ -113,7 +113,7 @@ public class AuthServiceTests
     public async Task Refresh_expirado_e_negado()
     {
         var (svc, _, clock, _) = Build();
-        var tokens = await svc.LoginAsync("admin@trino.test", "SenhaForte#2026");
+        var tokens = await svc.LoginAsync("admin@trino.test", "Hx8@baseSegura!");
 
         clock.Now = clock.Now.AddDays(8); // além dos 7 dias
 
@@ -124,7 +124,7 @@ public class AuthServiceTests
     public async Task Logout_revoga_o_refresh_token()
     {
         var (svc, _, _, _) = Build();
-        var tokens = await svc.LoginAsync("admin@trino.test", "SenhaForte#2026");
+        var tokens = await svc.LoginAsync("admin@trino.test", "Hx8@baseSegura!");
 
         await svc.LogoutAsync(tokens!.RefreshToken);
 
@@ -138,6 +138,6 @@ public class AuthServiceTests
         admin.Active = false;
         await db.SaveChangesAsync();
 
-        Assert.Null(await svc.LoginAsync("admin@trino.test", "SenhaForte#2026"));
+        Assert.Null(await svc.LoginAsync("admin@trino.test", "Hx8@baseSegura!"));
     }
 }

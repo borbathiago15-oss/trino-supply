@@ -260,11 +260,11 @@ public class HierarchyTests
         var users = new UserService(w.Db, hasher, TimeProvider.System);
 
         var (_, invalid) = await users.CreateAsync("novo@trino.dev", "Novo Gerente", Roles.Approver,
-            "senha-muito-forte-123", null, ["PBA-001"], w.Junior.Id); // Júnior não é diretor
+            "Wq5!chaveNova#z", null, ["PBA-001"], w.Junior.Id); // Júnior não é diretor
         Assert.Equal("IAM-ERR-019", invalid!.Code);
 
         var (user, error) = await users.CreateAsync("novo@trino.dev", "Novo Gerente", Roles.Approver,
-            "senha-muito-forte-123", null, ["pba-001", "BAH-001"], w.Diana.Id);
+            "Wq5!chaveNova#z", null, ["pba-001", "BAH-001"], w.Diana.Id);
         Assert.Null(error);
         Assert.Equal("PBA-001,BAH-001", user!.CostCenters);
         Assert.Equal(w.Diana.Id, user.DirectorId);

@@ -18,22 +18,54 @@ async function chamar<T>(caminho: string, token?: string, corpo?: unknown): Prom
 }
 
 /**
+ * Senha definitiva do admin nas execuções da suíte. O admin semeado nasce com a
+ * senha do ambiente marcada como provisória (SEC-004), então a primeira execução
+ * contra um banco novo troca por esta; as seguintes já entram direto com ela.
+ */
+export const SENHA_E2E = 'E2e#Suite!2026zx';
+
+async function postarLogin(password: string) {
+  return fetch(API + '/api/v1/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: EMAIL, password }),
+  });
+}
+
+function guardarSessao(tokens: { accessToken: string; refreshToken: string }) {
+  mkdirSync(dirname(ARQUIVO_SESSAO), { recursive: true });
+  writeFileSync(ARQUIVO_SESSAO, JSON.stringify({
+    accessToken: tokens.accessToken, refreshToken: tokens.refreshToken,
+  }));
+}
+
+/**
  * Um único login por execução: o login aceita 10 tentativas por minuto por IP
  * (SEC-003), e um login por teste estouraria o limite.
  */
 async function entrar(): Promise<string> {
   for (let tentativa = 1; tentativa <= 6; tentativa++) {
-    const res = await fetch(API + '/api/v1/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: EMAIL, password: SENHA }),
-    });
+    // banco novo: a senha do ambiente ainda vale, e vem marcada como provisória.
+    // banco já usado por uma execução anterior: só a SENHA_E2E entra.
+    let res = await postarLogin(SENHA);
+    let usadaAProvisoria = true;
+    if (res.status === 401) { res = await postarLogin(SENHA_E2E); usadaAProvisoria = false; }
+
     if (res.ok) {
       const json = await res.json();
       const tokens = json.data ?? json;
-      mkdirSync(dirname(ARQUIVO_SESSAO), { recursive: true });
-      writeFileSync(ARQUIVO_SESSAO, JSON.stringify({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken }));
-      return tokens.accessToken;
+      if (!tokens.user?.mustChangePassword) { guardarSessao(tokens); return tokens.accessToken; }
+
+      if (!usadaAProvisoria)
+        throw new Error('a senha da suíte entrou mas continua provisória — banco em estado inesperado');
+
+      // primeira execução deste banco: define a senha da suíte e segue com ela
+      const trocados = await chamar<{ accessToken: string; refreshToken: string }>(
+        '/api/v1/auth/change-password', tokens.accessToken,
+        { currentPassword: SENHA, newPassword: SENHA_E2E },
+      );
+      guardarSessao(trocados);
+      return trocados.accessToken;
     }
     if (res.status !== 429) throw new Error(`login falhou: ${res.status} ${await res.text()}`);
     await new Promise((r) => setTimeout(r, 8000));

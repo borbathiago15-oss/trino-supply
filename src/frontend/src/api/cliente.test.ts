@@ -33,6 +33,47 @@ describe('api()', () => {
     expect((fetchMock.mock.calls[2][1]?.headers as Record<string, string>).Authorization).toBe('Bearer novo');
   });
 
+  it('três chamadas simultâneas em 401 renovam uma vez só e todas seguem', async () => {
+    sessao.set({ accessToken: 'velho', refreshToken: 'r1' });
+    let refreshes = 0;
+    // o refresh demora: é justamente na janela de espera que as outras chamadas
+    // precisam entrar na fila, em vez de cada uma abrir a sua renovação
+    fetchMock.mockImplementation(async (url) => {
+      const caminho = String(url);
+      if (caminho === '/api/v1/auth/refresh') {
+        refreshes++;
+        await new Promise((r) => setTimeout(r, 10));
+        return resposta(200, { data: { accessToken: 'novo', refreshToken: 'r2' } });
+      }
+      return resposta(sessao.access === 'novo' ? 200 : 401, sessao.access === 'novo' ? { data: { ok: caminho } } : {});
+    });
+
+    const respostas = await Promise.all([
+      api<{ ok: string }>('/api/v1/purchase-orders/'),
+      api<{ ok: string }>('/api/v1/quotations/'),
+      api<{ ok: string }>('/api/v1/catalog/'),
+    ]);
+
+    expect(refreshes).toBe(1);
+    expect(respostas.map((r) => r.ok).sort())
+      .toEqual(['/api/v1/catalog/', '/api/v1/purchase-orders/', '/api/v1/quotations/']);
+    expect(sessao.access).toBe('novo');
+  });
+
+  it('depois de uma renovação concluída, um 401 novo renova de novo', async () => {
+    sessao.set({ accessToken: 'velho', refreshToken: 'r1' });
+    fetchMock
+      .mockResolvedValueOnce(resposta(401, {}))
+      .mockResolvedValueOnce(resposta(200, { data: { accessToken: 'n1', refreshToken: 'r2' } }))
+      .mockResolvedValueOnce(resposta(200, { data: { ok: true } }))
+      .mockResolvedValueOnce(resposta(401, {}))
+      .mockResolvedValueOnce(resposta(200, { data: { accessToken: 'n2', refreshToken: 'r3' } }))
+      .mockResolvedValueOnce(resposta(200, { data: { ok: true } }));
+    await api('/api/v1/purchase-orders/');
+    await api('/api/v1/purchase-orders/');
+    expect(sessao.access).toBe('n2');
+  });
+
   it('refresh recusado pelo servidor limpa a sessão e avisa a aplicação', async () => {
     sessao.set({ accessToken: 'velho', refreshToken: 'r1' });
     const ouvinte = vi.fn();

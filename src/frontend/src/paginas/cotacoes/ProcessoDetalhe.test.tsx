@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { Usuario } from '@/api/auth';
-import { acoesDisponiveis, melhorPreco, menorTotal, precoDoItem } from '@/api/cotacoes';
+import { acoesDisponiveis, conflitoDeSegregacao, melhorPreco, menorTotal, precoDoItem } from '@/api/cotacoes';
 import { ToastProvider } from '@/componentes/Toast';
 import { ProcessoDetalhe, textoDoConvite } from './ProcessoDetalhe';
 import { propostasDaFamilia } from './AcoesDoProcesso';
@@ -92,6 +92,49 @@ describe('regras das ações por etapa', () => {
     expect(acoesDisponiveis(processo({ status: 'AGUARDANDO_DIRETOR' }),
       { conduz: false, aprovaNivel1: false, aprovaNivel2: true }).decidirNivel2).toBe(true);
   });
+  describe('segregação de funções (RFQ-ERR-030)', () => {
+    const nivel1 = { conduz: false, aprovaNivel1: true, aprovaNivel2: false };
+    const nivel2 = { conduz: false, aprovaNivel1: false, aprovaNivel2: true };
+    const escolhidoPor = (by: string) => ({
+      winnerSupplierId: 's1', winnerProposalId: 'p1', criteria: null, justification: 'menor preço',
+      by, byLabel: 'Carla',
+    });
+
+    it('quem escolheu o fornecedor não aprova o Nível 1 da própria escolha', () => {
+      const q = processo({ status: 'AGUARDANDO_GERENTE', selection: escolhidoPor('u1') });
+      const a = acoesDisponiveis(q, { ...nivel1, de: 'u1' });
+      expect(a.decidirNivel1).toBe(false);
+      expect(a.conflitoSegregacao).toMatch(/escolheu o fornecedor.*RFQ-ERR-030/);
+    });
+
+    it('outra pessoa da mesma alçada aprova normalmente', () => {
+      const q = processo({ status: 'AGUARDANDO_GERENTE', selection: escolhidoPor('u1') });
+      const a = acoesDisponiveis(q, { ...nivel1, de: 'u2' });
+      expect(a.decidirNivel1).toBe(true);
+      expect(a.conflitoSegregacao).toBeNull();
+    });
+
+    it('quem deu o Nível 1 não dá também o Nível 2', () => {
+      const q = processo({
+        status: 'AGUARDANDO_DIRETOR', selection: escolhidoPor('u1'),
+        managerApproval: { by: 'u2', byLabel: 'Bruno', at: '2026-02-01T10:00:00Z' },
+      });
+      const a = acoesDisponiveis(q, { ...nivel2, de: 'u2' });
+      expect(a.decidirNivel2).toBe(false);
+      expect(a.conflitoSegregacao).toMatch(/Nível 1.*RFQ-ERR-030/);
+      // e o comprador que escolheu também segue barrado no Nível 2
+      expect(acoesDisponiveis(q, { ...nivel2, de: 'u1' }).decidirNivel2).toBe(false);
+      // um terceiro decide
+      expect(acoesDisponiveis(q, { ...nivel2, de: 'u3' }).decidirNivel2).toBe(true);
+    });
+
+    it('sem saber quem está logado a tela não esconde a ação', () => {
+      const q = processo({ status: 'AGUARDANDO_GERENTE', selection: escolhidoPor('u1') });
+      expect(conflitoDeSegregacao(q, undefined, 'manager')).toBeNull();
+      expect(acoesDisponiveis(q, nivel1).decidirNivel1).toBe(true);
+    });
+  });
+
   it('processo encerrado não aceita mais cancelamento', () => {
     for (const status of ['OC_REGISTRADA', 'REJEITADO', 'CANCELADA'])
       expect(acoesDisponiveis(processo({ status }), conduz).cancelar).toBe(false);
@@ -161,6 +204,37 @@ describe('tela do processo', () => {
     const mapa = await screen.findByTestId('mapa-cotacao');
     expect(within(mapa).getByText('melhor preço', { exact: false })).toBeInTheDocument();
     expect(within(mapa).getByText('menor total')).toBeInTheDocument();
+  });
+
+  it('quem escolheu o fornecedor vê o motivo no lugar dos botões de aprovar', async () => {
+    eu = { id: 'u1', email: 'carla@t.com', name: 'Carla', role: 'Approver', modules: ['COMPRAS', 'APROVACAO'] };
+    vi.mocked(lerProcesso).mockResolvedValue(processo({
+      status: 'AGUARDANDO_GERENTE',
+      selection: {
+        winnerSupplierId: 's1', winnerProposalId: 'p1', criteria: null,
+        justification: 'menor preço', by: 'u1', byLabel: 'Carla',
+      },
+    }));
+    abrir();
+
+    expect(await screen.findByTestId('conflito-segregacao')).toHaveTextContent('RFQ-ERR-030');
+    expect(screen.queryByTestId('acoes-aprovacao')).not.toBeInTheDocument();
+    expect(decidir).not.toHaveBeenCalled();
+  });
+
+  it('outro aprovador do mesmo nível decide o processo normalmente', async () => {
+    eu = { id: 'u7', email: 'bruno@t.com', name: 'Bruno', role: 'Approver', modules: ['APROVACAO'] };
+    vi.mocked(lerProcesso).mockResolvedValue(processo({
+      status: 'AGUARDANDO_GERENTE',
+      selection: {
+        winnerSupplierId: 's1', winnerProposalId: 'p1', criteria: null,
+        justification: 'menor preço', by: 'u1', byLabel: 'Carla',
+      },
+    }));
+    abrir();
+
+    expect(await screen.findByTestId('acoes-aprovacao')).toBeInTheDocument();
+    expect(screen.queryByTestId('conflito-segregacao')).not.toBeInTheDocument();
   });
 
   it('encerrar para análise pede confirmação antes', async () => {

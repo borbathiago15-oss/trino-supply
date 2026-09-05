@@ -24,6 +24,11 @@ export const Vazio = ({ children }: { children: ReactNode }) =>
 export const Erro = ({ children }: { children: ReactNode }) =>
   <p role="alert" className="rounded-lg bg-perigo-fundo px-4 py-3 text-perigo">{children}</p>;
 
+/** Impedimento de regra de negócio: explica por que a ação não está disponível. */
+export const Aviso = ({ children, testid }: { children: ReactNode; testid?: string }) =>
+  <p role="note" data-testid={testid}
+    className="rounded-lg border border-aviso/25 bg-aviso-fundo px-4 py-3 text-[13px] text-aviso">{children}</p>;
+
 export function Badge({ classe, children, title }: { classe: string; children: ReactNode; title?: string }) {
   return <span className={'badge ' + classe} title={title}>{children}</span>;
 }

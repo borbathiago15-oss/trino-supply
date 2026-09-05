@@ -1901,10 +1901,14 @@ static object QuotationView(Quotation q) => new
     {
         winnerSupplierId = q.WinnerSupplierId, winnerProposalId = q.WinnerProposalId,
         criteria = q.SelectionCriteria, justification = q.SelectionJustification,
-        byLabel = q.SelectedByLabel, at = q.SelectedAt,
+        // o id de quem agiu vai junto do rótulo: é com ele que a tela aplica a
+        // segregação de funções (RFQ-ERR-030) antes de oferecer o botão de aprovar
+        by = q.SelectedBy, byLabel = q.SelectedByLabel, at = q.SelectedAt,
     },
-    managerApproval = q.ManagerApprovedAt is null ? null : new { byLabel = q.ManagerApprovedByLabel, at = q.ManagerApprovedAt },
-    directorApproval = q.DirectorApprovedAt is null ? null : new { byLabel = q.DirectorApprovedByLabel, at = q.DirectorApprovedAt },
+    managerApproval = q.ManagerApprovedAt is null ? null
+        : new { by = q.ManagerApprovedBy, byLabel = q.ManagerApprovedByLabel, at = q.ManagerApprovedAt },
+    directorApproval = q.DirectorApprovedAt is null ? null
+        : new { by = q.DirectorApprovedBy, byLabel = q.DirectorApprovedByLabel, at = q.DirectorApprovedAt },
     // adjudicação por família: a mesma compra pode ficar com vários fornecedores, um por família
     awards = q.AwardList.Select(a => new
     {

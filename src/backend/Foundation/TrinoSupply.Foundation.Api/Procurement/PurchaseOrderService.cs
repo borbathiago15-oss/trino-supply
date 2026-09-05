@@ -78,7 +78,7 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
         var now = clock.GetUtcNow();
         var order = new PurchaseOrder
         {
-            Number = $"PO-{now.Year}-{await NextSeqAsync(ct):000000}",
+            Number = await NextOrderNumberAsync(db, now, ct),
             SupplierId = supplier.Id,
             SupplierName = supplier.TradeName ?? supplier.LegalName,
             SourcePrId = null,
@@ -114,25 +114,47 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
     /// A data é a base do lead time "aprovação → OC" (revisão de telas 2026-08-26).
     /// </summary>
     public async Task<(PurchaseOrder? order, UserError? error)> RegisterErpOrderAsync(
-        Actor actor, Guid id, string? erpNumber, DateOnly? issuedOn, CancellationToken ct = default)
+        Actor actor, Guid id, string? erpNumber, DateOnly? issuedOn,
+        string? noErpReason = null, CancellationToken ct = default)
     {
         var order = await LoadAsync(id, ct);
         if (order is null) return (null, new("PO-ERR-404", "Pedido não encontrado."));
         if (order.Status == PurchaseOrderStatus.Cancelled)
             return (null, new("PO-ERR-040", "Pedido cancelado não recebe OC."));
-        if (string.IsNullOrWhiteSpace(erpNumber))
-            return (null, new("PO-ERR-050", "Informe o número da OC gerada no ERP."));
 
-        var numero = erpNumber.Trim();
-        if (numero.Length > 30)
-            return (null, new("PO-ERR-050", "O número da OC tem no máximo 30 caracteres."));
-        // a OC do SENIOR é única no sistema (RFQ-ERR-041): o caminho da cotação já
-        // garantia isso pelo número do pedido, mas por aqui dava para repetir
-        if (await db.PurchaseOrders.AnyAsync(o => o.Id != order.Id && o.ErpNumber == numero, ct))
-            return (null, new("PO-ERR-050", $"A OC {numero} já está registrada em outro pedido."));
+        var agora = clock.GetUtcNow();
+        var numero = erpNumber?.Trim();
 
-        order.ErpNumber = numero;
-        order.ErpIssuedOn = issuedOn ?? DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        if (string.IsNullOrWhiteSpace(numero))
+        {
+            // a regra é a O.C. do ERP: sem ela o pedido não fecha. A única exceção é a
+            // observação explicando por que a O.C. não foi gerada (PO-BR-011)
+            var motivo = noErpReason?.Trim();
+            if (string.IsNullOrWhiteSpace(motivo) || motivo.Length < 10)
+                return (null, new("PO-ERR-054",
+                    "A O.C. é gerada no ERP e sem ela o pedido não fecha. Para fechar assim mesmo, "
+                    + "informe na observação, em pelo menos 10 caracteres, por que a O.C. não foi gerada."));
+            if (motivo.Length > 500)
+                return (null, new("PO-ERR-054", "A observação tem no máximo 500 caracteres."));
+
+            order.ErpNumber = null;
+            order.NoErpReason = motivo;
+        }
+        else
+        {
+            if (numero.Length > 30)
+                return (null, new("PO-ERR-050", "O número da OC tem no máximo 30 caracteres."));
+            // a OC do SENIOR é única no sistema (RFQ-ERR-041): o caminho da cotação já
+            // garantia isso pelo número do pedido, mas por aqui dava para repetir
+            if (await db.PurchaseOrders.AnyAsync(o => o.Id != order.Id && o.ErpNumber == numero, ct))
+                return (null, new("PO-ERR-050", $"A OC {numero} já está registrada em outro pedido."));
+
+            order.ErpNumber = numero;
+            // chegou a O.C. de verdade: a observação da exceção sai de cena
+            order.NoErpReason = null;
+        }
+
+        order.ErpIssuedOn = issuedOn ?? DateOnly.FromDateTime(agora.UtcDateTime);
         Touch(order);
         await db.SaveChangesAsync(ct);
         return (order, null);
@@ -148,8 +170,9 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
             return (null, new("PO-ERR-040", "Pedido cancelado não recebe faturamento."));
         if (string.IsNullOrWhiteSpace(number))
             return (null, new("PO-ERR-051", "Informe o número da nota fiscal."));
-        if (order.ErpNumber is null)
-            return (null, new("PO-ERR-052", "Registre primeiro a OC do ERP para depois lançar a nota fiscal."));
+        if (order.ErpNumber is null && order.NoErpReason is null)
+            return (null, new("PO-ERR-052",
+                "Registre primeiro a OC do ERP — ou a observação de por que ela não foi gerada — para depois lançar a nota fiscal."));
         if (value is < 0) return (null, new("PO-ERR-053", "O valor da nota não pode ser negativo."));
 
         var now = clock.GetUtcNow();
@@ -332,7 +355,9 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
         return (order, null);
     }
 
-    private async Task<long> NextSeqAsync(CancellationToken ct)
+    private Task<long> NextSeqAsync(CancellationToken ct) => NextSeqAsync(db, ct);
+
+    private static async Task<long> NextSeqAsync(AppDbContext db, CancellationToken ct)
     {
         if (!db.Database.IsRelational())
             return await db.PurchaseOrders.LongCountAsync(ct) + 1;
@@ -340,4 +365,8 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
             .SqlQueryRaw<long>("SELECT nextval('procurement.po_number_seq') AS \"Value\"")
             .SingleAsync(ct);
     }
+
+    /// <summary>Numeração própria do pedido (PO-ano-sequência), usada quando não há O.C. do ERP.</summary>
+    public static async Task<string> NextOrderNumberAsync(AppDbContext db, DateTimeOffset now, CancellationToken ct = default) =>
+        $"PO-{now.Year}-{await NextSeqAsync(db, ct):000000}";
 }

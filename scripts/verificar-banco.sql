@@ -86,6 +86,12 @@ SELECT categoria, checagem, ocorrencias FROM (
            WHERE erp_number IS NOT NULL AND erp_number <> ''
            GROUP BY 1 HAVING count(*) > 1) d
 
+  UNION ALL SELECT 25, 'regra', 'PO-BR-011: pedido faturado sem O.C. do ERP e sem observação', count(*)
+    FROM procurement.purchase_order o
+   WHERE o.erp_number IS NULL
+     AND (o.no_erp_reason IS NULL OR btrim(o.no_erp_reason) = '')
+     AND EXISTS (SELECT 1 FROM procurement.purchase_order_invoice i WHERE i.order_id = o.id)
+
   UNION ALL SELECT 24, 'regra', 'IC-ERR-023: EPI/EPC ativo sem C.A. em nenhum fornecedor', count(*)
     FROM materials.catalog_item c
    WHERE c.active AND c.product_type IN ('EPI', 'EPC')

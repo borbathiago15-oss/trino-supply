@@ -58,6 +58,14 @@ o usuário descobrir no erro do servidor:
   a própria escolha; quem deu o Nível 1 não dá o Nível 2.
 - **RFQ-ERR-040/041** — a O.C. nunca é emitida pelo sistema. Ela é fechada no ERP
   SENIOR e aqui só se registra o número, depois das duas aprovações.
+- **PO-BR-011** — **sem O.C. gerada no ERP, a compra não fecha.** A única exceção
+  é a observação dizendo por que a O.C. não foi gerada: com ela (mínimo 10
+  caracteres, em `no_erp_reason`) o fechamento segue normalmente e a justificativa
+  fica na auditoria. O sistema **nunca** inventa um número de O.C.: nesse caso o
+  pedido usa a própria numeração `PO-ano-sequência` e `erp_number` continua nulo —
+  é o que mantém honesto todo relatório que conta O.C. do ERP. A O.C. que chegar
+  depois deixa de ser exceção e limpa a observação. Vale nos dois caminhos:
+  `RFQ-ERR-043` no processo de cotação e `PO-ERR-054` na tela do pedido.
 - **IC-ERR-023** — EPI/EPC só circula com C.A. válido no par produto-fornecedor.
 - **SEC-004** — senha definida por outra pessoa é provisória. Usuário criado pelo
   cadastro, admin semeado pelo ambiente e senha redefinida pelo administrador

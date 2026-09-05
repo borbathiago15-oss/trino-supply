@@ -328,8 +328,50 @@ describe('tela do processo', () => {
     await usuario.click(within(form).getByRole('button', { name: /Registrar O.C./ }));
 
     await waitFor(() => expect(registrarOc).toHaveBeenCalledWith('q1', {
-      erpNumber: '663', issuedOn: null, notes: null, supplierId: 's2',
+      erpNumber: '663', issuedOn: null, notes: null, supplierId: 's2', noErpReason: null,
     }));
+  });
+
+  it('sem o número do ERP a observação é obrigatória, e é ela que libera o fechamento', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(lerProcesso).mockResolvedValue(processo({ status: 'APROVADO_PARA_EMISSAO' }));
+    vi.mocked(registrarOc).mockResolvedValue(processo({}));
+    abrir();
+
+    const form = await screen.findByTestId('form-oc');
+    const botao = within(form).getByRole('button', { name: /Fechar sem O.C.|Registrar O.C./ });
+
+    // com o campo da O.C. vazio o botão vira "sem O.C." e trava até o motivo
+    expect(botao).toHaveTextContent('Fechar sem O.C., com a observação');
+    expect(botao).toBeDisabled();
+    expect(within(form).getByText(/sem ela o processo/)).toBeInTheDocument();
+
+    await usuario.type(within(form).getByLabelText(/por que a O.C. não foi gerada/i), 'curto');
+    expect(botao).toBeDisabled();
+
+    await usuario.clear(within(form).getByLabelText(/por que a O.C. não foi gerada/i));
+    await usuario.type(within(form).getByLabelText(/por que a O.C. não foi gerada/i),
+      'Compra emergencial de balcão, sem tempo de abrir O.C.');
+    expect(botao).toBeEnabled();
+    await usuario.click(botao);
+
+    await waitFor(() => expect(registrarOc).toHaveBeenCalledWith('q1', {
+      erpNumber: '', issuedOn: null, notes: null, supplierId: null,
+      noErpReason: 'Compra emergencial de balcão, sem tempo de abrir O.C.',
+    }));
+  });
+
+  it('digitar o número do ERP faz o campo de observação sumir', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(lerProcesso).mockResolvedValue(processo({ status: 'APROVADO_PARA_EMISSAO' }));
+    abrir();
+
+    const form = await screen.findByTestId('form-oc');
+    expect(within(form).getByLabelText(/por que a O.C. não foi gerada/i)).toBeInTheDocument();
+
+    await usuario.type(within(form).getByLabelText('Número da O.C. (ERP)'), '663');
+    expect(within(form).queryByLabelText(/por que a O.C. não foi gerada/i)).not.toBeInTheDocument();
+    expect(within(form).getByRole('button', { name: /Registrar O.C./ })).toBeEnabled();
   });
 
   it('cancelar o processo exige o motivo', async () => {

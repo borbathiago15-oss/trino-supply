@@ -1459,6 +1459,8 @@ static object PoView(PurchaseOrder o) => new
     issuedByLabel = o.IssuedByLabel, receivedByLabel = o.ReceivedByLabel, receivedAt = o.ReceivedAt,
     cancelReason = o.CancelReason, createdAt = o.CreatedAt,
     erpNumber = o.ErpNumber, erpIssuedOn = o.ErpIssuedOn,
+    // fechado sem O.C. do ERP: a observação que autorizou a exceção (PO-BR-011)
+    noErpReason = o.NoErpReason,
     promisedDate = o.PromisedDate, onTime = o.OnTime, inFull = o.InFull, otif = o.Otif,
     referenceSavingTotal = o.Items.Any(i => i.ReferenceSaving != null)
         ? o.Items.Sum(i => i.ReferenceSaving ?? 0) : (decimal?)null,
@@ -1552,7 +1554,7 @@ pos.MapPost("/{id:guid}/receive", async (Guid id, ReceiveOrderRequest body, Purc
     var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
     var (order, error) = await svc.ReceiveAsync(actor, id, body.LocationId);
     return error is not null
-        ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, _ => 400 }, error.Code, error.Message)
+        ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, "PO-ERR-054" => 422, _ => 400 }, error.Code, error.Message)
         : Ok(PoView(order!), ctx);
 });
 
@@ -1564,9 +1566,9 @@ pos.MapPost("/{id:guid}/erp-order", async (Guid id, ErpOrderRequest body, Purcha
     if (!PurchaseOrderService.CanManage(role))
         return Error(ctx, 403, "PO-ERR-900", "Seu papel não registra a OC do ERP.");
     var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
-    var (order, error) = await svc.RegisterErpOrderAsync(actor, id, body.ErpNumber, body.IssuedOn);
+    var (order, error) = await svc.RegisterErpOrderAsync(actor, id, body.ErpNumber, body.IssuedOn, body.NoErpReason);
     return error is not null
-        ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, _ => 400 }, error.Code, error.Message)
+        ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, "PO-ERR-054" => 422, _ => 400 }, error.Code, error.Message)
         : Ok(PoView(order!), ctx);
 });
 
@@ -1580,7 +1582,7 @@ pos.MapPost("/{id:guid}/invoices", async (Guid id, InvoiceRequest body, Purchase
     var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
     var (invoice, error) = await svc.AddInvoiceAsync(actor, id, body.Number, body.IssuedOn, body.Value);
     return error is not null
-        ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, _ => 400 }, error.Code, error.Message)
+        ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, "PO-ERR-054" => 422, _ => 400 }, error.Code, error.Message)
         : Results.Json(new { data = new { id = invoice!.Id, number = invoice.Number, issuedOn = invoice.IssuedOn },
                               correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
@@ -1597,7 +1599,7 @@ pos.MapPost("/{id:guid}/deliveries", async (Guid id, DeliveryRequest body, Purch
     var (order, error) = await svc.RegisterDeliveryAsync(
         actor, id, body.LocationId, lines, body.CloseRemaining == true, body.CloseReason, body.RejectReason);
     return error is not null
-        ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, _ => 400 }, error.Code, error.Message)
+        ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, "PO-ERR-054" => 422, _ => 400 }, error.Code, error.Message)
         : Ok(PoView(order!), ctx);
 });
 
@@ -1609,7 +1611,7 @@ pos.MapPost("/{id:guid}/cancel", async (Guid id, ReasonRequest body, PurchaseOrd
     var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
     var (order, error) = await svc.CancelAsync(actor, id, body.Reason);
     return error is not null
-        ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, _ => 400 }, error.Code, error.Message)
+        ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, "PO-ERR-054" => 422, _ => 400 }, error.Code, error.Message)
         : Ok(PoView(order!), ctx);
 });
 
@@ -2238,9 +2240,9 @@ rfq.MapPost("/{id:guid}/register-po", async (Guid id, RegisterPoRequest body, Qu
     if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não registra ordens de compra.");
     var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
     var (order, error) = await svc.RegisterErpPurchaseOrderAsync(actor, id, body.ErpNumber, body.IssuedOn, body.Notes,
-        body.OverLimitJustification, body.SupplierId);
+        body.OverLimitJustification, body.SupplierId, body.NoErpReason);
     return error is not null
-        ? Error(ctx, error.Code is "RFQ-ERR-041" or "CT-ERR-010" or "RFQ-ERR-042" ? 422 : 409, error.Code, error.Message)
+        ? Error(ctx, error.Code is "RFQ-ERR-041" or "CT-ERR-010" or "RFQ-ERR-042" or "RFQ-ERR-043" ? 422 : 409, error.Code, error.Message)
         : Results.Json(new { data = PoView(order!), correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
 
@@ -2736,7 +2738,7 @@ public record UpdateCatalogItemRequest(string? Description, string? Family, stri
 public record CreateLocationRequest(string Code, string Name);
 public record MaterialLineRequest(Guid ItemId, decimal Quantity);
 public record ApproveMaterialRequest(List<MaterialLineRequest>? Items, string? Notes);
-public record ErpOrderRequest(string? ErpNumber, DateOnly? IssuedOn);
+public record ErpOrderRequest(string? ErpNumber, DateOnly? IssuedOn, string? NoErpReason);
 public record InvoiceRequest(string? Number, DateOnly? IssuedOn, decimal? Value);
 public record DeliveryLineRequest(Guid ItemId, decimal Quantity, decimal? Rejected = null);
 public record DeliveryRequest(Guid? LocationId, List<DeliveryLineRequest>? Items, bool? CloseRemaining, string? CloseReason,
@@ -2781,7 +2783,7 @@ public record SelectWinnerRequest(Guid ProposalId, List<string>? Criteria, strin
 public record AwardRequest(string Family, Guid ProposalId, List<string>? Criteria, string? Justification);
 public record QuotationDecisionRequest(string Decision, string? Reason);
 public record RegisterPoRequest(string? ErpNumber, DateOnly? IssuedOn, string? Notes,
-    string? OverLimitJustification = null, Guid? SupplierId = null);
+    string? OverLimitJustification = null, Guid? SupplierId = null, string? NoErpReason = null);
 public record NegotiationRequest(Guid SupplierId, decimal? ClosedValue, decimal? DiscountPercent, string? Notes);
 public record PortalLoginRequest(string TaxId, string AccessKey);
 public record PortalProposalRequest(int? DeliveryDays, string? PaymentTerms, decimal? FreightValue, DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items,

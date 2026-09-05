@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  CRITERIOS, escolherVencedor, propostasVigentes, registrarOc,
+  CRITERIOS, escolherVencedor, MINIMO_MOTIVO_SEM_OC, propostasVigentes, registrarOc,
   type Processo, type Proposta,
 } from '@/api/cotacoes';
 import { anexarOc } from '@/api/pedidos';
@@ -185,8 +185,14 @@ export function FormRegistroOc({ processo, aoConcluir, aoAvisar }: {
   const [numero, setNumero] = useState('');
   const [emissao, setEmissao] = useState('');
   const [observacao, setObservacao] = useState('');
+  const [motivoSemOc, setMotivoSemOc] = useState('');
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [salvando, setSalvando] = useState(false);
+
+  // a O.C. é gerada no ERP: sem ela o processo não fecha, a não ser com a observação
+  const semOc = numero.trim().length === 0;
+  const motivoCurto = motivoSemOc.trim().length < MINIMO_MOTIVO_SEM_OC;
+  const pronto = semOc ? !motivoCurto : true;
 
   async function confirmar() {
     setSalvando(true);
@@ -196,6 +202,7 @@ export function FormRegistroOc({ processo, aoConcluir, aoAvisar }: {
       const atualizado = await registrarOc(processo.id, {
         erpNumber: numero.trim(), issuedOn: emissao || null, notes: observacao || null,
         supplierId: pendentes.length > 1 ? fornecedor : null,
+        noErpReason: semOc ? motivoSemOc.trim() : null,
       });
       // o anexo é um passo à parte: falhar nele não desfaz a O.C. registrada
       if (arquivo) {
@@ -209,7 +216,9 @@ export function FormRegistroOc({ processo, aoConcluir, aoAvisar }: {
           return;
         }
       }
-      aoAvisar('O.C. registrada. O processo segue para faturamento e entrega.');
+      aoAvisar(semOc
+        ? 'Fechado sem O.C. do ERP, com a observação na auditoria. Segue para faturamento e entrega.'
+        : 'O.C. registrada. O processo segue para faturamento e entrega.');
       aoConcluir();
     } catch (e) { aoAvisar(mensagem(e, 'Falha ao registrar a O.C.'), 'erro'); }
     finally { setSalvando(false); }
@@ -256,14 +265,31 @@ export function FormRegistroOc({ processo, aoConcluir, aoAvisar }: {
         <input id="oc-obs" placeholder="ex.: entrega parcelada combinada com o fornecedor"
           value={observacao} onChange={(e) => setObservacao(e.target.value)} />
       </Campo>
+      {semOc && (
+        <Campo id="oc-motivo" rotulo="Observação: por que a O.C. não foi gerada no ERP?"
+          dica="(obrigatória para fechar sem O.C.)" className="mt-3">
+          <input id="oc-motivo" placeholder="ex.: compra emergencial de balcão, sem tempo de abrir O.C."
+            value={motivoSemOc} onChange={(e) => setMotivoSemOc(e.target.value)} />
+        </Campo>
+      )}
+
       <Campo id="oc-arquivo" rotulo="Anexo da O.C." dica="(opcional) PDF, planilha ou imagem" className="mt-3">
         <input id="oc-arquivo" type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.docx"
           onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} />
       </Campo>
 
-      <button type="button" className="botao mt-3" disabled={!numero.trim() || salvando} onClick={confirmar}>
-        {salvando ? 'Registrando…' : 'Registrar O.C. e seguir para faturamento'}
+      <button type="button" className="botao mt-3" disabled={!pronto || salvando} onClick={confirmar}>
+        {salvando
+          ? 'Registrando…'
+          : semOc ? 'Fechar sem O.C., com a observação' : 'Registrar O.C. e seguir para faturamento'}
       </button>
+      {semOc && (
+        <Nota>
+          A O.C. é gerada no ERP SENIOR, e sem ela o processo <strong>não fecha</strong>. A
+          observação acima é a única exceção: com ela o pedido segue com a própria numeração, e
+          a justificativa fica registrada na auditoria.
+        </Nota>
+      )}
       <Nota>O faturamento e a confirmação de entrega ficam na tela do pedido.</Nota>
     </div>
   );

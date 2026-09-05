@@ -7,7 +7,8 @@ import {
   anexarNota, anexarOc, lancarNota, obterPedido, pdfPedido, pedidoEncerrado, registrarEntrega, registrarOc,
   ROTULO_SITUACAO, type PedidoCompra,
 } from '@/api/pedidos';
-import { Badge, Carregando, Dado, Erro, Painel, Vazio } from '@/componentes/basicos';
+import { MINIMO_MOTIVO_SEM_OC } from '@/api/cotacoes';
+import { Aviso, Badge, Carregando, Dado, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { useToast } from '@/componentes/Toast';
 import { podeConfirmarEntrega, podeGerirPedidos } from '@/dominio/papeis';
 import { useUsuario } from '@/sessao/SessaoProvider';
@@ -94,18 +95,30 @@ function FormularioOc({ pedido, podeEditar, aoSalvar, abrirDocumento }:
   const { avisar } = useToast();
   const [numero, setNumero] = useState(pedido.erpNumber ?? '');
   const [dataOc, setDataOc] = useState(pedido.erpIssuedOn ?? '');
+  const [motivoSemOc, setMotivoSemOc] = useState(pedido.noErpReason ?? '');
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [salvando, setSalvando] = useState(false);
-  useEffect(() => { setNumero(pedido.erpNumber ?? ''); setDataOc(pedido.erpIssuedOn ?? ''); }, [pedido.erpNumber, pedido.erpIssuedOn]);
+  useEffect(() => {
+    setNumero(pedido.erpNumber ?? '');
+    setDataOc(pedido.erpIssuedOn ?? '');
+    setMotivoSemOc(pedido.noErpReason ?? '');
+  }, [pedido.erpNumber, pedido.erpIssuedOn, pedido.noErpReason]);
+
+  // a O.C. é gerada no ERP: sem ela o pedido não fecha, a não ser com a observação
+  const semOc = numero.trim().length === 0;
+  const pronto = !semOc || motivoSemOc.trim().length >= MINIMO_MOTIVO_SEM_OC;
 
   async function salvar(ev: FormEvent) {
     ev.preventDefault();
     setSalvando(true);
     try {
-      await registrarOc(pedido.id, { erpNumber: numero, issuedOn: dataOc || null });
+      await registrarOc(pedido.id, {
+        erpNumber: numero, issuedOn: dataOc || null,
+        noErpReason: semOc ? motivoSemOc.trim() : null,
+      });
       if (arquivo) await anexarOc(pedido.id, arquivo);
       setArquivo(null);
-      avisar('OC registrada.');
+      avisar(semOc ? 'Fechado sem O.C., com a observação na auditoria.' : 'OC registrada.');
       aoSalvar();
     } catch (e) { avisar(mensagem(e, 'Falha ao registrar a OC.'), 'erro'); }
     finally { setSalvando(false); }
@@ -118,14 +131,34 @@ function FormularioOc({ pedido, podeEditar, aoSalvar, abrirDocumento }:
           <>OC <strong>{pedido.erpNumber}</strong> de {data(pedido.erpIssuedOn)}
             {pedido.erpFileName && pedido.erpDocumentId && <> · <button type="button" className="text-marca underline" onClick={() => abrirDocumento(pedido.erpDocumentId!)}>{pedido.erpFileName}</button></>}
           </>
-        ) : 'Nenhuma OC registrada ainda — informe o número gerado no ERP.'}
+        ) : pedido.noErpReason ? (
+          <>Fechado <strong>sem O.C. do ERP</strong> em {data(pedido.erpIssuedOn)}, sob o próprio
+            número do pedido <strong>{pedido.number}</strong>.
+          </>
+        ) : 'Nenhuma OC registrada ainda — informe o número gerado no ERP, ou a observação de por que ele não existe.'}
       </p>
+      {pedido.noErpReason && (
+        <div className="mb-3"><Aviso testid="motivo-sem-oc">Observação: {pedido.noErpReason}</Aviso></div>
+      )}
       {podeEditar && (
         <form onSubmit={salvar} className="grid grid-cols-1 items-end gap-3 md:grid-cols-[1fr_170px_1fr_auto]">
-          <div><label htmlFor="oc-numero">Número da OC no ERP</label><input id="oc-numero" required value={numero} onChange={(e) => setNumero(e.target.value)} /></div>
+          <div><label htmlFor="oc-numero">Número da OC no ERP</label><input id="oc-numero" value={numero} onChange={(e) => setNumero(e.target.value)} /></div>
           <div><label htmlFor="oc-data">Data</label><input id="oc-data" type="date" value={dataOc} onChange={(e) => setDataOc(e.target.value)} /></div>
           <div><label htmlFor="oc-arquivo">Anexo (PDF da OC)</label><input id="oc-arquivo" type="file" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} /></div>
-          <button type="submit" className="botao" disabled={salvando}>{salvando ? 'Salvando…' : 'Registrar OC'}</button>
+          <button type="submit" className="botao" disabled={!pronto || salvando}>
+            {salvando ? 'Salvando…' : semOc ? 'Fechar sem O.C.' : 'Registrar OC'}
+          </button>
+          {semOc && (
+            <div className="md:col-span-4">
+              <label htmlFor="oc-motivo">Observação: por que a O.C. não foi gerada no ERP? (obrigatória para fechar sem O.C.)</label>
+              <input id="oc-motivo" placeholder="ex.: compra emergencial de balcão, sem tempo de abrir O.C."
+                value={motivoSemOc} onChange={(e) => setMotivoSemOc(e.target.value)} />
+              <p className="sub mt-1">
+                A O.C. é gerada no ERP SENIOR, e sem ela o pedido não fecha. Esta observação é a
+                única exceção, e fica registrada na auditoria.
+              </p>
+            </div>
+          )}
         </form>
       )}
     </Painel>

@@ -3,6 +3,7 @@ import {
   CRITERIOS, escolherVencedor, propostasVigentes, registrarOc,
   type Processo, type Proposta,
 } from '@/api/cotacoes';
+import { anexarOc } from '@/api/pedidos';
 import { Nota } from '@/componentes/formulario';
 import { Campo, Grade2 } from '@/componentes/formulario';
 import { moeda } from '@/util/formato';
@@ -184,15 +185,30 @@ export function FormRegistroOc({ processo, aoConcluir, aoAvisar }: {
   const [numero, setNumero] = useState('');
   const [emissao, setEmissao] = useState('');
   const [observacao, setObservacao] = useState('');
+  const [arquivo, setArquivo] = useState<File | null>(null);
   const [salvando, setSalvando] = useState(false);
 
   async function confirmar() {
     setSalvando(true);
+    // guarda o que já existia para achar a O.C. nova depois de registrar
+    const antes = new Set(processo.purchaseOrders.map((o) => o.id));
     try {
-      await registrarOc(processo.id, {
+      const atualizado = await registrarOc(processo.id, {
         erpNumber: numero.trim(), issuedOn: emissao || null, notes: observacao || null,
         supplierId: pendentes.length > 1 ? fornecedor : null,
       });
+      // o anexo é um passo à parte: falhar nele não desfaz a O.C. registrada
+      if (arquivo) {
+        const nova = atualizado.purchaseOrders.find((o) => !antes.has(o.id));
+        try {
+          if (!nova) throw new Error('pedido não localizado no processo');
+          await anexarOc(nova.id, arquivo);
+        } catch (e) {
+          aoAvisar(`O.C. registrada, mas o anexo falhou: ${mensagem(e, 'erro no upload')}. Anexe pela tela do pedido.`, 'erro');
+          aoConcluir();
+          return;
+        }
+      }
       aoAvisar('O.C. registrada. O processo segue para faturamento e entrega.');
       aoConcluir();
     } catch (e) { aoAvisar(mensagem(e, 'Falha ao registrar a O.C.'), 'erro'); }
@@ -240,11 +256,15 @@ export function FormRegistroOc({ processo, aoConcluir, aoAvisar }: {
         <input id="oc-obs" placeholder="ex.: entrega parcelada combinada com o fornecedor"
           value={observacao} onChange={(e) => setObservacao(e.target.value)} />
       </Campo>
+      <Campo id="oc-arquivo" rotulo="Anexo da O.C." dica="(opcional) PDF, planilha ou imagem" className="mt-3">
+        <input id="oc-arquivo" type="file" accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.docx"
+          onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} />
+      </Campo>
 
       <button type="button" className="botao mt-3" disabled={!numero.trim() || salvando} onClick={confirmar}>
         {salvando ? 'Registrando…' : 'Registrar O.C. e seguir para faturamento'}
       </button>
-      <Nota>O anexo da O.C. continua sendo lançado na tela de Pedidos de Compra.</Nota>
+      <Nota>O faturamento e a confirmação de entrega ficam na tela do pedido.</Nota>
     </div>
   );
 }

@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { registrarProposta, type Processo, type PropostaManual } from '@/api/cotacoes';
+import {
+  anexarNaProposta, propostaVigenteDe, registrarProposta,
+  type Processo, type PropostaManual,
+} from '@/api/cotacoes';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
 import { quantidade } from '@/util/formato';
 
@@ -60,6 +63,7 @@ export function PainelPropostaManual({ processo, aoRegistrar, aoAvisar }: {
   const [fornecedor, setFornecedor] = useState(processo.suppliers[0]?.supplierId ?? '');
   const [campos, setCampos] = useState<Record<string, string>>(VAZIO);
   const [precos, setPrecos] = useState<Record<string, string>>({});
+  const [arquivo, setArquivo] = useState<File | null>(null);
   const [salvando, setSalvando] = useState(false);
 
   const campo = (k: keyof typeof VAZIO) => ({
@@ -72,10 +76,26 @@ export function PainelPropostaManual({ processo, aoRegistrar, aoAvisar }: {
     if (erro || !proposta) { aoAvisar(erro ?? 'Proposta incompleta.', 'erro'); return; }
     setSalvando(true);
     try {
-      await registrarProposta(processo.id, proposta);
+      const atualizado = await registrarProposta(processo.id, proposta);
+      // o anexo é um passo à parte: falhar nele não desfaz a proposta registrada
+      if (arquivo) {
+        const registrada = propostaVigenteDe(atualizado, fornecedor);
+        try {
+          if (!registrada) throw new Error('proposta não localizada no processo');
+          await anexarNaProposta(processo.id, registrada.id, arquivo);
+        } catch (e) {
+          aoAvisar(`Proposta registrada, mas o anexo falhou: ${e instanceof Error ? e.message : 'erro no upload'}.`, 'erro');
+          setCampos(VAZIO);
+          setPrecos({});
+          setArquivo(null);
+          aoRegistrar();
+          return;
+        }
+      }
       aoAvisar('Proposta registrada.');
       setCampos(VAZIO);
       setPrecos({});
+      setArquivo(null);
       aoRegistrar();
     } catch (e) { aoAvisar(e instanceof Error ? e.message : 'Falha ao registrar a proposta.', 'erro'); }
     finally { setSalvando(false); }
@@ -166,14 +186,19 @@ export function PainelPropostaManual({ processo, aoRegistrar, aoAvisar }: {
         </div>
       </div>
 
+      <Campo id="ip-arquivo" rotulo="Cotação recebida" dica="PDF, planilha ou imagem, até 10 MB" className="mt-3">
+        <input id="ip-arquivo" type="file" accept=".pdf,.xlsx,.xls,.csv,.docx,.png,.jpg,.jpeg"
+          onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} />
+      </Campo>
+
       <div className="mt-3">
         <button type="button" className="botao" disabled={salvando} onClick={salvar}>
           {salvando ? 'Registrando…' : 'Registrar proposta'}
         </button>
       </div>
       <Nota>
-        Item sem preço fica de fora: o fornecedor pode não ter cotado tudo. O anexo do orçamento
-        recebido por e-mail continua sendo lançado no sistema clássico.
+        Item sem preço fica de fora: o fornecedor pode não ter cotado tudo. O orçamento que ele
+        enviou por e-mail fica arquivado no processo, disponível na comparação e na aprovação.
       </Nota>
     </div>
   );

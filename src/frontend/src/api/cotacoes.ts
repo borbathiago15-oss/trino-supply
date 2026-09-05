@@ -1,4 +1,4 @@
-import { api } from './cliente';
+import { api, enviarArquivo } from './cliente';
 
 /**
  * Situações do processo de cotação, com as chaves que o backend emite
@@ -290,6 +290,19 @@ export interface PropostaManual {
 
 export const registrarProposta = (id: string, dados: PropostaManual) =>
   api<Processo>(`${base}/${id}/proposals`, { method: 'POST', body: dados });
+
+/** Orçamento que o fornecedor mandou por e-mail, arquivado na proposta. */
+export const anexarNaProposta = (quotationId: string, proposalId: string, arquivo: File) =>
+  enviarArquivo<{ documentId: string; fileName: string }>(
+    `${base}/${quotationId}/proposals/${proposalId}/attachment`, arquivo);
+
+/**
+ * A proposta recém-registrada, achada no processo que o POST devolve: é a
+ * versão vigente daquele fornecedor. O endpoint responde com o processo
+ * inteiro, não com o id da proposta.
+ */
+export const propostaVigenteDe = (q: Processo, supplierId: string) =>
+  propostasVigentes(q).find((p) => p.supplierId === supplierId) ?? null;
 
 export const encerrarParaAnalise = (id: string) =>
   api<Processo>(`${base}/${id}/close`, { method: 'POST' });

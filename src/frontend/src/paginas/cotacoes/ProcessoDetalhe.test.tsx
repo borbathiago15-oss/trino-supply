@@ -15,6 +15,11 @@ vi.mock('@/api/cotacoes', async (importar) => ({
   lerProcesso: vi.fn(), convidarFornecedor: vi.fn(), encerrarParaAnalise: vi.fn(),
   escolherVencedor: vi.fn(), decidir: vi.fn(), registrarOc: vi.fn(),
   registrarNegociacao: vi.fn(), cancelarProcesso: vi.fn(), registrarProposta: vi.fn(),
+  anexarNaProposta: vi.fn(),
+}));
+vi.mock('@/api/pedidos', async (importar) => ({
+  ...(await importar<typeof import('@/api/pedidos')>()),
+  anexarOc: vi.fn(),
 }));
 vi.mock('@/api/fornecedores', async (importar) => ({
   ...(await importar<typeof import('@/api/fornecedores')>()),
@@ -23,9 +28,10 @@ vi.mock('@/api/fornecedores', async (importar) => ({
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => eu }));
 
 import {
-  cancelarProcesso, decidir, encerrarParaAnalise, escolherVencedor, lerProcesso,
-  registrarNegociacao, registrarOc,
+  anexarNaProposta, cancelarProcesso, decidir, encerrarParaAnalise, escolherVencedor,
+  lerProcesso, registrarNegociacao, registrarOc, registrarProposta,
 } from '@/api/cotacoes';
+import { anexarOc } from '@/api/pedidos';
 import { listarFornecedores } from '@/api/fornecedores';
 
 let eu: Usuario = {
@@ -274,6 +280,67 @@ describe('tela do processo', () => {
     expect(await screen.findByText('Nenhuma ação disponível para o seu papel nesta etapa.')).toBeInTheDocument();
     expect(screen.queryByTestId('form-vencedor')).not.toBeInTheDocument();
     expect(screen.queryByTestId('form-negociacao')).not.toBeInTheDocument();
+  });
+
+  it('o orçamento recebido por e-mail é anexado à proposta registrada', async () => {
+    const usuario = userEvent.setup();
+    const comProposta = processo({
+      status: 'EM_ANALISE',
+      proposals: [proposta({ id: 'p9', supplierId: 's1', supplierName: 'Alfa EPIs' })],
+    });
+    vi.mocked(lerProcesso).mockResolvedValue(processo({ status: 'COTACAO_ABERTA', proposals: [] }));
+    vi.mocked(registrarProposta).mockResolvedValue(comProposta);
+    vi.mocked(anexarNaProposta).mockResolvedValue({ documentId: 'd1', fileName: 'orcamento.pdf' });
+    abrir();
+
+    const form = await screen.findByTestId('form-proposta');
+    await usuario.type(within(form).getByLabelText('Preço unitário de Luva nitrílica'), '12');
+    await usuario.upload(within(form).getByLabelText(/Cotação recebida/),
+      new File(['x'], 'orcamento.pdf', { type: 'application/pdf' }));
+    await usuario.click(within(form).getByRole('button', { name: 'Registrar proposta' }));
+
+    // o anexo vai na proposta que acabou de entrar, achada pelo fornecedor
+    await waitFor(() => expect(anexarNaProposta).toHaveBeenCalledWith('q1', 'p9', expect.any(File)));
+  });
+
+  it('anexo que falha não desfaz a proposta já registrada', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(lerProcesso).mockResolvedValue(processo({ status: 'COTACAO_ABERTA', proposals: [] }));
+    vi.mocked(registrarProposta).mockResolvedValue(processo({
+      proposals: [proposta({ id: 'p9', supplierId: 's1' })],
+    }));
+    vi.mocked(anexarNaProposta).mockRejectedValue(new Error('Arquivo acima de 10 MB.'));
+    abrir();
+
+    const form = await screen.findByTestId('form-proposta');
+    await usuario.type(within(form).getByLabelText('Preço unitário de Luva nitrílica'), '12');
+    await usuario.upload(within(form).getByLabelText(/Cotação recebida/),
+      new File(['x'], 'grande.pdf', { type: 'application/pdf' }));
+    await usuario.click(within(form).getByRole('button', { name: 'Registrar proposta' }));
+
+    expect(await screen.findByText(/Proposta registrada, mas o anexo falhou/)).toBeInTheDocument();
+    expect(registrarProposta).toHaveBeenCalledTimes(1);
+  });
+
+  it('o anexo da O.C. entra no pedido que o registro acabou de criar', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(lerProcesso).mockResolvedValue(processo({
+      status: 'APROVADO_PARA_EMISSAO',
+      pendingPoSuppliers: [{ supplierId: 's1', supplierName: 'Alfa', families: ['EPI'], totalValue: 1200 }],
+    }));
+    vi.mocked(registrarOc).mockResolvedValue(processo({
+      purchaseOrders: [{ id: 'po-novo', number: 'PO-1', supplierName: 'Alfa', families: ['EPI'], totalValue: 1200 }],
+    }));
+    vi.mocked(anexarOc).mockResolvedValue(undefined);
+    abrir();
+
+    const form = await screen.findByTestId('form-oc');
+    await usuario.type(within(form).getByLabelText('Número da O.C. (ERP)'), '663');
+    await usuario.upload(within(form).getByLabelText(/Anexo da O.C./),
+      new File(['x'], 'oc.pdf', { type: 'application/pdf' }));
+    await usuario.click(within(form).getByRole('button', { name: /Registrar O.C./ }));
+
+    await waitFor(() => expect(anexarOc).toHaveBeenCalledWith('po-novo', expect.any(File)));
   });
 
   it('a O.C. registrada leva ao pedido, onde ficam faturamento e entrega', async () => {

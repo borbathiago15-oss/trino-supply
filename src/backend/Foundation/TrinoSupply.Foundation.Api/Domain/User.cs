@@ -18,6 +18,14 @@ public class User
     /// <summary>Diretor responsável pela 2ª alçada dos processos deste gerente (RFQ-001).</summary>
     public Guid? DirectorId { get; set; }
     public bool Active { get; set; } = true;
+    /// <summary>
+    /// Senha provisória: quem cadastrou o usuário escolheu a senha, então ela precisa
+    /// ser trocada no primeiro acesso (SEC-004). Enquanto estiver marcada, o token do
+    /// usuário só abre a troca de senha — nenhuma outra rota responde.
+    /// </summary>
+    public bool MustChangePassword { get; set; }
+    /// <summary>Quando o próprio usuário definiu a senha atual. Nulo = senha ainda é a de cadastro.</summary>
+    public DateTimeOffset? PasswordChangedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

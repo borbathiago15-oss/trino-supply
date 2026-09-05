@@ -21,6 +21,9 @@ public class TokenService(JwtOptions options)
 {
     public JwtOptions Options => options;
 
+    /// <summary>Claim que marca a sessão como presa na troca de senha obrigatória.</summary>
+    public const string SenhaProvisoria = "must_change_password";
+
     public string CreateAccessToken(User user, DateTimeOffset now)
     {
         var claims = new List<Claim>
@@ -32,6 +35,9 @@ public class TokenService(JwtOptions options)
             new(ClaimTypes.Role, user.Role),
             new("modules", string.Join(',', AppModules.EffectiveFor(user))),
         };
+        // senha provisória vira claim: o filtro de rota fecha tudo menos a troca
+        // de senha, sem consultar o banco a cada requisição (SEC-004)
+        if (user.MustChangePassword) claims.Add(new Claim(SenhaProvisoria, "1"));
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);

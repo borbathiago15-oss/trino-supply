@@ -27,7 +27,8 @@ const usuario = (p: Partial<UsuarioCadastro>): UsuarioCadastro => {
   return {
     id: 'u-' + email, email, name: 'Ana Solicitante', role: 'Requester',
     active: true, modules: ['SOLICITACOES', 'MATERIAL'], customModules: false, costCenters: ['BAH-001'],
-    directorId: null, createdAt: '2026-01-01T00:00:00Z', updatedAt: null, ...p,
+    directorId: null, mustChangePassword: false, passwordChangedAt: '2026-01-02T00:00:00Z',
+    createdAt: '2026-01-01T00:00:00Z', updatedAt: null, ...p,
   };
 };
 
@@ -86,7 +87,7 @@ describe('<Usuarios />', () => {
     await waitFor(() => expect(screen.getByTestId('tabela-usuarios')).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole('button', { name: 'Editar' })[0]);
     expect(screen.getByLabelText('E-mail')).toBeDisabled();
-    expect(screen.getByLabelText(/Senha inicial/)).toBeDisabled();
+    expect(screen.getByLabelText(/Senha provisória/)).toBeDisabled();
     expect(screen.getByLabelText('BAH-001 — PepsiCo Simões Filho')).toBeChecked();
   });
 
@@ -97,7 +98,7 @@ describe('<Usuarios />', () => {
     await userEvent.type(screen.getByLabelText('Nome'), 'Nova Pessoa');
     await userEvent.type(screen.getByLabelText('E-mail'), 'nova@t.com');
     await userEvent.selectOptions(screen.getByLabelText('Papel'), 'Requester');
-    await userEvent.type(screen.getByLabelText(/Senha inicial/), 'senhaSegura123');
+    await userEvent.type(screen.getByLabelText(/Senha provisória/), 'senhaSegura123');
     await userEvent.click(screen.getByLabelText('BAH-001 — PepsiCo Simões Filho'));
     await userEvent.click(screen.getByRole('button', { name: 'Criar usuário' }));
 

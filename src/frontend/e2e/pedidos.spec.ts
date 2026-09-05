@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test';
+import { SENHA_E2E } from './cenario';
 import { abrirAutenticado, lerCenario } from './sessao';
 
 const EMAIL = process.env.ADMIN_EMAIL ?? 'admin@trinosupply.com.br';
-const SENHA = process.env.ADMIN_PASSWORD ?? 'TrinoSupply@2026!';
+// depois do preparo do cenário o admin já trocou a senha provisória (SEC-004)
+const SENHA = SENHA_E2E;
 
 // a OC do SENIOR é única no sistema: um número fixo faria a segunda execução
 // contra o mesmo banco esbarrar na própria regra

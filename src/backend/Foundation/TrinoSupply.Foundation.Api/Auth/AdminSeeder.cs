@@ -10,6 +10,7 @@ public static class AdminSeeder
     /// <summary>
     /// Cria o usuário administrador inicial a partir de ADMIN_EMAIL / ADMIN_PASSWORD (e ADMIN_NAME opcional).
     /// Roda apenas quando não existe nenhum usuário; nunca sobrescreve senha de usuário existente.
+    /// O admin nasce com senha provisória: a do ambiente serve para entrar e trocar.
     /// </summary>
     public static async Task<bool> SeedAsync(AppDbContext db, IPasswordHasher<User> hasher, IConfiguration config, ILogger logger)
     {
@@ -33,7 +34,13 @@ public static class AdminSeeder
             return false;
         }
 
-        var admin = new User { Email = email, Name = name, Role = Roles.SystemAdministrator };
+        // a senha do seed vem de variável de ambiente e costuma circular no deploy:
+        // vale para o primeiro acesso e só (SEC-004)
+        var admin = new User
+        {
+            Email = email, Name = name, Role = Roles.SystemAdministrator,
+            MustChangePassword = true,
+        };
         admin.PasswordHash = hasher.HashPassword(admin, password);
         db.Users.Add(admin);
         await db.SaveChangesAsync();

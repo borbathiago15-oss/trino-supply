@@ -4,7 +4,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Usuario } from '@/api/auth';
 import { SessaoProvider } from '@/sessao/SessaoProvider';
-import { Login } from './Login';
+import { destinoDe, Login } from './Login';
 
 vi.mock('@/api/auth', async (importar) => ({
   ...(await importar<typeof import('@/api/auth')>()),
@@ -24,6 +24,7 @@ const abrir = () =>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/pedidos" element={<p>Meus pedidos</p>} />
+          <Route path="/trocar-senha" element={<p>Defina a sua senha</p>} />
         </Routes>
       </SessaoProvider>
     </MemoryRouter>,
@@ -63,6 +64,24 @@ describe('tela de login', () => {
 
     expect(entrar).toHaveBeenCalledWith('admin@trinosupply.com.br', 'TrinoSupply@2026!');
     await waitFor(() => expect(screen.getByText('Meus pedidos')).toBeInTheDocument());
+  });
+
+  it('senha provisória leva à troca, e não ao destino guardado', () => {
+    expect(destinoDe({ ...admin, mustChangePassword: true }, '/cotacoes')).toBe('/trocar-senha');
+    expect(destinoDe({ ...admin, mustChangePassword: false }, '/cotacoes')).toBe('/cotacoes');
+    expect(destinoDe(admin)).toBe('/pedidos');
+  });
+
+  it('quem entra com senha provisória cai na tela de troca', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(entrar).mockResolvedValue({ ...admin, mustChangePassword: true });
+    abrir();
+
+    await usuario.type(screen.getByLabelText('E-mail'), 'admin@trinosupply.com.br');
+    await usuario.type(document.querySelector('#password')!, 'Provisoria#2026');
+    await usuario.click(screen.getByRole('button', { name: 'Entrar' }));
+
+    await waitFor(() => expect(screen.getByText('Defina a sua senha')).toBeInTheDocument());
   });
 
   it('o botão Mostrar revela a senha digitada', async () => {

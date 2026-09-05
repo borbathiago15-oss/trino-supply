@@ -19,6 +19,9 @@ export interface UsuarioCadastro {
   customModules: boolean;
   costCenters: string[];
   directorId: string | null;
+  /** Ainda usa a senha de cadastro: troca obrigatória no próximo acesso (SEC-004). */
+  mustChangePassword: boolean;
+  passwordChangedAt: string | null;
   createdAt: string;
   updatedAt: string | null;
 }

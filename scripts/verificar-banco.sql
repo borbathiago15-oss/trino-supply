@@ -115,5 +115,9 @@ SELECT categoria, checagem, ocorrencias FROM (
     FROM foundation.refresh_token t
    WHERE t.expires_at < now() - interval '30 days'
 
+  UNION ALL SELECT 42, 'estado', 'SEC-004: usuário ativo há mais de 30 dias ainda com senha provisória', count(*)
+    FROM foundation.app_user u
+   WHERE u.active AND u.must_change_password AND u.created_at < now() - interval '30 days'
+
 ) AS checagens
 ORDER BY ord;

@@ -62,6 +62,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(u => u.CostCenters).HasColumnName("cost_centers").HasMaxLength(2000);
             e.Property(u => u.DirectorId).HasColumnName("director_id");
             e.Property(u => u.Active).HasColumnName("active");
+            e.Property(u => u.MustChangePassword).HasColumnName("must_change_password");
+            e.Property(u => u.PasswordChangedAt).HasColumnName("password_changed_at");
             e.Property(u => u.CreatedAt).HasColumnName("created_at");
             e.Property(u => u.UpdatedAt).HasColumnName("updated_at");
             e.HasIndex(u => u.Email).IsUnique();

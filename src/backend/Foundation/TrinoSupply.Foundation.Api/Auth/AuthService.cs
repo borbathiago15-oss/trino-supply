@@ -68,6 +68,14 @@ public class AuthService(AppDbContext db, TokenService tokens, IPasswordHasher<U
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>
+    /// Abre uma sessão nova para um usuário já autenticado nesta requisição —
+    /// é assim que a troca de senha devolve tokens sem a marca de provisória,
+    /// logo depois de revogar os antigos.
+    /// </summary>
+    public Task<AuthTokens> IssueForAsync(User user, CancellationToken ct = default) =>
+        IssueTokensAsync(user, ct);
+
     private async Task<AuthTokens> IssueTokensAsync(User user, CancellationToken ct, bool saveChanges = true)
     {
         var now = clock.GetUtcNow();

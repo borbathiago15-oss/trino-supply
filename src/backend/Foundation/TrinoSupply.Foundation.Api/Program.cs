@@ -113,6 +113,35 @@ if (!app.Environment.IsProduction() || app.Configuration["OPENAPI_ENABLED"] == "
 app.UseAuthentication();
 app.UseAuthorization();
 
+// ---- Senha provisória: a sessão só anda depois da troca (SEC-004) -----------
+// Fica no pipeline, e não em cada rota, para uma tela nova não nascer com o furo.
+// Liberado apenas o mínimo para trocar a senha e para sair.
+string[] rotasComSenhaProvisoria =
+[
+    "/api/v1/auth/change-password", "/api/v1/auth/me", "/api/v1/auth/logout",
+    "/api/v1/auth/refresh", "/api/v1/auth/login",
+];
+app.Use(async (ctx, next) =>
+{
+    if (ctx.User.Identity?.IsAuthenticated == true
+        && ctx.User.FindFirstValue(TokenService.SenhaProvisoria) == "1"
+        && ctx.Request.Path.StartsWithSegments("/api")
+        && !rotasComSenhaProvisoria.Any(r => ctx.Request.Path.Equals(r, StringComparison.OrdinalIgnoreCase)))
+    {
+        await Results.Json(new
+        {
+            error = new
+            {
+                code = "IAM-ERR-022",
+                message = "Sua senha ainda é provisória: defina uma nova senha para continuar.",
+                correlationId = ctx.TraceIdentifier,
+            },
+        }, statusCode: 403).ExecuteAsync(ctx);
+        return;
+    }
+    await next();
+});
+
 // ---- Envelope de resposta (convenção da suíte: data/error + correlationId) --
 static IResult Ok(object data, HttpContext ctx) =>
     Results.Json(new { data, correlationId = CorrelationId(ctx) });
@@ -171,9 +200,16 @@ auth.MapGet("/me", async (ClaimsPrincipal principal, AppDbContext db, HttpContex
     var sub = principal.FindFirstValue(ClaimTypes.NameIdentifier)
               ?? principal.FindFirstValue("sub");
     var costCenters = Array.Empty<string>();
+    var senhaProvisoria = principal.FindFirstValue(TokenService.SenhaProvisoria) == "1";
     if (Guid.TryParse(sub, out var uid))
-        costCenters = (await db.Users.Where(u => u.Id == uid).Select(u => u.CostCenters).FirstOrDefaultAsync() ?? "")
+    {
+        var dados = await db.Users.Where(u => u.Id == uid)
+            .Select(u => new { u.CostCenters, u.MustChangePassword }).FirstOrDefaultAsync();
+        costCenters = (dados?.CostCenters ?? "")
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        // o banco manda: um token emitido antes de o admin resetar a senha não vale como quitação
+        if (dados is not null) senhaProvisoria = dados.MustChangePassword;
+    }
     return Ok(new
     {
         id = sub,
@@ -182,8 +218,27 @@ auth.MapGet("/me", async (ClaimsPrincipal principal, AppDbContext db, HttpContex
         role = principal.FindFirstValue(ClaimTypes.Role),
         modules = (principal.FindFirstValue("modules") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries),
         costCenters,
+        mustChangePassword = senhaProvisoria,
     }, ctx);
 }).RequireAuthorization();
+
+// troca de senha pelo próprio dono — a única rota que responde enquanto a senha
+// é provisória, junto de /me, /refresh e /logout (SEC-004)
+auth.MapPost("/change-password", async (ChangePasswordRequest body, UserService svc, AuthService authSvc,
+    ClaimsPrincipal p, HttpContext ctx) =>
+{
+    if (!Guid.TryParse(p.FindFirstValue(ClaimTypes.NameIdentifier) ?? p.FindFirstValue("sub"), out var uid))
+        return Error(ctx, 401, "IAM-ERR-001", "Sessão inválida. Entre novamente.");
+
+    var (user, error) = await svc.ChangeOwnPasswordAsync(uid, body.CurrentPassword, body.NewPassword);
+    if (error is not null)
+        return Error(ctx, error.Code == "IAM-ERR-020" ? 401 : 422, error.Code, error.Message);
+
+    // a troca derruba as sessões antigas, inclusive a desta aba: devolve tokens
+    // novos, já sem a marca de provisória, para o usuário seguir sem relogar
+    var tokens = await authSvc.IssueForAsync(user!);
+    return Ok(ToResponse(tokens), ctx);
+}).RequireAuthorization().RequireRateLimiting("auth");
 
 // ---- Gestão de usuários (exclusiva do SystemAdministrator) -------------------
 var users = app.MapGroup("/api/v1/users")
@@ -195,6 +250,8 @@ static object UserView(User u) => new
     modules = AppModules.EffectiveFor(u), customModules = u.Modules is not null,
     costCenters = (u.CostCenters ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
     directorId = u.DirectorId,
+    // quem ainda não definiu a própria senha aparece marcado na lista do admin
+    mustChangePassword = u.MustChangePassword, passwordChangedAt = u.PasswordChangedAt,
     createdAt = u.CreatedAt, updatedAt = u.UpdatedAt,
 };
 
@@ -210,7 +267,7 @@ users.MapPost("/", async (CreateUserRequest body, UserService svc, HttpContext c
     var (user, error) = await svc.CreateAsync(body.Email, body.Name, body.Role, body.Password,
         body.Modules, body.CostCenters, body.DirectorId);
     return error is not null
-        ? Error(ctx, error.Code == "IAM-ERR-014" ? 409 : 400, error.Code, error.Message)
+        ? Error(ctx, error.Code switch { "IAM-ERR-014" => 409, "IAM-ERR-021" => 422, _ => 400 }, error.Code, error.Message)
         : Results.Json(new { data = UserView(user!), correlationId = CorrelationId(ctx) }, statusCode: 201);
 });
 
@@ -2630,11 +2687,18 @@ static object ToResponse(AuthTokens t) => new
     tokenType = "Bearer",
     expiresIn = t.ExpiresInSeconds,
     refreshToken = t.RefreshToken,
-    user = new { id = t.User.Id, email = t.User.Email, name = t.User.Name, role = t.User.Role, modules = AppModules.EffectiveFor(t.User) },
+    user = new
+    {
+        id = t.User.Id, email = t.User.Email, name = t.User.Name, role = t.User.Role,
+        modules = AppModules.EffectiveFor(t.User),
+        // a tela usa isto para levar direto à troca de senha no primeiro acesso
+        mustChangePassword = t.User.MustChangePassword,
+    },
 };
 
 public record LoginRequest(string Email, string Password);
 public record RefreshRequest(string RefreshToken);
+public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 public record CreateUserRequest(string Email, string Name, string Role, string Password, List<string>? Modules,
     List<string>? CostCenters, Guid? DirectorId);
 public record UpdateUserRequest(string? Name, string? Role, bool? Active, List<string>? Modules,

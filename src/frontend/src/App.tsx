@@ -28,16 +28,23 @@ import { AbrirCotacao } from '@/paginas/cotacoes/AbrirCotacao';
 import { ProcessosDeCotacao } from '@/paginas/cotacoes/ProcessosDeCotacao';
 import { ProcessoDetalhe } from '@/paginas/cotacoes/ProcessoDetalhe';
 import { Portal } from '@/paginas/portal/Portal';
+import { TrocarSenha } from '@/paginas/senha/TrocarSenha';
 import { SessaoProvider, useSessao } from '@/sessao/SessaoProvider';
 import { Carregando } from '@/componentes/basicos';
 import { LimiteErro } from '@/componentes/LimiteErro';
 
-/** Só deixa passar com usuário; sem sessão, manda para o login guardando o destino. */
+/**
+ * Só deixa passar com usuário; sem sessão, manda para o login guardando o destino.
+ * Com a senha ainda provisória, a única tela que abre é a da troca (SEC-004) — o
+ * servidor recusa o resto de qualquer jeito, e aqui o usuário entende o porquê.
+ */
 function Protegida() {
   const { usuario, carregando } = useSessao();
   const { pathname } = useLocation();
   if (carregando) return <div className="p-10"><Carregando texto="Abrindo a sessão…" /></div>;
   if (!usuario) return <Navigate to="/login" replace state={{ de: pathname }} />;
+  if (usuario.mustChangePassword && pathname !== '/trocar-senha')
+    return <Navigate to="/trocar-senha" replace />;
   return <Outlet />;
 }
 
@@ -48,6 +55,8 @@ export function Rotas() {
       {/* o portal é do fornecedor: sessão própria, sem o menu nem a sessão interna */}
       <Route path="/portal" element={<Portal />} />
       <Route element={<Protegida />}>
+        {/* fora do AppLayout: com a senha provisória o menu não deve nem aparecer */}
+        <Route path="/trocar-senha" element={<TrocarSenha />} />
         <Route element={<AppLayout />}>
           <Route index element={<Navigate to="/painel" replace />} />
           <Route path="/pedidos" element={<PedidosLista />} />

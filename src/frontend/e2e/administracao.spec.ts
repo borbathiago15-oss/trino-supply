@@ -13,7 +13,7 @@ test.describe('Usuários e Empresas (React)', () => {
     await page.selectOption('#usu-papel', 'Requester');
     // escolher o papel já sugere as autorizações dele
     await expect(page.getByLabel('Solicitações de Compra')).toBeChecked();
-    await page.fill('#usu-senha', 'SenhaSegura2026!');
+    await page.fill('#usu-senha', 'Yr4&pontoLivre!');
     await page.getByRole('button', { name: 'Criar usuário' }).click();
     await expect(page.getByTestId('toast')).toContainText('Usuário criado');
 

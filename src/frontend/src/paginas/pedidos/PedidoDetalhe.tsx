@@ -4,8 +4,8 @@ import { abrirBlob } from '@/api/cliente';
 import { baixarDocumento } from '@/api/documentos';
 import { listarLocais, type LocalEstoque } from '@/api/estoque';
 import {
-  anexarNota, anexarOc, lancarNota, obterPedido, pdfPedido, pedidoEncerrado, registrarEntrega, registrarOc,
-  ROTULO_SITUACAO, type PedidoCompra,
+  anexarNota, anexarOc, entradaBloqueada, lancarNota, obterPedido, pdfPedido, pedidoEncerrado,
+  registrarEntrega, registrarOc, ROTULO_SITUACAO, type PedidoCompra,
 } from '@/api/pedidos';
 import { MINIMO_MOTIVO_SEM_OC } from '@/api/cotacoes';
 import { Aviso, Badge, Carregando, Dado, Erro, Painel, Vazio } from '@/componentes/basicos';
@@ -278,16 +278,28 @@ function Entrega({ pedido, podeConfirmar, aoSalvar }: { pedido: PedidoCompra; po
           <tbody>
             {pedido.items.map((i) => {
               const aberto = i.pendingQuantity > 0 && podeConfirmar;
+              // inativado no catálogo depois da emissão: entrar em estoque é recusado
+              // (IV-ERR-010), mas devolver ao fornecedor continua valendo
+              const semEntrada = entradaBloqueada(pedido, i);
               return (
                 <tr key={i.itemId} data-item={i.itemId}>
-                  <td>{i.catalogCode && <span className="sub">[{i.catalogCode}] </span>}{i.description}</td>
+                  <td>
+                    {i.catalogCode && <span className="sub">[{i.catalogCode}] </span>}{i.description}
+                    {semEntrada && aberto && (
+                      <div className="sub text-perigo" data-sem-entrada>
+                        Inativo no catálogo: não dá entrada em estoque (IV-ERR-010). Reative o
+                        produto em Cadastros → Produtos, ou registre apenas a devolução.
+                      </div>
+                    )}
+                  </td>
                   <td className="whitespace-nowrap">{quantidade(i.quantity)} {i.unitOfMeasure}</td>
                   <td>{quantidade(i.receivedQuantity)}</td>
                   <td>{i.rejectedQuantity > 0 ? <Badge classe="bg-aviso-fundo text-aviso" title={i.rejectionReason ?? ''}>{quantidade(i.rejectedQuantity)}</Badge> : '0'}</td>
                   <td>{quantidade(i.pendingQuantity)}</td>
                   {podeConfirmar && (
                     <>
-                      <td><input type="number" aria-label={`Chegou agora: ${i.description}`} className="!w-[100px]" min="0" step="0.01" max={i.pendingQuantity} placeholder="0" disabled={!aberto}
+                      <td><input type="number" aria-label={`Chegou agora: ${i.description}`} className="!w-[100px]" min="0" step="0.01" max={i.pendingQuantity} placeholder="0" disabled={!aberto || semEntrada}
+                        title={semEntrada ? 'Item inativo no catálogo: não dá entrada em estoque (IV-ERR-010).' : undefined}
                         value={linha(i.itemId).quantidade} onChange={(e) => editar(i.itemId, 'quantidade', e.target.value)} /></td>
                       <td><input type="number" aria-label={`Devolvido agora: ${i.description}`} className="!w-[100px]" min="0" step="0.01" max={i.pendingQuantity} placeholder="0" disabled={!aberto}
                         title="Chegou mas foi recusado/devolvido ao fornecedor"

@@ -116,4 +116,17 @@ describe('<Fornecedores />', () => {
     // auditor não mantém cadastro: a consulta não pede os inativos
     expect(vi.mocked(buscarFornecedores).mock.calls[0][0]).toMatchObject({ incluirInativos: false });
   });
+  it('a vigência do contrato não aceita fim antes do início (SUP-ERR-020)', async () => {
+    // o servidor recusa; o campo já não deixa escolher, em vez de avisar no salvar
+    usuarioAtual = comprador;
+    montar();
+    await waitFor(() => expect(screen.getByTestId('tabela-fornecedores')).toBeInTheDocument());
+    await userEvent.click(screen.getAllByRole('button', { name: /Mais ações de/ })[0]);
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Contrato de parceria' }));
+
+    const fim = screen.getByLabelText(/Fim da vigência/);
+    expect(fim).not.toHaveAttribute('min');          // sem início, nada a limitar
+    await userEvent.type(screen.getByLabelText('Início da vigência'), '2026-03-01');
+    expect(fim).toHaveAttribute('min', '2026-03-01');
+  });
 });

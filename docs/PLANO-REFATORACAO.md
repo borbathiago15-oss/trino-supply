@@ -297,7 +297,7 @@ Nenhuma mudança de layout, de rota ou de comportamento; os testes existentes
 passaram sem alteração, exceto o `import` de `textoDoConvite`, que mudou de
 arquivo junto com a função.
 
-### 🟡 INT-C · Regras que a tela ainda não antecipa — **parte 1 entregue**
+### 🟢 INT-C · Regras que a tela ainda não antecipa — **concluído**
 
 O trabalho de #85 e #88 cobriu segregação de funções, EPI sem C.A. e O.C. sem
 número. A varredura seguinte listou os **160 códigos de erro** do backend e
@@ -345,9 +345,22 @@ Em "Meus Pedidos" a escolha foi outra, de propósito: ali a data pode ter vindo
 de um rascunho antigo, e travar o campo impediria de salvar qualquer outra
 correção — então a tela **avisa** que com aquela data o envio é recusado.
 
-**O que resta da varredura**: `PO-ERR-056` (recebimento), `IV-ERR-010` (entrada
-de item inativo) e `SUP-ERR-020` (vigência de contrato ao contrário), todos de
-impacto menor e em telas de uso menos frequente.
+**Parte 3, entregue em #110 — o resto da varredura, e uma correção da própria lista.**
+
+`PO-ERR-056` **não era um caso**: a tela de pedidos já recusa antes de chamar a
+API (`"Informe o que chegou."`). Eu tinha listado sem conferir o código —
+mesmo erro do INT-A, em escala menor: **listar um código de erro não é o mesmo
+que constatar que a tela não o antecipa.**
+
+`IV-ERR-010` era, e era o pior dos três. Item inativado no catálogo depois da
+emissão do pedido não pode dar entrada em estoque; o almoxarife preenchia a
+entrega inteira e o servidor recusava tudo. Agora a leitura do pedido traz
+`inactiveCatalogCodes` e a linha do item diz o que houve — com o cuidado de
+barrar **só a entrada**: a devolução ao fornecedor não mexe em estoque e
+continua aberta, e os demais itens do pedido são recebidos normalmente.
+
+`SUP-ERR-020` era o mais simples: o fim da vigência do contrato agora tem `min`
+no início. Vigência que termina antes de começar deixou de ser possível.
 
 ### 🟠 INT-D · O menu é um mapa de módulos, e o processo não anda por módulos
 
@@ -542,7 +555,7 @@ existentes antes de criar o índice.
 |---|---|---|
 | 11 | **INT-A** — componente único de estado de tela | interface · **premissa corrigida**; corrigida a tela sem estado vazio |
 | 12 | **INT-B / ARQ-B** — quebrar as duas maiores unidades | arquitetura · **entregue** — 1.222 → 5 arquivos e 455 → 254 linhas (#109) |
-| 13 | **INT-C** — varredura das regras que a tela ainda não antecipa | interface · **entregue** — escolha do fornecedor (#107), Usuários e data da SC (#108); restam três de impacto menor |
+| 13 | **INT-C** — varredura das regras que a tela ainda não antecipa | interface · **concluído** — #107, #108 e #110 |
 | 14 | **INT-D · D7** — vocabulário do menu (precisa da sua decisão) | interface |
 | 15 | **SEC-D** — zerar o aviso de build | qualidade · **entregue** |
 

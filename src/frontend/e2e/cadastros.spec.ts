@@ -49,13 +49,15 @@ test.describe('Cadastros (React)', () => {
     await page.getByRole('button', { name: 'Cadastrar fornecedor' }).click();
     await expect(page.getByTestId('toast')).toContainText('Fornecedor cadastrado.');
 
+    // busca antes de conferir a linha: a lista traz 50 por página e num banco já
+    // usado o fornecedor recém-criado pode cair fora da primeira. A busca por CNPJ
+    // é justamente o que precisa funcionar, então ela vem primeiro
+    await page.getByLabel('Buscar').fill(cnpj);
+    await expect(page.getByTestId('tabela-fornecedores').locator('tr[data-fornecedor]')).toHaveCount(1);
+
     const linha = page.locator(`tr[data-fornecedor="${cnpj}"]`);
     await expect(linha).toContainText('E2E Suprimentos');
     await expect(linha).toContainText('sem contrato');
-
-    // busca por CNPJ com pontuação encontra o registro
-    await page.getByLabel('Buscar').fill(cnpj);
-    await expect(page.getByTestId('tabela-fornecedores').locator('tr[data-fornecedor]')).toHaveCount(1);
 
     // homologação: novo fornecedor entra como prospect e vira homologado
     await linha.getByRole('button', { name: 'Homologação' }).click();

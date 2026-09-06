@@ -35,7 +35,9 @@ public static class PedidoRotas
                 return Error(ctx, 403, "PO-ERR-900", "Seu papel não acessa pedidos de compra.");
             PurchaseOrderStatus? situacao = Enum.TryParse<PurchaseOrderStatus>(status, true, out var st) ? st : null;
             var (itens, total) = await svc.ListAsync(q, situacao, tamanho ?? 100);
-            return Ok(new { items = itens.Select(PoView), total, tamanho = itens.Count }, ctx);
+            // lambda, e não grupo de métodos: `PoView` tem parâmetro opcional e o
+            // grupo casaria com a sobrecarga (item, índice) do Select
+            return Ok(new { items = itens.Select(o => PoView(o)), total, tamanho = itens.Count }, ctx);
         });
 
         pos.MapGet("/{id:guid}", async (Guid id, PurchaseOrderService svc, ClaimsPrincipal p, HttpContext ctx) =>
@@ -43,7 +45,10 @@ public static class PedidoRotas
             if (!PurchaseOrderService.CanView(RoleOf(p)))
                 return Error(ctx, 403, "PO-ERR-900", "Seu papel não acessa pedidos de compra.");
             var order = await svc.GetAsync(id);
-            return order is null ? Error(ctx, 404, "PO-ERR-404", "Pedido não encontrado.") : Ok(PoView(order), ctx);
+            if (order is null) return Error(ctx, 404, "PO-ERR-404", "Pedido não encontrado.");
+            // só a leitura do pedido confere o catálogo: é a tela do recebimento que precisa
+            // saber o que já não pode entrar em estoque (IV-ERR-010)
+            return Ok(PoView(order, await svc.InactiveCatalogCodesAsync(order)), ctx);
         });
 
         pos.MapGet("/demands", async (PurchaseOrderService svc, ClaimsPrincipal p, HttpContext ctx) =>

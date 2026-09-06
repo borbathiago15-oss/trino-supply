@@ -18,7 +18,7 @@ const pedido = (p: Partial<PedidoCompra>): PedidoCompra => ({
   families: ['EPI'], notes: null, totalValue: 1500, issuedByLabel: null, receivedByLabel: null, receivedAt: null,
   cancelReason: null, createdAt: '2026-09-01T10:00:00Z', erpNumber: null, noErpReason: null, erpIssuedOn: null, promisedDate: null,
   onTime: null, inFull: null, otif: null, referenceSavingTotal: null, erpDocumentId: null, erpFileName: null,
-  deliveryCompletedAt: null, pendingDelivery: true, invoices: [],
+  deliveryCompletedAt: null, pendingDelivery: true, inactiveCatalogCodes: null, invoices: [],
   items: [{ itemId: 'i1', description: 'Luva nitrílica', unitOfMeasure: 'PAR', quantity: 10, receivedQuantity: 4,
     pendingQuantity: 6, rejectedQuantity: 0, rejectionReason: null, lastPaidUnitPrice: null, referenceSaving: null,
     sourcePrNumber: null, unitPrice: 150, catalogCode: 'EPI-001', catalogItemId: null, family: 'EPI' }],

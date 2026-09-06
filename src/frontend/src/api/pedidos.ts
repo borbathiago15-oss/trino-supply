@@ -64,6 +64,14 @@ export interface PedidoCompra {
   erpFileName: string | null;
   deliveryCompletedAt: string | null;
   pendingDelivery: boolean;
+  /**
+   * Códigos do pedido que estão inativos no catálogo. Receber um deles dá entrada em
+   * estoque e é recusado (IV-ERR-010) — devolver continua valendo.
+   *
+   * `null` quer dizer "não conferido nesta leitura", e não "nenhum": só a leitura de um
+   * pedido faz essa consulta, a lista não.
+   */
+  inactiveCatalogCodes: string[] | null;
   invoices: NotaFiscal[];
   items: ItemPedido[];
 }
@@ -79,6 +87,15 @@ export const ROTULO_SITUACAO: Record<SituacaoPedido, { rotulo: string; classe: s
 /** Encerrado = entrega concluída ou saldo cancelado; aí o pedido não recebe mais nada. */
 export const pedidoEncerrado = (o: Pick<PedidoCompra, 'deliveryCompletedAt' | 'status'>) =>
   !!o.deliveryCompletedAt || o.status === 'RECEBIDO' || o.status === 'CANCELADO';
+
+/**
+ * Se este item do pedido não pode mais dar entrada em estoque: foi inativado no catálogo
+ * depois da emissão, e o recebimento dele é recusado (IV-ERR-010). Item sem código de
+ * catálogo não entra em estoque de qualquer forma, então nunca é barrado por aqui.
+ */
+export const entradaBloqueada = (
+  pedido: Pick<PedidoCompra, 'inactiveCatalogCodes'>, item: Pick<ItemPedido, 'catalogCode'>,
+) => !!item.catalogCode && !!pedido.inactiveCatalogCodes?.includes(item.catalogCode);
 
 export const totalPedido = (itens: Pick<ItemPedido, 'quantity'>[]) => itens.reduce((a, i) => a + i.quantity, 0);
 export const totalRecebido = (itens: Pick<ItemPedido, 'receivedQuantity'>[]) =>

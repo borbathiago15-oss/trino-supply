@@ -27,6 +27,28 @@ export const diretoresPossiveis = (usuarios: UsuarioCadastro[]) =>
 /** Papéis oferecidos no cadastro, sem os que hoje são resolvidos por módulo. */
 export const papeisOferecidos = (papeis: Papel[]) => papeis.filter((p) => !PAPEIS_OCULTOS.includes(p));
 
+/** Se existe outro administrador ativo além deste — quem sustenta o IAM-ERR-015. */
+export const ehUnicoAdmin = (u: UsuarioCadastro, lista: UsuarioCadastro[]) =>
+  u.active && u.role === 'SystemAdministrator'
+  && !lista.some((x) => x.id !== u.id && x.active && x.role === 'SystemAdministrator');
+
+/**
+ * Por que este usuário não pode ser inativado — a mesma régua do backend, dita
+ * antes do clique em vez de depois do erro:
+ *
+ * - **IAM-ERR-016**: ninguém inativa o próprio usuário (seria fechar a porta
+ *   por dentro, e as sessões caem na hora).
+ * - **IAM-ERR-015**: o último administrador ativo não sai. Sem ele não sobra
+ *   quem mantenha usuários, e o sistema fica sem administração.
+ */
+export function impedimentoDeInativar(
+  u: UsuarioCadastro, euId: string, lista: UsuarioCadastro[],
+): string | null {
+  if (u.id === euId) return 'você não inativa o seu próprio usuário (IAM-ERR-016)';
+  if (ehUnicoAdmin(u, lista)) return 'é o único administrador ativo — promova outro antes (IAM-ERR-015)';
+  return null;
+}
+
 export function Usuarios() {
   const eu = useUsuario();
   const { avisar } = useToast();
@@ -166,7 +188,11 @@ export function Usuarios() {
                         <MenuAcoes rotulo={`Mais ações de ${u.name}`} acoes={[
                           { rotulo: 'Nova senha', aoEscolher: () => { setNovaSenha(''); setATrocarSenha(u); } },
                           u.active
-                            ? { rotulo: 'Inativar', perigo: true, aoEscolher: () => setAInativar(u) }
+                            ? {
+                                rotulo: 'Inativar', perigo: true,
+                                impedimento: impedimentoDeInativar(u, eu.id, lista) ?? undefined,
+                                aoEscolher: () => setAInativar(u),
+                              }
                             : { rotulo: 'Reativar', aoEscolher: () => alternarSituacao(u, true) },
                         ]} />
                       </CelulaAcoes>
@@ -249,6 +275,12 @@ export function Usuarios() {
             {editando && <button type="button" className="botao-secundario" onClick={cancelar}>Cancelar edição</button>}
           </div>
           {editando?.id === eu.id && <Nota>Você está editando o próprio usuário.</Nota>}
+          {editando && ehUnicoAdmin(editando, lista) && (
+            <Nota>
+              Este é o <strong>único administrador ativo</strong>: trocar o papel dele é recusado
+              (IAM-ERR-015). Promova outro administrador antes — o resto da edição segue normal.
+            </Nota>
+          )}
         </form>
       </Painel>
 

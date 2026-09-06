@@ -8,6 +8,7 @@ import { anexarNaSolicitacao, criarSolicitacao, ROTULO_PRIORIDADE, type ItemNovo
 import { Aviso, Painel } from '@/componentes/basicos';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
+import { hojeIso } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
 
 interface LinhaItem { chave: string; produto: string; unidade: string; quantidade: string }
@@ -199,8 +200,9 @@ export function NovaSolicitacao() {
                 <option value="URGENT">{ROTULO_PRIORIDADE.URGENT}</option>
               </select>
             </Campo>
-            <Campo id="sc-necessidade" rotulo="Necessidade">
-              <input id="sc-necessidade" type="date" {...campo('necessidade')} />
+            {/* a submissão recusa data no passado (PR-ERR-050): o campo diz isso antes */}
+            <Campo id="sc-necessidade" rotulo="Necessidade" dica="(de hoje em diante)">
+              <input id="sc-necessidade" type="date" min={hojeIso()} {...campo('necessidade')} />
             </Campo>
           </Grade2>
         </Grade2>

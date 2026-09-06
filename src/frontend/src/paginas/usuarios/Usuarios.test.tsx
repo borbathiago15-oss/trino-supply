@@ -5,7 +5,7 @@ import type { Usuario } from '@/api/auth';
 import type { CentroCusto } from '@/api/centrosCusto';
 import type { UsuarioCadastro } from '@/api/usuarios';
 import { ToastProvider } from '@/componentes/Toast';
-import { diretoresPossiveis, papeisOferecidos, Usuarios } from './Usuarios';
+import { diretoresPossiveis, impedimentoDeInativar, papeisOferecidos, Usuarios } from './Usuarios';
 
 vi.mock('@/api/usuarios', async (importar) => ({
   ...(await importar<typeof import('@/api/usuarios')>()),
@@ -49,6 +49,29 @@ describe('regras da tela de usuários', () => {
   it('papéis resolvidos por módulo saem da lista de escolha', () => {
     expect(papeisOferecidos(['Requester', 'WarehouseOperator', 'SupplyManager', 'Director']))
       .toEqual(['Requester', 'Director']);
+  });
+
+  describe('quem não pode ser inativado', () => {
+    const ana = usuario({});
+    const adm = usuario({ email: 'adm@t.com', name: 'Adm', role: 'SystemAdministrator' });
+    const adm2 = usuario({ email: 'adm2@t.com', name: 'Outro Adm', role: 'SystemAdministrator' });
+
+    it('ninguém inativa o próprio usuário (IAM-ERR-016)', () => {
+      expect(impedimentoDeInativar(ana, ana.id, [ana, adm])).toContain('IAM-ERR-016');
+    });
+    it('o único administrador ativo fica (IAM-ERR-015)', () => {
+      expect(impedimentoDeInativar(adm, 'u-outro', [ana, adm])).toContain('IAM-ERR-015');
+    });
+    it('com outro administrador ativo, a trava sai', () => {
+      expect(impedimentoDeInativar(adm, 'u-outro', [ana, adm, adm2])).toBeNull();
+    });
+    it('administrador já inativo não conta como o último ativo', () => {
+      const inativoAdm = usuario({ email: 'x@t.com', role: 'SystemAdministrator', active: false });
+      expect(impedimentoDeInativar(adm, 'u-outro', [adm, inativoAdm])).toContain('IAM-ERR-015');
+    });
+    it('usuário comum não é barrado', () => {
+      expect(impedimentoDeInativar(ana, 'u-outro', [ana, adm])).toBeNull();
+    });
   });
 });
 
@@ -134,6 +157,38 @@ describe('<Usuarios />', () => {
     await userEvent.type(campoSenha, 'MaisQueDozeCaracteres1');
     await userEvent.click(screen.getByRole('button', { name: 'Redefinir senha' }));
     await waitFor(() => expect(redefinirSenha).toHaveBeenCalledWith('u-ana@t.com', 'curtaMaisQueDozeCaracteres1'));
+  });
+
+  it('inativar a si mesmo e o único administrador aparece barrado, com o motivo', async () => {
+    // as duas regras existiam só no servidor: o administrador clicava e tomava o erro
+    vi.mocked(listarUsuarios).mockResolvedValue({
+      items: [usuario({ id: 'u-admin', email: 'admin@t.com', name: 'Administrador', role: 'SystemAdministrator' })],
+      roles: ['Requester', 'SystemAdministrator'],
+      availableModules: [],
+    });
+    montar();
+    await waitFor(() => expect(screen.getByTestId('tabela-usuarios')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /Mais ações de/ }));
+
+    const inativar = screen.getByRole('menuitem', { name: /Inativar/ });
+    expect(inativar).toBeDisabled();
+    // é o próprio usuário logado: a regra que aparece primeiro é a do IAM-ERR-016
+    expect(inativar).toHaveTextContent('IAM-ERR-016');
+    await userEvent.click(inativar);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(atualizarUsuario).not.toHaveBeenCalled();
+  });
+
+  it('editar o único administrador avisa que o papel dele não muda', async () => {
+    vi.mocked(listarUsuarios).mockResolvedValue({
+      items: [usuario({ id: 'u-adm', email: 'adm@t.com', name: 'Adm', role: 'SystemAdministrator' })],
+      roles: ['Requester', 'SystemAdministrator'],
+      availableModules: [],
+    });
+    montar();
+    await waitFor(() => expect(screen.getByTestId('tabela-usuarios')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    expect(screen.getByText(/trocar o papel dele é recusado/)).toHaveTextContent('IAM-ERR-015');
   });
 
   it('lista vazia diz que não há usuário, em vez de mostrar um painel mudo', async () => {

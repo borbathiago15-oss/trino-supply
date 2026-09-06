@@ -5,7 +5,8 @@ import type { Usuario } from '@/api/auth';
 import type { SolicitacaoCompra } from '@/api/solicitacoes';
 import { podeEnviar, podeMexer, situacaoDaSc } from '@/api/solicitacoes';
 import { ToastProvider } from '@/componentes/Toast';
-import { andamentoDaSc, MeusPedidos, resumoDosItens } from './MeusPedidos';
+import { hojeIso } from '@/util/formato';
+import { andamentoDaSc, dataNoPassado, MeusPedidos, resumoDosItens } from './MeusPedidos';
 
 vi.mock('@/api/solicitacoes', async (importar) => ({
   ...(await importar<typeof import('@/api/solicitacoes')>()),
@@ -64,6 +65,11 @@ describe('regras da SC', () => {
   });
   it('o resumo lista quantidade, código e descrição', () => {
     expect(resumoDosItens(sc({}))).toBe('10× [EPI-001] Luva nitrílica');
+  });
+  it('data de necessidade vencida é reconhecida antes do envio (PR-ERR-050)', () => {
+    expect(dataNoPassado('2020-01-01')).toBe(true);
+    expect(dataNoPassado(hojeIso())).toBe(false);       // hoje ainda vale
+    expect(dataNoPassado('')).toBe(false);              // sem data não há o que avisar
   });
 });
 
@@ -148,6 +154,19 @@ describe('<MeusPedidos />', () => {
     await waitFor(() => expect(atualizarSolicitacao).toHaveBeenCalledWith('sc-SC-2026-000001', expect.objectContaining({
       justification: 'Reposição de EPI', clearNeededBy: true, neededBy: null,
     })));
+  });
+
+  it('a data que já passou avisa na edição, em vez de esperar o envio falhar', async () => {
+    // o rascunho pode ter nascido com a data vencida: travar o campo impediria
+    // de salvar qualquer outra correção, então a tela avisa e deixa salvar
+    vi.mocked(listarSolicitacoes).mockResolvedValue(pagina([sc({ neededBy: '2020-01-01' })]));
+    montar();
+    await waitFor(() => expect(screen.getByTestId('tabela-solicitacoes')).toBeInTheDocument());
+    await userEvent.click(screen.getAllByRole('button', { name: 'Editar' })[0]);
+    expect(screen.getByTestId('data-vencida')).toHaveTextContent('PR-ERR-050');
+
+    await userEvent.clear(screen.getByLabelText(/Data de necessidade/));
+    expect(screen.queryByTestId('data-vencida')).not.toBeInTheDocument();
   });
 
   it('urgência só aparece quando a prioridade é urgente', async () => {

@@ -4,6 +4,12 @@ export interface AcaoMenu {
   rotulo: string;
   aoEscolher: () => void;
   perigo?: boolean;
+  /**
+   * Motivo pelo qual a ação não está disponível. Com ele a ação continua
+   * visível, desabilitada e explicada — some da lista quem nunca poderia
+   * usá-la; fica com o motivo quem esbarra numa regra do momento.
+   */
+  impedimento?: string;
 }
 
 /**
@@ -32,10 +38,15 @@ export function MenuAcoes({ acoes, rotulo = 'Mais ações' }: { acoes: AcaoMenu[
       {aberto && (
         <div role="menu" className="absolute right-0 z-30 mt-1 min-w-[190px] overflow-hidden rounded-lg border border-borda bg-white py-1 shadow-lg">
           {acoes.map((a) => (
-            <button key={a.rotulo} type="button" role="menuitem"
-              className={'block w-full px-3 py-2 text-left text-[13px] hover:bg-superficie-suave ' + (a.perigo ? 'text-perigo' : 'text-texto')}
+            <button key={a.rotulo} type="button" role="menuitem" disabled={!!a.impedimento}
+              title={a.impedimento}
+              className={'block w-full px-3 py-2 text-left text-[13px] '
+                + (a.impedimento
+                  ? 'cursor-not-allowed text-texto-suave'
+                  : 'hover:bg-superficie-suave ' + (a.perigo ? 'text-perigo' : 'text-texto'))}
               onClick={() => { setAberto(false); a.aoEscolher(); }}>
               {a.rotulo}
+              {a.impedimento && <span className="mt-0.5 block text-[11.5px] leading-tight">{a.impedimento}</span>}
             </button>
           ))}
         </div>

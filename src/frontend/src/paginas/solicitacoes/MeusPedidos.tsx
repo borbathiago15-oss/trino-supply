@@ -6,12 +6,12 @@ import {
   atualizarSolicitacao, enviarSolicitacao, excluirSolicitacao, listarSolicitacoes, podeEnviar, podeMexer,
   ROTULO_PRIORIDADE, situacaoDaSc, type Prioridade, type SolicitacaoCompra,
 } from '@/api/solicitacoes';
-import { Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
+import { Aviso, Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { Confirmacao } from '@/componentes/Dialogo';
 import { Campo, Grade2 } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
 import { useUsuario } from '@/sessao/SessaoProvider';
-import { data, moeda, quantidade } from '@/util/formato';
+import { data, hojeIso, moeda, quantidade } from '@/util/formato';
 import { rolarPara } from '@/util/rolar';
 import { useCarregar } from '@/util/useCarregar';
 import { useDebounce } from '@/util/useDebounce';
@@ -44,6 +44,12 @@ export function andamentoDaSc(r: SolicitacaoCompra): { texto: string; alerta: bo
     };
   return null;
 }
+
+/**
+ * Data de necessidade que já passou. A submissão recusa (PR-ERR-050) e a
+ * recusa só aparecia no clique em "Enviar" — depois de tudo preenchido.
+ */
+export const dataNoPassado = (iso: string) => !!iso && iso < hojeIso();
 
 export const resumoDosItens = (r: SolicitacaoCompra) =>
   r.items.map((i) => `${quantidade(i.quantity)}× ${i.catalogCode ? `[${i.catalogCode}] ` : ''}${i.description}`).join(' · ');
@@ -268,9 +274,19 @@ export function MeusPedidos() {
                 </select>
               </Campo>
             </Grade2>
+            {/*
+              Aqui a data não é travada e sim avisada: o rascunho pode ter nascido com uma data
+              que já passou, e travar o campo impediria de salvar qualquer outra correção. O
+              envio é que recusa (PR-ERR-050) — e é desta tela que se envia.
+            */}
             <Campo id="sc-edit-necessidade" rotulo="Data de necessidade" className="mt-3">
               <input id="sc-edit-necessidade" type="date" {...campo('necessidade')} />
             </Campo>
+            {dataNoPassado(form.necessidade) && (
+              <Aviso testid="data-vencida">
+                Esta data já passou: com ela o envio da SC é recusado (PR-ERR-050). Ajuste antes de enviar.
+              </Aviso>
+            )}
             {form.prioridade === 'URGENT' && (
               <Grade2 className="mt-3">
                 <Campo id="sc-edit-urg-motivo" rotulo="Justificativa da urgência">

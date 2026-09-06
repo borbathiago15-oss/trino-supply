@@ -183,4 +183,28 @@ public class InsightsServiceTests
         Assert.Contains("RFQ-2026-000001", achado.Evidence);
         Assert.Equal("quotations", achado.View);
     }
+
+    /// <summary>
+    /// INTEL-C: o achado de severidade alta é o que precisa chegar a quem decide
+    /// sem depender de alguém abrir a tela de Insights. Este teste fixa a régua
+    /// que a Central de Avisos usa para escolher o que promover.
+    /// </summary>
+    [Fact]
+    public async Task Achado_grave_se_distingue_do_que_e_so_para_acompanhar()
+    {
+        var (db, svc) = Build();
+        // sobrepreço de 60% é alta; de 25%, média
+        db.PurchaseOrders.Add(Po("PO-1", "Alfa",
+            new PurchaseOrderItem { Description = "Luva", Quantity = 1, UnitPrice = 16m, LastPaidUnitPrice = 10m }));
+        db.PurchaseOrders.Add(Po("PO-2", "Beta",
+            new PurchaseOrderItem { Description = "Bota", Quantity = 1, UnitPrice = 12.5m, LastPaidUnitPrice = 10m }));
+        await db.SaveChangesAsync();
+
+        var achados = await svc.FindInsightsAsync(6);
+        var graves = achados.Where(a => a.Severity == "alta").ToList();
+        Assert.Single(graves);
+        Assert.Contains("Luva", graves[0].Title);
+        // e o grave vem primeiro: a ordenação é por severidade
+        Assert.Equal("alta", achados[0].Severity);
+    }
 }

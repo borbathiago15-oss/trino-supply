@@ -69,6 +69,15 @@ describe('menu', () => {
     expect(total).toEqual({ triage: 7, 'pr-approvals': 2 });
   });
 
+  it('achado de insight aparece no aviso, mas não infla o contador do menu', () => {
+    // é constatação, não fila: contar faria o menu dizer "Pedidos 3" com a lista vazia
+    const total = contagemPorItem([
+      { view: 'buy-orders', count: 3, severity: 'alta', counts: false },
+      { view: 'buy-orders', count: 2, severity: 'alta' },
+    ]);
+    expect(total).toEqual({ 'buy-orders': 2 });
+  });
+
   it('aviso de acompanhamento não vira contador: número no menu quer dizer ação', () => {
     const total = contagemPorItem([
       { view: 'pr-mine', count: 40, severity: 'info' },

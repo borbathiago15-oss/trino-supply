@@ -11,6 +11,12 @@ export interface Aviso {
   /** Id da tela (`pr-mine`, `triage`…); `enderecoDoId` resolve para a rota. */
   view: string;
   text: string;
+  /**
+   * Se entra na contagem do menu. Falso para o achado de insight: ele é uma
+   * constatação, não fila — contá-lo faria o menu dizer "Pedidos 3" com a lista
+   * de pedidos vazia. Ausente significa verdadeiro, que é o caso da maioria.
+   */
+  counts?: boolean;
 }
 
 export const CLASSE_AVISO: Record<Severidade, string> = {

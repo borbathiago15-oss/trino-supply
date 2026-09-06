@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Infrastructure;
+using TrinoSupply.Foundation.Api.Insights;
 using TrinoSupply.Foundation.Api.Materials;
 using TrinoSupply.Foundation.Api.Procurement;
 using TrinoSupply.Foundation.Api.Users;
@@ -19,10 +20,22 @@ namespace TrinoSupply.Foundation.Api.Rotas;
 /// </summary>
 public static class AvisoRotas
 {
+    /// <summary>O nome do achado em português, para o aviso não falar por código.</summary>
+    private static string RotuloDoAchado(string codigo) => codigo switch
+    {
+        "INS-01" => "sobrepreço",
+        "INS-02" => "possível fracionamento",
+        "INS-04" => "concentração de fornecedor",
+        "INS-05" => "compra sem O.C. do ERP",
+        "INS-06" => "atraso recorrente de fornecedor",
+        _ => "risco em compras",
+    };
+
     public static void MapAvisos(this WebApplication app)
     {
         // ---- Dashboard — central de avisos (atrasos, aprovações, fila, demandas) -----
-        app.MapGet("/api/v1/dashboard", async (AppDbContext db, RequisitionService prSvc, ClaimsPrincipal p, HttpContext ctx, TimeProvider clock) =>
+        app.MapGet("/api/v1/dashboard", async (AppDbContext db, RequisitionService prSvc,
+            InsightsService insights, ClaimsPrincipal p, HttpContext ctx, TimeProvider clock) =>
         {
             var role = RoleOf(p);
             var uid = ActorId(p);
@@ -249,6 +262,27 @@ public static class AvisoRotas
                         text = $"{dir} processo(s) de compra aguardando a aprovação da diretoria.",
                     });
                 }
+            }
+
+            // INTEL-C: achado de severidade alta não pode ficar esperando alguém
+            // abrir a tela de Insights. Ele entra na Central de Avisos como os
+            // outros — com a mesma cara — e assim também conta no menu.
+            if (InsightsService.CanView(role) && mods.Contains(AppModules.Insights))
+            {
+                var altos = (await insights.FindInsightsAsync(6)).Where(i => i.Severity == "alta").ToList();
+                foreach (var g in altos.GroupBy(i => i.Code).OrderBy(g => g.Key))
+                    alerts.Add(new
+                    {
+                        kind = $"INSIGHT_{g.Key.Replace("-", "_")}", severity = "alta", count = g.Count(),
+                        view = g.First().View ?? "insights",
+                        text = g.Count() == 1
+                            ? $"{g.First().Title}. {g.First().Action}"
+                            : $"{g.Count()} achados de {RotuloDoAchado(g.Key)} — veja em Insights & Executivo.",
+                        // achado é constatação, não fila: aparece no aviso mas não
+                        // entra no contador do menu, que conta trabalho parado. Sem
+                        // isso o menu diria "Pedidos 3" com a lista de pedidos vazia.
+                        counts = false,
+                    });
             }
 
             return Ok(new { alerts, generatedAt = clock.GetUtcNow() }, ctx);

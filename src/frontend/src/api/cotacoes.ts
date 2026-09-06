@@ -1,4 +1,5 @@
 import { api, enviarArquivo } from './cliente';
+import { ROTULO_HOMOLOGACAO, type SituacaoHomologacao } from './fornecedores';
 
 /**
  * Situações do processo de cotação, com as chaves que o backend emite
@@ -373,6 +374,58 @@ export const registrarNegociacao = (id: string, dados: Negociacao) =>
 
 export const cancelarProcesso = (id: string, reason: string) =>
   api<Processo>(`${base}/${id}/cancel`, { method: 'POST', body: { reason } });
+
+// ---- mapa por família: quem pode levar cada lote ---------------------------
+
+/**
+ * A oferta de um fornecedor para uma família inteira, com a situação dele no
+ * cadastro. `canWin` é a régua do servidor: cotou a família inteira, está ativo
+ * e está homologado. A tela usa isso para não oferecer uma escolha que a API
+ * vai recusar depois da justificativa escrita.
+ */
+export interface OfertaDaFamilia {
+  supplierId: string;
+  supplierName: string;
+  proposalId: string;
+  proposalVersion: number;
+  itemsValue: number;
+  totalValue: number;
+  deliveryDays: number | null;
+  paymentTerms: string | null;
+  /** Cotou todos os itens da família. Meia cotação não leva o lote (RFQ-ERR-024). */
+  complete: boolean;
+  /** Menor total entre as ofertas que podem vencer esta família. */
+  cheapest: boolean;
+  homologation: SituacaoHomologacao;
+  active: boolean;
+  canWin: boolean;
+}
+
+export interface LoteDaFamilia {
+  family: string;
+  itemCount: number;
+  quantity: number;
+  offers: OfertaDaFamilia[];
+}
+
+export const mapaDeFamilias = async (id: string, signal?: AbortSignal) =>
+  (await api<{ note: string; items: LoteDaFamilia[] }>(`${base}/${id}/family-map`, { signal })).items;
+
+/**
+ * Por que esta oferta não pode levar a família — na ordem em que o servidor
+ * verifica, para a tela dizer a mesma coisa que a API diria. `null` quando pode.
+ */
+export function impedimentoDaOferta(o: OfertaDaFamilia): string | null {
+  if (!o.complete) return 'não cotou a família inteira (RFQ-ERR-024)';
+  if (!o.active) return 'fornecedor inativo no cadastro (RFQ-ERR-040)';
+  if (o.homologation !== 'HOMOLOGADO')
+    return `${ROTULO_HOMOLOGACAO[o.homologation]?.rotulo ?? o.homologation} — homologação pendente (SUP-ERR-030)`;
+  return null;
+}
+
+/** A oferta de cada proposta dentro de um lote, achada pelo id da proposta. */
+export const ofertaDaProposta = (lote: LoteDaFamilia | null, proposalId: string) =>
+  lote?.offers.find((o) => o.proposalId === proposalId) ?? null;
 
 // ---- leituras do mapa de comparação ---------------------------------------
 

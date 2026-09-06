@@ -1,14 +1,71 @@
 import { useState } from 'react';
 import {
-  CRITERIOS, escolherVencedor, MINIMO_MOTIVO_SEM_OC, propostasVigentes, registrarOc,
-  type Processo, type Proposta,
+  CRITERIOS, escolherVencedor, impedimentoDaOferta, mapaDeFamilias, MINIMO_MOTIVO_SEM_OC,
+  ofertaDaProposta, propostasVigentes, registrarOc,
+  type LoteDaFamilia, type Processo, type Proposta,
 } from '@/api/cotacoes';
 import { anexarOc } from '@/api/pedidos';
 import { Nota } from '@/componentes/formulario';
 import { Campo, Grade2 } from '@/componentes/formulario';
 import { moeda } from '@/util/formato';
+import { useCarregar } from '@/util/useCarregar';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
+
+/**
+ * O mapa por família — é ele que sabe quem pode mesmo levar cada lote: cotou a
+ * família inteira (RFQ-ERR-024), está ativo (RFQ-ERR-040) e está homologado
+ * (SUP-ERR-030). Sem isso a tela deixava escolher, o comprador escrevia a
+ * justificativa e só então tomava o erro do servidor.
+ *
+ * Falha na leitura não trava nada: sem o mapa a escolha volta a ser a de antes
+ * e quem barra é a API — melhor o botão que falha do que a ação escondida.
+ */
+function useLotes(processoId: string): LoteDaFamilia[] | null {
+  const { dados } = useCarregar(async (signal) => {
+    try { return await mapaDeFamilias(processoId, signal); } catch { return null; }
+  }, [processoId]);
+  return dados ?? null;
+}
+
+/**
+ * Por que esta proposta não pode vencer — no processo de uma família só,
+ * escolher o vencedor é escolher quem leva o lote inteiro. Proposta que não
+ * aparece no lote não cotou nada dele. Sem o mapa carregado, nada é barrado.
+ */
+export function impedimentoDaProposta(lote: LoteDaFamilia | null, p: Proposta): string | null {
+  if (!lote) return null;
+  const oferta = ofertaDaProposta(lote, p.id);
+  return oferta ? impedimentoDaOferta(oferta) : 'não cotou nenhum item desta compra';
+}
+
+/** Fornecedor que pode ou não levar uma família, na forma que o <select> usa. */
+export interface Candidata {
+  proposalId: string;
+  supplierName: string;
+  totalValue: number;
+  version: number;
+  /** Motivo do impedimento, ou `null` quando pode vencer. */
+  impedimento: string | null;
+}
+
+/**
+ * Quem disputa uma família. Com o mapa carregado, o valor é o da fatia daquela
+ * família (com o rateio de frete e desconto) e o impedimento vem da mesma régua
+ * do servidor. Sem o mapa, sobra o que dá para saber pelo processo.
+ */
+export function candidatasDaFamilia(
+  processo: Processo, familia: string, lote: LoteDaFamilia | null,
+): Candidata[] {
+  if (lote) return lote.offers.map((o) => ({
+    proposalId: o.proposalId, supplierName: o.supplierName, totalValue: o.totalValue,
+    version: o.proposalVersion, impedimento: impedimentoDaOferta(o),
+  }));
+  return propostasDaFamilia(processo, familia).map((p) => ({
+    proposalId: p.id, supplierName: p.supplierName, totalValue: p.totalValue,
+    version: p.version, impedimento: null,
+  }));
+}
 
 /**
  * Escolha do vencedor com uma família só. A justificativa é obrigatória — é
@@ -20,6 +77,7 @@ export function FormVencedor({ processo, aoConcluir, aoAvisar }: {
   aoAvisar: (t: string, tipo?: 'ok' | 'erro') => void;
 }) {
   const vigentes = propostasVigentes(processo);
+  const lote = useLotes(processo.id)?.[0] ?? null;
   const [propostaId, setPropostaId] = useState('');
   const [criterios, setCriterios] = useState<string[]>([]);
   const [justificativa, setJustificativa] = useState('');
@@ -44,20 +102,26 @@ export function FormVencedor({ processo, aoConcluir, aoAvisar }: {
       <div className="overflow-x-auto">
         <table>
           <tbody>
-            {vigentes.map((p) => (
-              <tr key={p.id}>
+            {vigentes.map((p) => {
+              const impedida = impedimentoDaProposta(lote, p);
+              return (
+              <tr key={p.id} data-proposta={p.supplierName}>
                 <td className="w-8">
-                  <input type="radio" name="vencedor" className="w-auto" value={p.id}
+                  <input type="radio" name="vencedor" className="w-auto" value={p.id} disabled={!!impedida}
                     checked={propostaId === p.id} aria-label={`Escolher ${p.supplierName}`}
                     onChange={() => setPropostaId(p.id)} />
                 </td>
-                <td>{p.supplierName} <span className="sub">v{p.version} · {p.submittedVia}</span></td>
+                <td>
+                  {p.supplierName} <span className="sub">v{p.version} · {p.submittedVia}</span>
+                  {impedida && <div className="sub text-perigo" data-impedimento>Não pode vencer: {impedida}.</div>}
+                </td>
                 <td className="whitespace-nowrap"><strong>{moeda(p.totalValue)}</strong></td>
                 <td className="sub whitespace-nowrap">
                   {p.deliveryDays ?? '—'} dias · {p.paymentTerms || '—'}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -86,11 +150,15 @@ export function FormVencedor({ processo, aoConcluir, aoAvisar }: {
   );
 }
 
-/** Propostas que cotaram ao menos um item da família. */
+/**
+ * Propostas que cotaram a família **inteira** — só elas podem levar o lote
+ * (RFQ-ERR-024). É a régua do servidor: cotar parte da família não habilita a
+ * disputa. Serve de reserva para quando o mapa por família não pôde ser lido.
+ */
 export function propostasDaFamilia(processo: Processo, familia: string): Proposta[] {
   const itens = processo.items.filter((i) => i.family === familia).map((i) => i.id);
-  return propostasVigentes(processo)
-    .filter((p) => p.items.some((x) => itens.includes(x.quotationItemId) && x.unitPrice > 0));
+  return propostasVigentes(processo).filter((p) =>
+    itens.every((id) => p.items.some((x) => x.quotationItemId === id && x.unitPrice > 0)));
 }
 
 /**
@@ -102,6 +170,7 @@ export function FormAdjudicacao({ processo, aoConcluir, aoAvisar }: {
   aoConcluir: () => void;
   aoAvisar: (t: string, tipo?: 'ok' | 'erro') => void;
 }) {
+  const lotes = useLotes(processo.id);
   const [escolhas, setEscolhas] = useState<Record<string, string>>({});
   const [justificativa, setJustificativa] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -136,22 +205,29 @@ export function FormAdjudicacao({ processo, aoConcluir, aoAvisar }: {
           <thead><tr><th>Família</th><th>Fornecedor</th></tr></thead>
           <tbody>
             {processo.families.map((f) => {
-              const candidatas = propostasDaFamilia(processo, f);
+              const candidatas = candidatasDaFamilia(processo, f, lotes?.find((l) => l.family === f) ?? null);
+              const podem = candidatas.filter((c) => !c.impedimento);
+              const impedidas = candidatas.filter((c) => c.impedimento);
               return (
-                <tr key={f}>
+                <tr key={f} data-familia={f}>
                   <td><strong>{f}</strong></td>
                   <td className="min-w-[280px]">
-                    {candidatas.length === 0
-                      ? <span className="sub">Nenhuma proposta cotou esta família.</span>
+                    {podem.length === 0
+                      ? <span className="sub">Nenhuma proposta pode levar esta família.</span>
                       : <select aria-label={`Fornecedor da família ${f}`} value={escolhas[f] ?? ''}
                           onChange={(e) => setEscolhas((x) => ({ ...x, [f]: e.target.value }))}>
                           <option value="">Escolha o fornecedor…</option>
-                          {candidatas.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.supplierName} — {moeda(p.totalValue)} (v{p.version})
+                          {podem.map((c) => (
+                            <option key={c.proposalId} value={c.proposalId}>
+                              {c.supplierName} — {moeda(c.totalValue)} (v{c.version})
                             </option>
                           ))}
                         </select>}
+                    {impedidas.map((c) => (
+                      <div key={c.proposalId} className="sub text-perigo" data-impedimento>
+                        {c.supplierName} fora: {c.impedimento}.
+                      </div>
+                    ))}
                   </td>
                 </tr>
               );

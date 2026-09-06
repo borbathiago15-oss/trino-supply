@@ -264,11 +264,47 @@ padrão que as outras dezessete seguiam.
 A maior tela do sistema, com convite, mapa, propostas, aprovação, O.C. e
 anexos. Separável em blocos sem tocar no layout.
 
-### 🟡 INT-C · Regras que a tela ainda não antecipa
+### 🟡 INT-C · Regras que a tela ainda não antecipa — **parte 1 entregue**
 
 O trabalho de #85 e #88 cobriu segregação de funções, EPI sem C.A. e O.C. sem
-número. Falta varrer as demais regras do backend e ver quais ainda só aparecem
-como erro depois do formulário preenchido.
+número. A varredura seguinte listou os **160 códigos de erro** do backend e
+separou os que são regra de negócio dos que são autorização (`-900`, já
+resolvidos pela visibilidade do menu) ou 404.
+
+**O que a varredura achou de pior — a escolha do fornecedor.** A tela de
+seleção listava *todas* as propostas vigentes com um botão de rádio. O servidor
+recusa três casos que a tela não mostrava:
+
+| Código | Regra | O que a tela fazia |
+|---|---|---|
+| `RFQ-ERR-024` | só leva a família quem cotou a **família inteira** | oferecia quem cotou **um** item dela |
+| `SUP-ERR-030` | só fornecedor **homologado** vence | oferecia prospect, em homologação e restrito |
+| `RFQ-ERR-040` | fornecedor **inativo** não vence | oferecia igual |
+
+Nos três, o comprador marcava o fornecedor, preenchia a justificativa
+obrigatória e só então tomava o erro — e a justificativa se perdia.
+
+**O achado incômodo.** O backend já tinha o endpoint que responde exatamente a
+pergunta da tela — `GET /quotations/{id}/family-map`, "quem pode levar cada
+família" —, e **nenhuma tela o consumia**. O React refazia a conta por conta
+própria, com `some` onde a regra é `every`. A correção foi ligar a tela ao
+endpoint que já existia, e completar o endpoint com a situação do fornecedor no
+cadastro (`homologation`, `active`, `canWin`).
+
+Entregue em #107: `FamilyMapAsync` no serviço, `canWin` na oferta, o "mais
+barato" recalculado entre os que podem vencer (destacar como melhor oferta
+quem o servidor vai recusar é a mesma armadilha), e as duas telas de escolha
+— vencedor único e adjudicação por família — dizendo o impedimento na linha.
+Falha na leitura do mapa não esconde ninguém: sem ele, quem barra é a API.
+
+**O que resta da varredura**, em ordem de valor:
+
+1. `IAM-ERR-015/016` — a tela de Usuários oferece "Inativar" no próprio usuário
+   e no único administrador ativo; os dois só falham no clique.
+2. `PR-ERR-050` — a data de necessidade no passado só é recusada no *envio* da
+   SC, não na criação: o campo aceita ontem sem dizer nada.
+3. `PO-ERR-056`, `IV-ERR-010`, `SUP-ERR-020` — recebimento, entrada de estoque
+   e vigência de contrato, todos de impacto menor.
 
 ### 🟠 INT-D · O menu é um mapa de módulos, e o processo não anda por módulos
 
@@ -463,7 +499,7 @@ existentes antes de criar o índice.
 |---|---|---|
 | 11 | **INT-A** — componente único de estado de tela | interface · **premissa corrigida**; corrigida a tela sem estado vazio |
 | 12 | **INT-B / ARQ-B** — quebrar as duas maiores unidades | arquitetura |
-| 13 | **INT-C** — varredura das regras que a tela ainda não antecipa | interface |
+| 13 | **INT-C** — varredura das regras que a tela ainda não antecipa | interface · **parte 1 entregue** (escolha do fornecedor); faltam Usuários e a data da SC |
 | 14 | **INT-D · D7** — vocabulário do menu (precisa da sua decisão) | interface |
 | 15 | **SEC-D** — zerar o aviso de build | qualidade · **entregue** |
 

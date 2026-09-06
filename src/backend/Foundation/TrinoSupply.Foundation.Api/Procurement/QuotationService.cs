@@ -29,7 +29,17 @@ public record ProposalItemInput(Guid QuotationItemId, decimal UnitPrice, decimal
 /// <summary>Oferta de um fornecedor para uma família inteira (mapa de adjudicação).</summary>
 public record FamilyOffer(Guid SupplierId, string SupplierName, Guid ProposalId, int ProposalVersion,
     decimal ItemsValue, decimal TotalValue, int? DeliveryDays, string? PaymentTerms,
-    bool Complete, bool Cheapest);
+    bool Complete, bool Cheapest,
+    string Homologation = SupplierHomologation.Homologado, bool Active = true)
+{
+    /// <summary>
+    /// Se esta oferta pode mesmo levar a família — a mesma régua que <c>AwardAsync</c> aplica
+    /// na hora de gravar: cotou a família inteira (RFQ-ERR-024), está ativa no cadastro
+    /// (RFQ-ERR-040) e está homologada de fato (SUP-ERR-030). A tela usa isto para só
+    /// oferecer quem pode vencer, em vez de deixar o comprador descobrir no erro.
+    /// </summary>
+    public bool CanWin => Complete && Active && Homologation == SupplierHomologation.Homologado;
+}
 
 /// <summary>Lote da compra: a família, o que ela pede e quem cotou.</summary>
 public record FamilyLot(string Family, int ItemCount, decimal Quantity, IReadOnlyList<FamilyOffer> Offers);
@@ -682,13 +692,47 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
                 ofertas.Add(new FamilyOffer(p.SupplierId, p.SupplierName, p.Id, p.VersionNumber,
                     valorItens, total, p.DeliveryDays, p.PaymentTerms, cobre, false));
             }
-            var menor = ofertas.Where(o => o.Complete).OrderBy(o => o.TotalValue).FirstOrDefault();
             lotes.Add(new FamilyLot(familia, itens.Count,
                 q.Items.Where(i => itens.Contains(i.Id)).Sum(i => i.Quantity),
-                ofertas.Select(o => o with { Cheapest = menor is not null && o.Complete && o.TotalValue == menor.TotalValue })
-                    .OrderByDescending(o => o.Complete).ThenBy(o => o.TotalValue).ToList()));
+                Ordenadas(ofertas)));
         }
         return lotes;
+    }
+
+    /// <summary>
+    /// O mesmo mapa, com a situação de cada fornecedor no cadastro. É o que a tela precisa para
+    /// só oferecer quem pode mesmo vencer a família: sem isso o comprador escolhe, escreve a
+    /// justificativa e só então leva SUP-ERR-030 (não homologado) ou RFQ-ERR-040 (inativo).
+    /// O "mais barato" também passa a ser o mais barato <em>entre os que podem vencer</em> —
+    /// destacar como melhor oferta quem o servidor vai recusar seria a mesma armadilha.
+    /// </summary>
+    public async Task<IReadOnlyList<FamilyLot>> FamilyMapAsync(Quotation q, CancellationToken ct = default)
+    {
+        var lotes = FamilyMap(q);
+        var ids = lotes.SelectMany(l => l.Offers).Select(o => o.SupplierId).Distinct().ToList();
+        if (ids.Count == 0) return lotes;
+        var fornecedores = await db.Suppliers.Include(f => f.Documents)
+            .Where(f => ids.Contains(f.Id)).ToListAsync(ct);
+        var hoje = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        return lotes.Select(l => l with { Offers = Ordenadas(l.Offers.Select(o =>
+        {
+            var f = fornecedores.SingleOrDefault(x => x.Id == o.SupplierId);
+            // fornecedor sumido do cadastro não vira "homologado por omissão": não pode vencer
+            return o with { Homologation = f?.EffectiveHomologation(hoje) ?? SupplierHomologation.Bloqueado,
+                            Active = f?.Active ?? false };
+        }).ToList()) }).ToList();
+    }
+
+    /// <summary>
+    /// Ordem e destaque do lote: quem pode levar a família primeiro, do mais barato ao mais caro,
+    /// com o menor total marcado. Recalcula a marca porque o que pode vencer muda quando a
+    /// situação do fornecedor entra na conta.
+    /// </summary>
+    private static IReadOnlyList<FamilyOffer> Ordenadas(IReadOnlyList<FamilyOffer> ofertas)
+    {
+        var menor = ofertas.Where(o => o.CanWin).OrderBy(o => o.TotalValue).FirstOrDefault();
+        return ofertas.Select(o => o with { Cheapest = menor is not null && o.CanWin && o.TotalValue == menor.TotalValue })
+            .OrderByDescending(o => o.CanWin).ThenByDescending(o => o.Complete).ThenBy(o => o.TotalValue).ToList();
     }
 
     /// <summary>Itens de uma família dentro do processo (a família do item é snapshot do catálogo).</summary>

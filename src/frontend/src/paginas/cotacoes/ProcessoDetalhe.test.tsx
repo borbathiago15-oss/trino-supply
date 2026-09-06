@@ -3,19 +3,21 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { Usuario } from '@/api/auth';
-import { acoesDisponiveis, conflitoDeSegregacao, melhorPreco, menorTotal, precoDoItem } from '@/api/cotacoes';
+import {
+  acoesDisponiveis, conflitoDeSegregacao, impedimentoDaOferta, melhorPreco, menorTotal, precoDoItem,
+} from '@/api/cotacoes';
 import { ToastProvider } from '@/componentes/Toast';
 import { ProcessoDetalhe, textoDoConvite } from './ProcessoDetalhe';
-import { propostasDaFamilia } from './AcoesDoProcesso';
+import { candidatasDaFamilia, propostasDaFamilia } from './AcoesDoProcesso';
 import { montarProposta } from './PainelPropostaManual';
-import { processo, proposta } from '@/test/cotacoes';
+import { lote, oferta, processo, proposta } from '@/test/cotacoes';
 
 vi.mock('@/api/cotacoes', async (importar) => ({
   ...(await importar<typeof import('@/api/cotacoes')>()),
   lerProcesso: vi.fn(), convidarFornecedor: vi.fn(), encerrarParaAnalise: vi.fn(),
   escolherVencedor: vi.fn(), decidir: vi.fn(), registrarOc: vi.fn(),
   registrarNegociacao: vi.fn(), cancelarProcesso: vi.fn(), registrarProposta: vi.fn(),
-  anexarNaProposta: vi.fn(),
+  anexarNaProposta: vi.fn(), mapaDeFamilias: vi.fn(),
 }));
 vi.mock('@/api/pedidos', async (importar) => ({
   ...(await importar<typeof import('@/api/pedidos')>()),
@@ -29,7 +31,7 @@ vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => eu }));
 
 import {
   anexarNaProposta, cancelarProcesso, decidir, encerrarParaAnalise, escolherVencedor,
-  lerProcesso, registrarNegociacao, registrarOc, registrarProposta,
+  lerProcesso, mapaDeFamilias, registrarNegociacao, registrarOc, registrarProposta,
 } from '@/api/cotacoes';
 import { anexarOc } from '@/api/pedidos';
 import { listarFornecedores } from '@/api/fornecedores';
@@ -143,7 +145,7 @@ describe('regras das ações por etapa', () => {
   it('mais de uma família manda escolher fornecedor por família', () => {
     expect(acoesDisponiveis(processo({ families: ['EPI', 'FERRAMENTA'] }), conduz).porFamilia).toBe(true);
   });
-  it('só concorre a uma família quem cotou algum item dela', () => {
+  it('só concorre a uma família quem cotou a família inteira', () => {
     const q = processo({
       families: ['EPI', 'FERRAMENTA'],
       items: [
@@ -157,6 +159,44 @@ describe('regras das ações por etapa', () => {
     });
     expect(propostasDaFamilia(q, 'EPI').map((p) => p.supplierName)).toEqual(['Alfa']);
     expect(propostasDaFamilia(q, 'FERRAMENTA').map((p) => p.supplierName)).toEqual(['Beta']);
+  });
+
+  describe('quem pode levar a família', () => {
+    // a mesma régua do servidor, na ordem em que ele verifica
+    it('meia cotação não leva o lote (RFQ-ERR-024)', () => {
+      expect(impedimentoDaOferta(oferta({ complete: false, canWin: false })))
+        .toContain('não cotou a família inteira');
+    });
+    it('fornecedor inativo não leva o lote (RFQ-ERR-040)', () => {
+      expect(impedimentoDaOferta(oferta({ active: false, canWin: false }))).toContain('inativo');
+    });
+    it('fornecedor sem homologação não leva o lote (SUP-ERR-030)', () => {
+      const barrado = impedimentoDaOferta(oferta({ homologation: 'EM_HOMOLOGACAO', canWin: false }))!;
+      expect(barrado).toContain('Em homologação');
+      expect(barrado).toContain('SUP-ERR-030');
+    });
+    it('homologado e com a família inteira cotada pode vencer', () => {
+      expect(impedimentoDaOferta(oferta({}))).toBeNull();
+    });
+
+    it('a adjudicação só oferece quem pode vencer, e diz por que o outro ficou de fora', () => {
+      const q = processo({ families: ['EPI'] });
+      const candidatas = candidatasDaFamilia(q, 'EPI', lote({
+        offers: [
+          oferta({ proposalId: 'p1', supplierName: 'Alfa' }),
+          oferta({ proposalId: 'p2', supplierName: 'Beta', homologation: 'PROSPECT', canWin: false }),
+        ],
+      }));
+      expect(candidatas.filter((c) => !c.impedimento).map((c) => c.supplierName)).toEqual(['Alfa']);
+      expect(candidatas.find((c) => c.supplierName === 'Beta')!.impedimento).toContain('SUP-ERR-030');
+    });
+
+    it('sem o mapa carregado a tela não esconde ninguém — quem barra é a API', () => {
+      // leitura do mapa pode falhar; esconder a opção por engano é pior do que
+      // deixar o servidor recusar com a mensagem dele
+      const q = processo({ families: ['EPI'] });
+      expect(candidatasDaFamilia(q, 'EPI', null).map((c) => c.impedimento)).toEqual([null]);
+    });
   });
 });
 
@@ -191,6 +231,32 @@ describe('tela do processo', () => {
     vi.resetAllMocks();
     eu = { id: 'u1', email: 'carla@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['COMPRAS'] };
     vi.mocked(listarFornecedores).mockResolvedValue([]);
+    vi.mocked(mapaDeFamilias).mockResolvedValue([lote({})]);
+  });
+
+  it('proposta de fornecedor sem homologação não pode ser escolhida (SUP-ERR-030)', async () => {
+    // antes a tela deixava marcar, escrever a justificativa e só então o
+    // servidor recusava — a régua agora é a mesma dos dois lados
+    vi.mocked(lerProcesso).mockResolvedValue(processo({
+      proposals: [
+        proposta({ id: 'p1', supplierName: 'Alfa' }),
+        proposta({ id: 'p2', supplierId: 's2', supplierName: 'Beta', totalValue: 900 }),
+      ],
+    }));
+    vi.mocked(mapaDeFamilias).mockResolvedValue([lote({
+      offers: [
+        oferta({ proposalId: 'p1', supplierName: 'Alfa' }),
+        oferta({ proposalId: 'p2', supplierId: 's2', supplierName: 'Beta', homologation: 'RESTRITO', canWin: false }),
+      ],
+    })]);
+    abrir();
+
+    const forma = await screen.findByTestId('form-vencedor');
+    // o mapa por família chega depois do processo: é ele que sabe quem pode vencer
+    expect(await within(forma).findByText(/Não pode vencer/)).toHaveTextContent('SUP-ERR-030');
+    expect(within(forma).getByRole('radio', { name: 'Escolher Alfa' })).toBeEnabled();
+    expect(within(forma).getByRole('radio', { name: 'Escolher Beta' })).toBeDisabled();
+    expect(escolherVencedor).not.toHaveBeenCalled();
   });
 
   it('o mapa destaca o melhor preço e o menor total', async () => {

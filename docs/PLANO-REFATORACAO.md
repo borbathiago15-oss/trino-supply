@@ -217,10 +217,28 @@ inventário — é isso que sustenta a afirmação de que nada se perdeu no cami
 tabela de rotas num teste sem subir o banco, e trocar a conferência de texto do
 SEC-A pela versão em execução.
 
-### 🟡 ARQ-B · `QuotationService.cs` com 1.108 linhas
+### 🟢 ARQ-B · `QuotationService.cs` com 1.222 linhas — **entregue**
 
-Concentra abertura, convite, proposta, negociação, adjudicação, alçadas e O.C.
-Candidato natural a separar a parte de alçadas/decisão do resto.
+Concentrava abertura, convite, proposta, negociação, adjudicação, alçadas e O.C.
+num arquivo só. Virou cinco arquivos da **mesma classe** (`partial`), cortados
+pelas etapas do processo, sem uma linha de chamada mudando de lugar:
+
+| Arquivo | Linhas | O que responde |
+|---|---:|---|
+| `QuotationService.cs` | 272 | capacidades por papel, consultas, fila e infra |
+| `QuotationService.Cotacao.cs` | 342 | abertura, convite, propostas, negociação |
+| `QuotationService.Adjudicacao.cs` | 254 | escolha do vencedor, mapa por família, rateio |
+| `QuotationService.Alcadas.cs` | 158 | Nível 1, Nível 2 e a segregação de funções |
+| `QuotationService.OrdemDeCompra.cs` | 254 | registro da O.C. do ERP, contrato, cancelamento |
+
+`partial` foi escolha deliberada: separar em classes distintas obrigaria a
+injetar uma na outra e a inventar fronteiras que o domínio não tem — as etapas
+compartilham `TransitionAsync`, `AddEvent` e o mesmo agregado. O corte é para
+achar o método, não para desacoplar o que não é acoplável.
+
+**A rede desta vez foi mecânica:** remontei os cinco arquivos na ordem original
+e comparei com a versão anterior — idênticos, linha a linha. Só então build,
+217 testes e E2E.
 
 ### 🟢 ARQ-C · Referências entre schemas sem FK
 
@@ -259,10 +277,25 @@ Fica a lição sobre a própria auditoria: contar repetição encontra padrão, 
 defeito. O que faltava não era uniformidade — era uma tela que não seguia o
 padrão que as outras dezessete seguiam.
 
-### 🟡 INT-B · `ProcessoDetalhe.tsx` com 453 linhas
+### 🟢 INT-B · `ProcessoDetalhe.tsx` com 455 linhas — **entregue**
 
-A maior tela do sistema, com convite, mapa, propostas, aprovação, O.C. e
-anexos. Separável em blocos sem tocar no layout.
+A maior tela do sistema: convite, mapa, propostas, negociação, aprovação e O.C.
+Foi para **254 linhas**, com três painéis saindo para arquivos vizinhos:
+
+- `CabecalhoDoProcesso.tsx` (78) — identificação, próximo passo e itens. Só lê.
+- `PainelDeConvidados.tsx` (111) — convidados, o convite e o texto copiado.
+- `PainelDeNegociacao.tsx` (104) — o ganho apurado e o formulário que o registra.
+
+O critério do corte foi **de quem é o estado**. Os dois painéis com formulário
+levaram junto o `useState` que só eles usavam — e o de convidados levou também
+a leitura dos fornecedores do cadastro, que a tela carregava para uso de um
+`<select>` só. O que sobrou em `ProcessoDetalhe` é o que pertence à tela: a
+leitura do processo, a régua de ações por papel e etapa, e os diálogos de
+decisão.
+
+Nenhuma mudança de layout, de rota ou de comportamento; os testes existentes
+passaram sem alteração, exceto o `import` de `textoDoConvite`, que mudou de
+arquivo junto com a função.
 
 ### 🟡 INT-C · Regras que a tela ainda não antecipa — **parte 1 entregue**
 
@@ -508,7 +541,7 @@ existentes antes de criar o índice.
 | # | Item | Eixo |
 |---|---|---|
 | 11 | **INT-A** — componente único de estado de tela | interface · **premissa corrigida**; corrigida a tela sem estado vazio |
-| 12 | **INT-B / ARQ-B** — quebrar as duas maiores unidades | arquitetura |
+| 12 | **INT-B / ARQ-B** — quebrar as duas maiores unidades | arquitetura · **entregue** — 1.222 → 5 arquivos e 455 → 254 linhas (#109) |
 | 13 | **INT-C** — varredura das regras que a tela ainda não antecipa | interface · **entregue** — escolha do fornecedor (#107), Usuários e data da SC (#108); restam três de impacto menor |
 | 14 | **INT-D · D7** — vocabulário do menu (precisa da sua decisão) | interface |
 | 15 | **SEC-D** — zerar o aviso de build | qualidade · **entregue** |

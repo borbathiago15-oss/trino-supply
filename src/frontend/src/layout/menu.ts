@@ -139,16 +139,17 @@ export const itemDaView = (view: string) => VIEW_PARA_ITEM[view] ?? view;
 /**
  * Quanto há pendente em cada item de menu, somado a partir dos avisos.
  *
- * Só entra o que pede ação. Aviso de severidade `info` é acompanhamento — "40
- * pedidos seus em andamento com Suprimentos" não é trabalho parado com você, e
- * um número no menu diria que é.
+ * Só entra o que pede ação e está na fila. Aviso de severidade `info` é
+ * acompanhamento — "40 pedidos seus em andamento" não é trabalho parado com
+ * você. E aviso com `counts: false` é constatação, não fila: é o caso do achado
+ * de insight, que aparece na Central de Avisos mas não infla o menu.
  */
 export function contagemPorItem(
-  avisos: { view: string; count: number; severity?: string }[],
+  avisos: { view: string; count: number; severity?: string; counts?: boolean }[],
 ): Record<string, number> {
   const total: Record<string, number> = {};
   for (const a of avisos) {
-    if (a.severity === 'info') continue;
+    if (a.severity === 'info' || a.counts === false) continue;
     const id = itemDaView(a.view);
     total[id] = (total[id] ?? 0) + a.count;
   }

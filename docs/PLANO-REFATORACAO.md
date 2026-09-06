@@ -364,10 +364,18 @@ Três, todas sobre dado que já estava no banco:
 | **INS-06** | fornecedor que atrasou 3+ vezes, com o percentual sobre as entregas medidas | o OTIF já era medido por pedido; aqui vira padrão de comportamento, que é o que muda uma decisão |
 | **INS-07** | processos decididos com uma proposta só | não é irregular, mas sem concorrência o preço não tem contra o que ser medido |
 
-### INTEL-C · O insight chega até quem decide
+### INTEL-C · O insight chega até quem decide — **entregue**
 
-Hoje ele mora numa tela que a pessoa precisa abrir. Levar os de severidade alta
-para a Central de Avisos e para o painel faz o sistema avisar em vez de esperar.
+Achado de severidade **alta** entra na Central de Avisos como qualquer outro
+aviso, com o texto do achado e a providência, e leva para a tela onde se age.
+Quem decide deixa de precisar abrir Insights & Executivo para descobrir que
+existe um problema.
+
+Um cuidado: o achado **não entra no contador do menu**. Ele é constatação, não
+fila — contá-lo faria o menu dizer "Pedidos 3" com a lista de pedidos vazia,
+que é a mesma incoerência corrigida quando o aviso de acompanhamento saiu da
+contagem. O aviso carrega `counts: false`, e a regra está escrita nos dois
+lados.
 
 ---
 
@@ -424,7 +432,7 @@ existentes antes de criar o índice.
 | 7 | **INT-D · D1/D4** — trilha do processo no painel e contadores no menu | interface + inteligência · **entregue** |
 | 8 | **INTEL-A** — insight com ação e link para a tela onde se age | inteligência · **entregue** |
 | 9 | **INTEL-B** — regras novas sobre o dado que já existe | inteligência · **entregue** |
-| 10 | **INTEL-C** — insight de severidade alta chega ao painel e aos avisos | inteligência + interface |
+| 10 | **INTEL-C** — insight de severidade alta chega ao painel e aos avisos | inteligência + interface · **entregue** |
 
 ### Prioridade 4 — acabamento
 
@@ -447,7 +455,7 @@ existentes antes de criar o índice.
 | Arquitetura | `Program.cs` com 120 endpoints | 🟠 ALTO | Rotas por módulo | **Entregue** — 401 linhas, 12 arquivos de rota, inventário como rede | Médio |
 | Segurança | Rate limiting só no login | 🟡 MÉDIO | Cotas por usuário em upload e relatório | **Entregue** | Médio |
 | Segurança | Upload sem limite declarado | 🟡 MÉDIO | Teto de requisição nos oito endpoints | **Entregue** | Médio |
-| Inteligência | Insight descreve mas não age | 🟡 MÉDIO | Ação + link + três regras novas | **Entregue** (falta INTEL-C) | Alto |
+| Inteligência | Insight descreve mas não age | 🟡 MÉDIO | Ação + link, três regras novas, achado grave no painel | **Entregue** | Alto |
 | Interface | Menu por módulo, processo em zigue-zague; acordeão não segue a rota | 🟠 ALTO | Trilha do processo, próximo passo na tela, menu corrigido | D1–D6 e D8 entregues (#92, #93); falta D7, o vocabulário | Alto |
 | Interface | 27 telas repetem estado | 🟡 MÉDIO | Componente único | A executar | Médio |
 | Arquitetura | `QuotationService` com 1.108 linhas | 🟡 MÉDIO | Separar alçadas | A executar | Médio |

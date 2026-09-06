@@ -87,6 +87,9 @@ test.describe('Processos de Cotação (React)', () => {
     // sem proposta, o mapa diz o que fazer em vez de mostrar tabela vazia
     await expect(page.locator('body')).toContainText('Nenhuma proposta lançada ainda');
 
+    // a tela diz o passo seguinte, em vez de exigir que se saiba a sequência de cor
+    await expect(page.getByTestId('proximo-passo')).toContainText('Convidar fornecedores');
+
     // convidar um fornecedor: o cenário garante que existe ao menos um
     const convidar = page.locator('#rfq-convidar');
     await expect(convidar).toBeVisible();
@@ -112,6 +115,8 @@ test.describe('Processos de Cotação (React)', () => {
     await dialogo.getByLabel(/Motivo do cancelamento/).fill(`teste E2E ${marca}`);
     await dialogo.getByRole('button', { name: 'Cancelar processo' }).click();
     await expect(page.getByTestId('toast').last()).toContainText('cancelado');
+    // processo encerrado não tem passo seguinte a apontar
+    await expect(page.getByTestId('proximo-passo')).toHaveCount(0);
   });
 
   test('a lista filtra por situação e abre o processo', async ({ page }) => {

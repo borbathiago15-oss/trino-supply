@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProcessoParaAprovar } from '@/api/cotacoes';
 import { propostaVencedora } from '@/api/cotacoes';
@@ -55,7 +56,7 @@ describe('regras da central', () => {
     expect(propostaVencedora(processo)?.supplierName).toBe('Beta Química');
     expect(propostaVencedora({ ...processo, selection: null })).toBeNull();
   });
-  it('o processo abre no sistema clássico, que ainda tem a tela de cotações', () => {
+  it('o processo abre na tela React de cotações, sem recarregar o app', () => {
     expect(linkDoProcesso('q1')).toBe('/cotacoes/q1');
   });
 });
@@ -68,7 +69,9 @@ describe('<CentralDeAprovacao />', () => {
     vi.mocked(aprovacoesPendentes).mockResolvedValue([scLegado]);
   });
 
-  const montar = () => render(<ToastProvider><CentralDeAprovacao /></ToastProvider>);
+  const montar = () => render(
+    <MemoryRouter><ToastProvider><CentralDeAprovacao /></ToastProvider></MemoryRouter>,
+  );
 
   it('mostra as três filas com o essencial de cada uma', async () => {
     montar();

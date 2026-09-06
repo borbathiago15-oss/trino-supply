@@ -2016,32 +2016,10 @@ rfq.MapGet("/", async (QuotationService svc, ClaimsPrincipal p, HttpContext ctx)
 });
 
 // Central de Aprovação: processos de compra aguardando a MINHA alçada, já com preços
-rfq.MapGet("/my-approvals", async (QuotationService svc, AppDbContext db, ClaimsPrincipal p, HttpContext ctx) =>
+rfq.MapGet("/my-approvals", async (QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
 {
-    var role = RoleOf(p);
-    var uid = ActorId(p);
-    if (!QuotationService.CanApproveAsManager(role) && !QuotationService.CanApproveAsDirector(role))
-        return Ok(new { items = Array.Empty<object>() }, ctx);
-
-    var all = await svc.ListAsync();
-    var mine = new List<Quotation>();
-
-    if (QuotationService.CanApproveAsManager(role))
-    {
-        var awaiting = all.Where(q => q.Status == QuotationStatus.AwaitingManager && q.SelectedBy != uid).ToList();
-        if (role == Roles.Approver)
-        {
-            var managed = await db.CostCenters.Where(c => c.Active && c.ManagerUserId == uid)
-                .Select(c => c.Code.ToUpper()).ToListAsync();
-            awaiting = awaiting.Where(q => managed.Contains(q.CostCenter.ToUpperInvariant())).ToList();
-        }
-        mine.AddRange(awaiting);
-    }
-    if (QuotationService.CanApproveAsDirector(role))
-        mine.AddRange(all.Where(q => q.Status == QuotationStatus.AwaitingDirector
-                                     && q.SelectedBy != uid && q.ManagerApprovedBy != uid));
-
-    return Ok(new { items = mine.DistinctBy(q => q.Id).Select(QuotationView) }, ctx);
+    var fila = await svc.PendingApprovalsAsync(RoleOf(p), ActorId(p));
+    return Ok(new { items = fila.Select(QuotationView) }, ctx);
 });
 
 // fila de Suprimentos: PRs aprovadas aguardando cotação

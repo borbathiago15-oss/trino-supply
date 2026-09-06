@@ -68,6 +68,42 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
             .Include(q => q.Proposals).ThenInclude(p => p.Items)
             .OrderByDescending(q => q.CreatedAt).Take(200).ToListAsync(ct);
 
+    /// <summary>
+    /// Processos aguardando a alçada de quem está pedindo. O filtro é feito no
+    /// banco, e não sobre uma lista já cortada: uma fila de aprovação que trunca
+    /// esconde trabalho de quem decide, sem avisar ninguém (PO-BR-012).
+    /// </summary>
+    public Task<List<Quotation>> PendingApprovalsAsync(
+        string role, Guid actorId, CancellationToken ct = default)
+    {
+        var podeNivel1 = CanApproveAsManager(role);
+        var podeNivel2 = CanApproveAsDirector(role);
+        if (!podeNivel1 && !podeNivel2) return Task.FromResult(new List<Quotation>());
+
+        // um Where só, e não Union: `Include` depois de operação de conjunto não é
+        // traduzível pelo EF — compilaria e quebraria na primeira chamada real
+        var soCentrosQueGerencio = podeNivel1 && role == Roles.Approver;
+        var meus = db.CostCenters.Where(c => c.Active && c.ManagerUserId == actorId).Select(c => c.Code.ToUpper());
+
+        // segregação de funções (RFQ-ERR-030): quem selecionou não aprova a própria
+        // escolha, e quem deu o Nível 1 não aparece na fila do Nível 2
+        var fila = db.Quotations.Where(q =>
+            (podeNivel1
+             && q.Status == QuotationStatus.AwaitingManager
+             && q.SelectedBy != actorId
+             && (!soCentrosQueGerencio || meus.Contains(q.CostCenter.ToUpper())))
+            ||
+            (podeNivel2
+             && q.Status == QuotationStatus.AwaitingDirector
+             && q.SelectedBy != actorId
+             && q.ManagerApprovedBy != actorId));
+
+        return fila.Include(q => q.Items).Include(q => q.Suppliers).Include(q => q.Awards)
+            .Include(q => q.Proposals).ThenInclude(p => p.Items)
+            .OrderBy(q => q.CreatedAt)   // o mais antigo primeiro: a fila é de trabalho, não de novidade
+            .ToListAsync(ct);
+    }
+
     public Task<Quotation?> GetAsync(Guid id, CancellationToken ct = default) =>
         db.Quotations.Include(q => q.Items).Include(q => q.Suppliers).Include(q => q.Awards)
             .Include(q => q.Proposals).ThenInclude(p => p.Items)

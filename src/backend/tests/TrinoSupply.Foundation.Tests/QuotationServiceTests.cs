@@ -70,6 +70,53 @@ public class QuotationServiceTests
         return closed!;
     }
 
+    // ---- fila de aprovação: filtra no banco, sem teto (PO-BR-012) -----------
+    [Fact]
+    public async Task Fila_de_aprovacao_nao_trunca_e_respeita_a_segregacao()
+    {
+        var w = await BuildAsync();
+
+        // uma fila maior que o antigo teto de 200 da listagem
+        for (var i = 0; i < 210; i++)
+            w.Db.Quotations.Add(new Quotation
+            {
+                Number = $"RFQ-2026-{i:000000}", Kind = QuotationKind.Purchase,
+                Status = QuotationStatus.AwaitingManager, CostCenter = "BAH-001",
+                SelectedBy = Carla.Id, CreatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).AddMinutes(i),
+            });
+        await w.Db.SaveChangesAsync();
+
+        var fila = await w.Rfq.PendingApprovalsAsync(Roles.SupplyManager, Gustavo.Id);
+
+        // antes, a listagem cortava em 200 e os mais antigos sumiam da fila
+        Assert.Equal(210, fila.Count);
+        // e a fila abre pelo mais antigo, que é o que espera há mais tempo
+        Assert.Equal("RFQ-2026-000000", fila[0].Number);
+
+        // quem selecionou o fornecedor não vê nenhum deles (RFQ-ERR-030)
+        Assert.Empty(await w.Rfq.PendingApprovalsAsync(Roles.SupplyManager, Carla.Id));
+        // quem não tem alçada nenhuma também não
+        Assert.Empty(await w.Rfq.PendingApprovalsAsync(Roles.Requester, Gustavo.Id));
+    }
+
+    [Fact]
+    public async Task Fila_do_nivel_2_exclui_quem_deu_o_nivel_1()
+    {
+        var w = await BuildAsync();
+        w.Db.Quotations.Add(new Quotation
+        {
+            Number = "RFQ-2026-000900", Kind = QuotationKind.Purchase,
+            Status = QuotationStatus.AwaitingDirector, CostCenter = "BAH-001",
+            SelectedBy = Carla.Id, ManagerApprovedBy = Gustavo.Id,
+            CreatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+        });
+        await w.Db.SaveChangesAsync();
+
+        Assert.Single(await w.Rfq.PendingApprovalsAsync(Roles.Director, Diana.Id));
+        Assert.Empty(await w.Rfq.PendingApprovalsAsync(Roles.Director, Gustavo.Id));  // deu o Nível 1
+        Assert.Empty(await w.Rfq.PendingApprovalsAsync(Roles.Director, Carla.Id));    // selecionou
+    }
+
     private static async Task<Quotation> UpToApprovedAsync(World w)
     {
         var q = await UpToAnalysisAsync(w);

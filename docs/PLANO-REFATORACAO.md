@@ -156,9 +156,11 @@ e não há como dois trabalhos mexerem em módulos diferentes sem se cruzarem.
 | `Rotas/Anexos.cs` | a gravação de anexo, com o limite de tamanho e a lista de tipos que valem para todo upload |
 | `Rotas/CotacaoRotas.cs` | RFQ-001 inteiro — cotação, propostas, aprovações, O.C. — e o Portal do Fornecedor, que é o outro lado do mesmo processo |
 | `Rotas/PedidoRotas.cs` | PO-001 — pedido, O.C. do ERP, nota fiscal, entrega, cancelamento, os anexos de O.C./NF e o PDF |
+| `Rotas/SolicitacaoRotas.cs` | PR-001 — solicitação de compra, itens, envio, decisão do aprovador e anexos |
+| `Rotas/EstoqueRotas.cs` | MMS-003/004/005 — estoque e solicitação de material, os dois lados do mesmo balcão |
 
-`Program.cs`: de **2.813 para 1.880 linhas**. Faltam solicitações, estoque,
-material, triagem, catálogo, fornecedores e cadastros.
+`Program.cs`: de **2.813 para 1.340 linhas**. Faltam a central de avisos,
+triagem, catálogo, fornecedores, centros de custo, empresas e usuários.
 
 Os helpers eram funções locais do `Program.cs`, alcançáveis só de lá — foi o que
 impedia mover qualquer rota. Agora são uma classe estática importada com

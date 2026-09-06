@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LinhaTco, RelatorioInsights } from '@/api/analytics';
 import { Insights } from './Insights';
@@ -35,7 +36,7 @@ const tco: LinhaTco = {
   tcoTotal: 2700, unitPriceAvg: 12, tcoUnitAvg: 13.5, extrasPercent: 11.1,
 };
 
-const abrir = () => render(<Insights />);
+const abrir = () => render(<MemoryRouter><Insights /></MemoryRouter>);
 
 describe('tela Insights & Executivo', () => {
   beforeEach(() => {
@@ -62,11 +63,11 @@ describe('tela Insights & Executivo', () => {
     expect(screen.queryByTestId('lista-insights')).not.toBeInTheDocument();
   });
 
-  it('cada achado mostra código, título e a evidência', async () => {
+  it('cada achado mostra código, título, evidência e o que fazer', async () => {
     vi.mocked(relatorioDeInsights).mockResolvedValue(relatorio({
       insights: [
-        { code: 'INS-01', kind: 'SOBREPRECO', severity: 'alta', title: 'Sobrepreço de 32% em Luva nitrílica', evidence: 'O.C. PO-1 (Alfa): pago 15,84 contra último preço 12,00.' },
-        { code: 'INS-04', kind: 'CONCENTRACAO', severity: 'media', title: 'Concentração em Alfa EPIs', evidence: '58% do spend da categoria Segurança.' },
+        { code: 'INS-01', kind: 'SOBREPRECO', severity: 'alta', title: 'Sobrepreço de 32% em Luva nitrílica', evidence: 'O.C. PO-1 (Alfa): pago 15,84 contra último preço 12,00.', action: 'Confira o pedido PO-1 e leve o preço anterior para a próxima negociação.', view: 'buy-orders' },
+        { code: 'INS-04', kind: 'CONCENTRACAO', severity: 'media', title: 'Concentração em Alfa EPIs', evidence: '58% do spend da categoria Segurança.', action: 'Convide outros fornecedores homologados.', view: 'suppliers' },
       ],
     }));
     abrir();
@@ -74,6 +75,25 @@ describe('tela Insights & Executivo', () => {
     expect(within(lista).getByText('INS-01')).toBeInTheDocument();
     expect(within(lista).getByText(/pago 15,84 contra último preço/)).toBeInTheDocument();
     expect(within(lista).getByText('INS-04')).toBeInTheDocument();
+
+    // descrever sem dizer o que fazer devolve o trabalho a quem lê (INTEL-A)
+    expect(within(lista).getByText(/leve o preço anterior/)).toBeInTheDocument();
+    const sobrepreco = within(lista.querySelector('[data-achado="INS-01"]') as HTMLElement);
+    expect(sobrepreco.getByRole('link', { name: /Ir para a tela/ })).toHaveAttribute('href', '/pedidos');
+    const concentracao = within(lista.querySelector('[data-achado="INS-04"]') as HTMLElement);
+    expect(concentracao.getByRole('link', { name: /Ir para a tela/ })).toHaveAttribute('href', '/fornecedores');
+  });
+
+  it('achado sem destino mostra a providência, mas nenhum link', async () => {
+    vi.mocked(relatorioDeInsights).mockResolvedValue(relatorio({
+      insights: [
+        { code: 'INS-09', kind: 'OUTRO', severity: 'info', title: 'Algo a olhar', evidence: 'evidência', action: 'Converse com o time.', view: null },
+      ],
+    }));
+    abrir();
+    const lista = await screen.findByTestId('lista-insights');
+    expect(within(lista).getByText('Converse com o time.')).toBeInTheDocument();
+    expect(within(lista).queryByRole('link', { name: /Ir para a tela/ })).not.toBeInTheDocument();
   });
 
   it('o backlog mostra as faixas de espera e quem está com o quê', async () => {

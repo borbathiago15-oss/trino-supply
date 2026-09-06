@@ -6,15 +6,30 @@ using TrinoSupply.Foundation.Api.Procurement;
 
 namespace TrinoSupply.Foundation.Api.Insights;
 
-/// <summary>Um achado determinístico: regra fixa sobre dados reais, sempre com a evidência.</summary>
-public record Insight(string Code, string Kind, string Severity, string Title, string Evidence);
+/// <summary>
+/// Um achado determinístico: regra fixa sobre dados reais, sempre com a
+/// evidência — e, desde o INTEL-A, com o que fazer e onde.
+/// </summary>
+/// <param name="Action">A providência, em uma frase no imperativo.</param>
+/// <param name="View">
+/// Id da tela onde se age, no mesmo vocabulário dos avisos (`quotations`,
+/// `suppliers`…). A interface resolve para a rota; achado sem destino usa null.
+/// </param>
+public record Insight(
+    string Code, string Kind, string Severity, string Title, string Evidence,
+    string Action, string? View = null);
 
 /// <summary>
 /// Procurement Insights (V2-P3): achados 100% determinísticos — nenhuma previsão, nenhum
 /// modelo — sempre com a evidência que os sustenta:
 ///  INS-01 sobrepreço (item pago acima do último preço), INS-02 fracionamento (SCs pequenas
 ///  do mesmo centro somando acima do limite de alçada), INS-03 emergenciais recorrentes,
-///  INS-04 concentração de fornecedor na categoria. Mede e expõe — nunca bloqueia.
+///  INS-04 concentração de fornecedor na categoria, INS-05 compras fechadas sem O.C. do ERP,
+///  INS-06 fornecedor que atrasa de novo, INS-07 decisão com proposta única.
+///
+/// Cada achado carrega a evidência, a providência e a tela onde se age: descrever
+/// um problema sem dizer o que fazer devolve o trabalho para quem lê (INTEL-A).
+/// Mede e expõe — nunca bloqueia.
 /// </summary>
 public class InsightsService(AppDbContext db, ComplianceService compliance, TimeProvider clock)
 {
@@ -25,6 +40,8 @@ public class InsightsService(AppDbContext db, ComplianceService compliance, Time
     private const int FracionamentoDias = 30;       // janela em que SCs pequenas se somam
     private const int EmergenciaisMinimo = 3;       // urgências no período que viram padrão
     private const double ConcentracaoPct = 40;      // % do spend da categoria em um fornecedor
+    private const int SemOcMinimo = 3;              // fechamentos sem O.C. do ERP que viram padrão
+    private const int AtrasosMinimo = 3;            // atrasos do mesmo fornecedor que viram padrão
 
     /// <summary>Os achados do período, já ordenados por severidade (público para os testes).</summary>
     public async Task<List<Insight>> FindInsightsAsync(int monthsBack, CancellationToken ct = default)
@@ -45,7 +62,9 @@ public class InsightsService(AppDbContext db, ComplianceService compliance, Time
                 var pct = Math.Round((i.UnitPrice!.Value / i.LastPaidUnitPrice!.Value - 1) * 100, 1);
                 insights.Add(new("INS-01", "SOBREPRECO", pct >= 50 ? "alta" : "media",
                     $"Sobrepreço de {pct}% em {i.Description}",
-                    $"O.C. {o.Number} ({o.SupplierName}): pago {i.UnitPrice:0.00} contra último preço {i.LastPaidUnitPrice:0.00}."));
+                    $"O.C. {o.Number} ({o.SupplierName}): pago {i.UnitPrice:0.00} contra último preço {i.LastPaidUnitPrice:0.00}.",
+                    $"Confira o pedido {o.Number} e leve o preço anterior para a próxima negociação com {o.SupplierName}.",
+                    "buy-orders"));
             }
 
         // INS-02 — fracionamento: SCs individualmente abaixo do limite do centro que, somadas
@@ -78,7 +97,10 @@ public class InsightsService(AppDbContext db, ComplianceService compliance, Time
                         insights.Add(new("INS-02", "FRACIONAMENTO", "alta",
                             $"Possível fracionamento no centro {cc.Code}",
                             $"{grupo.Count} SCs em {FracionamentoDias} dias somam {grupo.Sum(r => r.TotalEstimatedValue):0.00} " +
-                            $"(limite de alçada {cc.Limite:0.00}): {string.Join(", ", grupo.Select(g => g.Number))}."));
+                            $"(limite de alçada {cc.Limite:0.00}): {string.Join(", ", grupo.Select(g => g.Number))}.",
+                            "Abra essas SCs numa cotação só: junto elas passam do limite do centro e " +
+                            "precisam da alçada correspondente — e ainda dão escala para negociar.",
+                            "triage"));
                         break;   // um achado por centro basta para investigar
                     }
                 }
@@ -94,7 +116,10 @@ public class InsightsService(AppDbContext db, ComplianceService compliance, Time
             insights.Add(new("INS-03", "EMERGENCIAIS", "media",
                 $"Urgências recorrentes no centro {g.Key}",
                 $"{g.Count()} SCs urgentes no período — planejamento de demanda merece revisão: " +
-                $"{string.Join(", ", g.Take(6).Select(r => r.Number))}{(g.Count() > 6 ? "…" : "")}."));
+                $"{string.Join(", ", g.Take(6).Select(r => r.Number))}{(g.Count() > 6 ? "…" : "")}.",
+                $"Converse com o responsável pelo centro {g.Key}: urgência repetida costuma ser " +
+                "compra que dava para prever, e ela custa mais caro.",
+                "triage"));
 
         // INS-04 — concentração de fornecedor na categoria (≥40% do spend)
         var familyById = (await db.CatalogItems.Select(i => new { i.Id, i.Family }).ToListAsync(ct))
@@ -123,8 +148,57 @@ public class InsightsService(AppDbContext db, ComplianceService compliance, Time
             if (share >= ConcentracaoPct && cat.Select(x => x.SupplierName).Distinct().Count() > 1)
                 insights.Add(new("INS-04", "CONCENTRACAO", share >= 70 ? "alta" : "media",
                     $"Concentração na categoria {cat.Key}",
-                    $"{top.Fornecedor} responde por {share}% do spend da categoria ({top.Valor:0.00} de {total:0.00})."));
+                    $"{top.Fornecedor} responde por {share}% do spend da categoria ({top.Valor:0.00} de {total:0.00}).",
+                    $"Convide outros fornecedores homologados para as próximas cotações de {cat.Key} — " +
+                    "depender de um só encarece e deixa a operação exposta se ele falhar.",
+                    "suppliers"));
         }
+
+        // INS-05 — compra fechada sem O.C. do ERP (PO-BR-011). A observação é a
+        // exceção prevista e mantém o fechamento honesto; o que não pode é a
+        // exceção virar rotina, e é isso que este achado mede.
+        var semOc = pos.Where(o => string.IsNullOrWhiteSpace(o.ErpNumber)
+                                   && !string.IsNullOrWhiteSpace(o.NoErpReason)).ToList();
+        if (semOc.Count >= SemOcMinimo)
+            insights.Add(new("INS-05", "SEM_OC", semOc.Count >= SemOcMinimo * 2 ? "alta" : "media",
+                $"{semOc.Count} compras fechadas sem O.C. do ERP",
+                $"Fecharam com a justificativa da exceção, e não com número do SENIOR: " +
+                $"{string.Join(", ", semOc.Take(6).Select(o => o.Number))}{(semOc.Count > 6 ? "…" : "")}.",
+                "Confira com o time por que a O.C. não sai do ERP nesses casos. A exceção existe "
+                + "para o imprevisto; virando rotina, o relatório de O.C. deixa de descrever a operação.",
+                "buy-orders"));
+
+        // INS-06 — fornecedor que atrasa de novo. O OTIF já é medido por pedido;
+        // aqui ele vira padrão de comportamento, que é o que muda uma decisão.
+        var atrasos = pos.Where(o => o.OnTime == false).GroupBy(o => o.SupplierName)
+            .Where(g => g.Count() >= AtrasosMinimo).ToList();
+        foreach (var g in atrasos)
+        {
+            var entregues = pos.Count(o => o.SupplierName == g.Key && o.OnTime != null);
+            var pct = entregues > 0 ? Math.Round(g.Count() * 100m / entregues, 1) : 0;
+            insights.Add(new("INS-06", "ATRASO_FORNECEDOR", pct >= 50 ? "alta" : "media",
+                $"{g.Key} entregou fora do prazo {g.Count()} vezes",
+                $"{g.Count()} de {entregues} entregas medidas ({pct}%) passaram da data prometida: " +
+                $"{string.Join(", ", g.Take(6).Select(o => o.Number))}{(g.Count() > 6 ? "…" : "")}.",
+                $"Leve o histórico para a próxima negociação com {g.Key} e considere o prazo real, "
+                + "e não o prometido, ao comparar as propostas.",
+                "scorecard"));
+        }
+
+        // INS-07 — decisão com proposta única: não é irregular, mas comprar sem
+        // comparação é o caso em que o preço não tem contra o que ser medido.
+        var decididas = await db.Quotations.Include(q => q.Proposals)
+            .Where(q => q.CreatedAt >= from && q.WinnerProposalId != null)
+            .Select(q => new { q.Number, q.CostCenter, Propostas = q.Proposals.Count })
+            .ToListAsync(ct);
+        var unicas = decididas.Where(q => q.Propostas <= 1).ToList();
+        if (unicas.Count > 0)
+            insights.Add(new("INS-07", "PROPOSTA_UNICA", "media",
+                $"{unicas.Count} processo(s) decidido(s) com uma proposta só",
+                $"Sem concorrência não há com o que comparar o preço: " +
+                $"{string.Join(", ", unicas.Take(6).Select(q => q.Number))}{(unicas.Count > 6 ? "…" : "")}.",
+                "Convide ao menos mais um fornecedor homologado nas próximas cotações desses centros.",
+                "quotations"));
 
         var ordem = new Dictionary<string, int> { ["alta"] = 0, ["media"] = 1, ["info"] = 2 };
         return insights.OrderBy(i => ordem.GetValueOrDefault(i.Severity, 3)).ThenBy(i => i.Code)
@@ -194,7 +268,11 @@ public class InsightsService(AppDbContext db, ComplianceService compliance, Time
             months = Math.Clamp(monthsBack, 1, 36),
             executive, backlog,
             insights = insights
-                .Select(i => new { code = i.Code, kind = i.Kind, severity = i.Severity, title = i.Title, evidence = i.Evidence })
+                .Select(i => new
+                {
+                    code = i.Code, kind = i.Kind, severity = i.Severity,
+                    title = i.Title, evidence = i.Evidence, action = i.Action, view = i.View,
+                })
                 .ToList(),
         };
     }

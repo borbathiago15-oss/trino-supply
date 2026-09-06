@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ehSubgrupo, enderecoDe, itensVisiveis, localizar, MENU, type ItemMenu } from './menu';
+import { contagemPorItem, ehSubgrupo, enderecoDe, itensVisiveis, localizar, MENU, type ItemMenu } from './menu';
 import type { Perfil } from '@/dominio/papeis';
 
 const folhas = (u: Perfil): ItemMenu[] =>
@@ -57,6 +57,24 @@ describe('menu', () => {
     // tela filha sem item próprio fica no item que a contém
     expect(localizar(grupos, '/pedidos/abc-123')!.item.id).toBe('buy-orders');
     expect(localizar(grupos, '/tela-que-nao-existe')).toBeNull();
+  });
+
+  it('contagemPorItem soma as views que a mesma tela atende', () => {
+    const total = contagemPorItem([
+      { view: 'triage', count: 3, severity: 'media' },
+      { view: 'buy-demands', count: 4, severity: 'media' },
+      { view: 'pr-approvals', count: 2, severity: 'alta' },
+    ]);
+    // buy-demands não é item de menu: quem cuida dessas demandas é a Gestão de Solicitações
+    expect(total).toEqual({ triage: 7, 'pr-approvals': 2 });
+  });
+
+  it('aviso de acompanhamento não vira contador: número no menu quer dizer ação', () => {
+    const total = contagemPorItem([
+      { view: 'pr-mine', count: 40, severity: 'info' },
+      { view: 'pr-mine', count: 2, severity: 'alta' },
+    ]);
+    expect(total).toEqual({ 'pr-mine': 2 });
   });
 
   it('todo item do menu aponta para uma rota do app', () => {

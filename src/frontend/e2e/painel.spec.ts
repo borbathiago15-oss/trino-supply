@@ -8,6 +8,12 @@ test.describe('Dashboard de Suprimentos e Insights (React)', () => {
     await expect(page.locator('#titulo-pagina')).toHaveText('Dashboard de Suprimentos');
     await expect(page.locator('body')).toContainText('Central de Avisos');
 
+    // a trilha mostra a sequência inteira, mesmo com nada parado nos passos
+    const trilha = page.getByTestId('trilha-processo');
+    await expect(trilha).toBeVisible();
+    await expect(trilha.locator('> *')).toHaveCount(9);
+    await expect(trilha).toContainText('Aprovar Níveis 1 e 2');
+
     // espera a leitura resolver antes de ramificar: com ou sem aviso, algo aparece
     const avisos = page.getByTestId('lista-avisos');
     await expect(avisos.or(page.getByText('Tudo em dia por aqui: nenhum aviso pendente. ✔'))).toBeVisible();

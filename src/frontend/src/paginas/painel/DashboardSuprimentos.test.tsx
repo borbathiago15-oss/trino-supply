@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import type { Usuario } from '@/api/auth';
 import { consultaDoPainel, FILTROS_PAINEL_VAZIOS, variacao, type DashboardSuprimentos as Dados } from '@/api/painel';
 import { ToastProvider } from '@/componentes/Toast';
+import { AvisosProvider } from '@/sessao/AvisosProvider';
 import { DashboardSuprimentos, podeVerAnalises } from './DashboardSuprimentos';
 
 vi.mock('@/api/painel', async (importar) => ({
@@ -47,7 +48,7 @@ const dados = (p: Partial<Dados>): Dados => ({
 });
 
 const abrir = () => render(
-  <MemoryRouter><ToastProvider><DashboardSuprimentos /></ToastProvider></MemoryRouter>,
+  <MemoryRouter><AvisosProvider><ToastProvider><DashboardSuprimentos /></ToastProvider></AvisosProvider></MemoryRouter>,
 );
 
 describe('regras do painel', () => {

@@ -7,10 +7,12 @@ import { Badge, Carregando, Erro, Kpi, Painel, Vazio } from '@/componentes/basic
 import { Campo } from '@/componentes/formulario';
 import { CORES, GraficoColunas, Legenda, ListaBarras, moedaCurta, type Serie } from '@/componentes/graficos';
 import { podeComprar, podeDecidirSc, temModulo } from '@/dominio/papeis';
+import { useAvisos } from '@/sessao/AvisosProvider';
 import { useUsuario } from '@/sessao/SessaoProvider';
 import { moeda, quantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
 import { CentralDeAvisos } from './CentralDeAvisos';
+import { TrilhaDoProcesso } from './TrilhaDoProcesso';
 
 /** Mesma regra do `canSeeSupplyAnalytics()` do legado: papel e módulo. */
 export const podeVerAnalises = (u: Parameters<typeof podeComprar>[0]) =>
@@ -254,6 +256,7 @@ function Analises({ dados }: { dados: Dados }) {
 
 export function DashboardSuprimentos() {
   const usuario = useUsuario();
+  const { avisos } = useAvisos();
   const veAnalises = podeVerAnalises(usuario);
   const [rascunho, setRascunho] = useState<FiltrosPainel>(FILTROS_PAINEL_VAZIOS);
   const [aplicados, setAplicados] = useState<FiltrosPainel>(FILTROS_PAINEL_VAZIOS);
@@ -274,6 +277,7 @@ export function DashboardSuprimentos() {
 
   return (
     <>
+      <TrilhaDoProcesso avisos={avisos} usuario={usuario} />
       <CentralDeAvisos />
 
       {veAnalises && (

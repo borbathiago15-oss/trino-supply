@@ -46,7 +46,7 @@ public class MaterialRequisitionServiceTests
         var clock = new FixedTimeProvider(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero));
         var catalog = new CatalogService(db, clock);
         var inv = new InventoryService(db, clock);
-        var mrs = new MaterialRequisitionService(db, catalog, inv, clock);
+        var mrs = new MaterialRequisitionService(db, catalog, clock);
         var prs = new RequisitionService(db, new FakeNumbers(), catalog, clock);
 
         var (detergente, _) = await catalog.CreateAsync(Otavio.Id, "LMP-001", "Detergente neutro 500ml", "MATERIAL DE LIMPEZA", "UN", 3.5m);

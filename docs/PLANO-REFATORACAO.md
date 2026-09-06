@@ -119,10 +119,14 @@ continuar recebendo a mensagem da aplicação em vez de um 413 seco. Conferido
 contra a API: 15 MB devolve **413** sem ler o corpo; 1 MB com tipo errado
 devolve **DOC-ERR-003**, que é a regra da aplicação falando.
 
-### 🟢 SEC-D · Aviso de build não resolvido
+### 🟢 SEC-D · Aviso de build não resolvido — **entregue**
 
-`CS9113: Parameter 'inventory' is unread` — parâmetro injetado e não usado.
-Ruído que esconde avisos futuros.
+Eram dois, e os dois saíram: o `CS9113` do parâmetro `inventory` injetado sem
+uso no `MaterialRequisitionService`, e o `EF1002` do `SqlQueryRaw` com string
+interpolada no `QuotationService` — nada ali vinha de fora, mas escrever os
+dois literais em vez de interpolar o nome da sequência tira o aviso em vez de
+suprimi-lo. **O build fica em zero avisos**, que é o que faz o próximo aviso
+ser notado.
 
 ---
 
@@ -227,14 +231,33 @@ Deliberado, para desacoplar os módulos, e já documentado. Fica como está — 
 
 ## 5. Interface
 
-### 🟠 INT-A · 27 telas, 27 tratamentos de carregando/erro
+### 🟠 INT-A · 27 telas, 27 tratamentos de carregando/erro — **premissa corrigida**
 
-Toda tela repete `{carregando && <Carregando/>}` e `{erro && <Erro>}` com
-variações. Não há um componente que padronize o estado de uma tela.
+A auditoria dizia que cada tela repetia o estado "com variações" e propunha um
+componente `<Conteudo>` para padronizar. **Fui conferir antes de mexer em 18
+arquivos, e a premissa não se sustentou.**
 
-**Proposta:** um componente `<Conteudo carregando erro vazio>` que encapsula os
-três estados. Reduz repetição e faz as telas se comportarem igual. **Sem mudar
-o visual** — o mesmo `Carregando` e o mesmo `Erro` por dentro.
+O formato é o mesmo em todas, na mesma ordem:
+
+```tsx
+{erro && <Erro>{erro}</Erro>}
+{carregando && !dados && <Carregando />}
+{dados && !lista.length && <Vazio>…</Vazio>}
+```
+
+O que varia é a mensagem de vazio — e ela **deve** variar: "Nenhum pedido de
+compra ainda" e "Nenhum fornecedor com atividade no período" dizem coisas
+diferentes. Extrair um componente economizaria duas linhas por tela e cobraria
+uma indireção justamente onde a mensagem específica é o que ajuda quem lê.
+
+**O defeito real era outro, e estava escondido pela contagem.** Uma tela — a de
+Usuários — não tinha estado vazio nenhum: com a lista vazia, o painel mostrava
+o título e mais nada, e quem chegava ali não sabia se estava carregando,
+quebrado ou realmente vazio. Corrigido, com teste.
+
+Fica a lição sobre a própria auditoria: contar repetição encontra padrão, não
+defeito. O que faltava não era uniformidade — era uma tela que não seguia o
+padrão que as outras dezessete seguiam.
 
 ### 🟡 INT-B · `ProcessoDetalhe.tsx` com 453 linhas
 
@@ -438,11 +461,11 @@ existentes antes de criar o índice.
 
 | # | Item | Eixo |
 |---|---|---|
-| 11 | **INT-A** — componente único de estado de tela | interface |
+| 11 | **INT-A** — componente único de estado de tela | interface · **premissa corrigida**; corrigida a tela sem estado vazio |
 | 12 | **INT-B / ARQ-B** — quebrar as duas maiores unidades | arquitetura |
 | 13 | **INT-C** — varredura das regras que a tela ainda não antecipa | interface |
 | 14 | **INT-D · D7** — vocabulário do menu (precisa da sua decisão) | interface |
-| 15 | **SEC-D** — zerar o aviso de build | qualidade |
+| 15 | **SEC-D** — zerar o aviso de build | qualidade · **entregue** |
 
 ---
 
@@ -457,10 +480,10 @@ existentes antes de criar o índice.
 | Segurança | Upload sem limite declarado | 🟡 MÉDIO | Teto de requisição nos oito endpoints | **Entregue** | Médio |
 | Inteligência | Insight descreve mas não age | 🟡 MÉDIO | Ação + link, três regras novas, achado grave no painel | **Entregue** | Alto |
 | Interface | Menu por módulo, processo em zigue-zague; acordeão não segue a rota | 🟠 ALTO | Trilha do processo, próximo passo na tela, menu corrigido | D1–D6 e D8 entregues (#92, #93); falta D7, o vocabulário | Alto |
-| Interface | 27 telas repetem estado | 🟡 MÉDIO | Componente único | A executar | Médio |
+| Interface | 27 telas repetem estado | 🟡 MÉDIO | ~~Componente único~~ — o formato já era uniforme; o defeito era uma tela sem estado vazio | **Corrigido** | Baixo |
 | Arquitetura | `QuotationService` com 1.108 linhas | 🟡 MÉDIO | Separar alçadas | A executar | Médio |
 | Banco | `erp_number` sem índice único | 🟡 MÉDIO | Migration após conferir a produção | **Bloqueado em você** | Médio |
-| Qualidade | Aviso CS9113 | 🟢 BAIXO | Remover parâmetro | A executar | Baixo |
+| Qualidade | Avisos CS9113 e EF1002 | 🟢 BAIXO | Parâmetro removido; SQL literal em vez de interpolado | **Entregue** — build em 0 avisos | Baixo |
 
 ---
 

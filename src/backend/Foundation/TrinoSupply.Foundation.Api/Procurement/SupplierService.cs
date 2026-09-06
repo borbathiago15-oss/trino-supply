@@ -13,11 +13,34 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
 
     public static bool CanView(string role) => CanMaintain(role) || role == Roles.Auditor;
 
-    public async Task<List<Supplier>> ListAsync(bool includeInactive, CancellationToken ct = default)
+    public async Task<List<Supplier>> ListAsync(bool includeInactive, CancellationToken ct = default) =>
+        (await BuscarAsync(includeInactive, null, 500, ct)).itens;
+
+    /// <summary>
+    /// Página de fornecedores, com a busca feita no banco. O `total` volta junto
+    /// para a tela distinguir "não existe" de "não veio nesta página" (PO-BR-012).
+    /// </summary>
+    public async Task<(List<Supplier> itens, int total)> BuscarAsync(
+        bool includeInactive, string? busca = null, int tamanho = 100, CancellationToken ct = default)
     {
+        var termo = busca?.Trim();
         var q = db.Suppliers.Include(s => s.ContractItems).Include(s => s.Documents).AsQueryable();
         if (!includeInactive) q = q.Where(s => s.Active);
-        var list = await q.OrderBy(s => s.LegalName).Take(500).ToListAsync(ct);
+        if (!string.IsNullOrEmpty(termo))
+        {
+            // o CNPJ é gravado só com dígitos, então "12.345" tem que achar "12345"
+            var digitos = new string(termo.Where(char.IsDigit).ToArray());
+            q = q.Where(s =>
+                EF.Functions.ILike(s.LegalName, $"%{termo}%")
+                || (s.TradeName != null && EF.Functions.ILike(s.TradeName, $"%{termo}%"))
+                || (s.Email != null && EF.Functions.ILike(s.Email, $"%{termo}%"))
+                || (s.Phone != null && EF.Functions.ILike(s.Phone, $"%{termo}%"))
+                || EF.Functions.ILike(s.TaxId, $"%{termo}%")
+                || (digitos.Length > 0 && EF.Functions.ILike(s.TaxId, $"%{digitos}%")));
+        }
+
+        var total = await q.CountAsync(ct);
+        var list = await q.OrderBy(s => s.LegalName).Take(Math.Clamp(tamanho, 1, 500)).ToListAsync(ct);
 
         // consumo do contrato (teto − O.C.s na vigência), calculado em uma consulta só
         var comTeto = list.Where(s => s.ContractValueLimit is not null && s.ContractItems.Count > 0).ToList();
@@ -37,7 +60,7 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
                     : 0m;
             }
         }
-        return list;
+        return (list, total);
     }
 
     public async Task<(Supplier? supplier, UserError? error)> CreateAsync(

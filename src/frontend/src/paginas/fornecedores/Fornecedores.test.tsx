@@ -4,18 +4,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Usuario } from '@/api/auth';
 import type { Fornecedor } from '@/api/fornecedores';
 import { ToastProvider } from '@/componentes/Toast';
-import { filtrarFornecedores, Fornecedores } from './Fornecedores';
+import { Fornecedores } from './Fornecedores';
 import { situacaoDocumento } from './PainelHomologacao';
 
 vi.mock('@/api/fornecedores', async (importar) => ({
   ...(await importar<typeof import('@/api/fornecedores')>()),
-  listarFornecedores: vi.fn(),
+  buscarFornecedores: vi.fn(),
   gerarChavePortal: vi.fn(),
 }));
 let usuarioAtual: Usuario;
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => usuarioAtual }));
 
-import { gerarChavePortal, listarFornecedores } from '@/api/fornecedores';
+import { buscarFornecedores, gerarChavePortal } from '@/api/fornecedores';
 
 const fornecedor = (p: Partial<Fornecedor>): Fornecedor => ({
   id: 'id-' + (p.taxId ?? '1'), legalName: 'Alfa Equipamentos LTDA', tradeName: 'Alfa EPIs',
@@ -36,15 +36,7 @@ const lista = [
 const comprador: Usuario = { id: 'u1', email: 'c@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['FORNECEDORES'] };
 const auditor: Usuario = { id: 'u2', email: 'a@t.com', name: 'Auditor', role: 'Auditor', modules: ['FORNECEDORES'] };
 
-describe('filtrarFornecedores', () => {
-  it('busca por razão social, fantasia e CNPJ, ignorando pontuação', () => {
-    expect(filtrarFornecedores(lista, 'beta').map((f) => f.taxId)).toEqual(['98765432000155']);
-    expect(filtrarFornecedores(lista, 'alfa epis').map((f) => f.taxId)).toEqual(['12345678000199']);
-    expect(filtrarFornecedores(lista, '12.345.678/0001-99').map((f) => f.taxId)).toEqual(['12345678000199']);
-    expect(filtrarFornecedores(lista, '')).toHaveLength(2);
-    expect(filtrarFornecedores(lista, 'gama')).toHaveLength(0);
-  });
-});
+const pagina = (itens: Fornecedor[], total = itens.length) => ({ itens, total });
 
 describe('situacaoDocumento', () => {
   it('distingue vencida, vencendo, válida e sem prazo', () => {
@@ -59,7 +51,7 @@ describe('<Fornecedores />', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     usuarioAtual = comprador;
-    vi.mocked(listarFornecedores).mockResolvedValue(lista);
+    vi.mocked(buscarFornecedores).mockResolvedValue(pagina(lista));
   });
 
   const montar = () => render(<ToastProvider><Fornecedores /></ToastProvider>);
@@ -97,6 +89,23 @@ describe('<Fornecedores />', () => {
     await waitFor(() => expect(screen.getByTestId('chave-portal')).toHaveTextContent('CHAVE-SECRETA-123'));
   });
 
+  it('a busca vai para o servidor, e a tela diz quantos existem', async () => {
+    vi.mocked(buscarFornecedores).mockResolvedValue(pagina(lista, 480));
+    usuarioAtual = comprador;
+    montar();
+    await waitFor(() => expect(screen.getByTestId('contagem-fornecedores'))
+      .toHaveTextContent('Mostrando 2 de 480'));
+
+    await userEvent.type(screen.getByLabelText('Buscar'), '12.345');
+    await waitFor(() => expect(buscarFornecedores).toHaveBeenCalledWith(
+      expect.objectContaining({ busca: '12.345' }), expect.anything()));
+
+    // e oferece o resto em vez de fingir que a lista acabou
+    await userEvent.click(screen.getByRole('button', { name: 'Carregar mais' }));
+    await waitFor(() => expect(buscarFornecedores).toHaveBeenCalledWith(
+      expect.objectContaining({ tamanho: 100 }), expect.anything()));
+  });
+
   it('auditor vê a lista sem ações nem formulário', async () => {
     usuarioAtual = auditor;
     montar();
@@ -104,6 +113,7 @@ describe('<Fornecedores />', () => {
     expect(screen.queryByRole('button', { name: 'Homologação' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Mais ações de/ })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Razão social')).not.toBeInTheDocument();
-    expect(vi.mocked(listarFornecedores).mock.calls[0][0]).toBe(false);
+    // auditor não mantém cadastro: a consulta não pede os inativos
+    expect(vi.mocked(buscarFornecedores).mock.calls[0][0]).toMatchObject({ incluirInativos: false });
   });
 });

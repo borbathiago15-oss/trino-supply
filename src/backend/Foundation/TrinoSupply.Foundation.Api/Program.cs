@@ -1830,7 +1830,16 @@ companies.MapPatch("/{id:guid}", async (Guid id, UpdateCompanyRequest body, Comp
 });
 
 // ---- Dashboards analíticos ---------------------------------------------------
+// SEC-A: até aqui o grupo `analytics` era o único sem filtro — os seis endpoints
+// repetiam a checagem dentro do handler, e todos acertavam. O problema era o
+// amanhã: um endpoint novo que esquecesse a linha nasceria aberto ao token do
+// Portal do Fornecedor. Os filtros abaixo são o piso, não a checagem completa —
+// cada handler continua exigindo o papel e o módulo específicos dele.
 var analytics = app.MapGroup("/api/v1/analytics").RequireAuthorization();
+analytics.AddEndpointFilter(RejectSupplierRole());
+analytics.AddEndpointFilter(RequireModules(
+    AppModules.Solicitacoes, AppModules.Aprovacao, AppModules.Compras,
+    AppModules.Insights, AppModules.Compliance, AppModules.Fornecedores, AppModules.Estoque));
 
 analytics.MapGet("/supply", async (TrinoSupply.Foundation.Api.Analytics.AnalyticsService svc,
     ClaimsPrincipal p, HttpContext ctx, TimeProvider clock,

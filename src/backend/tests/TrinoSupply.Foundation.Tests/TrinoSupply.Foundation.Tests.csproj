@@ -27,4 +27,13 @@
     <None Update="fixtures\**\*.xlsx" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!--
+    SEC-A: RotasProtegidasTests lê o Program.cs para conferir que nenhuma rota
+    /api nasce sem autorização declarada. Embutir evita depender do diretório de
+    trabalho e garante que o texto conferido é o mesmo que foi compilado.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\Foundation\TrinoSupply.Foundation.Api\Program.cs" LogicalName="Program.cs" />
+  </ItemGroup>
+
 </Project>

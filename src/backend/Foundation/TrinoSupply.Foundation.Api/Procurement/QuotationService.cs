@@ -1165,11 +1165,13 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
 
     private async Task<long> NextSeqAsync(QuotationKind kind, CancellationToken ct)
     {
-        var seq = kind == QuotationKind.Bid ? "bid_number_seq" : "rfq_number_seq";
         if (!db.Database.IsRelational())
             return await db.Quotations.LongCountAsync(q => (q.Kind == QuotationKind.Bid) == (kind == QuotationKind.Bid), ct) + 1;
-        return await db.Database
-            .SqlQueryRaw<long>($"SELECT nextval('procurement.{seq}') AS \"Value\"")
+        // dois literais em vez de um nome interpolado: nada aqui vem de fora, e
+        // escrever assim tira o aviso do analisador em vez de suprimi-lo (SEC-D)
+        return await db.Database.SqlQueryRaw<long>(kind == QuotationKind.Bid
+                ? "SELECT nextval('procurement.bid_number_seq') AS \"Value\""
+                : "SELECT nextval('procurement.rfq_number_seq') AS \"Value\"")
             .SingleAsync(ct);
     }
 

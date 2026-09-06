@@ -135,4 +135,12 @@ describe('<Usuarios />', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Redefinir senha' }));
     await waitFor(() => expect(redefinirSenha).toHaveBeenCalledWith('u-ana@t.com', 'curtaMaisQueDozeCaracteres1'));
   });
+
+  it('lista vazia diz que não há usuário, em vez de mostrar um painel mudo', async () => {
+    // era a única tela sem o estado vazio: quem chegava numa lista sem resultado
+    // não sabia se estava carregando, quebrado ou realmente vazio
+    vi.mocked(listarUsuarios).mockResolvedValue({ items: [], roles: [], availableModules: [] });
+    montar();
+    await waitFor(() => expect(screen.getByText(/Nenhum usuário cadastrado ainda/)).toBeInTheDocument());
+  });
 });

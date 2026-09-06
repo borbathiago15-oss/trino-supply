@@ -15,7 +15,10 @@ public record MaterialItemInput(Guid CatalogItemId, decimal Quantity);
 /// atendimento com baixa via Estoque (MMS-004, somente disponível — MMS-RG-09),
 /// rota mista por item: sem saldo → rota de compra (MMS-RG-09/PR-001).
 /// </summary>
-public class MaterialRequisitionService(AppDbContext db, CatalogService catalog, InventoryService inventory, TimeProvider clock)
+// O InventoryService saiu da assinatura: a baixa de estoque passou a acontecer
+// dentro do próprio atendimento, e o parâmetro ficou injetado sem uso — ruído
+// que escondia avisos novos no build (SEC-D).
+public class MaterialRequisitionService(AppDbContext db, CatalogService catalog, TimeProvider clock)
 {
     public static bool CanRequest(string role) =>
         role is Roles.Requester or Roles.SupplyManager or Roles.SystemAdministrator;

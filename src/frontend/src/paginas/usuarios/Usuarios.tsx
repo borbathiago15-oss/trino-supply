@@ -4,7 +4,7 @@ import {
   atualizarUsuario, criarUsuario, listarUsuarios, redefinirSenha, TAMANHO_MINIMO_SENHA,
   type DadosUsuario, type UsuarioCadastro,
 } from '@/api/usuarios';
-import { Badge, Carregando, Erro, Painel } from '@/componentes/basicos';
+import { Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { Confirmacao, Dialogo } from '@/componentes/Dialogo';
 import { BadgeAtivo, Campo, Grade2, Nota } from '@/componentes/formulario';
 import { CelulaAcoes, MenuAcoes } from '@/componentes/MenuAcoes';
@@ -125,6 +125,9 @@ export function Usuarios() {
       <Painel titulo="Usuários">
         {erro && <Erro>{erro}</Erro>}
         {carregando && !dados && <Carregando />}
+        {dados && !lista.length && (
+          <Vazio>Nenhum usuário cadastrado ainda — cadastre o primeiro no formulário abaixo.</Vazio>
+        )}
         {lista.length > 0 && (
           <div className="overflow-x-auto">
             <table data-testid="tabela-usuarios" className="min-w-[1040px]">

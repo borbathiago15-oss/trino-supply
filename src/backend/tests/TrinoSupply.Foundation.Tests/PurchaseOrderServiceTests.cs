@@ -200,8 +200,7 @@ public class PurchaseOrderServiceTests
     {
         var w = await BuildAsync();
         var clock = new FixedTimeProvider(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero));
-        var mrs = new TrinoSupply.Foundation.Api.Materials.MaterialRequisitionService(
-            w.Db, w.Catalog, w.Inv, clock);
+        var mrs = new TrinoSupply.Foundation.Api.Materials.MaterialRequisitionService(w.Db, w.Catalog, clock);
         var prs = new RequisitionService(w.Db, new FakeNumbers(), w.Catalog, clock);
 
         var (mr, _) = await mrs.CreateAsync(Ana, "CC-01", null,

@@ -65,10 +65,21 @@ builder.Services.AddRateLimiter(o =>
     // definir a própria senha. O limite aqui é por usuário, que é o que protege
     // contra tentativa de adivinhar a senha atual (SEC-004).
     o.AddPolicy("auth-senha", ctx => RateLimitPartition.GetFixedWindowLimiter(
-        ctx.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-            ?? ctx.User.FindFirst("sub")?.Value
-            ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        QuemEsta(ctx),
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+    // SEC-B: fora da autenticação, o que custa caro é upload e relatório. Os dois
+    // limites são por usuário, não por IP, para o escritório inteiro atrás do
+    // mesmo IP não dividir a mesma cota.
+    //
+    // As cotas são folgadas de propósito. O que se quer barrar é a repetição
+    // automática, não o uso humano: apertar até encostar no uso normal troca uma
+    // proteção contra abuso por uma tela que quebra na mão de quem trabalha.
+    o.AddPolicy("upload", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        QuemEsta(ctx),
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 30, Window = TimeSpan.FromMinutes(1) }));
+    o.AddPolicy("relatorio", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        QuemEsta(ctx),
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 120, Window = TimeSpan.FromMinutes(1) }));
     o.AddPolicy("auth-refresh", ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 60, Window = TimeSpan.FromMinutes(1) }));

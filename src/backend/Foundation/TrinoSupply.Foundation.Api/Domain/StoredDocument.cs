@@ -7,6 +7,15 @@ namespace TrinoSupply.Foundation.Api.Domain;
 public class StoredDocument
 {
     public const long MaxSizeBytes = 10 * 1024 * 1024;
+
+    /// <summary>
+    /// Teto declarado da requisição de upload (SEC-C). Sem ele o servidor lê o
+    /// arquivo inteiro para só então a aplicação recusar pelo tamanho — quem
+    /// mandasse 30 MB ocuparia memória e banda antes de ouvir "não". Fica acima
+    /// de <see cref="MaxSizeBytes"/> para o arquivo legítimo de 10 MB continuar
+    /// passando e recebendo a mensagem da aplicação, e não um 413 seco.
+    /// </summary>
+    public const long MaxRequestBytes = 12 * 1024 * 1024;
     public static readonly string[] AllowedContentTypes =
     [
         "application/pdf", "image/png", "image/jpeg",

@@ -281,7 +281,8 @@ public static class SolicitacaoRotas
             db.RequisitionAttachments.Add(attachment);
             await db.SaveChangesAsync();
             return Ok(new { id = attachment.Id, documentId = doc.Id, fileName = doc.FileName }, ctx);
-        }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+        }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole())
+            .RequireRateLimiting("upload").ComTetoDeUpload(StoredDocument.MaxRequestBytes);
 
         app.MapDelete("/api/v1/purchase-requisitions/{id:guid}/attachments/{attachmentId:guid}",
             async (Guid id, Guid attachmentId, RequisitionService svc, AppDbContext db, ClaimsPrincipal p, HttpContext ctx) =>

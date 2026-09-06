@@ -129,7 +129,8 @@ public static class CatalogoRotas
                 }),
                 sizeSuggestions = new { letters = CatalogImportService.LetterSizes, numbers = CatalogImportService.NumberSizes },
             }, ctx);
-        }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+        }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole())
+            .RequireRateLimiting("upload").ComTetoDeUpload(StoredDocument.MaxRequestBytes);
 
         // tipos de produto (lista fixa do catálogo, com as exigências de conformidade)
         app.MapGet("/api/v1/product-types", (HttpContext ctx) => Ok(new
@@ -170,7 +171,8 @@ public static class CatalogoRotas
             var (updated, error) = await svc.AttachImageAsync(id, doc.Id, doc.FileName);
             return error is not null ? Error(ctx, 400, error.Code, error.Message)
                 : Ok(new { documentId = doc.Id, fileName = doc.FileName, item = CatalogView(updated!) }, ctx);
-        }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+        }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole())
+            .RequireRateLimiting("upload").ComTetoDeUpload(StoredDocument.MaxRequestBytes);
 
         // ---- famílias de produtos (cadastro próprio: evita a mesma família escrita de vários jeitos)
         static object FamilyView(ProductFamily f) => new

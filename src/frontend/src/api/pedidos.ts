@@ -53,6 +53,8 @@ export interface PedidoCompra {
   createdAt: string;
   erpNumber: string | null;
   erpIssuedOn: string | null;
+  /** Observação que autorizou o fechamento sem O.C. do ERP (PO-BR-011). */
+  noErpReason: string | null;
   promisedDate: string | null;
   onTime: boolean | null;
   inFull: boolean | null;
@@ -95,7 +97,12 @@ export const listarPedidos = async (signal?: AbortSignal) =>
 export const obterPedido = async (id: string, signal?: AbortSignal) =>
   normalizarPedido(await api<PedidoCompra>(`${base}/${id}`, { signal }));
 
-export interface RegistroOc { erpNumber: string; issuedOn: string | null }
+export interface RegistroOc {
+  erpNumber: string;
+  issuedOn: string | null;
+  /** Obrigatório quando `erpNumber` vem vazio (PO-BR-011). */
+  noErpReason?: string | null;
+}
 export const registrarOc = (id: string, dados: RegistroOc) =>
   api<PedidoCompra>(`${base}/${id}/erp-order`, { method: 'POST', body: dados });
 export const anexarOc = (id: string, arquivo: File) => enviarArquivo(`${base}/${id}/erp-order/attachment`, arquivo);

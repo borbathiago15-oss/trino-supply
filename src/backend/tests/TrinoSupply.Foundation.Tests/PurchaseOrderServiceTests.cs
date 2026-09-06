@@ -237,8 +237,9 @@ public class PurchaseOrderServiceTests
         var (order, _) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null,
             [new PoItemInput("Detergente neutro", 10, "UN", 3.5m, w.Detergente.Id)], null);
 
+        // campo em branco não é mais recusa seca: passa a cobrar o motivo (PO-BR-011)
         var (_, semNumero) = await w.Pos.RegisterErpOrderAsync(Carla, order!.Id, "  ", null);
-        Assert.Equal("PO-ERR-050", semNumero!.Code);
+        Assert.Equal("PO-ERR-054", semNumero!.Code);
 
         var (comOc, error) = await w.Pos.RegisterErpOrderAsync(Carla, order.Id, "663", new DateOnly(2026, 8, 20));
         Assert.Null(error);
@@ -270,6 +271,51 @@ public class PurchaseOrderServiceTests
 
         var (_, longo) = await w.Pos.RegisterErpOrderAsync(Carla, segundo.Id, new string('9', 31), null);
         Assert.Equal("PO-ERR-050", longo!.Code);
+    }
+
+    // ---- fechamento sem O.C. do ERP (PO-BR-011) -----------------------------
+    [Fact]
+    public async Task Sem_oc_do_erp_o_pedido_so_fecha_com_a_observacao()
+    {
+        var w = await BuildAsync();
+        var (order, _) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null,
+            [new PoItemInput("Detergente neutro", 10, "UN", 3.5m, w.Detergente.Id)], null);
+
+        // a regra é a O.C. do ERP: sem ela e sem a observação, não fecha
+        var (_, semMotivo) = await w.Pos.RegisterErpOrderAsync(Carla, order!.Id, "  ", null);
+        Assert.Equal("PO-ERR-054", semMotivo!.Code);
+
+        // observação curta demais não conta como justificativa
+        var (_, curto) = await w.Pos.RegisterErpOrderAsync(Carla, order.Id, null, null, "urgente");
+        Assert.Equal("PO-ERR-054", curto!.Code);
+
+        var (semOc, erro) = await w.Pos.RegisterErpOrderAsync(Carla, order.Id, null, new DateOnly(2026, 9, 1),
+            "Compra emergencial de balcão, sem tempo de abrir O.C. no SENIOR.");
+
+        Assert.Null(erro);
+        Assert.Null(semOc!.ErpNumber);                       // nenhuma O.C. inventada
+        Assert.StartsWith("PO-", semOc.Number);              // o pedido segue com a própria numeração
+        Assert.Contains("emergencial", semOc.NoErpReason);
+        Assert.Equal(new DateOnly(2026, 9, 1), semOc.ErpIssuedOn);
+    }
+
+    [Fact]
+    public async Task Faturamento_anda_com_a_observacao_e_a_oc_que_chega_depois_a_dispensa()
+    {
+        var w = await BuildAsync();
+        var (order, _) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null,
+            [new PoItemInput("Detergente neutro", 10, "UN", 3.5m, w.Detergente.Id)], null);
+
+        await w.Pos.RegisterErpOrderAsync(Carla, order!.Id, null, null,
+            "Fornecedor entregou antes de a O.C. sair do SENIOR.");
+        var (nf, erroNf) = await w.Pos.AddInvoiceAsync(Carla, order.Id, "1001", null, 35m);
+        Assert.Null(erroNf);
+        Assert.NotNull(nf);
+
+        // a O.C. chega depois: deixa de ser exceção e a observação sai de cena
+        var (comOc, _) = await w.Pos.RegisterErpOrderAsync(Carla, order.Id, "OC-9911", null);
+        Assert.Equal("OC-9911", comOc!.ErpNumber);
+        Assert.Null(comOc.NoErpReason);
     }
 
     [Fact]

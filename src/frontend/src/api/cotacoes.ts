@@ -333,7 +333,16 @@ export interface RegistroDeOc {
   notes: string | null;
   supplierId?: string | null;
   overLimitJustification?: string | null;
+  /** Obrigatório quando `erpNumber` vem vazio (PO-BR-011). */
+  noErpReason?: string | null;
 }
+
+/**
+ * A O.C. é gerada no ERP e sem ela o processo não fecha. A única exceção é a
+ * observação dizendo por que ela não foi gerada — este é o mínimo que o
+ * servidor aceita para tratá-la como justificativa de verdade (PO-BR-011).
+ */
+export const MINIMO_MOTIVO_SEM_OC = 10;
 
 export const registrarOc = (id: string, dados: RegistroDeOc) =>
   api<Processo>(`${base}/${id}/register-po`, { method: 'POST', body: dados });

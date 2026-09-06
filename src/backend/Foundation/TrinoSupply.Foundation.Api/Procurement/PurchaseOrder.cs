@@ -35,6 +35,12 @@ public class PurchaseOrder
     public DateOnly? PromisedDate { get; set; }                  // data da OC (base do lead time)
     public Guid? ErpDocumentId { get; set; }                    // anexo da OC
     public string? ErpFileName { get; set; }
+    /// <summary>
+    /// Observação que justifica o fechamento sem O.C. do ERP (PO-BR-011). A regra é a
+    /// O.C. do SENIOR; esta observação é a única exceção que libera o fechamento, e
+    /// existir aqui é o que a torna auditável. Nula = a compra tem O.C. de verdade.
+    /// </summary>
+    public string? NoErpReason { get; set; }
     public DateTimeOffset? DeliveryCompletedAt { get; set; }    // data da conclusão da entrega
     public string? Notes { get; set; }
     /// <summary>Famílias adjudicadas a este fornecedor, separadas por vírgula (compra dividida).</summary>

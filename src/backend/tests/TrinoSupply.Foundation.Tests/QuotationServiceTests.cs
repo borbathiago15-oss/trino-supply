@@ -313,14 +313,35 @@ public class QuotationServiceTests
     }
 
     [Fact]
+    public async Task Processo_sem_oc_do_erp_so_fecha_com_a_observacao()
+    {
+        var w = await BuildAsync();
+        var q = await UpToApprovedAsync(w);
+
+        var (pedido, erro) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, null, new DateOnly(2026, 9, 1), null,
+            noErpReason: "Compra emergencial fechada direto com o fornecedor, sem O.C. no SENIOR.");
+
+        Assert.Null(erro);
+        Assert.Null(pedido!.ErpNumber);            // nenhuma O.C. inventada
+        Assert.StartsWith("PO-", pedido.Number);   // o pedido usa a própria numeração
+        Assert.Contains("emergencial", pedido.NoErpReason);
+    }
+
+    [Fact]
     public async Task Fluxo_completo_registra_a_OC_do_SENIOR_com_os_dados_da_proposta_e_timeline()
     {
         var w = await BuildAsync();
         var q = await UpToApprovedAsync(w);
 
+        // campo em branco não é mais recusa seca: passa a cobrar o motivo (PO-BR-011)
         var (semNumero, faltaNumero) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, "  ", null, null);
         Assert.Null(semNumero);
-        Assert.Equal("RFQ-ERR-041", faltaNumero!.Code);
+        Assert.Equal("RFQ-ERR-043", faltaNumero!.Code);
+
+        var (motivoCurto, curto) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, null, null, null,
+            noErpReason: "urgente");
+        Assert.Null(motivoCurto);
+        Assert.Equal("RFQ-ERR-043", curto!.Code);
 
         var (order, error) = await w.Rfq.RegisterErpPurchaseOrderAsync(
             Carla, q.Id, "663", new DateOnly(2026, 8, 26), "Entregar no almoxarifado central.");

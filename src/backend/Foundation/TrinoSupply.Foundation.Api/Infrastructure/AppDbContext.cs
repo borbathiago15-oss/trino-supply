@@ -485,6 +485,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Ignore(o => o.OnTime); e.Ignore(o => o.InFull); e.Ignore(o => o.Otif);
             e.Property(o => o.ErpDocumentId).HasColumnName("erp_document_id");
             e.Property(o => o.ErpFileName).HasColumnName("erp_file_name").HasMaxLength(260);
+            e.Property(o => o.NoErpReason).HasColumnName("no_erp_reason").HasMaxLength(500);
             e.Property(o => o.DeliveryCompletedAt).HasColumnName("delivery_completed_at");
             e.Ignore(o => o.HasPendingDelivery);
             e.Property(o => o.CreatedAt).HasColumnName("created_at");

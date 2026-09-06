@@ -828,18 +828,35 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
     /// </summary>
     public async Task<(PurchaseOrder? order, UserError? error)> RegisterErpPurchaseOrderAsync(
         Actor actor, Guid id, string? erpNumber, DateOnly? issuedOn, string? notes,
-        string? overLimitJustification = null, Guid? supplierId = null, CancellationToken ct = default)
+        string? overLimitJustification = null, Guid? supplierId = null, string? noErpReason = null,
+        CancellationToken ct = default)
     {
         var q = await GetAsync(id, ct);
         if (q is null) return (null, new("RFQ-ERR-404", "Cotação não encontrada."));
         if (q.Status != QuotationStatus.ApprovedForIssue)
             return (null, new("RFQ-ERR-040", "A OC só é registrada depois das duas aprovações."));
+
         var numero = erpNumber?.Trim();
-        if (string.IsNullOrWhiteSpace(numero))
-            return (null, new("RFQ-ERR-041", "Informe o número da OC fechada no SENIOR."));
-        if (numero.Length > 30) return (null, new("RFQ-ERR-041", "O número da OC tem no máximo 30 caracteres."));
-        if (await db.PurchaseOrders.AnyAsync(o => o.Number == numero, ct))
-            return (null, new("RFQ-ERR-041", $"A OC {numero} já está registrada em outro processo."));
+        var semOc = string.IsNullOrWhiteSpace(numero);
+        var motivo = noErpReason?.Trim();
+        if (semOc)
+        {
+            // a regra é a O.C. do SENIOR: sem ela o processo não fecha. A única
+            // exceção é a observação explicando por que não houve O.C. (PO-BR-011)
+            if (string.IsNullOrWhiteSpace(motivo) || motivo.Length < 10)
+                return (null, new("RFQ-ERR-043",
+                    "A O.C. é gerada no ERP e sem ela o processo não fecha. Para fechar assim mesmo, "
+                    + "informe na observação, em pelo menos 10 caracteres, por que a O.C. não foi gerada."));
+            if (motivo.Length > 500)
+                return (null, new("RFQ-ERR-043", "A observação tem no máximo 500 caracteres."));
+        }
+        else
+        {
+            motivo = null;
+            if (numero!.Length > 30) return (null, new("RFQ-ERR-041", "O número da OC tem no máximo 30 caracteres."));
+            if (await db.PurchaseOrders.AnyAsync(o => o.Number == numero, ct))
+                return (null, new("RFQ-ERR-041", $"A OC {numero} já está registrada em outro processo."));
+        }
 
         // processos anteriores à adjudicação por família continuam valendo: viram uma adjudicação única
         await EnsureAwardsAsync(q, ct);
@@ -869,10 +886,14 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
         var now = clock.GetUtcNow();
         var familias = doFornecedor.Select(a => a.Family).OrderBy(f => f).ToList();
         var itensDaOc = familias.SelectMany(f => ItemsOfFamily(q, f)).Distinct().ToHashSet();
+        // sem O.C. do ERP o pedido usa a própria numeração de pedido, a mesma das
+        // compras que não vêm de cotação — nada aqui se parece com número do SENIOR
+        var referencia = semOc ? await PurchaseOrderService.NextOrderNumberAsync(db, now, ct) : numero!;
         var order = new PurchaseOrder
         {
-            Number = numero,
-            ErpNumber = numero,
+            Number = referencia,
+            ErpNumber = semOc ? null : numero,
+            NoErpReason = motivo,
             ErpIssuedOn = issuedOn ?? DateOnly.FromDateTime(now.UtcDateTime),
             // congela a data prometida para o OTIF: data da O.C. + prazo de entrega da proposta
             PromisedDate = proposal.DeliveryDays is { } prazo

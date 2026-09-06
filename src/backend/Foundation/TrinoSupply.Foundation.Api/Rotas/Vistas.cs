@@ -1,3 +1,5 @@
+using TrinoSupply.Foundation.Api.Auth;
+using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Procurement;
 
 namespace TrinoSupply.Foundation.Api.Rotas;
@@ -54,5 +56,21 @@ public static class Vistas
             unitPrice = i.UnitPrice, catalogCode = i.CatalogCode, catalogItemId = i.CatalogItemId,
             family = i.Family,
         }),
+    };
+
+    /// <summary>A resposta do login: os tokens e quem entrou.</summary>
+    public static object ToResponse(AuthTokens t) => new
+    {
+        accessToken = t.AccessToken,
+        tokenType = "Bearer",
+        expiresIn = t.ExpiresInSeconds,
+        refreshToken = t.RefreshToken,
+        user = new
+        {
+            id = t.User.Id, email = t.User.Email, name = t.User.Name, role = t.User.Role,
+            modules = AppModules.EffectiveFor(t.User),
+            // a tela usa isto para levar direto à troca de senha no primeiro acesso
+            mustChangePassword = t.User.MustChangePassword,
+        },
     };
 }

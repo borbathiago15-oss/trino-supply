@@ -310,13 +310,13 @@ existentes antes de criar o índice.
 |---|---|---|
 | 1 | **COR-A** — paginação nas quatro listas principais e busca no servidor | correção + interface |
 | 2 | **SEC-A** — filtro no grupo `analytics` + teste que varre a tabela de rotas | segurança |
-| 3 | **INT-D · D5/D3/D6/D8** — acordeão do menu, Central de Aprovação no topo, ordem dos grupos e permissão de Pedidos | interface |
+| 3 | **INT-D · D5/D3/D6/D8** — acordeão do menu, Central de Aprovação no topo, ordem dos grupos e permissão de Pedidos | interface · **entregue (#92)** |
 
 ### Prioridade 2 — tirar o risco estrutural
 
 | # | Item | Eixo |
 |---|---|---|
-| 4 | **INT-D · D2** — "próximo passo" na tela, atravessando o zigue-zague do processo | interface |
+| 4 | **INT-D · D2** — "próximo passo" na tela, atravessando o zigue-zague do processo | interface · **entregue (#93)** |
 | 5 | **ARQ-A** — recortar `Program.cs` em rotas por módulo | arquitetura |
 | 6 | **SEC-B / SEC-C** — rate limiting fora do login e limites de upload | segurança |
 
@@ -324,7 +324,7 @@ existentes antes de criar o índice.
 
 | # | Item | Eixo |
 |---|---|---|
-| 7 | **INT-D · D1/D4** — trilha do processo no painel e contadores no menu | interface + inteligência |
+| 7 | **INT-D · D1/D4** — trilha do processo no painel e contadores no menu | interface + inteligência · **entregue** |
 | 8 | **INTEL-A** — insight com ação e link para a tela onde se age | inteligência |
 | 9 | **INTEL-B** — regras novas sobre o dado que já existe | inteligência |
 | 10 | **INTEL-C** — insight de severidade alta chega ao painel e aos avisos | inteligência + interface |
@@ -351,7 +351,7 @@ existentes antes de criar o índice.
 | Segurança | Rate limiting só no login | 🟡 MÉDIO | Política por grupo | A executar | Médio |
 | Segurança | Upload sem limite declarado | 🟡 MÉDIO | Limite de bytes e tipos | A executar | Médio |
 | Inteligência | Insight descreve mas não age | 🟡 MÉDIO | Ação + link + regras novas | A executar | Alto |
-| Interface | Menu por módulo, processo em zigue-zague; acordeão não segue a rota | 🟠 ALTO | Trilha do processo, próximo passo na tela, menu corrigido | A executar | Alto |
+| Interface | Menu por módulo, processo em zigue-zague; acordeão não segue a rota | 🟠 ALTO | Trilha do processo, próximo passo na tela, menu corrigido | D1–D6 e D8 entregues (#92, #93); falta D7, o vocabulário | Alto |
 | Interface | 27 telas repetem estado | 🟡 MÉDIO | Componente único | A executar | Médio |
 | Arquitetura | `QuotationService` com 1.108 linhas | 🟡 MÉDIO | Separar alçadas | A executar | Médio |
 | Banco | `erp_number` sem índice único | 🟡 MÉDIO | Migration após conferir a produção | **Bloqueado em você** | Médio |

@@ -126,12 +126,34 @@ export function localizar(grupos: GrupoMenu[], caminho: string): Localizacao | n
 }
 
 /**
- * Destinos que a Central de Avisos manda e que não são itens de menu.
+ * Views que a Central de Avisos manda e que não são itens de menu.
  * `buy-demands` é o caso vivo: a tela dele deixou de existir há tempos e o
  * aviso ficava sem destino — quem cuida dessas demandas é a Gestão de
  * Solicitações.
  */
-const FORA_DO_MENU: Record<string, string> = { 'buy-demands': '/gestao-solicitacoes' };
+const VIEW_PARA_ITEM: Record<string, string> = { 'buy-demands': 'triage' };
+
+/** O item de menu que atende a view de um aviso. */
+export const itemDaView = (view: string) => VIEW_PARA_ITEM[view] ?? view;
+
+/**
+ * Quanto há pendente em cada item de menu, somado a partir dos avisos.
+ *
+ * Só entra o que pede ação. Aviso de severidade `info` é acompanhamento — "40
+ * pedidos seus em andamento com Suprimentos" não é trabalho parado com você, e
+ * um número no menu diria que é.
+ */
+export function contagemPorItem(
+  avisos: { view: string; count: number; severity?: string }[],
+): Record<string, number> {
+  const total: Record<string, number> = {};
+  for (const a of avisos) {
+    if (a.severity === 'info') continue;
+    const id = itemDaView(a.view);
+    total[id] = (total[id] ?? 0) + a.count;
+  }
+  return total;
+}
 
 /**
  * Endereço a partir do id da tela — a Central de Avisos manda o id da view
@@ -139,11 +161,12 @@ const FORA_DO_MENU: Record<string, string> = { 'buy-demands': '/gestao-solicitac
  * destino conhecido cai no painel, onde o próprio aviso está.
  */
 export function enderecoDoId(id: string): string {
+  const alvo = itemDaView(id);
   for (const grupo of MENU)
     for (const item of grupo.itens) {
       const candidatos = ehSubgrupo(item) ? item.filhos : [item];
-      const achado = candidatos.find((i) => i.id === id);
+      const achado = candidatos.find((i) => i.id === alvo);
       if (achado) return achado.rota;
     }
-  return FORA_DO_MENU[id] ?? '/painel';
+  return '/painel';
 }

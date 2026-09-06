@@ -3,10 +3,18 @@ import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Usuario } from '@/api/auth';
+import type { Aviso } from '@/api/painel';
 import { Sidebar } from './Sidebar';
 
 let usuarioAtual: Usuario;
+let avisosAtuais: Aviso[] = [];
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => usuarioAtual }));
+vi.mock('@/sessao/AvisosProvider', () => ({
+  useAvisos: () => ({ avisos: avisosAtuais, erro: null, carregando: false, carregou: true, recarregar: () => {} }),
+}));
+
+const aviso = (kind: string, count: number, view: string): Aviso =>
+  ({ kind, count, view, severity: 'media', text: `${count} coisa(s)` });
 
 const admin: Usuario = {
   id: 'u1', email: 'admin@trinosupply.com.br', name: 'Admin', role: 'SystemAdministrator', modules: [],
@@ -26,7 +34,7 @@ const montar = (rota: string) => render(
 const menu = () => within(screen.getByRole('navigation'));
 
 describe('<Sidebar />', () => {
-  beforeEach(() => { usuarioAtual = admin; });
+  beforeEach(() => { usuarioAtual = admin; avisosAtuais = []; });
 
   it('abre sozinho o grupo da tela em que se está', () => {
     montar('/pedidos');
@@ -70,5 +78,32 @@ describe('<Sidebar />', () => {
     montar('/painel');
     // sem abrir grupo nenhum, ela já está à vista: é o passo 2 e o passo 6 do ciclo
     expect(menu().getByRole('link', { name: 'Central de Aprovação' })).toBeInTheDocument();
+  });
+
+  it('o contador diz onde há trabalho parado, somando as views do mesmo item', () => {
+    avisosAtuais = [aviso('TRIAGEM', 3, 'triage'), aviso('DEMANDA', 4, 'buy-demands')];
+    montar('/gestao-solicitacoes');
+    // buy-demands não é item de menu: quem atende essas demandas é a Gestão de Solicitações
+    expect(menu().getByTestId('pendencia-triage')).toHaveTextContent('7');
+  });
+
+  it('grupo fechado carrega a soma do que esconde, senão o número fica invisível', () => {
+    avisosAtuais = [aviso('OC_EMITIR', 2, 'quotations')];
+    montar('/painel');
+    // "Compras" está fechado — o aviso mora em Cotações, dois níveis abaixo
+    expect(menu().getByRole('button', { name: /^Compras/ })).toHaveTextContent('2');
+    expect(menu().queryByTestId('pendencia-quotations')).not.toBeInTheDocument();
+  });
+
+  it('sem pendência, nenhum contador aparece', () => {
+    montar('/pedidos');
+    expect(menu().queryByTestId('pendencia-buy-orders')).not.toBeInTheDocument();
+  });
+
+  it('aviso de acompanhamento não marca o menu', () => {
+    // "40 pedidos seus em andamento" é acompanhamento, não trabalho parado com você
+    avisosAtuais = [{ ...aviso('AGUARDANDO', 40, 'pr-mine'), severity: 'info' }];
+    montar('/solicitacoes');
+    expect(menu().queryByTestId('pendencia-pr-mine')).not.toBeInTheDocument();
   });
 });

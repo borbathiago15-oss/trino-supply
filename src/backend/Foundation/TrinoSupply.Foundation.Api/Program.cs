@@ -970,7 +970,7 @@ app.MapGet("/api/v1/dashboard", async (AppDbContext db, RequisitionService prSvc
             var mgr = await mgrQuery.CountAsync();
             if (mgr > 0) alerts.Add(new
             {
-                kind = "APROVACAO_GERENTE", severity = "media", count = mgr, view = "quotations",
+                kind = "APROVACAO_GERENTE", severity = "media", count = mgr, view = "pr-approvals",
                 text = $"{mgr} processo(s) de compra aguardando a sua aprovação gerencial.",
             });
         }
@@ -1001,7 +1001,7 @@ app.MapGet("/api/v1/dashboard", async (AppDbContext db, RequisitionService prSvc
             }
             if (dir > 0) alerts.Add(new
             {
-                kind = "APROVACAO_DIRETOR", severity = "media", count = dir, view = "quotations",
+                kind = "APROVACAO_DIRETOR", severity = "media", count = dir, view = "pr-approvals",
                 text = $"{dir} processo(s) de compra aguardando a aprovação da diretoria.",
             });
         }

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import type { Aviso } from '@/api/painel';
 import { enderecoDoId } from '@/layout/menu';
+import { AvisosProvider } from '@/sessao/AvisosProvider';
 import { CentralDeAvisos } from './CentralDeAvisos';
 
 vi.mock('@/api/painel', async (importar) => ({
@@ -18,7 +19,9 @@ const aviso = (p: Partial<Aviso>): Aviso => ({
   ...p,
 });
 
-const abrir = () => render(<MemoryRouter><CentralDeAvisos /></MemoryRouter>);
+const abrir = () => render(
+  <MemoryRouter><AvisosProvider><CentralDeAvisos /></AvisosProvider></MemoryRouter>,
+);
 
 describe('endereço da tela pelo id', () => {
   it('o id do menu vira a rota daquela tela', () => {

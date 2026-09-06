@@ -167,7 +167,8 @@ public static class FornecedorRotas
                 stored.Id, stored.FileName, stored.UploadedByLabel);
             return error is not null ? Error(ctx, error.Code == "SUP-ERR-404" ? 404 : 422, error.Code, error.Message)
                 : Ok(new { id = doc!.Id, documentId = stored.Id, fileName = stored.FileName }, ctx);
-        }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+        }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole())
+            .RequireRateLimiting("upload").ComTetoDeUpload(StoredDocument.MaxRequestBytes);
 
         sup.MapDelete("/{id:guid}/documents/{docId:guid}", async (Guid id, Guid docId, SupplierService svc,
             ClaimsPrincipal p, HttpContext ctx) =>

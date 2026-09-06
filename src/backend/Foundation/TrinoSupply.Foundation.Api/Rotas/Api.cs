@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Http.Metadata;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Inventory;
 using TrinoSupply.Foundation.Api.Procurement;
@@ -65,6 +66,30 @@ public static class Api
 
     public static bool CanViewStock(ClaimsPrincipal p) =>
         InventoryService.CanView(RoleOf(p)) || ModulesOf(p).Contains(AppModules.Estoque);
+
+    /// <summary>
+    /// De quem é a cota de uso: do usuário, e não do IP — um escritório inteiro
+    /// atrás do mesmo IP não pode dividir o mesmo balde. Sem sessão, cai no IP.
+    /// </summary>
+    public static string QuemEsta(HttpContext ctx) =>
+        ctx.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? ctx.User.FindFirst("sub")?.Value
+            ?? ctx.Connection.RemoteIpAddress?.ToString()
+            ?? "desconhecido";
+
+    /// <summary>
+    /// Teto da requisição, declarado no endpoint (SEC-C). Minimal API não tem um
+    /// `WithRequestSizeLimit`, mas honra este metadado: o servidor corta o envio
+    /// grande demais em vez de lê-lo inteiro para a aplicação recusar depois.
+    /// </summary>
+    private sealed record TetoDeRequisicao(long? MaxRequestBodySize) : IRequestSizeLimitMetadata;
+
+    public static TBuilder ComTetoDeUpload<TBuilder>(this TBuilder rota, long bytes)
+        where TBuilder : IEndpointConventionBuilder
+    {
+        rota.Add(e => e.Metadata.Add(new TetoDeRequisicao(bytes)));
+        return rota;
+    }
 
     // ---- filtros de grupo ----------------------------------------------------
 

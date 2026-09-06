@@ -458,7 +458,8 @@ public static class CotacaoRotas
             proposal.AttachmentFileName = doc.FileName;
             await db.SaveChangesAsync();
             return Ok(new { documentId = doc.Id, fileName = doc.FileName }, ctx);
-        }).RequireAuthorization();
+        }).RequireAuthorization()
+            .RequireRateLimiting("upload").ComTetoDeUpload(StoredDocument.MaxRequestBytes);
 
         // anexo da proposta registrada internamente: o PDF/planilha que o fornecedor enviou por fora
         app.MapPost("/api/v1/quotations/{id:guid}/proposals/{proposalId:guid}/attachment",
@@ -496,6 +497,7 @@ public static class CotacaoRotas
                     proposal.SupplierName, doc.FileName);
             await db.SaveChangesAsync();
             return Ok(new { documentId = doc.Id, fileName = doc.FileName }, ctx);
-        }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+        }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole())
+            .RequireRateLimiting("upload").ComTetoDeUpload(StoredDocument.MaxRequestBytes);
     }
 }

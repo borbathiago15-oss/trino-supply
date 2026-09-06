@@ -173,7 +173,8 @@ public static class PedidoRotas
             order.UpdatedAt = clock.GetUtcNow();
             await db.SaveChangesAsync();
             return Ok(new { documentId = doc.Id, fileName = doc.FileName }, ctx);
-        }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+        }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole())
+            .RequireRateLimiting("upload").ComTetoDeUpload(StoredDocument.MaxRequestBytes);
 
         app.MapPost("/api/v1/purchase-orders/{id:guid}/invoices/{invoiceId:guid}/attachment",
             async (Guid id, Guid invoiceId, HttpRequest request, AppDbContext db, TimeProvider clock,
@@ -189,7 +190,8 @@ public static class PedidoRotas
             invoice.FileName = doc.FileName;
             await db.SaveChangesAsync();
             return Ok(new { documentId = doc.Id, fileName = doc.FileName }, ctx);
-        }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+        }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole())
+            .RequireRateLimiting("upload").ComTetoDeUpload(StoredDocument.MaxRequestBytes);
 
         // ==== PDF da Ordem de Compra (modelo oficial) ================================
         app.MapGet("/api/v1/purchase-orders/{id:guid}/pdf", async (Guid id, AppDbContext db, QuotationService qsvc, TimeProvider clock, ClaimsPrincipal p, HttpContext ctx) =>

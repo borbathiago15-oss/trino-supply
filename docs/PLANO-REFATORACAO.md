@@ -86,13 +86,38 @@ texto da fonte.
 
 ### 🟡 SEC-B · Rate limiting só na autenticação
 
-Existem as políticas `auth` e `auth-refresh`. O resto da API não tem limite —
-inclusive os endpoints de upload e os de relatório, que são caros.
+Existiam só as políticas `auth` e `auth-refresh`. O resto da API não tinha
+limite — inclusive os endpoints de upload e os de relatório, que são caros.
+
+**Entregue.** Duas políticas novas, ambas **por usuário e não por IP**, para o
+escritório inteiro atrás do mesmo IP não dividir a mesma cota: `upload`
+(30/min, nos oito endpoints que aceitam arquivo) e `relatorio` (120/min, no
+grupo `analytics`).
+
+As cotas são folgadas de propósito. O que se quer barrar é a repetição
+automática, não o uso humano — apertar até encostar no uso normal troca uma
+proteção contra abuso por uma tela que quebra na mão de quem trabalha. A
+primeira calibragem, em 60/min, foi afrouxada depois de ver a suíte E2E inteira
+consumir a cota.
 
 ### 🟡 SEC-C · Upload sem limite declarado de tamanho e tipo
 
-Cinco endpoints de anexo gravam `bytea` no banco. Vale checar limite de bytes,
-lista de tipos aceitos e o que acontece com um arquivo grande.
+Oito endpoints de anexo gravam `bytea` no banco. Fui conferir os três pontos:
+
+- **limite de bytes:** existe, 10 MB, em todos ✅
+- **tipos aceitos:** todos checam ✅ — a lista comum em `StoredDocument`, e a
+  foto do produto com a sua própria (PNG/JPG/WEBP). O download serve com
+  `Content-Disposition: attachment` e a lista não tem HTML nem SVG, então não há
+  caminho para script guardado
+- **arquivo grande:** era o furo. O servidor lia o arquivo **inteiro** para só
+  então a aplicação recusar pelo tamanho — 30 MB de banda e memória gastos antes
+  de dizer "não"
+
+**Entregue.** Os oito endpoints declaram um teto de requisição de 12 MB
+(`IRequestSizeLimitMetadata`), acima dos 10 MB da regra para o arquivo legítimo
+continuar recebendo a mensagem da aplicação em vez de um 413 seco. Conferido
+contra a API: 15 MB devolve **413** sem ler o corpo; 1 MB com tipo errado
+devolve **DOC-ERR-003**, que é a regra da aplicação falando.
 
 ### 🟢 SEC-D · Aviso de build não resolvido
 
@@ -382,7 +407,7 @@ existentes antes de criar o índice.
 |---|---|---|
 | 4 | **INT-D · D2** — "próximo passo" na tela, atravessando o zigue-zague do processo | interface · **entregue (#93)** |
 | 5 | **ARQ-A** — recortar `Program.cs` em rotas por módulo | arquitetura · **entregue** |
-| 6 | **SEC-B / SEC-C** — rate limiting fora do login e limites de upload | segurança |
+| 6 | **SEC-B / SEC-C** — rate limiting fora do login e limites de upload | segurança · **entregue** |
 
 ### Prioridade 3 — a inteligência que você pediu
 
@@ -412,8 +437,8 @@ existentes antes de criar o índice.
 | Correção | Listas truncadas sem paginação; fila de aprovação perde processo | 🔴 CRÍTICO | Paginação + busca no servidor | **Entregue** — fila (#89), Pedidos e Fornecedores (#90), SCs e Cotações | Alto |
 | Segurança | Autorização por convenção; `analytics` sem filtro de grupo | 🟠 ALTO | Filtro no grupo + teste sobre a tabela registrada | **Entregue** | Alto |
 | Arquitetura | `Program.cs` com 120 endpoints | 🟠 ALTO | Rotas por módulo | **Entregue** — 401 linhas, 12 arquivos de rota, inventário como rede | Médio |
-| Segurança | Rate limiting só no login | 🟡 MÉDIO | Política por grupo | A executar | Médio |
-| Segurança | Upload sem limite declarado | 🟡 MÉDIO | Limite de bytes e tipos | A executar | Médio |
+| Segurança | Rate limiting só no login | 🟡 MÉDIO | Cotas por usuário em upload e relatório | **Entregue** | Médio |
+| Segurança | Upload sem limite declarado | 🟡 MÉDIO | Teto de requisição nos oito endpoints | **Entregue** | Médio |
 | Inteligência | Insight descreve mas não age | 🟡 MÉDIO | Ação + link + regras novas | A executar | Alto |
 | Interface | Menu por módulo, processo em zigue-zague; acordeão não segue a rota | 🟠 ALTO | Trilha do processo, próximo passo na tela, menu corrigido | D1–D6 e D8 entregues (#92, #93); falta D7, o vocabulário | Alto |
 | Interface | 27 telas repetem estado | 🟡 MÉDIO | Componente único | A executar | Médio |

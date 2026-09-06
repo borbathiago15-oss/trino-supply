@@ -24,6 +24,9 @@ public static class AnalyticsRotas
         // Portal do Fornecedor. Os filtros abaixo são o piso, não a checagem completa —
         // cada handler continua exigindo o papel e o módulo específicos dele.
         var analytics = app.MapGroup("/api/v1/analytics").RequireAuthorization();
+        // SEC-B: seis consultas pesadas, sem limite nenhum até aqui. A cota é por
+        // usuário e generosa — o painel inteiro cabe numa fração dela.
+        analytics.RequireRateLimiting("relatorio");
         analytics.AddEndpointFilter(RejectSupplierRole());
         analytics.AddEndpointFilter(RequireModules(
             AppModules.Solicitacoes, AppModules.Aprovacao, AppModules.Compras,

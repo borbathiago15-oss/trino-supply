@@ -23,6 +23,11 @@
     <ProjectReference Include="..\..\Foundation\TrinoSupply.Foundation.Api\TrinoSupply.Foundation.Api.csproj" />
   </ItemGroup>
 
+  <!-- monta a tabela de rotas de verdade no teste, sem subir o app (SEC-A) -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Update="fixtures\**\*.xlsx" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

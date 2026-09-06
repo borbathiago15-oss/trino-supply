@@ -63,19 +63,26 @@ lembrança.
 
 **Entregue.** O grupo `analytics` recebeu `RejectSupplierRole()` e um
 `RequireModules(...)` com a união dos módulos que os seis endpoints já exigiam
-— um piso, com cada handler mantendo a checagem específica dele. E
-`RotasProtegidasTests` confere quatro invariantes: todo grupo `/api` exige
-autenticação; os únicos grupos públicos são `auth` e `portal`; toda rota `/api`
-fora de grupo declara `RequireAuthorization`; e todo grupo interno tem algo que
-o token do Portal do Fornecedor não satisfaz.
+— um piso, com cada handler mantendo a checagem específica dele.
 
-A conferência é sobre o **texto** do `Program.cs`, não sobre a tabela de rotas
-em execução. O motivo é o custo: o app roda as migrations na inicialização, e
-montá-lo num teste exigiria um Postgres no job de testes unitários, que hoje
-roda em sete segundos sem banco nenhum. O teste é embutido como recurso, para
-não depender do diretório de trabalho, e tem uma asserção que falha se o
-recurso sumir — sem ela os outros passariam sobre o vazio. Depois do **ARQ-A**,
-a versão em execução fica barata e substitui esta.
+**E a conferência passou a ser sobre a tabela de rotas em execução.** Depois do
+ARQ-A cada módulo expõe o seu `Map…`, então `TabelaDeRotasTests` monta a tabela
+chamando todos eles num app vazio — sem migration, sem banco, sem servidor — e
+confere o que o ASP.NET **registrou**, não o que o texto sugere: toda rota
+`/api` exige autenticação; as únicas públicas são as quatro portas de entrada,
+cada uma com o motivo escrito; a gestão de usuários só abre para o
+administrador; e o inventário bate com o arquivo versionado.
+
+Duas coisas só apareceram quando o teste passou a ler a tabela de verdade:
+`/api/v1/auth/logout` é público (é seguro — revoga o refresh token de quem o
+apresenta, e exigir token válido impediria sair com o acesso já expirado), e
+`/api/v1/users/pickers` não pertence ao grupo de usuários, é o seletor de
+responsável das telas de cadastro. As duas estão registradas com a razão.
+
+Sobrou em `RotasProtegidasTests` uma invariante que os metadados não mostram: os
+filtros de grupo são embrulhados no delegate e não viram metadado, então a
+conferência de `RejectSupplierRole` / `RequireModules` continua sendo sobre o
+texto da fonte.
 
 ### 🟡 SEC-B · Rate limiting só na autenticação
 
@@ -366,7 +373,7 @@ existentes antes de criar o índice.
 | # | Item | Eixo |
 |---|---|---|
 | 1 | **COR-A** — paginação nas quatro listas principais e busca no servidor | correção + interface · **entregue** |
-| 2 | **SEC-A** — filtro no grupo `analytics` + teste que varre as rotas | segurança · **entregue** |
+| 2 | **SEC-A** — filtro no grupo `analytics` + teste sobre a tabela de rotas | segurança · **entregue** |
 | 3 | **INT-D · D5/D3/D6/D8** — acordeão do menu, Central de Aprovação no topo, ordem dos grupos e permissão de Pedidos | interface · **entregue (#92)** |
 
 ### Prioridade 2 — tirar o risco estrutural
@@ -403,7 +410,7 @@ existentes antes de criar o índice.
 | Área | Problema | Criticidade | Solução | Status | Impacto |
 |---|---|---|---|---|---|
 | Correção | Listas truncadas sem paginação; fila de aprovação perde processo | 🔴 CRÍTICO | Paginação + busca no servidor | **Entregue** — fila (#89), Pedidos e Fornecedores (#90), SCs e Cotações | Alto |
-| Segurança | Autorização por convenção; `analytics` sem filtro de grupo | 🟠 ALTO | Filtro no grupo + teste que varre as rotas | **Entregue** | Alto |
+| Segurança | Autorização por convenção; `analytics` sem filtro de grupo | 🟠 ALTO | Filtro no grupo + teste sobre a tabela registrada | **Entregue** | Alto |
 | Arquitetura | `Program.cs` com 120 endpoints | 🟠 ALTO | Rotas por módulo | **Entregue** — 401 linhas, 12 arquivos de rota, inventário como rede | Médio |
 | Segurança | Rate limiting só no login | 🟡 MÉDIO | Política por grupo | A executar | Médio |
 | Segurança | Upload sem limite declarado | 🟡 MÉDIO | Limite de bytes e tipos | A executar | Médio |

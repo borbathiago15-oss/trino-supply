@@ -98,16 +98,16 @@ Ruído que esconde avisos futuros.
 
 ### 🔴 COR-A · Listas truncadas em silêncio, sem paginação
 
-| Consulta | Teto |
-|---|---|
-| `RequisitionService.ListAsync` (Meus Pedidos) | 100 |
-| `RequisitionService` fila de aprovação | 100 |
-| `PurchaseOrderService.ListAsync` (Pedidos) | 100 |
-| `PurchaseOrderService` SCs aguardando pedido | 100 |
-| `QuotationService.ListAsync` (Processos) | 200 |
-| `QuotationService` fila | 200 |
-| `TriageService` | 200 |
-| `SupplierService` | 500 |
+| Consulta | Teto na auditoria | Hoje |
+|---|---|---|
+| `RequisitionService.ListAsync` (Meus Pedidos) | 100 | página + busca + `total` |
+| `QuotationService.ListAsync` (Processos) | 200 | página + busca + `total` |
+| `PurchaseOrderService.ListAsync` (Pedidos) | 100 | página + busca + `total` (#90) |
+| `SupplierService` | 500 | página + busca + `total` (#90) |
+| `QuotationService` fila de aprovação | 200 | filtra no banco, sem teto (#89) |
+| `RequisitionService` fila de aprovação | 100 | pendente — fila do fluxo antigo, conjunto que só diminui |
+| `PurchaseOrderService` SCs aguardando pedido | 100 | pendente |
+| `TriageService` | 200 | pendente |
 
 Nenhuma dessas rotas aceita página, deslocamento ou cursor. Duas consequências
 concretas:
@@ -120,9 +120,22 @@ concretas:
    sobre a lista já truncada. Procurar um pedido antigo devolve *"Nenhum pedido
    corresponde ao filtro"* — que é falso: o pedido existe, só não veio.
 
-**Proposta:** paginação por cursor na API, começando pelas quatro listas que o
-usuário mais usa, e busca no servidor nas duas telas que filtram no navegador.
-A interface muda o mínimo: o mesmo campo de busca, consultando o servidor.
+**Proposta:** paginação na API, começando pelas quatro listas que o usuário
+mais usa, e busca no servidor nas telas que filtram no navegador. A interface
+muda o mínimo: o mesmo campo de busca, consultando o servidor.
+
+**Entregue nas quatro listas principais.** Cada uma devolve `{items, total}`,
+com busca e filtro de situação feitos no banco (`ILike`, sem diferenciar
+maiúsculas), teto de página de 500 e "Carregar mais" na tela. O `total` é o que
+permite dizer *"Mostrando 50 de 640"* em vez de deixar a lista terminar sem
+explicação.
+
+A busca por `ILike` não roda no provedor em memória dos testes unitários, então
+o que os testes cobrem é a paginação e o `total`; os caminhos de busca foram
+conferidos endpoint a endpoint contra um Postgres real. As três consultas
+restantes na tabela alimentam telas de fila, não de procura, e ficam para
+depois — a mais sensível delas, a fila de aprovação de cotação, já foi
+corrigida em #89.
 
 ---
 
@@ -324,7 +337,7 @@ existentes antes de criar o índice.
 
 | # | Item | Eixo |
 |---|---|---|
-| 1 | **COR-A** — paginação nas quatro listas principais e busca no servidor | correção + interface |
+| 1 | **COR-A** — paginação nas quatro listas principais e busca no servidor | correção + interface · **entregue** |
 | 2 | **SEC-A** — filtro no grupo `analytics` + teste que varre as rotas | segurança · **entregue** |
 | 3 | **INT-D · D5/D3/D6/D8** — acordeão do menu, Central de Aprovação no topo, ordem dos grupos e permissão de Pedidos | interface · **entregue (#92)** |
 
@@ -361,7 +374,7 @@ existentes antes de criar o índice.
 
 | Área | Problema | Criticidade | Solução | Status | Impacto |
 |---|---|---|---|---|---|
-| Correção | Listas truncadas sem paginação; fila de aprovação perde processo | 🔴 CRÍTICO | Paginação + busca no servidor | Fila de aprovação (#89), Pedidos e Fornecedores (#90) entregues; faltam SCs e Cotações | Alto |
+| Correção | Listas truncadas sem paginação; fila de aprovação perde processo | 🔴 CRÍTICO | Paginação + busca no servidor | **Entregue** — fila (#89), Pedidos e Fornecedores (#90), SCs e Cotações | Alto |
 | Segurança | Autorização por convenção; `analytics` sem filtro de grupo | 🟠 ALTO | Filtro no grupo + teste que varre as rotas | **Entregue** | Alto |
 | Arquitetura | `Program.cs` com 120 endpoints | 🟠 ALTO | Rotas por módulo | A executar | Médio |
 | Segurança | Rate limiting só no login | 🟡 MÉDIO | Política por grupo | A executar | Médio |

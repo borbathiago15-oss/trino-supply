@@ -32,13 +32,36 @@ public record ItemInput(string Description, decimal Quantity, string? UnitOfMeas
 public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Catalog.CatalogService catalog, TimeProvider clock)
 {
     // ---- consulta -----------------------------------------------------------
-    public async Task<List<PurchaseRequisition>> ListAsync(Actor actor, RequisitionStatus? status, CancellationToken ct = default)
+
+    /// <summary>Página máxima aceita: evita que um `tamanho` grande vire consulta sem teto.</summary>
+    public const int TamanhoMaximoDePagina = 500;
+
+    /// <summary>
+    /// Página de solicitações, com a busca feita no banco. O `total` volta junto
+    /// para a tela dizer quantas existem, e não só quantas vieram: buscar sobre
+    /// uma lista truncada responde "nada encontrado" para SC que existe (PO-BR-012).
+    /// </summary>
+    public async Task<(List<PurchaseRequisition> itens, int total)> ListAsync(
+        Actor actor, RequisitionStatus? status, string? busca = null,
+        int tamanho = 100, CancellationToken ct = default)
     {
+        var termo = busca?.Trim();
         var query = db.Requisitions.Include(r => r.Items).Include(r => r.Attachments)
             .Where(r => r.DeletedAt == null);
         if (!actor.SeesAll) query = query.Where(r => r.RequesterId == actor.Id);
         if (status is not null) query = query.Where(r => r.Status == status);
-        return await query.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id).Take(100).ToListAsync(ct);
+        if (!string.IsNullOrEmpty(termo))
+            query = query.Where(r =>
+                EF.Functions.ILike(r.Number, $"%{termo}%")
+                || EF.Functions.ILike(r.Justification, $"%{termo}%")
+                || EF.Functions.ILike(r.CostCenter, $"%{termo}%")
+                || EF.Functions.ILike(r.RequesterLabel, $"%{termo}%")
+                || r.Items.Any(i => EF.Functions.ILike(i.Description, $"%{termo}%")));
+
+        var total = await query.CountAsync(ct);
+        var itens = await query.OrderByDescending(r => r.CreatedAt).ThenByDescending(r => r.Id)
+            .Take(Math.Clamp(tamanho, 1, TamanhoMaximoDePagina)).ToListAsync(ct);
+        return (itens, total);
     }
 
     public async Task<PurchaseRequisition?> GetAsync(Actor actor, Guid id, CancellationToken ct = default)

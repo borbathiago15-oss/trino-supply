@@ -99,6 +99,39 @@ public class QuotationServiceTests
         Assert.Empty(await w.Rfq.PendingApprovalsAsync(Roles.Requester, Gustavo.Id));
     }
 
+    /// <summary>
+    /// A listagem trazia no máximo 200 processos e não dizia que havia mais:
+    /// quem procurava um processo antigo recebia "nada encontrado" para
+    /// cotação que existe (PO-BR-012).
+    /// </summary>
+    [Fact]
+    public async Task Lista_diz_quantos_existem_e_filtra_a_situacao_no_banco()
+    {
+        var w = await BuildAsync();
+        for (var i = 0; i < 210; i++)
+            w.Db.Quotations.Add(new Quotation
+            {
+                Number = $"RFQ-2026-{i:000000}", Kind = QuotationKind.Purchase,
+                Status = i < 30 ? QuotationStatus.Cancelled : QuotationStatus.Open,
+                CostCenter = "BAH-001",
+                CreatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).AddMinutes(i),
+            });
+        await w.Db.SaveChangesAsync();
+
+        // antes o teto era 200 e o resto sumia sem aviso
+        var (pagina, total) = await w.Rfq.ListAsync(tamanho: 100);
+        Assert.Equal(100, pagina.Count);
+        Assert.Equal(210, total);
+
+        var (tudo, _) = await w.Rfq.ListAsync(tamanho: 500);
+        Assert.Equal(210, tudo.Count);
+
+        // a situação é filtrada no banco, e o total acompanha o filtro
+        var (canceladas, totalCancelada) = await w.Rfq.ListAsync(situacao: QuotationStatus.Cancelled);
+        Assert.Equal(30, totalCancelada);
+        Assert.All(canceladas, q => Assert.Equal(QuotationStatus.Cancelled, q.Status));
+    }
+
     [Fact]
     public async Task Fila_do_nivel_2_exclui_quem_deu_o_nivel_1()
     {

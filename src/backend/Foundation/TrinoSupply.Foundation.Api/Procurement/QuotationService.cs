@@ -63,10 +63,42 @@ public class QuotationService(AppDbContext db, TimeProvider clock)
         CanConduct(role) || CanApproveAsManager(role) || CanApproveAsDirector(role) || role == Roles.Auditor;
 
     // ---- consulta -----------------------------------------------------------
-    public Task<List<Quotation>> ListAsync(CancellationToken ct = default) =>
-        db.Quotations.Include(q => q.Items).Include(q => q.Suppliers).Include(q => q.Awards)
+
+    /// <summary>Página máxima aceita: evita que um `tamanho` grande vire consulta sem teto.</summary>
+    public const int TamanhoMaximoDePagina = 500;
+
+    /// <summary>
+    /// Página de processos, com busca e filtro de situação feitos no banco. O
+    /// `total` volta junto para a tela dizer quantos existem, e não só quantos
+    /// vieram: buscar sobre uma lista truncada responde "nada encontrado" para
+    /// processo que existe (PO-BR-012).
+    /// </summary>
+    public async Task<(List<Quotation> itens, int total)> ListAsync(
+        string? busca = null, QuotationStatus? situacao = null,
+        int tamanho = 100, CancellationToken ct = default)
+    {
+        var termo = busca?.Trim();
+        var query = db.Quotations.AsQueryable();
+
+        if (situacao is { } s) query = query.Where(q => q.Status == s);
+        if (!string.IsNullOrEmpty(termo))
+            query = query.Where(q =>
+                EF.Functions.ILike(q.Number, $"%{termo}%")
+                || EF.Functions.ILike(q.CostCenter, $"%{termo}%")
+                || EF.Functions.ILike(q.SourcePrNumber, $"%{termo}%")
+                // a SC de origem também vem por item, na cotação que juntou várias
+                || q.Items.Any(i => EF.Functions.ILike(i.Description, $"%{termo}%")
+                    || (i.SourcePrNumber != null && EF.Functions.ILike(i.SourcePrNumber, $"%{termo}%")))
+                || q.Suppliers.Any(f => EF.Functions.ILike(f.SupplierName, $"%{termo}%")));
+
+        var total = await query.CountAsync(ct);
+        var itens = await query
+            .Include(q => q.Items).Include(q => q.Suppliers).Include(q => q.Awards)
             .Include(q => q.Proposals).ThenInclude(p => p.Items)
-            .OrderByDescending(q => q.CreatedAt).Take(200).ToListAsync(ct);
+            .OrderByDescending(q => q.CreatedAt)
+            .Take(Math.Clamp(tamanho, 1, TamanhoMaximoDePagina)).ToListAsync(ct);
+        return (itens, total);
+    }
 
     /// <summary>
     /// Processos aguardando a alçada de quem está pedindo. O filtro é feito no

@@ -658,7 +658,10 @@ static IResult PrError(HttpContext ctx, UserError e) => Error(ctx, e.Code switch
 var prs = app.MapGroup("/api/v1/purchase-requisitions").RequireAuthorization();
 prs.AddEndpointFilter(RequireModules(AppModules.Solicitacoes, AppModules.Aprovacao));
 
-prs.MapGet("/", async (RequisitionService svc, AppDbContext db, ClaimsPrincipal p, HttpContext ctx, string? status) =>
+// busca e paginação no servidor: procurar sobre uma lista truncada responde
+// "nada encontrado" para solicitação que existe (PO-BR-012)
+prs.MapGet("/", async (RequisitionService svc, AppDbContext db, ClaimsPrincipal p, HttpContext ctx,
+    string? status, string? q, int? tamanho) =>
 {
     if (BuildActor(p) is not { } actor) return Error(ctx, 403, "PR-ERR-001", "Seu papel não acessa o módulo de requisições.");
     RequisitionStatus? filter = status?.ToUpperInvariant() switch
@@ -672,10 +675,14 @@ prs.MapGet("/", async (RequisitionService svc, AppDbContext db, ClaimsPrincipal 
         "CANCELLED" => RequisitionStatus.Cancelled,
         _ => null,
     };
-    var items = await svc.ListAsync(actor, filter);
+    var (items, total) = await svc.ListAsync(actor, filter, q, tamanho ?? 100);
     var hints = await svc.ApproverHintsAsync(items);
     var process = await ProcessStatusMapAsync(db, items);
-    return Ok(new { items = items.Select(r => PrView(r, svc.HintFor(hints, r), process.GetValueOrDefault(r.Id))) }, ctx);
+    return Ok(new
+    {
+        items = items.Select(r => PrView(r, svc.HintFor(hints, r), process.GetValueOrDefault(r.Id))),
+        total, tamanho = items.Count,
+    }, ctx);
 });
 
 prs.MapGet("/{id:guid}", async (Guid id, RequisitionService svc, AppDbContext db, ClaimsPrincipal p, HttpContext ctx) =>
@@ -2036,10 +2043,14 @@ var rfq = app.MapGroup("/api/v1/quotations").RequireAuthorization();
 rfq.AddEndpointFilter(RejectSupplierRole());
 rfq.AddEndpointFilter(RequireModules(AppModules.Compras, AppModules.Aprovacao));
 
-rfq.MapGet("/", async (QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+// idem: a lista de processos também busca e pagina no servidor (PO-BR-012)
+rfq.MapGet("/", async (QuotationService svc, ClaimsPrincipal p, HttpContext ctx,
+    string? q, string? status, int? tamanho) =>
 {
     if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");
-    return Ok(new { items = (await svc.ListAsync()).Select(QuotationView) }, ctx);
+    QuotationStatus? situacao = Enum.TryParse<QuotationStatus>(status, true, out var st) ? st : null;
+    var (itens, total) = await svc.ListAsync(q, situacao, tamanho ?? 100);
+    return Ok(new { items = itens.Select(QuotationView), total, tamanho = itens.Count }, ctx);
 });
 
 // Central de Aprovação: processos de compra aguardando a MINHA alçada, já com preços

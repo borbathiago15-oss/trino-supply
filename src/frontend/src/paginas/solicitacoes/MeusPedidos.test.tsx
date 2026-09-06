@@ -67,15 +67,17 @@ describe('regras da SC', () => {
   });
 });
 
+const pagina = (itens: SolicitacaoCompra[], total = itens.length) => ({ itens, total });
+
 describe('<MeusPedidos />', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(listarCentrosCusto).mockResolvedValue([]);
-    vi.mocked(listarSolicitacoes).mockResolvedValue([
+    vi.mocked(listarSolicitacoes).mockResolvedValue(pagina([
       sc({ number: 'SC-2026-000001', status: 'DRAFT' }),
       sc({ number: 'SC-2026-000002', status: 'SUBMITTED', assignedToLabel: 'Carla Menezes' }),
       sc({ number: 'SC-2026-000003', status: 'APPROVED', requesterId: 'outro' }),
-    ]);
+    ]));
   });
 
   const montar = () => render(<ToastProvider><MeusPedidos /></ToastProvider>);
@@ -102,6 +104,28 @@ describe('<MeusPedidos />', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Enviar solicitação' }));
     await waitFor(() => expect(enviarSolicitacao).toHaveBeenCalledWith('sc-SC-2026-000001'));
     expect(screen.getAllByTestId('toast').at(-1)).toHaveTextContent('enviada');
+  });
+
+  it('a busca vai para o servidor, e a tela diz quantas existem', async () => {
+    vi.mocked(listarSolicitacoes).mockResolvedValue(pagina([sc({ number: 'SC-2026-000001' })], 640));
+    montar();
+    await waitFor(() => expect(screen.getByTestId('contagem-solicitacoes'))
+      .toHaveTextContent('Mostrando 1 de 640'));
+
+    await userEvent.type(screen.getByLabelText('Buscar'), 'notebook');
+    await waitFor(() => expect(listarSolicitacoes).toHaveBeenCalledWith(
+      expect.objectContaining({ busca: 'notebook' }), expect.anything()));
+
+    // e oferece o resto em vez de fingir que a lista acabou
+    await userEvent.click(screen.getByRole('button', { name: 'Carregar mais' }));
+    await waitFor(() => expect(listarSolicitacoes).toHaveBeenCalledWith(
+      expect.objectContaining({ tamanho: 100 }), expect.anything()));
+  });
+
+  it('sem busca, a lista vazia diz por onde criar a primeira', async () => {
+    vi.mocked(listarSolicitacoes).mockResolvedValue(pagina([]));
+    montar();
+    await waitFor(() => expect(screen.getByText(/Nenhum pedido ainda/)).toBeInTheDocument());
   });
 
   it('excluir pede confirmação antes de chamar a API', async () => {

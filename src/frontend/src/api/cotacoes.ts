@@ -267,8 +267,22 @@ const normalizar = (q: Processo): Processo => ({
   purchaseOrders: q.purchaseOrders ?? [], sourcePrNumbers: q.sourcePrNumbers ?? [],
 });
 
-export const listarProcessos = async (signal?: AbortSignal) =>
-  ((await api<{ items: Processo[] }>(`${base}/`, { signal })).items ?? []).map(normalizar);
+export interface PaginaDeProcessos { itens: Processo[]; total: number }
+
+/** Busca e situação no servidor; `total` é quantos existem, não quantos vieram. */
+export async function listarProcessos(
+  { busca, situacao, tamanho }: { busca?: string; situacao?: string; tamanho?: number } = {},
+  signal?: AbortSignal,
+): Promise<PaginaDeProcessos> {
+  const params = new URLSearchParams();
+  if (busca?.trim()) params.set('q', busca.trim());
+  if (situacao) params.set('status', situacao);
+  if (tamanho) params.set('tamanho', String(tamanho));
+  const consulta = params.toString();
+  const r = await api<{ items: Processo[]; total: number }>(
+    `${base}/${consulta ? `?${consulta}` : ''}`, { signal });
+  return { itens: (r.items ?? []).map(normalizar), total: r.total ?? 0 };
+}
 
 export const lerProcesso = async (id: string, signal?: AbortSignal) =>
   normalizar(await api<Processo>(`${base}/${id}`, { signal }));

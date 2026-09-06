@@ -95,8 +95,26 @@ export const podeEnviar = (r: Pick<SolicitacaoCompra, 'status'>) => r.status ===
 
 const base = '/api/v1/purchase-requisitions';
 
-export const listarSolicitacoes = async (signal?: AbortSignal) =>
-  (await api<{ items: SolicitacaoCompra[] }>(`${base}/`, { signal })).items;
+export interface PaginaDeSolicitacoes { itens: SolicitacaoCompra[]; total: number }
+
+/**
+ * Busca e situação vão para o servidor. `total` é quantas existem, não quantas
+ * vieram: procurar sobre uma lista truncada responde "nada encontrado" para
+ * solicitação que existe.
+ */
+export async function listarSolicitacoes(
+  { busca, situacao, tamanho }: { busca?: string; situacao?: string; tamanho?: number } = {},
+  signal?: AbortSignal,
+): Promise<PaginaDeSolicitacoes> {
+  const params = new URLSearchParams();
+  if (busca?.trim()) params.set('q', busca.trim());
+  if (situacao) params.set('status', situacao);
+  if (tamanho) params.set('tamanho', String(tamanho));
+  const consulta = params.toString();
+  const r = await api<{ items: SolicitacaoCompra[]; total: number }>(
+    `${base}/${consulta ? `?${consulta}` : ''}`, { signal });
+  return { itens: r.items ?? [], total: r.total ?? 0 };
+}
 
 export interface ItemNovo {
   description: string;

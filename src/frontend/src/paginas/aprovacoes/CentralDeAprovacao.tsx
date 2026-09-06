@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { processosParaMinhaAprovacao, propostaVencedora, ROTULO_RFQ, type ProcessoParaAprovar } from '@/api/cotacoes';
 import {
   aprovarMaterial, listarSolicitacoesMaterial, recusarMaterial, type SolicitacaoMaterial,
@@ -17,10 +18,7 @@ import { resumoDosItens } from '@/paginas/solicitacoes/MeusPedidos';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
-/**
- * A tela de Cotações ainda é a do sistema clássico: o botão leva para lá com o
- * processo já aberto. Sai daqui quando Cotações for migrada.
- */
+/** Endereço do processo, que a fila abre com o número já resolvido. */
 export const linkDoProcesso = (id: string) => `/cotacoes/${id}`;
 
 type Acao =
@@ -111,7 +109,7 @@ export function CentralDeAprovacao() {
                       <td className="whitespace-nowrap">{vencedora?.totalValue != null ? moeda(vencedora.totalValue) : '—'}</td>
                       <td><Badge classe={marca.classe}>{marca.rotulo}</Badge></td>
                       <td className="whitespace-nowrap">
-                        <a className="botao" href={linkDoProcesso(q.id)}>Analisar e decidir</a>
+                        <Link className="botao" to={linkDoProcesso(q.id)}>Analisar e decidir</Link>
                       </td>
                     </tr>
                   );

@@ -20,6 +20,7 @@ import { useCarregar } from '@/util/useCarregar';
 import { FormAdjudicacao, FormRegistroOc, FormVencedor } from './AcoesDoProcesso';
 import { MapaDeCotacao } from './MapaDeCotacao';
 import { PainelPropostaManual } from './PainelPropostaManual';
+import { ProximoPasso } from './ProximoPasso';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
@@ -154,6 +155,7 @@ export function ProcessoDetalhe() {
           <Dado rotulo="Prazo">{data(q.deadline)}</Dado>
         </div>
         <Nota>Aberta por {q.createdByLabel ?? '—'} em {dataHora(q.createdAt)}.</Nota>
+        <ProximoPasso processo={q} />
         {q.decisionReason && (
           <p className="mt-2 rounded-lg bg-aviso-fundo px-3 py-2 text-[13px] text-aviso">
             Último motivo registrado: <strong>{q.decisionReason}</strong>

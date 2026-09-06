@@ -297,14 +297,24 @@ quem o servidor vai recusar é a mesma armadilha), e as duas telas de escolha
 — vencedor único e adjudicação por família — dizendo o impedimento na linha.
 Falha na leitura do mapa não esconde ninguém: sem ele, quem barra é a API.
 
-**O que resta da varredura**, em ordem de valor:
+**Parte 2, entregue em #108 — administração e data da SC.**
 
-1. `IAM-ERR-015/016` — a tela de Usuários oferece "Inativar" no próprio usuário
-   e no único administrador ativo; os dois só falham no clique.
-2. `PR-ERR-050` — a data de necessidade no passado só é recusada no *envio* da
-   SC, não na criação: o campo aceita ontem sem dizer nada.
-3. `PO-ERR-056`, `IV-ERR-010`, `SUP-ERR-020` — recebimento, entrada de estoque
-   e vigência de contrato, todos de impacto menor.
+`IAM-ERR-015/016`: a tela de Usuários oferecia "Inativar" no próprio usuário e
+no único administrador ativo. Os dois só falhavam no clique, e o segundo é o
+mais perigoso: quem tentasse e não lesse o erro poderia achar que ficou sem
+administração. Agora a ação aparece **desabilitada e com o motivo** — e a
+edição do único administrador avisa que trocar o papel dele é recusado, sem
+travar o resto do formulário, que continua editável.
+
+`PR-ERR-050`: a data de necessidade no passado só era recusada no **envio**, não
+na criação. Nos dois formulários de criação o campo passou a ter `min` de hoje.
+Em "Meus Pedidos" a escolha foi outra, de propósito: ali a data pode ter vindo
+de um rascunho antigo, e travar o campo impediria de salvar qualquer outra
+correção — então a tela **avisa** que com aquela data o envio é recusado.
+
+**O que resta da varredura**: `PO-ERR-056` (recebimento), `IV-ERR-010` (entrada
+de item inativo) e `SUP-ERR-020` (vigência de contrato ao contrário), todos de
+impacto menor e em telas de uso menos frequente.
 
 ### 🟠 INT-D · O menu é um mapa de módulos, e o processo não anda por módulos
 
@@ -499,7 +509,7 @@ existentes antes de criar o índice.
 |---|---|---|
 | 11 | **INT-A** — componente único de estado de tela | interface · **premissa corrigida**; corrigida a tela sem estado vazio |
 | 12 | **INT-B / ARQ-B** — quebrar as duas maiores unidades | arquitetura |
-| 13 | **INT-C** — varredura das regras que a tela ainda não antecipa | interface · **parte 1 entregue** (escolha do fornecedor); faltam Usuários e a data da SC |
+| 13 | **INT-C** — varredura das regras que a tela ainda não antecipa | interface · **entregue** — escolha do fornecedor (#107), Usuários e data da SC (#108); restam três de impacto menor |
 | 14 | **INT-D · D7** — vocabulário do menu (precisa da sua decisão) | interface |
 | 15 | **SEC-D** — zerar o aviso de build | qualidade · **entregue** |
 

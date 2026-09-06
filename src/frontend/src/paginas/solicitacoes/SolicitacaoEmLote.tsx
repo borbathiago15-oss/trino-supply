@@ -7,7 +7,7 @@ import { criarSolicitacao, ROTULO_PRIORIDADE, type Prioridade } from '@/api/soli
 import { Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { Campo, Grade2 } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
-import { moeda, quantidade } from '@/util/formato';
+import { hojeIso, moeda, quantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
 
 const VAZIO = {
@@ -119,8 +119,9 @@ export function SolicitacaoEmLote() {
                 ))}
               </select>
             </Campo>
-            <Campo id="lote-necessidade" rotulo="Necessidade">
-              <input id="lote-necessidade" type="date" {...campo('necessidade')} />
+            {/* a submissão recusa data no passado (PR-ERR-050): o campo diz isso antes */}
+            <Campo id="lote-necessidade" rotulo="Necessidade" dica="(de hoje em diante)">
+              <input id="lote-necessidade" type="date" min={hojeIso()} {...campo('necessidade')} />
             </Campo>
           </Grade2>
         </Grade2>

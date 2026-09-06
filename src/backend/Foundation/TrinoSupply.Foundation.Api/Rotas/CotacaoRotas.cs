@@ -198,9 +198,10 @@ public static class CotacaoRotas
             if (q is null) return Error(ctx, 404, "RFQ-ERR-404", "Cotação não encontrada.");
             return Ok(new
             {
-                note = "Cada família é um lote: só quem cotou a família inteira pode levá-la. " +
-                       "O valor inclui o rateio proporcional de frete, impostos e desconto da proposta.",
-                items = svc.FamilyMap(q).Select(l => new
+                note = "Cada família é um lote: só quem cotou a família inteira e está homologado " +
+                       "pode levá-la. O valor inclui o rateio proporcional de frete, impostos e " +
+                       "desconto da proposta.",
+                items = (await svc.FamilyMapAsync(q)).Select(l => new
                 {
                     family = l.Family, itemCount = l.ItemCount, quantity = l.Quantity,
                     offers = l.Offers.Select(o => new
@@ -210,6 +211,9 @@ public static class CotacaoRotas
                         itemsValue = o.ItemsValue, totalValue = o.TotalValue,
                         deliveryDays = o.DeliveryDays, paymentTerms = o.PaymentTerms,
                         complete = o.Complete, cheapest = o.Cheapest,
+                        // situação do fornecedor no cadastro: é o que deixa a tela antecipar
+                        // SUP-ERR-030 e RFQ-ERR-040 em vez de recusar depois da justificativa
+                        homologation = o.Homologation, active = o.Active, canWin = o.CanWin,
                     }),
                 }),
             }, ctx);

@@ -1,4 +1,4 @@
-import type { Processo, Proposta } from '@/api/cotacoes';
+import type { LoteDaFamilia, OfertaDaFamilia, Processo, Proposta } from '@/api/cotacoes';
 
 /**
  * Fixtures do processo de cotação, compartilhadas pelos testes da lista e do
@@ -34,4 +34,16 @@ export const processo = (p: Partial<Processo>): Processo => ({
   awards: [], splitAward: false, pendingPoSuppliers: [], purchaseOrders: [],
   purchaseOrderId: null, purchaseOrderNumber: null, saving: null,
   ...p,
+});
+
+/** Oferta de um fornecedor para uma família, como o mapa por família devolve. */
+export const oferta = (o: Partial<OfertaDaFamilia>): OfertaDaFamilia => ({
+  supplierId: 's1', supplierName: 'Alfa EPIs', proposalId: 'p1', proposalVersion: 1,
+  itemsValue: 1200, totalValue: 1200, deliveryDays: 10, paymentTerms: '30 dias',
+  complete: true, cheapest: false, homologation: 'HOMOLOGADO', active: true, canWin: true,
+  ...o,
+});
+
+export const lote = (l: Partial<LoteDaFamilia>): LoteDaFamilia => ({
+  family: 'EPI', itemCount: 1, quantity: 100, offers: [oferta({})], ...l,
 });

@@ -267,7 +267,7 @@ public class QuotationServiceTests
     public async Task Fornecedor_inativo_nao_pode_ser_convidado_e_nao_convidado_nao_propoe()
     {
         var w = await BuildAsync();
-        await w.Sup.UpdateAsync(w.Beta.Id, null, null, null, active: false);
+        await w.Sup.UpdateAsync(w.Beta.Id, null, null, null, false);
         var (q, _) = await w.Rfq.CreateFromPrAsync(Carla, w.Pr.Id, QuotationKind.Purchase, null, null);
 
         var (_, inactive) = await w.Rfq.InviteSuppliersAsync(Carla, q!.Id, [w.Beta.Id]);
@@ -1012,6 +1012,63 @@ public class QuotationServiceTests
         Assert.DoesNotContain(ferramentas.Offers, o => o.SupplierId == w.Beta.Id);
         var lote = mapa.Single(l => l.Family == "EPI");
         Assert.True(lote.Offers.Single(o => o.SupplierId == w.Beta.Id).Cheapest);
+    }
+
+    /// <summary>
+    /// O mapa por família diz quem pode mesmo vencer. Fornecedor não homologado continua na
+    /// lista — participar da cotação ele pode —, mas marcado como impedido e sem o destaque de
+    /// mais barato, que passa para quem pode levar a família. É o que permite à tela avisar
+    /// antes: hoje o comprador escolhe, escreve a justificativa e só então leva SUP-ERR-030.
+    /// </summary>
+    [Fact]
+    public async Task Mapa_de_familias_diz_quem_pode_vencer_antes_da_escolha()
+    {
+        var w = await BuildSplitAsync();
+        var q = await SplitUpToAnalysisAsync(w);
+
+        // com todos homologados, a Beta é a mais barata em ferramentas (150 contra 220 da Alfa)
+        var antes = (await w.Rfq.FamilyMapAsync(q)).Single(l => l.Family == "FERRAMENTAS");
+        Assert.True(antes.Offers.Single(o => o.SupplierId == w.Beta.Id).CanWin);
+        Assert.True(antes.Offers.Single(o => o.SupplierId == w.Beta.Id).Cheapest);
+
+        await w.Sup.SetHomologationAsync(w.Beta.Id, SupplierHomologation.EmHomologacao);
+
+        var lote = (await w.Rfq.FamilyMapAsync(q)).Single(l => l.Family == "FERRAMENTAS");
+        var beta = lote.Offers.Single(o => o.SupplierId == w.Beta.Id);
+        Assert.True(beta.Complete);                 // cotou a família inteira
+        Assert.False(beta.CanWin);                  // mas não está homologada
+        Assert.False(beta.Cheapest);                // e não é a "melhor oferta" de nada
+        Assert.Equal(SupplierHomologation.EmHomologacao, beta.Homologation);
+        // o destaque vai para quem pode levar a família, e ela vem primeiro na lista
+        Assert.True(lote.Offers.Single(o => o.SupplierId == w.Alfa.Id).Cheapest);
+        Assert.Equal(w.Alfa.Id, lote.Offers[0].SupplierId);
+
+        // o mapa e a regra dizem a mesma coisa: escolher a Beta é recusado
+        var alfa = q.Proposals.Single(p => p.SupplierId == w.Alfa.Id);
+        var betaProposta = q.Proposals.Single(p => p.SupplierId == w.Beta.Id);
+        var (nada, erro) = await w.Rfq.AwardByFamilyAsync(Carla, q.Id, [
+            new AwardInput("EPI", alfa.Id, null, "Alfa em EPI."),
+            new AwardInput("FERRAMENTAS", betaProposta.Id, null, "Beta em ferramentas."),
+        ]);
+        Assert.Null(nada);
+        Assert.Equal("SUP-ERR-030", erro!.Code);
+    }
+
+    /// <summary>
+    /// Fornecedor inativado depois de propor também não leva a família (RFQ-ERR-040) — o mapa
+    /// mostra isso pela situação, não deixa a tela oferecê-lo.
+    /// </summary>
+    [Fact]
+    public async Task Mapa_de_familias_marca_fornecedor_inativo_como_impedido()
+    {
+        var w = await BuildSplitAsync();
+        var q = await SplitUpToAnalysisAsync(w);
+        await w.Sup.UpdateAsync(w.Beta.Id, null, null, null, false);
+
+        var lote = (await w.Rfq.FamilyMapAsync(q)).Single(l => l.Family == "FERRAMENTAS");
+        var beta = lote.Offers.Single(o => o.SupplierId == w.Beta.Id);
+        Assert.False(beta.Active);
+        Assert.False(beta.CanWin);
     }
 
     /// <summary>

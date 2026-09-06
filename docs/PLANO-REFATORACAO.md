@@ -57,9 +57,25 @@ Dez grupos de rota usam `AddEndpointFilter(RequireModules(...))` ou
 endpoints dele repetem a checagem à mão, dentro do handler. Todos acertam hoje.
 O problema é o amanhã: nada obriga o próximo endpoint a lembrar.
 
-**Proposta:** filtro padrão no grupo `analytics`, e um teste que percorre a
-tabela de rotas e falha se algum endpoint `/api/v1` não tiver política de
-autorização declarada. Vira uma rede, não uma lembrança.
+**Proposta:** filtro padrão no grupo `analytics`, e um teste que falha se
+alguma rota `/api` nascer sem autorização declarada. Vira uma rede, não uma
+lembrança.
+
+**Entregue.** O grupo `analytics` recebeu `RejectSupplierRole()` e um
+`RequireModules(...)` com a união dos módulos que os seis endpoints já exigiam
+— um piso, com cada handler mantendo a checagem específica dele. E
+`RotasProtegidasTests` confere quatro invariantes: todo grupo `/api` exige
+autenticação; os únicos grupos públicos são `auth` e `portal`; toda rota `/api`
+fora de grupo declara `RequireAuthorization`; e todo grupo interno tem algo que
+o token do Portal do Fornecedor não satisfaz.
+
+A conferência é sobre o **texto** do `Program.cs`, não sobre a tabela de rotas
+em execução. O motivo é o custo: o app roda as migrations na inicialização, e
+montá-lo num teste exigiria um Postgres no job de testes unitários, que hoje
+roda em sete segundos sem banco nenhum. O teste é embutido como recurso, para
+não depender do diretório de trabalho, e tem uma asserção que falha se o
+recurso sumir — sem ela os outros passariam sobre o vazio. Depois do **ARQ-A**,
+a versão em execução fica barata e substitui esta.
 
 ### 🟡 SEC-B · Rate limiting só na autenticação
 
@@ -309,7 +325,7 @@ existentes antes de criar o índice.
 | # | Item | Eixo |
 |---|---|---|
 | 1 | **COR-A** — paginação nas quatro listas principais e busca no servidor | correção + interface |
-| 2 | **SEC-A** — filtro no grupo `analytics` + teste que varre a tabela de rotas | segurança |
+| 2 | **SEC-A** — filtro no grupo `analytics` + teste que varre as rotas | segurança · **entregue** |
 | 3 | **INT-D · D5/D3/D6/D8** — acordeão do menu, Central de Aprovação no topo, ordem dos grupos e permissão de Pedidos | interface · **entregue (#92)** |
 
 ### Prioridade 2 — tirar o risco estrutural
@@ -346,7 +362,7 @@ existentes antes de criar o índice.
 | Área | Problema | Criticidade | Solução | Status | Impacto |
 |---|---|---|---|---|---|
 | Correção | Listas truncadas sem paginação; fila de aprovação perde processo | 🔴 CRÍTICO | Paginação + busca no servidor | Fila de aprovação (#89), Pedidos e Fornecedores (#90) entregues; faltam SCs e Cotações | Alto |
-| Segurança | Autorização por convenção; `analytics` sem filtro de grupo | 🟠 ALTO | Filtro no grupo + teste da tabela de rotas | A executar | Alto |
+| Segurança | Autorização por convenção; `analytics` sem filtro de grupo | 🟠 ALTO | Filtro no grupo + teste que varre as rotas | **Entregue** | Alto |
 | Arquitetura | `Program.cs` com 120 endpoints | 🟠 ALTO | Rotas por módulo | A executar | Médio |
 | Segurança | Rate limiting só no login | 🟡 MÉDIO | Política por grupo | A executar | Médio |
 | Segurança | Upload sem limite declarado | 🟡 MÉDIO | Limite de bytes e tipos | A executar | Médio |

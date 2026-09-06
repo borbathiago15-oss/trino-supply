@@ -14,8 +14,11 @@ import { useUsuario } from '@/sessao/SessaoProvider';
 import { data, moeda, quantidade } from '@/util/formato';
 import { rolarPara } from '@/util/rolar';
 import { useCarregar } from '@/util/useCarregar';
+import { useDebounce } from '@/util/useDebounce';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
+
+const POR_PAGINA = 50;
 
 /**
  * Onde a SC está no fluxo, em uma frase — o que o legado mostrava abaixo do
@@ -56,15 +59,22 @@ export function MeusPedidos() {
   const [salvando, setSalvando] = useState(false);
   const [aExcluir, setAExcluir] = useState<SolicitacaoCompra | null>(null);
 
+  const [busca, setBusca] = useState('');
+  const [tamanho, setTamanho] = useState(POR_PAGINA);
+
+  // a busca é do servidor: peneirar no navegador esconderia o que não coube na
+  // página, e a tela diria "nada encontrado" para SC que existe
+  const termo = useDebounce(busca);
   const { dados, erro, carregando, recarregar } = useCarregar(
     async (signal) => ({
-      solicitacoes: await listarSolicitacoes(signal),
+      pagina: await listarSolicitacoes({ busca: termo, tamanho }, signal),
       centros: await listarCentrosCusto(false, signal).catch(() => [] as CentroCusto[]),
     }),
-    [],
+    [termo, tamanho],
   );
 
-  const lista = dados?.solicitacoes ?? [];
+  const lista = dados?.pagina.itens ?? [];
+  const total = dados?.pagina.total ?? 0;
   const centros = dados?.centros ?? [];
   /**
    * O centro da SC pode não estar mais entre os ativos (inativado depois, ou
@@ -134,11 +144,19 @@ export function MeusPedidos() {
 
   return (
     <>
-      <Painel titulo="Meus Pedidos de Compra">
+      <Painel titulo="Meus Pedidos de Compra" acoes={
+        <input aria-label="Buscar" placeholder="Buscar por número, item, justificativa ou CC"
+          className="!w-[320px]" value={busca}
+          onChange={(e) => { setTamanho(POR_PAGINA); setBusca(e.target.value); }} />
+      }>
         {erro && <Erro>{erro}</Erro>}
         {carregando && !dados && <Carregando />}
         {dados && !lista.length && (
-          <Vazio>Nenhum pedido ainda. Crie pelo menu “Inclusão de SC” ou “Solicitação em Lote”.</Vazio>
+          <Vazio>
+            {termo.trim()
+              ? 'Nenhum pedido encontrado para esta busca.'
+              : 'Nenhum pedido ainda. Crie pelo menu “Inclusão de SC” ou “Solicitação em Lote”.'}
+          </Vazio>
         )}
         {lista.length > 0 && (
           <div className="overflow-x-auto">
@@ -206,6 +224,19 @@ export function MeusPedidos() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+        {lista.length > 0 && (
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <span className="sub" data-testid="contagem-solicitacoes">
+              Mostrando {lista.length} de {total} pedido(s).
+            </span>
+            {lista.length < total && (
+              <button type="button" className="botao-secundario" disabled={carregando}
+                onClick={() => setTamanho((t) => t + POR_PAGINA)}>
+                {carregando ? 'Carregando…' : 'Carregar mais'}
+              </button>
+            )}
           </div>
         )}
       </Painel>

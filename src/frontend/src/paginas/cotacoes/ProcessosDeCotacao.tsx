@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { listarProcessos, propostasVigentes, ROTULO_RFQ, type Processo } from '@/api/cotacoes';
 import { Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
-import { Campo } from '@/componentes/formulario';
 import { moeda } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
+import { useDebounce } from '@/util/useDebounce';
+
+const POR_PAGINA = 50;
 
 /** As situações oferecidas no filtro, na ordem do fluxo. */
 export const SITUACOES_FILTRO = [
@@ -29,27 +31,45 @@ export const origemDe = (q: Processo) =>
   q.sourcePrNumbers.length ? q.sourcePrNumbers : (q.sourcePrNumber ? [q.sourcePrNumber] : []);
 
 export function ProcessosDeCotacao() {
+  const [busca, setBusca] = useState('');
   const [situacao, setSituacao] = useState('');
-  const { dados, erro, carregando } = useCarregar(listarProcessos, []);
+  const [tamanho, setTamanho] = useState(POR_PAGINA);
 
-  const lista = useMemo(
-    () => (situacao ? (dados ?? []).filter((q) => q.status === situacao) : (dados ?? [])),
-    [dados, situacao],
+  // a busca e o filtro são do servidor: peneirar no navegador esconderia o que
+  // não coube na página, e a tela diria "nada encontrado" para processo que existe
+  const termo = useDebounce(busca);
+  const { dados, erro, carregando } = useCarregar(
+    (signal) => listarProcessos({ busca: termo, situacao, tamanho }, signal),
+    [termo, situacao, tamanho],
   );
+
+  const lista = dados?.itens ?? [];
+  const total = dados?.total ?? 0;
+  const filtrando = termo.trim().length > 0 || situacao !== '';
+  const mudarFiltro = (aplicar: () => void) => { setTamanho(POR_PAGINA); aplicar(); };
 
   return (
     <Painel titulo="Processos de cotação" acoes={
-      <Campo id="rfq-situacao" rotulo="">
-        <select id="rfq-situacao" aria-label="Situação do processo" className="w-auto"
-          value={situacao} onChange={(e) => setSituacao(e.target.value)}>
+      <>
+        <input aria-label="Buscar" placeholder="Buscar por processo, SC, item, fornecedor ou CC"
+          className="!w-[300px]" value={busca}
+          onChange={(e) => mudarFiltro(() => setBusca(e.target.value))} />
+        <select id="rfq-situacao" aria-label="Situação do processo" className="!w-[260px]"
+          value={situacao} onChange={(e) => mudarFiltro(() => setSituacao(e.target.value))}>
           <option value="">Todos</option>
           {SITUACOES_FILTRO.map((s) => <option key={s.valor} value={s.valor}>{s.rotulo}</option>)}
         </select>
-      </Campo>
+      </>
     }>
       {erro && <Erro>{erro}</Erro>}
       {carregando && !dados && <Carregando />}
-      {dados && !lista.length && <Vazio>Nenhum processo de cotação neste filtro.</Vazio>}
+      {dados && !lista.length && (
+        <Vazio>
+          {filtrando
+            ? 'Nenhum processo de cotação neste filtro.'
+            : 'Nenhum processo de cotação ainda. Abra o primeiro em Compras → Abrir Cotação.'}
+        </Vazio>
+      )}
 
       {lista.length > 0 && (
         <div className="overflow-x-auto">
@@ -94,6 +114,19 @@ export function ProcessosDeCotacao() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+      {lista.length > 0 && (
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <span className="sub" data-testid="contagem-processos">
+            Mostrando {lista.length} de {total} processo(s).
+          </span>
+          {lista.length < total && (
+            <button type="button" className="botao-secundario" disabled={carregando}
+              onClick={() => setTamanho((t) => t + POR_PAGINA)}>
+              {carregando ? 'Carregando…' : 'Carregar mais'}
+            </button>
+          )}
         </div>
       )}
     </Painel>

@@ -274,11 +274,43 @@ public class RequisitionServiceTests
         await svc.SubmitAsync(Ana, deAna.Id);
         await svc.SubmitAsync(outroSolicitante, deOutro.Id);
 
-        Assert.Single(await svc.ListAsync(Ana, null));                       // só a própria
+        Assert.Single((await svc.ListAsync(Ana, null)).itens);               // só a própria
         Assert.Null(await svc.GetAsync(Ana, deOutro.Id));                    // fora do escopo ⇒ 404
-        Assert.Equal(2, (await svc.ListAsync(Clara, null)).Count);           // auditor vê tudo
+        Assert.Equal(2, (await svc.ListAsync(Clara, null)).total);           // auditor vê tudo
         var filaDeBrunoQueTambemSolicitou = await svc.PendingApprovalsAsync(new Actor(Ana.Id, Ana.Label, Roles.Approver));
         Assert.DoesNotContain(filaDeBrunoQueTambemSolicitou, r => r.Id == deAna.Id); // SoD na fila
+    }
+
+    /// <summary>
+    /// A lista trazia no máximo cem e não dizia que havia mais: quem procurava
+    /// uma SC antiga recebia "nada encontrado" para solicitação que existe
+    /// (PO-BR-012). O `total` agora conta tudo, e a página é o que a tela pediu.
+    /// </summary>
+    [Fact]
+    public async Task Lista_diz_quantas_existem_e_nao_so_quantas_couberam()
+    {
+        var (svc, _, _) = Build();
+        for (var i = 0; i < 7; i++) await DraftAsync(svc, Ana, Notebook);
+
+        var (pagina, total) = await svc.ListAsync(Ana, null, tamanho: 3);
+        Assert.Equal(3, pagina.Count);
+        Assert.Equal(7, total);
+
+        // pedir mais traz mais, sem mudar o total
+        var (tudo, mesmoTotal) = await svc.ListAsync(Ana, null, tamanho: 50);
+        Assert.Equal(7, tudo.Count);
+        Assert.Equal(7, mesmoTotal);
+    }
+
+    [Fact]
+    public async Task Tamanho_de_pagina_tem_teto_e_piso()
+    {
+        var (svc, _, _) = Build();
+        for (var i = 0; i < 3; i++) await DraftAsync(svc, Ana, Notebook);
+
+        // um `tamanho` absurdo não vira consulta sem teto, e zero não zera a lista
+        Assert.Equal(3, (await svc.ListAsync(Ana, null, tamanho: 99_999)).itens.Count);
+        Assert.Single((await svc.ListAsync(Ana, null, tamanho: 0)).itens);
     }
 
     [Fact]

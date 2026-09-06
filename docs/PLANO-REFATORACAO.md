@@ -151,7 +151,12 @@ e não há como dois trabalhos mexerem em módulos diferentes sem se cruzarem.
 | Arquivo | O que leva |
 |---|---|
 | `Rotas/Api.cs` | o que toda rota usa: envelope da resposta, leitura do token e os filtros `RejectSupplierRole` / `RequireModules` |
+| `Rotas/Vistas.cs` | vistas de resposta que mais de um módulo publica (hoje, a do pedido de compra) |
 | `Rotas/AnalyticsRotas.cs` | os seis dashboards analíticos |
+| `Rotas/CotacaoRotas.cs` | RFQ-001 inteiro — cotação, propostas, aprovações, O.C. — e o Portal do Fornecedor, que é o outro lado do mesmo processo |
+
+`Program.cs`: de **2.813 para 2.127 linhas**. Faltam pedidos, solicitações,
+estoque, material, triagem, catálogo, fornecedores e cadastros.
 
 Os helpers eram funções locais do `Program.cs`, alcançáveis só de lá — foi o que
 impedia mover qualquer rota. Agora são uma classe estática importada com

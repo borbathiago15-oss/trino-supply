@@ -143,15 +143,25 @@ corrigida em #89.
 
 ### 🟠 ARQ-A · `Program.cs` com 2.797 linhas e 120 endpoints
 
-Um arquivo concentra o roteamento inteiro, as vinte e poucas funções de
-serialização (`PrView`, `PoView`, `QuotationView`, `UserView`…) e os `record` de
-request. Efeitos práticos: conflito em qualquer trabalho paralelo, difícil achar
-o endpoint, e a serialização longe da entidade que ela descreve.
+Um arquivo concentra a definição de todos os endpoints. Cresce a cada tela nova
+e não há como dois trabalhos mexerem em módulos diferentes sem se cruzarem.
 
-**Proposta:** extrair um arquivo de rotas por módulo
-(`Procurement/ProcurementEndpoints.cs`, `Materials/…`), no padrão de extension
-method que o .NET já usa. Movimento mecânico, sem mudar comportamento, com os
-testes existentes como rede. **Não é reescrita** — é recorte.
+**Em andamento, um módulo por vez.** O que saiu até agora:
+
+| Arquivo | O que leva |
+|---|---|
+| `Rotas/Api.cs` | o que toda rota usa: envelope da resposta, leitura do token e os filtros `RejectSupplierRole` / `RequireModules` |
+| `Rotas/AnalyticsRotas.cs` | os seis dashboards analíticos |
+
+Os helpers eram funções locais do `Program.cs`, alcançáveis só de lá — foi o que
+impedia mover qualquer rota. Agora são uma classe estática importada com
+`using static`, então **os 120 pontos de chamada continuam escritos igual**.
+
+A rede que torna o recorte seguro é o inventário de rotas em
+`fixtures/rotas-da-api.txt`: as 116 rotas `/api`, conferidas a cada build.
+Mover um bloco de arquivo não muda nada ali; perder uma rota no caminho quebra
+o teste, com o nome da que sumiu. Rota nova de verdade se registra atualizando
+o arquivo, que é um ato visível na revisão.
 
 ### 🟡 ARQ-B · `QuotationService.cs` com 1.108 linhas
 
@@ -346,7 +356,7 @@ existentes antes de criar o índice.
 | # | Item | Eixo |
 |---|---|---|
 | 4 | **INT-D · D2** — "próximo passo" na tela, atravessando o zigue-zague do processo | interface · **entregue (#93)** |
-| 5 | **ARQ-A** — recortar `Program.cs` em rotas por módulo | arquitetura |
+| 5 | **ARQ-A** — recortar `Program.cs` em rotas por módulo | arquitetura · **em andamento** |
 | 6 | **SEC-B / SEC-C** — rate limiting fora do login e limites de upload | segurança |
 
 ### Prioridade 3 — a inteligência que você pediu
@@ -376,7 +386,7 @@ existentes antes de criar o índice.
 |---|---|---|---|---|---|
 | Correção | Listas truncadas sem paginação; fila de aprovação perde processo | 🔴 CRÍTICO | Paginação + busca no servidor | **Entregue** — fila (#89), Pedidos e Fornecedores (#90), SCs e Cotações | Alto |
 | Segurança | Autorização por convenção; `analytics` sem filtro de grupo | 🟠 ALTO | Filtro no grupo + teste que varre as rotas | **Entregue** | Alto |
-| Arquitetura | `Program.cs` com 120 endpoints | 🟠 ALTO | Rotas por módulo | A executar | Médio |
+| Arquitetura | `Program.cs` com 120 endpoints | 🟠 ALTO | Rotas por módulo | **Em andamento** — helpers e analytics fora; inventário de rotas como rede | Médio |
 | Segurança | Rate limiting só no login | 🟡 MÉDIO | Política por grupo | A executar | Médio |
 | Segurança | Upload sem limite declarado | 🟡 MÉDIO | Limite de bytes e tipos | A executar | Médio |
 | Inteligência | Insight descreve mas não age | 🟡 MÉDIO | Ação + link + regras novas | A executar | Alto |

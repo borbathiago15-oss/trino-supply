@@ -109,7 +109,12 @@ export interface Achado {
   kind: string;
   severity: SeveridadeInsight;
   title: string;
+  /** O que foi encontrado. */
   evidence: string;
+  /** A providência, em uma frase — descrever sem dizer o que fazer devolve o trabalho a quem lê. */
+  action: string;
+  /** Id da tela onde se age, no mesmo vocabulário dos avisos; null quando não há destino. */
+  view: string | null;
 }
 
 export const CLASSE_ACHADO: Record<SeveridadeInsight, string> = {

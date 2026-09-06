@@ -100,4 +100,87 @@ public class InsightsServiceTests
 
         Assert.Single(achados.Where(i => i.Code == "INS-03"));
     }
+
+    // ---- INTEL-A/B: providência em cada achado, e três regras novas ----------
+
+    [Fact]
+    public async Task Todo_achado_diz_o_que_fazer()
+    {
+        // descrever um problema sem dizer o que fazer devolve o trabalho a quem lê
+        var (db, svc) = Build();
+        db.PurchaseOrders.Add(Po("PO-1", "Alfa",
+            new PurchaseOrderItem { Description = "Luva", Quantity = 10, UnitPrice = 16m, LastPaidUnitPrice = 10m }));
+        await db.SaveChangesAsync();
+
+        var achados = await svc.FindInsightsAsync(6);
+        Assert.NotEmpty(achados);
+        Assert.All(achados, a => Assert.False(string.IsNullOrWhiteSpace(a.Action)));
+        // e o destino, quando existe, é um id de tela que a interface sabe resolver
+        Assert.All(achados.Where(a => a.View is not null),
+            a => Assert.Contains(a.View, new[] { "buy-orders", "triage", "suppliers", "quotations", "scorecard" }));
+    }
+
+    [Fact]
+    public async Task Fechar_sem_oc_do_erp_vira_achado_quando_deixa_de_ser_excecao()
+    {
+        // PO-BR-011: a observação é a exceção prevista. O que não pode é virar rotina
+        var (db, svc) = Build();
+        for (var i = 1; i <= 3; i++)
+        {
+            var po = Po($"PO-{i}", "Alfa", new PurchaseOrderItem { Description = "Item", Quantity = 1, UnitPrice = 100m });
+            po.NoErpReason = "compra emergencial de balcão";
+            db.PurchaseOrders.Add(po);
+        }
+        await db.SaveChangesAsync();
+
+        var achado = Assert.Single(await svc.FindInsightsAsync(6), a => a.Code == "INS-05");
+        Assert.Contains("3 compras", achado.Title);
+        Assert.Equal("buy-orders", achado.View);
+
+        // com número do ERP, não há achado nenhum: o caminho normal não acusa
+        var (db2, svc2) = Build();
+        for (var i = 1; i <= 5; i++)
+        {
+            var po = Po($"PO-{i}", "Alfa", new PurchaseOrderItem { Description = "Item", Quantity = 1, UnitPrice = 100m });
+            po.ErpNumber = $"OC-{i}";
+            db2.PurchaseOrders.Add(po);
+        }
+        await db2.SaveChangesAsync();
+        Assert.DoesNotContain(await svc2.FindInsightsAsync(6), a => a.Code == "INS-05");
+    }
+
+    [Fact]
+    public async Task Fornecedor_que_atrasa_de_novo_vira_padrao_e_nao_caso_isolado()
+    {
+        var (db, svc) = Build();
+        for (var i = 1; i <= 3; i++)
+        {
+            var po = Po($"PO-{i}", "Beta", new PurchaseOrderItem { Description = "Item", Quantity = 1, UnitPrice = 50m });
+            po.PromisedDate = new DateOnly(2026, 8, 1);
+            po.DeliveryCompletedAt = Hoje;            // entregue depois do prometido
+            db.PurchaseOrders.Add(po);
+        }
+        await db.SaveChangesAsync();
+
+        var achado = Assert.Single(await svc.FindInsightsAsync(6), a => a.Code == "INS-06");
+        Assert.Contains("Beta", achado.Title);
+        Assert.Equal("scorecard", achado.View);
+    }
+
+    [Fact]
+    public async Task Decidir_com_proposta_unica_aparece_como_compra_sem_comparacao()
+    {
+        var (db, svc) = Build();
+        var q = new Quotation
+        {
+            Number = "RFQ-2026-000001", Kind = QuotationKind.Purchase, Status = QuotationStatus.PoIssued,
+            CostCenter = "BAH-001", CreatedAt = Hoje.AddDays(-5), WinnerProposalId = Guid.NewGuid(),
+        };
+        db.Quotations.Add(q);
+        await db.SaveChangesAsync();
+
+        var achado = Assert.Single(await svc.FindInsightsAsync(6), a => a.Code == "INS-07");
+        Assert.Contains("RFQ-2026-000001", achado.Evidence);
+        Assert.Equal("quotations", achado.View);
+    }
 }

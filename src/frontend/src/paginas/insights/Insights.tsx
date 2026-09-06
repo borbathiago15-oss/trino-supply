@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   BADGE_ACHADO, CLASSE_ACHADO, JANELAS, relatorioDeInsights, tcoPorProduto,
   type Backlog, type Janela, type LinhaTco, type VisaoExecutiva,
 } from '@/api/analytics';
 import { Badge, Carregando, Erro, Kpi, Painel, SeletorJanela, Vazio } from '@/componentes/basicos';
 import { moedaCurta } from '@/componentes/graficos';
+import { enderecoDoId } from '@/layout/menu';
 import { moeda, quantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
 
@@ -119,13 +121,23 @@ export function Insights() {
             {dados.insights.length > 0 && (
               <div className="flex flex-col gap-2" data-testid="lista-insights">
                 {dados.insights.map((i, idx) => (
-                  <div key={`${i.code}-${idx}`}
+                  <div key={`${i.code}-${idx}`} data-achado={i.code}
                     className={'rounded-lg border px-4 py-3 ' + (CLASSE_ACHADO[i.severity] ?? CLASSE_ACHADO.info)}>
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge classe={BADGE_ACHADO[i.severity] ?? BADGE_ACHADO.info}>{i.code}</Badge>
                       <strong>{i.title}</strong>
                     </div>
                     <div className="sub mt-1">{i.evidence}</div>
+                    {i.action && (
+                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[13px] font-semibold">{i.action}</span>
+                        {i.view && (
+                          <Link to={enderecoDoId(i.view)} className="botao-secundario shrink-0">
+                            Ir para a tela →
+                          </Link>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

@@ -32,7 +32,7 @@ processos vão sumir de filas de aprovação sem aviso.
 | `QuotationService.cs` | 1.108 linhas |
 | Telas React | 27, cada uma com seu próprio tratamento de carregando/erro |
 | Paginação na API | **nenhuma** |
-| Regras no motor de insights | 4 |
+| Regras no motor de insights | 4 → **7** |
 | Tabelas | 32 em 3 schemas, referências entre schemas sem FK (deliberado) |
 
 ---
@@ -343,18 +343,26 @@ Hoje o motor tem **quatro regras**, todas com evidência e severidade:
 É uma base boa e o formato `Insight(Code, Kind, Severity, Title, Evidence)` já
 é o certo. O que falta é o salto de **descritivo para prescritivo**.
 
-### INTEL-A · Insight que diz o que fazer
+### INTEL-A · Insight que diz o que fazer — **entregue**
 
-Hoje o insight descreve. Falta a ação: qual processo abrir, qual fornecedor
-renegociar, qual contrato revisar — com link para a tela onde se age.
+Cada achado passa a carregar, além da evidência, **a providência e a tela onde
+se age**. O destino usa o mesmo vocabulário dos avisos (`buy-orders`, `triage`,
+`suppliers`, `quotations`, `scorecard`), então a interface resolve para a rota
+com o `enderecoDoId` que já existia — nada de mapa novo.
 
-### INTEL-B · Regras novas com o dado que já existe
+Descrever um problema sem dizer o que fazer devolve o trabalho para quem lê. Um
+teste do serviço exige `Action` em todo achado, e o destino, quando existe,
+precisa ser uma tela conhecida.
 
-O banco já guarda o necessário para, por exemplo: fornecedor com entregas
-atrasadas em sequência (OTIF por fornecedor existe), contrato perto de vencer
-(`contract_valid_until` existe), documento de homologação vencido
-(`supplier_document.valid_until` existe), SC parada sem responsável (`aging`
-existe), item comprado repetidamente sem contrato.
+### INTEL-B · Regras novas com o dado que já existe — **entregue**
+
+Três, todas sobre dado que já estava no banco:
+
+| Código | O que encontra | Por que importa |
+|---|---|---|
+| **INS-05** | 3+ compras fechadas sem O.C. do ERP no período | a observação é a exceção prevista no PO-BR-011; virando rotina, o relatório de O.C. deixa de descrever a operação |
+| **INS-06** | fornecedor que atrasou 3+ vezes, com o percentual sobre as entregas medidas | o OTIF já era medido por pedido; aqui vira padrão de comportamento, que é o que muda uma decisão |
+| **INS-07** | processos decididos com uma proposta só | não é irregular, mas sem concorrência o preço não tem contra o que ser medido |
 
 ### INTEL-C · O insight chega até quem decide
 
@@ -414,8 +422,8 @@ existentes antes de criar o índice.
 | # | Item | Eixo |
 |---|---|---|
 | 7 | **INT-D · D1/D4** — trilha do processo no painel e contadores no menu | interface + inteligência · **entregue** |
-| 8 | **INTEL-A** — insight com ação e link para a tela onde se age | inteligência |
-| 9 | **INTEL-B** — regras novas sobre o dado que já existe | inteligência |
+| 8 | **INTEL-A** — insight com ação e link para a tela onde se age | inteligência · **entregue** |
+| 9 | **INTEL-B** — regras novas sobre o dado que já existe | inteligência · **entregue** |
 | 10 | **INTEL-C** — insight de severidade alta chega ao painel e aos avisos | inteligência + interface |
 
 ### Prioridade 4 — acabamento
@@ -439,7 +447,7 @@ existentes antes de criar o índice.
 | Arquitetura | `Program.cs` com 120 endpoints | 🟠 ALTO | Rotas por módulo | **Entregue** — 401 linhas, 12 arquivos de rota, inventário como rede | Médio |
 | Segurança | Rate limiting só no login | 🟡 MÉDIO | Cotas por usuário em upload e relatório | **Entregue** | Médio |
 | Segurança | Upload sem limite declarado | 🟡 MÉDIO | Teto de requisição nos oito endpoints | **Entregue** | Médio |
-| Inteligência | Insight descreve mas não age | 🟡 MÉDIO | Ação + link + regras novas | A executar | Alto |
+| Inteligência | Insight descreve mas não age | 🟡 MÉDIO | Ação + link + três regras novas | **Entregue** (falta INTEL-C) | Alto |
 | Interface | Menu por módulo, processo em zigue-zague; acordeão não segue a rota | 🟠 ALTO | Trilha do processo, próximo passo na tela, menu corrigido | D1–D6 e D8 entregues (#92, #93); falta D7, o vocabulário | Alto |
 | Interface | 27 telas repetem estado | 🟡 MÉDIO | Componente único | A executar | Médio |
 | Arquitetura | `QuotationService` com 1.108 linhas | 🟡 MÉDIO | Separar alçadas | A executar | Médio |

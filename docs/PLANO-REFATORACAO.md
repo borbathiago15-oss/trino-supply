@@ -143,34 +143,43 @@ corrigida em #89.
 
 ### 🟠 ARQ-A · `Program.cs` com 2.797 linhas e 120 endpoints
 
-Um arquivo concentra a definição de todos os endpoints. Cresce a cada tela nova
-e não há como dois trabalhos mexerem em módulos diferentes sem se cruzarem.
+Um arquivo concentrava a definição de todos os endpoints. Crescia a cada tela
+nova e não havia como dois trabalhos mexerem em módulos diferentes sem se
+cruzarem.
 
-**Em andamento, um módulo por vez.** O que saiu até agora:
+**Entregue.** O `Program.cs` ficou com o que é de fato inicialização —
+configuração, migração, seed, o middleware da senha provisória, o `/health` e
+a autenticação — e passa a **chamar um `Map…` por módulo**:
 
-| Arquivo | O que leva |
-|---|---|
-| `Rotas/Api.cs` | o que toda rota usa: envelope da resposta, leitura do token e os filtros `RejectSupplierRole` / `RequireModules` |
-| `Rotas/Vistas.cs` | vistas de resposta que mais de um módulo publica (hoje, a do pedido de compra) |
-| `Rotas/AnalyticsRotas.cs` | os seis dashboards analíticos |
-| `Rotas/Anexos.cs` | a gravação de anexo, com o limite de tamanho e a lista de tipos que valem para todo upload |
-| `Rotas/CotacaoRotas.cs` | RFQ-001 inteiro — cotação, propostas, aprovações, O.C. — e o Portal do Fornecedor, que é o outro lado do mesmo processo |
-| `Rotas/PedidoRotas.cs` | PO-001 — pedido, O.C. do ERP, nota fiscal, entrega, cancelamento, os anexos de O.C./NF e o PDF |
-| `Rotas/SolicitacaoRotas.cs` | PR-001 — solicitação de compra, itens, envio, decisão do aprovador e anexos |
-| `Rotas/EstoqueRotas.cs` | MMS-003/004/005 — estoque e solicitação de material, os dois lados do mesmo balcão |
+| Arquivo | Linhas | O que leva |
+|---|---|---|
+| `Program.cs` | 401 | configuração, pipeline, `/health`, autenticação e as chamadas dos módulos |
+| `Rotas/CotacaoRotas.cs` | 501 | RFQ-001 e o Portal do Fornecedor |
+| `Rotas/SolicitacaoRotas.cs` | 308 | PR-001 e os anexos da SC |
+| `Rotas/EstoqueRotas.cs` | 288 | MMS-003/004/005 |
+| `Rotas/CatalogoRotas.cs` | 276 | MMS-002, famílias e locais de entrega |
+| `Rotas/AvisoRotas.cs` | 257 | a central de avisos |
+| `Rotas/PedidoRotas.cs` | 253 | PO-001, anexos de O.C./NF e o PDF |
+| `Rotas/CadastroRotas.cs` | 220 | centros de custo, triagem e empresas |
+| `Rotas/FornecedorRotas.cs` | 200 | SUP-001 |
+| `Rotas/AnalyticsRotas.cs` | 118 | os seis dashboards |
+| `Rotas/DocumentoRotas.cs` | 80 | download autorizado de anexo |
+| `Rotas/UsuarioRotas.cs` | 65 | gestão de usuários |
+| `Rotas/Api.cs` | 108 | envelope, leitura do token e os filtros de grupo |
+| `Rotas/Vistas.cs` | 58 | vistas de resposta de mais de um módulo |
+| `Rotas/Anexos.cs` | 41 | gravação de anexo, com o limite e os tipos aceitos |
 
-`Program.cs`: de **2.813 para 1.340 linhas**. Faltam a central de avisos,
-triagem, catálogo, fornecedores, centros de custo, empresas e usuários.
+O que destravou o recorte foi tirar os helpers de dentro do `Program.cs`: eram
+funções locais, alcançáveis só de lá. Viraram `Rotas/Api.cs`, importado com
+`using static`, então **os pontos de chamada continuam escritos igual**.
 
-Os helpers eram funções locais do `Program.cs`, alcançáveis só de lá — foi o que
-impedia mover qualquer rota. Agora são uma classe estática importada com
-`using static`, então **os 120 pontos de chamada continuam escritos igual**.
+A rede que tornou o corte seguro é o inventário em `fixtures/rotas-da-api.txt`:
+as 116 rotas `/api`, conferidas a cada build. Nenhum dos oito cortes alterou o
+inventário — é isso que sustenta a afirmação de que nada se perdeu no caminho.
 
-A rede que torna o recorte seguro é o inventário de rotas em
-`fixtures/rotas-da-api.txt`: as 116 rotas `/api`, conferidas a cada build.
-Mover um bloco de arquivo não muda nada ali; perder uma rota no caminho quebra
-o teste, com o nome da que sumiu. Rota nova de verdade se registra atualizando
-o arquivo, que é um ato visível na revisão.
+**O que isto destrava:** com cada módulo expondo o seu `Map…`, dá para montar a
+tabela de rotas num teste sem subir o banco, e trocar a conferência de texto do
+SEC-A pela versão em execução.
 
 ### 🟡 ARQ-B · `QuotationService.cs` com 1.108 linhas
 
@@ -365,7 +374,7 @@ existentes antes de criar o índice.
 | # | Item | Eixo |
 |---|---|---|
 | 4 | **INT-D · D2** — "próximo passo" na tela, atravessando o zigue-zague do processo | interface · **entregue (#93)** |
-| 5 | **ARQ-A** — recortar `Program.cs` em rotas por módulo | arquitetura · **em andamento** |
+| 5 | **ARQ-A** — recortar `Program.cs` em rotas por módulo | arquitetura · **entregue** |
 | 6 | **SEC-B / SEC-C** — rate limiting fora do login e limites de upload | segurança |
 
 ### Prioridade 3 — a inteligência que você pediu
@@ -395,7 +404,7 @@ existentes antes de criar o índice.
 |---|---|---|---|---|---|
 | Correção | Listas truncadas sem paginação; fila de aprovação perde processo | 🔴 CRÍTICO | Paginação + busca no servidor | **Entregue** — fila (#89), Pedidos e Fornecedores (#90), SCs e Cotações | Alto |
 | Segurança | Autorização por convenção; `analytics` sem filtro de grupo | 🟠 ALTO | Filtro no grupo + teste que varre as rotas | **Entregue** | Alto |
-| Arquitetura | `Program.cs` com 120 endpoints | 🟠 ALTO | Rotas por módulo | **Em andamento** — helpers e analytics fora; inventário de rotas como rede | Médio |
+| Arquitetura | `Program.cs` com 120 endpoints | 🟠 ALTO | Rotas por módulo | **Entregue** — 401 linhas, 12 arquivos de rota, inventário como rede | Médio |
 | Segurança | Rate limiting só no login | 🟡 MÉDIO | Política por grupo | A executar | Médio |
 | Segurança | Upload sem limite declarado | 🟡 MÉDIO | Limite de bytes e tipos | A executar | Médio |
 | Inteligência | Insight descreve mas não age | 🟡 MÉDIO | Ação + link + regras novas | A executar | Alto |

@@ -7,7 +7,8 @@ import {
   acoesDisponiveis, conflitoDeSegregacao, impedimentoDaOferta, melhorPreco, menorTotal, precoDoItem,
 } from '@/api/cotacoes';
 import { ToastProvider } from '@/componentes/Toast';
-import { ProcessoDetalhe, textoDoConvite } from './ProcessoDetalhe';
+import { ProcessoDetalhe } from './ProcessoDetalhe';
+import { textoDoConvite } from './PainelDeConvidados';
 import { candidatasDaFamilia, propostasDaFamilia } from './AcoesDoProcesso';
 import { montarProposta } from './PainelPropostaManual';
 import { lote, oferta, processo, proposta } from '@/test/cotacoes';

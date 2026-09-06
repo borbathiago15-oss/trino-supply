@@ -125,8 +125,10 @@ export function PainelContrato({ fornecedor, aoSalvar, aoFechar }:
           <Campo id="ct-inicio" rotulo="Início da vigência">
             <input id="ct-inicio" type="date" value={inicio} onChange={(e) => setInicio(e.target.value)} />
           </Campo>
-          <Campo id="ct-fim" rotulo="Fim da vigência">
-            <input id="ct-fim" type="date" value={fim} onChange={(e) => setFim(e.target.value)} />
+          {/* vigência que termina antes de começar é recusada (SUP-ERR-020): o campo já não aceita */}
+          <Campo id="ct-fim" rotulo="Fim da vigência" dica={inicio ? '(a partir do início)' : undefined}>
+            <input id="ct-fim" type="date" min={inicio || undefined} value={fim}
+              onChange={(e) => setFim(e.target.value)} />
           </Campo>
         </Grade2>
       </Grade2>

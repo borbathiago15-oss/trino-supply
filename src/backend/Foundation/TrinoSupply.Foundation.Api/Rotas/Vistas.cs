@@ -13,8 +13,14 @@ namespace TrinoSupply.Foundation.Api.Rotas;
 /// </summary>
 public static class Vistas
 {
-    public static object PoView(PurchaseOrder o) => new
+    /// <param name="inactiveCatalogCodes">
+    /// Códigos do pedido que estão inativos no catálogo — o recebimento deles é recusado
+    /// (IV-ERR-010) e a tela precisa saber disso antes do formulário. <c>null</c> quer dizer
+    /// "não conferido aqui", e não "nenhum": só a leitura do pedido em si faz essa consulta.
+    /// </param>
+    public static object PoView(PurchaseOrder o, IReadOnlyList<string>? inactiveCatalogCodes = null) => new
     {
+        inactiveCatalogCodes,
         id = o.Id, number = o.Number,
         status = o.Status switch
         {

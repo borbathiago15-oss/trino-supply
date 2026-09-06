@@ -86,6 +86,33 @@ public class PurchaseOrderServiceTests
         Assert.Equal("PO-ERR-020", error!.Code);
     }
 
+    /// <summary>
+    /// Item inativado no catálogo depois da emissão: receber dá entrada em estoque e é
+    /// recusado (IV-ERR-010). A leitura do pedido passa a dizer quais são, para a tela
+    /// avisar na linha em vez de deixar o almoxarife preencher tudo e perder o formulário.
+    /// </summary>
+    [Fact]
+    public async Task Pedido_diz_quais_itens_estao_inativos_no_catalogo()
+    {
+        var w = await BuildAsync();
+        var (order, _) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null,
+            [new PoItemInput("Detergente neutro", 10, "UN", 3.5m, w.Detergente.Id)], null);
+
+        Assert.Empty(await w.Pos.InactiveCatalogCodesAsync(order!));
+
+        await w.Catalog.UpdateAsync(w.Detergente.Id, null, null, null, null, active: false);
+
+        var codigos = await w.Pos.InactiveCatalogCodesAsync((await w.Pos.GetAsync(order!.Id))!);
+        Assert.Equal(["LMP-001"], codigos);
+
+        // e a lista bate com o que o recebimento recusa de fato
+        var (nada, erro) = await w.Pos.RegisterDeliveryAsync(Otavio, order.Id, w.Local.Id,
+            [new PurchaseOrderService.ReceiptLine(order.Items.Single().Id, 10)],
+            closeRemaining: false, closeReason: null);
+        Assert.Null(nada);
+        Assert.Equal("IV-ERR-010", erro!.Code);
+    }
+
     // ---- emissão ------------------------------------------------------------
     [Fact]
     public async Task Pedido_manual_gera_numero_e_total()

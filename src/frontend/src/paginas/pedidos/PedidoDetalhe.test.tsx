@@ -32,7 +32,7 @@ const pedido = (p: Partial<PedidoCompra>): PedidoCompra => ({
   receivedByLabel: null, receivedAt: null, cancelReason: null, createdAt: '2026-09-01T10:00:00Z',
   erpNumber: null, noErpReason: null, erpIssuedOn: null, promisedDate: null,
   onTime: null, inFull: null, otif: null, referenceSavingTotal: null, erpDocumentId: null,
-  erpFileName: null, deliveryCompletedAt: null, pendingDelivery: true, invoices: [],
+  erpFileName: null, deliveryCompletedAt: null, pendingDelivery: true, inactiveCatalogCodes: null, invoices: [],
   items: [{
     itemId: 'i1', description: 'Luva nitrílica', unitOfMeasure: 'PAR', quantity: 10, receivedQuantity: 0,
     pendingQuantity: 10, rejectedQuantity: 0, rejectionReason: null, lastPaidUnitPrice: null,
@@ -111,5 +111,47 @@ describe('O.C. do ERP no pedido', () => {
     expect(within(painel).getByText('PO-2026-000001')).toBeInTheDocument();
     // sem O.C. de verdade, o campo do número segue vazio e o motivo continua exigido
     expect(within(painel).getByLabelText('Número da OC no ERP')).toHaveValue('');
+  });
+});
+
+describe('recebimento de item inativado no catálogo (IV-ERR-010)', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    eu = {
+      id: 'u2', email: 'ana@t.com', name: 'Ana', role: 'WarehouseOperator',
+      modules: ['COMPRAS', 'ESTOQUE'],
+    };
+    vi.mocked(listarLocais).mockResolvedValue([{ id: 'l1', code: 'ALM-01', name: 'Almoxarifado' }]);
+  });
+
+  it('o item inativo não recebe entrada, mas a devolução dele continua aberta', async () => {
+    // antes o almoxarife digitava a quantidade de tudo e o servidor recusava a
+    // entrega inteira; agora a linha diz o que houve, e o resto do pedido segue
+    vi.mocked(obterPedido).mockResolvedValue(pedido({
+      status: 'FATURADO',
+      inactiveCatalogCodes: ['EPI-001'],
+      items: [
+        pedido({}).items[0],
+        { ...pedido({}).items[0], itemId: 'i2', description: 'Bota', catalogCode: 'EPI-002' },
+      ],
+    }));
+    abrir();
+
+    const tabela = await screen.findByTestId('tabela-entrega');
+    expect(within(tabela).getByText(/Inativo no catálogo/)).toHaveTextContent('IV-ERR-010');
+    expect(within(tabela).getByLabelText('Chegou agora: Luva nitrílica')).toBeDisabled();
+    // devolver ao fornecedor não dá entrada em estoque: segue permitido
+    expect(within(tabela).getByLabelText('Devolvido agora: Luva nitrílica')).toBeEnabled();
+    // o outro item do mesmo pedido não é afetado
+    expect(within(tabela).getByLabelText('Chegou agora: Bota')).toBeEnabled();
+  });
+
+  it('sem item inativo, nada é bloqueado', async () => {
+    vi.mocked(obterPedido).mockResolvedValue(pedido({ status: 'FATURADO', inactiveCatalogCodes: [] }));
+    abrir();
+
+    const tabela = await screen.findByTestId('tabela-entrega');
+    expect(within(tabela).queryByText(/Inativo no catálogo/)).not.toBeInTheDocument();
+    expect(within(tabela).getByLabelText('Chegou agora: Luva nitrílica')).toBeEnabled();
   });
 });

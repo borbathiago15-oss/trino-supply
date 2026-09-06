@@ -59,6 +59,23 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
             .SingleOrDefaultAsync(o => o.Id == id, ct);
 
     /// <summary>
+    /// Códigos do pedido que foram inativados no catálogo depois da emissão. Receber um deles
+    /// dá entrada em estoque e é recusado (IV-ERR-010) — a tela usa esta lista para dizer isso
+    /// na linha do item, antes de alguém digitar a quantidade e perder o formulário.
+    ///
+    /// A devolução do mesmo item continua valendo: o que a regra barra é a entrada.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> InactiveCatalogCodesAsync(
+        PurchaseOrder order, CancellationToken ct = default)
+    {
+        var ids = order.Items.Where(i => i.CatalogItemId is not null)
+            .Select(i => i.CatalogItemId!.Value).Distinct().ToList();
+        if (ids.Count == 0) return [];
+        return await db.CatalogItems.Where(c => ids.Contains(c.Id) && !c.Active)
+            .Select(c => c.Code).ToListAsync(ct);
+    }
+
+    /// <summary>
     /// Demandas do comprador: solicitações de compra ainda sem cotação nem pedido. O faltante do
     /// almoxarifado deixou de aparecer aqui como item solto — desde a revisão do módulo de estoque
     /// (2026-08-26) ele vira uma solicitação de compra própria, em nome de quem pediu o material.

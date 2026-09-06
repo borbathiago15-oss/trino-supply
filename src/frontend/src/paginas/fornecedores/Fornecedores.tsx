@@ -1,6 +1,6 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import {
-  atualizarFornecedor, criarFornecedor, gerarChavePortal, listarFornecedores, ROTULO_HOMOLOGACAO,
+  atualizarFornecedor, buscarFornecedores, criarFornecedor, gerarChavePortal, ROTULO_HOMOLOGACAO,
   situacaoEfetiva, type Fornecedor,
 } from '@/api/fornecedores';
 import { Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
@@ -13,6 +13,7 @@ import { useUsuario } from '@/sessao/SessaoProvider';
 import { data, moeda } from '@/util/formato';
 import { rolarPara } from '@/util/rolar';
 import { useCarregar } from '@/util/useCarregar';
+import { useDebounce } from '@/util/useDebounce';
 import { PainelContrato } from './PainelContrato';
 import { PainelHomologacao } from './PainelHomologacao';
 
@@ -21,15 +22,7 @@ type Formulario = typeof VAZIO;
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
 /** Busca por razão social, nome fantasia ou CNPJ, ignorando pontuação do documento. */
-export function filtrarFornecedores(lista: Fornecedor[], busca: string) {
-  const termo = busca.trim().toLowerCase();
-  if (!termo) return lista;
-  const so = (v: string) => v.replace(/\D/g, '');
-  return lista.filter((f) =>
-    [f.legalName, f.tradeName, f.email, f.phone].filter(Boolean).join(' ').toLowerCase().includes(termo)
-    || f.taxId.includes(termo)
-    || (so(termo).length > 0 && so(f.taxId).includes(so(termo))));
-}
+const POR_PAGINA = 50;
 
 export function Fornecedores() {
   const usuario = useUsuario();
@@ -44,12 +37,18 @@ export function Fornecedores() {
   const [chaveDe, setChaveDe] = useState<Fornecedor | null>(null);
   const [chave, setChave] = useState<string | null>(null);
 
+  const [tamanho, setTamanho] = useState(POR_PAGINA);
+
+  // a busca é do servidor: filtrar no navegador esconderia quem não coube na lista
+  const termo = useDebounce(busca);
   const { dados, erro, carregando, recarregar } = useCarregar(
-    (signal) => listarFornecedores(mantem, signal), [mantem],
+    (signal) => buscarFornecedores({ busca: termo, incluirInativos: mantem, tamanho }, signal),
+    [mantem, termo, tamanho],
   );
 
-  const lista = useMemo(() => filtrarFornecedores(dados ?? [], busca), [dados, busca]);
-  const aberto = (id: string | null) => (id ? (dados ?? []).find((f) => f.id === id) ?? null : null);
+  const lista = dados?.itens ?? [];
+  const total = dados?.total ?? 0;
+  const aberto = (id: string | null) => (id ? lista.find((f) => f.id === id) ?? null : null);
   const emHomologacao = aberto(homologando);
   const emContrato = aberto(contratando);
 
@@ -106,12 +105,12 @@ export function Fornecedores() {
     <>
       <Painel titulo="Fornecedores" acoes={
         <input aria-label="Buscar" placeholder="Buscar por razão social, fantasia ou CNPJ"
-          className="!w-[320px]" value={busca} onChange={(e) => setBusca(e.target.value)} />
+          className="!w-[320px]" value={busca} onChange={(e) => { setTamanho(POR_PAGINA); setBusca(e.target.value); }} />
       }>
         {erro && <Erro>{erro}</Erro>}
         {carregando && !dados && <Carregando />}
         {dados && !lista.length && (
-          <Vazio>{dados.length ? 'Nenhum fornecedor corresponde à busca.' : 'Nenhum fornecedor cadastrado ainda.'}</Vazio>
+          <Vazio>{termo.trim() ? 'Nenhum fornecedor corresponde à busca.' : 'Nenhum fornecedor cadastrado ainda.'}</Vazio>
         )}
         {lista.length > 0 && (
           <div className="overflow-x-auto">
@@ -178,6 +177,19 @@ export function Fornecedores() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+        {lista.length > 0 && (
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <span className="sub" data-testid="contagem-fornecedores">
+              Mostrando {lista.length} de {total} fornecedor(es).
+            </span>
+            {lista.length < total && (
+              <button type="button" className="botao-secundario" disabled={carregando}
+                onClick={() => setTamanho((t) => t + POR_PAGINA)}>
+                {carregando ? 'Carregando…' : 'Carregar mais'}
+              </button>
+            )}
           </div>
         )}
       </Painel>

@@ -84,8 +84,26 @@ export function situacaoEfetiva(f: Pick<Fornecedor, 'homologationStatus' | 'effe
 
 const base = '/api/v1/suppliers';
 
+/** Lista inteira, para os seletores de fornecedor de outras telas. */
 export const listarFornecedores = async (incluirInativos = false, signal?: AbortSignal) =>
   (await api<{ items: Fornecedor[] }>(`${base}/${incluirInativos ? '?all=true' : ''}`, { signal })).items;
+
+export interface PaginaDeFornecedores { itens: Fornecedor[]; total: number }
+
+/** Busca no servidor, para a tela de cadastro — que antes filtrava no navegador. */
+export async function buscarFornecedores(
+  { busca, incluirInativos, tamanho }: { busca?: string; incluirInativos?: boolean; tamanho?: number } = {},
+  signal?: AbortSignal,
+): Promise<PaginaDeFornecedores> {
+  const params = new URLSearchParams();
+  if (incluirInativos) params.set('all', 'true');
+  if (busca?.trim()) params.set('q', busca.trim());
+  if (tamanho) params.set('tamanho', String(tamanho));
+  const consulta = params.toString();
+  const r = await api<{ items: Fornecedor[]; total: number }>(
+    `${base}/${consulta ? `?${consulta}` : ''}`, { signal });
+  return { itens: r.items ?? [], total: r.total ?? 0 };
+}
 
 export interface DadosFornecedor {
   legalName: string;

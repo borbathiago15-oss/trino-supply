@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PedidoCompra } from '@/api/pedidos';
 import { ToastProvider } from '@/componentes/Toast';
-import { filtrarPedidos, PedidosLista } from './PedidosLista';
+import { PedidosLista } from './PedidosLista';
 
 vi.mock('@/api/pedidos', async (importar) => ({
   ...(await importar<typeof import('@/api/pedidos')>()),
@@ -31,19 +31,10 @@ const lista = [
     invoices: [{ id: 'n1', number: '4521', issuedOn: '2026-09-01', value: 1500, documentId: null, fileName: null, createdByLabel: 'Ana', createdAt: '' }] }),
 ];
 
-describe('filtrarPedidos', () => {
-  it('filtra por situação e por texto (pedido, OC, fornecedor, SC, NF)', () => {
-    expect(filtrarPedidos(lista, '', 'RECEBIDO').map((o) => o.number)).toEqual(['PO-2026-000002']);
-    expect(filtrarPedidos(lista, 'alfa', '').map((o) => o.number)).toEqual(['PO-2026-000001']);
-    expect(filtrarPedidos(lista, 'oc-77', '').map((o) => o.number)).toEqual(['PO-2026-000002']);
-    expect(filtrarPedidos(lista, '4521', '').map((o) => o.number)).toEqual(['PO-2026-000002']);
-    expect(filtrarPedidos(lista, 'SC-2026', '')).toHaveLength(2);
-    expect(filtrarPedidos(lista, 'nada', '')).toHaveLength(0);
-  });
-});
+const pagina = (itens: PedidoCompra[], total = itens.length) => ({ itens, total });
 
 describe('<PedidosLista />', () => {
-  beforeEach(() => { vi.mocked(listarPedidos).mockResolvedValue(lista); });
+  beforeEach(() => { vi.mocked(listarPedidos).mockResolvedValue(pagina(lista)); });
 
   const montar = () => render(
     <MemoryRouter><ToastProvider><PedidosLista /></ToastProvider></MemoryRouter>,
@@ -61,15 +52,43 @@ describe('<PedidosLista />', () => {
     expect(tabela.getByText('a registrar')).toBeInTheDocument();
   });
 
-  it('filtra pela busca digitada', async () => {
+  it('a busca vai para o servidor, e não filtra a lista no navegador', async () => {
     montar();
     await waitFor(() => expect(screen.getByTestId('tabela-pedidos')).toBeInTheDocument());
+
+    vi.mocked(listarPedidos).mockResolvedValue(pagina([lista[1]]));
     await userEvent.type(screen.getByLabelText('Buscar'), 'beta');
-    expect(screen.queryByText('PO-2026-000001')).not.toBeInTheDocument();
+
+    await waitFor(() => expect(listarPedidos).toHaveBeenCalledWith(
+      expect.objectContaining({ busca: 'beta' }), expect.anything()));
+    await waitFor(() => expect(screen.queryByText('PO-2026-000001')).not.toBeInTheDocument());
     expect(screen.getByText('PO-2026-000002')).toBeInTheDocument();
-    await userEvent.clear(screen.getByLabelText('Buscar'));
-    await userEvent.type(screen.getByLabelText('Buscar'), 'zzz');
-    expect(screen.getByText('Nenhum pedido corresponde ao filtro.')).toBeInTheDocument();
+  });
+
+  it('a situação também é filtrada no servidor', async () => {
+    montar();
+    await waitFor(() => expect(screen.getByTestId('tabela-pedidos')).toBeInTheDocument());
+
+    await userEvent.selectOptions(screen.getByLabelText('Situação'), 'RECEBIDO');
+    await waitFor(() => expect(listarPedidos).toHaveBeenCalledWith(
+      expect.objectContaining({ situacao: 'RECEBIDO' }), expect.anything()));
+  });
+
+  it('diz quantos existem, e não só quantos vieram', async () => {
+    vi.mocked(listarPedidos).mockResolvedValue(pagina(lista, 312));
+    montar();
+    await waitFor(() => expect(screen.getByTestId('contagem-pedidos')).toHaveTextContent('Mostrando 2 de 312'));
+
+    // e oferece o resto, em vez de fingir que a lista acabou
+    await userEvent.click(screen.getByRole('button', { name: 'Carregar mais' }));
+    await waitFor(() => expect(listarPedidos).toHaveBeenCalledWith(
+      expect.objectContaining({ tamanho: 100 }), expect.anything()));
+  });
+
+  it('sem busca, a lista vazia explica que ainda não há pedidos', async () => {
+    vi.mocked(listarPedidos).mockResolvedValue(pagina([]));
+    montar();
+    await waitFor(() => expect(screen.getByText(/Nenhum pedido de compra ainda/)).toBeInTheDocument());
   });
 
   it('mostra o erro da API sem quebrar a tela', async () => {

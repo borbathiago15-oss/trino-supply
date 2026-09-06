@@ -1,35 +1,38 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { abrirBlob } from '@/api/cliente';
 import { baixarDocumento } from '@/api/documentos';
-import { listarPedidos, pdfPedido, ROTULO_SITUACAO, totalPedido, totalRecebido, type PedidoCompra, type SituacaoPedido } from '@/api/pedidos';
+import { listarPedidos, pdfPedido, ROTULO_SITUACAO, totalPedido, totalRecebido, type SituacaoPedido } from '@/api/pedidos';
 import { Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { useToast } from '@/componentes/Toast';
 import { data, moeda, quantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
+import { useDebounce } from '@/util/useDebounce';
 
 const SITUACOES = Object.keys(ROTULO_SITUACAO) as SituacaoPedido[];
 
-/** Filtro em memória: a API devolve os 100 pedidos mais recentes, como no legado. */
-export function filtrarPedidos(pedidos: PedidoCompra[], busca: string, situacao: SituacaoPedido | '') {
-  const termo = busca.trim().toLowerCase();
-  return pedidos.filter((o) => {
-    if (situacao && o.status !== situacao) return false;
-    if (!termo) return true;
-    const alvo = [o.number, o.erpNumber, o.supplierName, o.sourcePrNumber, o.quotationNumber,
-      ...o.invoices.map((i) => i.number), ...o.families].filter(Boolean).join(' ').toLowerCase();
-    return alvo.includes(termo);
-  });
-}
+const POR_PAGINA = 50;
 
 export function PedidosLista() {
-  const { dados, erro, carregando } = useCarregar((signal) => listarPedidos(signal));
   const [busca, setBusca] = useState('');
   const [situacao, setSituacao] = useState<SituacaoPedido | ''>('');
+  const [tamanho, setTamanho] = useState(POR_PAGINA);
   const navegar = useNavigate();
   const { avisar } = useToast();
 
-  const lista = useMemo(() => filtrarPedidos(dados ?? [], busca, situacao), [dados, busca, situacao]);
+  // a busca é do servidor: filtrar no navegador esconderia o que não coube na
+  // lista, e a tela responderia "nada encontrado" para pedido que existe
+  const termo = useDebounce(busca);
+  const { dados, erro, carregando } = useCarregar(
+    (signal) => listarPedidos({ busca: termo, situacao, tamanho }, signal),
+    [termo, situacao, tamanho],
+  );
+
+  const lista = dados?.itens ?? [];
+  const total = dados?.total ?? 0;
+  const filtrando = termo.trim().length > 0 || situacao !== '';
+
+  const mudarFiltro = (aplicar: () => void) => { setTamanho(POR_PAGINA); aplicar(); };
 
   async function abrirPdf(id: string) {
     try {
@@ -48,8 +51,8 @@ export function PedidosLista() {
       acoes={
         <>
           <input aria-label="Buscar" placeholder="Buscar por pedido, OC, fornecedor, SC ou NF"
-            className="!w-[300px]" value={busca} onChange={(e) => setBusca(e.target.value)} />
-          <select aria-label="Situação" className="!w-[190px]" value={situacao} onChange={(e) => setSituacao(e.target.value as SituacaoPedido | '')}>
+            className="!w-[300px]" value={busca} onChange={(e) => mudarFiltro(() => setBusca(e.target.value))} />
+          <select aria-label="Situação" className="!w-[190px]" value={situacao} onChange={(e) => mudarFiltro(() => setSituacao(e.target.value as SituacaoPedido | ''))}>
             <option value="">Todas as situações</option>
             {SITUACOES.map((s) => <option key={s} value={s}>{ROTULO_SITUACAO[s].rotulo}</option>)}
           </select>
@@ -58,7 +61,9 @@ export function PedidosLista() {
       {erro && <Erro>{erro}</Erro>}
       {carregando && !dados && <Carregando />}
       {dados && !lista.length && (
-        <Vazio>{dados.length ? 'Nenhum pedido corresponde ao filtro.' : 'Nenhum pedido de compra ainda. Eles nascem do processo de cotação aprovado.'}</Vazio>
+        <Vazio>{filtrando
+          ? 'Nenhum pedido corresponde ao filtro.'
+          : 'Nenhum pedido de compra ainda. Eles nascem do processo de cotação aprovado.'}</Vazio>
       )}
       {lista.length > 0 && (
         <div className="overflow-x-auto">
@@ -113,6 +118,19 @@ export function PedidosLista() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+      {lista.length > 0 && (
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <span className="sub" data-testid="contagem-pedidos">
+            Mostrando {lista.length} de {total} pedido(s).
+          </span>
+          {lista.length < total && (
+            <button type="button" className="botao-secundario" disabled={carregando}
+              onClick={() => setTamanho((t) => t + POR_PAGINA)}>
+              {carregando ? 'Carregando…' : 'Carregar mais'}
+            </button>
+          )}
         </div>
       )}
     </Painel>

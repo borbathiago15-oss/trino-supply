@@ -91,8 +91,26 @@ export function normalizarPedido(bruto: PedidoCompra): PedidoCompra {
   return { ...bruto, families: bruto.families ?? [], invoices: bruto.invoices ?? [], items: bruto.items ?? [] };
 }
 
-export const listarPedidos = async (signal?: AbortSignal) =>
-  (await api<{ items: PedidoCompra[] }>(`${base}/`, { signal })).items.map(normalizarPedido);
+export interface PaginaDePedidos { itens: PedidoCompra[]; total: number }
+
+/**
+ * Busca e situação vão para o servidor. `total` é quantos existem, não quantos
+ * vieram — é o que permite a tela dizer "mostrando 50 de 312" em vez de fingir
+ * que a lista acabou.
+ */
+export async function listarPedidos(
+  { busca, situacao, tamanho }: { busca?: string; situacao?: string; tamanho?: number } = {},
+  signal?: AbortSignal,
+): Promise<PaginaDePedidos> {
+  const params = new URLSearchParams();
+  if (busca?.trim()) params.set('q', busca.trim());
+  if (situacao) params.set('status', situacao);
+  if (tamanho) params.set('tamanho', String(tamanho));
+  const consulta = params.toString();
+  const r = await api<{ items: PedidoCompra[]; total: number }>(
+    `${base}/${consulta ? `?${consulta}` : ''}`, { signal });
+  return { itens: (r.items ?? []).map(normalizarPedido), total: r.total ?? 0 };
+}
 
 export const obterPedido = async (id: string, signal?: AbortSignal) =>
   normalizarPedido(await api<PedidoCompra>(`${base}/${id}`, { signal }));

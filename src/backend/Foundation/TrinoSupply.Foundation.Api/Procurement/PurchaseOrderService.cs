@@ -21,9 +21,38 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
 
     public static bool CanView(string role) => CanManage(role) || role == Roles.Auditor;
 
-    public Task<List<PurchaseOrder>> ListAsync(CancellationToken ct = default) =>
-        db.PurchaseOrders.Include(o => o.Items).Include(o => o.Invoices)
-            .OrderByDescending(o => o.CreatedAt).Take(100).ToListAsync(ct);
+    /// <summary>Página máxima aceita: evita que um `tamanho` grande vire uma consulta sem teto.</summary>
+    public const int TamanhoMaximoDePagina = 500;
+
+    /// <summary>
+    /// Página de pedidos, com busca e filtro de situação feitos no banco. O `total`
+    /// volta junto para a tela poder dizer quantos existem, e não só quantos vieram:
+    /// buscar sobre uma lista truncada responde "nada encontrado" para pedido que
+    /// existe (PO-BR-012).
+    /// </summary>
+    public async Task<(List<PurchaseOrder> itens, int total)> ListAsync(
+        string? busca = null, PurchaseOrderStatus? situacao = null,
+        int tamanho = 100, CancellationToken ct = default)
+    {
+        var termo = busca?.Trim();
+        var query = db.PurchaseOrders.Include(o => o.Items).Include(o => o.Invoices).AsQueryable();
+
+        if (situacao is { } s) query = query.Where(o => o.Status == s);
+        if (!string.IsNullOrEmpty(termo))
+            query = query.Where(o =>
+                EF.Functions.ILike(o.Number, $"%{termo}%")
+                || (o.ErpNumber != null && EF.Functions.ILike(o.ErpNumber, $"%{termo}%"))
+                || EF.Functions.ILike(o.SupplierName, $"%{termo}%")
+                || (o.SourcePrNumber != null && EF.Functions.ILike(o.SourcePrNumber, $"%{termo}%"))
+                || (o.QuotationNumber != null && EF.Functions.ILike(o.QuotationNumber, $"%{termo}%"))
+                || (o.Families != null && EF.Functions.ILike(o.Families, $"%{termo}%"))
+                || o.Invoices.Any(i => EF.Functions.ILike(i.Number, $"%{termo}%")));
+
+        var total = await query.CountAsync(ct);
+        var itens = await query.OrderByDescending(o => o.CreatedAt)
+            .Take(Math.Clamp(tamanho, 1, TamanhoMaximoDePagina)).ToListAsync(ct);
+        return (itens, total);
+    }
 
     public Task<PurchaseOrder?> GetAsync(Guid id, CancellationToken ct = default) =>
         db.PurchaseOrders.Include(o => o.Items).Include(o => o.Invoices)

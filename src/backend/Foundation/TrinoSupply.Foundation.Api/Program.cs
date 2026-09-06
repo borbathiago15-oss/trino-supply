@@ -75,6 +75,15 @@ builder.Services.AddRateLimiter(o =>
     o.AddPolicy("auth", ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+    // a troca de senha é rota autenticada: limitar por IP puniria o escritório
+    // inteiro atrás do mesmo IP — quem entra depois de dez logins não conseguiria
+    // definir a própria senha. O limite aqui é por usuário, que é o que protege
+    // contra tentativa de adivinhar a senha atual (SEC-004).
+    o.AddPolicy("auth-senha", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? ctx.User.FindFirst("sub")?.Value
+            ?? ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
     o.AddPolicy("auth-refresh", ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 60, Window = TimeSpan.FromMinutes(1) }));
@@ -238,7 +247,7 @@ auth.MapPost("/change-password", async (ChangePasswordRequest body, UserService 
     // novos, já sem a marca de provisória, para o usuário seguir sem relogar
     var tokens = await authSvc.IssueForAsync(user!);
     return Ok(ToResponse(tokens), ctx);
-}).RequireAuthorization().RequireRateLimiting("auth");
+}).RequireAuthorization().RequireRateLimiting("auth-senha");
 
 // ---- Gestão de usuários (exclusiva do SystemAdministrator) -------------------
 var users = app.MapGroup("/api/v1/users")
@@ -1304,12 +1313,16 @@ static object SupplierView(Supplier s) => new
 var sup = app.MapGroup("/api/v1/suppliers").RequireAuthorization();
 sup.AddEndpointFilter(RequireModules(AppModules.Fornecedores, AppModules.Compras));
 
-sup.MapGet("/", async (SupplierService svc, ClaimsPrincipal p, HttpContext ctx, bool? all) =>
+sup.MapGet("/", async (SupplierService svc, ClaimsPrincipal p, HttpContext ctx,
+    bool? all, string? q, int? tamanho) =>
 {
     var role = RoleOf(p);
     if (!SupplierService.CanView(role)) return Error(ctx, 403, "SUP-ERR-900", "Seu papel não acessa fornecedores.");
     var includeInactive = all == true && SupplierService.CanMaintain(role);
-    return Ok(new { items = (await svc.ListAsync(includeInactive)).Select(SupplierView) }, ctx);
+    // sem `tamanho` o teto continua o de antes: os seletores de fornecedor de
+    // outras telas dependem de receber a lista inteira
+    var (itens, total) = await svc.BuscarAsync(includeInactive, q, tamanho ?? 500);
+    return Ok(new { items = itens.Select(SupplierView), total, tamanho = itens.Count }, ctx);
 });
 
 sup.MapPost("/", async (CreateSupplierRequest body, SupplierService svc, ClaimsPrincipal p, HttpContext ctx) =>
@@ -1488,11 +1501,16 @@ static object PoView(PurchaseOrder o) => new
 var pos = app.MapGroup("/api/v1/purchase-orders").RequireAuthorization();
 pos.AddEndpointFilter(RequireModules(AppModules.Compras));
 
-pos.MapGet("/", async (PurchaseOrderService svc, ClaimsPrincipal p, HttpContext ctx) =>
+// a busca e o filtro de situação vão para o banco: filtrar no navegador sobre uma
+// lista truncada responde "nada encontrado" para pedido que existe (PO-BR-012)
+pos.MapGet("/", async (PurchaseOrderService svc, ClaimsPrincipal p, HttpContext ctx,
+    string? q, string? status, int? tamanho) =>
 {
     if (!PurchaseOrderService.CanView(RoleOf(p)))
         return Error(ctx, 403, "PO-ERR-900", "Seu papel não acessa pedidos de compra.");
-    return Ok(new { items = (await svc.ListAsync()).Select(PoView) }, ctx);
+    PurchaseOrderStatus? situacao = Enum.TryParse<PurchaseOrderStatus>(status, true, out var st) ? st : null;
+    var (itens, total) = await svc.ListAsync(q, situacao, tamanho ?? 100);
+    return Ok(new { items = itens.Select(PoView), total, tamanho = itens.Count }, ctx);
 });
 
 pos.MapGet("/{id:guid}", async (Guid id, PurchaseOrderService svc, ClaimsPrincipal p, HttpContext ctx) =>

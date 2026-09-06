@@ -158,6 +158,86 @@ O trabalho de #85 e #88 cobriu segregação de funções, EPI sem C.A. e O.C. se
 número. Falta varrer as demais regras do backend e ver quais ainda só aparecem
 como erro depois do formulário preenchido.
 
+### 🟠 INT-D · O menu é um mapa de módulos, e o processo não anda por módulos
+
+Este item entrou por observação sua: para o Master e para o Administrador o
+menu é confuso — "ele entra em menu X e depois, para a sequência, vai no Y".
+
+**O que medi.** O menu tem 6 grupos e, para quem enxerga tudo, 19 telas. O
+ciclo completo de uma compra tem 9 passos. Estes são os passos e o grupo em
+que cada um mora hoje:
+
+| # | Passo | Grupo no menu |
+|---|---|---|
+| 1 | Criar a SC | Solicitações de Compra |
+| 2 | Aprovar a SC | Solicitações de Compra |
+| 3 | Triar e atribuir a demanda | Compras |
+| 4 | Abrir a cotação | Compras › Cotações |
+| 5 | Receber propostas e escolher o vencedor | Compras › Cotações |
+| 6 | **Aprovar Nível 1 e Nível 2** | **Solicitações de Compra** |
+| 7 | Registrar a O.C. do ERP | Compras |
+| 8 | Acompanhar pedido, NF e entrega | Compras |
+| 9 | Receber o material | Estoque |
+
+A sequência de grupos é **1 → 1 → 4 → 4 → 4 → 1 → 4 → 4 → 3**. O passo 6 é o
+salto que dói: quem acabou de escolher o fornecedor dentro de "Compras" precisa
+voltar a "Solicitações de Compra" para aprovar. E como o menu lateral é um
+acordeão que mantém **um grupo aberto por vez**, esse salto custa fechar
+"Compras", abrir "Solicitações de Compra" e achar o item — sem nada na tela
+dizendo que era para ir ali.
+
+**A Central de Aprovação está arquivada no lugar errado.** Ela decide três
+fluxos — SC, requisição de material e aprovação de cotação — mas mora dentro de
+um deles. É uma caixa de entrada transversal guardada dentro de uma das três
+caixas que ela atende.
+
+**Dois defeitos de estado no acordeão** (`layout/Sidebar.tsx`):
+
+- `grupoAberto` é inicializado com `useState` e nunca mais acompanha a rota.
+  Navegando por link — inclusive pelos links da Central de Avisos — você chega
+  na tela com o grupo dela fechado e outro grupo aberto. O menu deixa de
+  responder "onde eu estou".
+- `grupoAtual` procura o grupo com `!ehSubgrupo(i)`, então as telas que vivem
+  dentro de um subgrupo (Inclusão de SC, Abrir Cotação, Processos de Cotação)
+  **nunca** abrem o grupo, nem no carregamento direto da URL.
+
+**O vocabulário colide.** O Master vê ao mesmo tempo:
+
+| Rótulo | O que é de verdade |
+|---|---|
+| Meus Pedidos | minhas **solicitações de compra** |
+| Pedidos de Compra | os **pedidos/O.C.** com o fornecedor |
+| Minhas Solicitações | minhas requisições de **material** |
+| Gestão de Solicitações | **triagem** das demandas de compra |
+
+"Pedido" significa SC num item e O.C. no outro; "Solicitação" significa três
+coisas. Para quem só usa um fluxo isso passa; para o Master, que vê os quatro
+rótulos na mesma barra, é ruído.
+
+**Uma inconsistência menor de permissão:** `Pedidos de Compra` está com
+`mostrar: sempre`, enquanto o domínio tem `podeVerPedidos`. Hoje o módulo
+`COMPRAS` segura a porta, mas quem receber o módulo sem papel de compra vê o
+item e leva 403 da API.
+
+#### Oportunidades
+
+| Id | Oportunidade | Custo | Resolve |
+|---|---|---|---|
+| **D1** | **Trilha do processo no painel** — uma faixa com os 9 passos, cada um com a contagem do que está parado ali e link para a tela. É a resposta literal a "qual a sequência" e usa os avisos que a API já devolve. | médio | a queixa |
+| **D2** | **Próximo passo na própria tela** — ao escolher o vencedor, link para a aprovação; ao dar o Nível 2, link para registrar a O.C.; ao registrar a O.C., link para o pedido. O usuário atravessa o zigue-zague sem passar pelo menu. | baixo | a queixa |
+| **D3** | **Central de Aprovação para o topo**, fora de "Solicitações de Compra" — ela atende três fluxos, não um. | baixo | passo 6 |
+| **D4** | **Contadores no menu** ao lado de Central de Aprovação, Gestão de Solicitações e Fila de Atendimento, com o mesmo número dos avisos. O menu passa a dizer onde há trabalho. | baixo | orientação |
+| **D5** | **Corrigir o acordeão**: abrir o grupo da rota atual, inclusive para telas dentro de subgrupo, e acompanhar a navegação. | baixo | defeito |
+| **D6** | **Ordenar os grupos na sequência do processo**: Solicitações de Compra → Compras → Material → Estoque → Cadastros. Hoje Estoque vem antes de Compras, contra o fluxo. | baixo | leitura |
+| **D7** | **Separar o vocabulário**: "Meus Pedidos" → "Minhas Solicitações de Compra"; "Minhas Solicitações" → "Minhas Requisições de Material". | baixo | ruído |
+| **D8** | Trocar `mostrar: sempre` de Pedidos de Compra por `podeVerPedidos`. | trivial | coerência |
+
+**Recomendação:** D5 + D3 + D6 + D8 primeiro — são correção e arrumação, sem
+tela nova e sem decisão sua. Depois D2, que é o que de fato tira o usuário do
+menu. D1 e D4 em seguida. D7 fica por último porque mexe em rótulo que a sua
+equipe já decorou: é a única que precisa da sua palavra.
+
+
 ---
 
 ## 6. Inteligência
@@ -230,30 +310,34 @@ existentes antes de criar o índice.
 |---|---|---|
 | 1 | **COR-A** — paginação nas quatro listas principais e busca no servidor | correção + interface |
 | 2 | **SEC-A** — filtro no grupo `analytics` + teste que varre a tabela de rotas | segurança |
+| 3 | **INT-D · D5/D3/D6/D8** — acordeão do menu, Central de Aprovação no topo, ordem dos grupos e permissão de Pedidos | interface |
 
 ### Prioridade 2 — tirar o risco estrutural
 
 | # | Item | Eixo |
 |---|---|---|
-| 3 | **ARQ-A** — recortar `Program.cs` em rotas por módulo | arquitetura |
-| 4 | **SEC-B / SEC-C** — rate limiting fora do login e limites de upload | segurança |
+| 4 | **INT-D · D2** — "próximo passo" na tela, atravessando o zigue-zague do processo | interface |
+| 5 | **ARQ-A** — recortar `Program.cs` em rotas por módulo | arquitetura |
+| 6 | **SEC-B / SEC-C** — rate limiting fora do login e limites de upload | segurança |
 
 ### Prioridade 3 — a inteligência que você pediu
 
 | # | Item | Eixo |
 |---|---|---|
-| 5 | **INTEL-A** — insight com ação e link para a tela onde se age | inteligência |
-| 6 | **INTEL-B** — regras novas sobre o dado que já existe | inteligência |
-| 7 | **INTEL-C** — insight de severidade alta chega ao painel e aos avisos | inteligência + interface |
+| 7 | **INT-D · D1/D4** — trilha do processo no painel e contadores no menu | interface + inteligência |
+| 8 | **INTEL-A** — insight com ação e link para a tela onde se age | inteligência |
+| 9 | **INTEL-B** — regras novas sobre o dado que já existe | inteligência |
+| 10 | **INTEL-C** — insight de severidade alta chega ao painel e aos avisos | inteligência + interface |
 
 ### Prioridade 4 — acabamento
 
 | # | Item | Eixo |
 |---|---|---|
-| 8 | **INT-A** — componente único de estado de tela | interface |
-| 9 | **INT-B / ARQ-B** — quebrar as duas maiores unidades | arquitetura |
-| 10 | **INT-C** — varredura das regras que a tela ainda não antecipa | interface |
-| 11 | **SEC-D** — zerar o aviso de build | qualidade |
+| 11 | **INT-A** — componente único de estado de tela | interface |
+| 12 | **INT-B / ARQ-B** — quebrar as duas maiores unidades | arquitetura |
+| 13 | **INT-C** — varredura das regras que a tela ainda não antecipa | interface |
+| 14 | **INT-D · D7** — vocabulário do menu (precisa da sua decisão) | interface |
+| 15 | **SEC-D** — zerar o aviso de build | qualidade |
 
 ---
 
@@ -261,12 +345,13 @@ existentes antes de criar o índice.
 
 | Área | Problema | Criticidade | Solução | Status | Impacto |
 |---|---|---|---|---|---|
-| Correção | Listas truncadas sem paginação; fila de aprovação perde processo | 🔴 CRÍTICO | Paginação por cursor + busca no servidor | A executar | Alto |
+| Correção | Listas truncadas sem paginação; fila de aprovação perde processo | 🔴 CRÍTICO | Paginação + busca no servidor | Fila de aprovação (#89), Pedidos e Fornecedores (#90) entregues; faltam SCs e Cotações | Alto |
 | Segurança | Autorização por convenção; `analytics` sem filtro de grupo | 🟠 ALTO | Filtro no grupo + teste da tabela de rotas | A executar | Alto |
 | Arquitetura | `Program.cs` com 120 endpoints | 🟠 ALTO | Rotas por módulo | A executar | Médio |
 | Segurança | Rate limiting só no login | 🟡 MÉDIO | Política por grupo | A executar | Médio |
 | Segurança | Upload sem limite declarado | 🟡 MÉDIO | Limite de bytes e tipos | A executar | Médio |
 | Inteligência | Insight descreve mas não age | 🟡 MÉDIO | Ação + link + regras novas | A executar | Alto |
+| Interface | Menu por módulo, processo em zigue-zague; acordeão não segue a rota | 🟠 ALTO | Trilha do processo, próximo passo na tela, menu corrigido | A executar | Alto |
 | Interface | 27 telas repetem estado | 🟡 MÉDIO | Componente único | A executar | Médio |
 | Arquitetura | `QuotationService` com 1.108 linhas | 🟡 MÉDIO | Separar alçadas | A executar | Médio |
 | Banco | `erp_number` sem índice único | 🟡 MÉDIO | Migration após conferir a produção | **Bloqueado em você** | Médio |

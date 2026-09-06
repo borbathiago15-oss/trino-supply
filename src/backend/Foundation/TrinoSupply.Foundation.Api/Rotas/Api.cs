@@ -55,6 +55,11 @@ public static class Api
         return actor.CanAccessModule ? actor : null;
     }
 
+    /// <summary>O fornecedor por trás do token do portal, quando é um deles.</summary>
+    public static Guid? PortalSupplierId(ClaimsPrincipal p) =>
+        p.FindFirstValue(ClaimTypes.Role) == "Supplier" && Guid.TryParse(p.FindFirstValue("supplierId"), out var id)
+            ? id : null;
+
     public static bool CanOperateStock(ClaimsPrincipal p) =>
         InventoryService.CanOperate(RoleOf(p)) || ModulesOf(p).Contains(AppModules.Estoque);
 

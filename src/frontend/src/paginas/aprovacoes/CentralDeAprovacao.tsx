@@ -42,6 +42,12 @@ export function CentralDeAprovacao() {
   }), []);
 
   const processos = dados?.processos ?? [];
+  /** O que as duas formas da fila mostram — derivado uma vez, desenhado duas. */
+  const fila = processos.map((q) => ({
+    q,
+    marca: ROTULO_RFQ[q.status] ?? { rotulo: q.status, classe: '' },
+    vencedora: propostaVencedora(q),
+  }));
   const materiais = dados?.materiais ?? [];
   const solicitacoes = dados?.solicitacoes ?? [];
   const vazia = dados && !processos.length && !materiais.length && !solicitacoes.length;
@@ -85,35 +91,58 @@ export function CentralDeAprovacao() {
         {erro && <Erro>{erro}</Erro>}
         {carregando && !dados && <Carregando />}
         {dados && !processos.length && <Vazio>Nenhuma compra aguardando a sua aprovação.</Vazio>}
+        {/*
+          Duas formas para os mesmos processos. No celular, cartão: medi a tabela em 900px
+          dentro de uma caixa de 316px, com o botão "Analisar e decidir" em x=784 numa tela
+          de 390px — quem fosse aprovar teria de descobrir que a tabela arrasta de lado.
+          Encolher coluna não resolveu (ainda deu 460px): quatro colunas não cabem em 390px,
+          e insistir na tabela seria brigar com o meio. No notebook, a tabela de sempre.
+        */}
         {processos.length > 0 && (
-          <div className="overflow-x-auto">
+          <ul className="flex flex-col gap-2 lg:hidden" data-testid="fila-processos-celular">
+            {fila.map(({ q, marca, vencedora }) => (
+              <li key={q.id} className="rounded-lg border border-borda p-3" data-processo={q.number}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-semibold">{q.number}</span>
+                  <Badge classe={marca.classe}>{marca.rotulo}</Badge>
+                </div>
+                <div className="sub">CC: {q.costCenter}{q.sourcePrNumber ? ` · ${q.sourcePrNumber}` : ''}</div>
+                <div className="mt-2">
+                  {vencedora?.supplierName ?? '—'}
+                  {vencedora?.totalValue != null && (
+                    <strong className="ml-2 whitespace-nowrap">{moeda(vencedora.totalValue)}</strong>
+                  )}
+                </div>
+                <Link className="botao mt-3 block text-center" to={linkDoProcesso(q.id)}>Analisar e decidir</Link>
+              </li>
+            ))}
+          </ul>
+        )}
+        {processos.length > 0 && (
+          <div className="hidden overflow-x-auto lg:block">
             <table data-testid="tabela-processos" className="min-w-[900px]">
               <thead>
                 <tr><th>Processo</th><th>Origem</th><th>Fornecedor escolhido</th><th>Valor</th><th>Etapa</th><th>Ações</th></tr>
               </thead>
               <tbody>
-                {processos.map((q) => {
-                  const marca = ROTULO_RFQ[q.status] ?? { rotulo: q.status, classe: '' };
-                  const vencedora = propostaVencedora(q);
-                  return (
-                    <tr key={q.id} data-processo={q.number}>
-                      <td className="whitespace-nowrap">
-                        <span className="font-semibold">{q.number}</span>
-                        <div className="sub">CC: {q.costCenter}</div>
-                      </td>
-                      <td>{q.sourcePrNumber ?? '—'}<div className="sub">{q.justification ?? ''}</div></td>
-                      <td>
-                        {vencedora?.supplierName ?? '—'}
-                        {q.selection?.justification && <div className="sub">{q.selection.justification}</div>}
-                      </td>
-                      <td className="whitespace-nowrap">{vencedora?.totalValue != null ? moeda(vencedora.totalValue) : '—'}</td>
-                      <td><Badge classe={marca.classe}>{marca.rotulo}</Badge></td>
-                      <td className="whitespace-nowrap">
-                        <Link className="botao" to={linkDoProcesso(q.id)}>Analisar e decidir</Link>
-                      </td>
-                    </tr>
-                  );
-                })}
+                {fila.map(({ q, marca, vencedora }) => (
+                  <tr key={q.id} data-processo={q.number}>
+                    <td className="whitespace-nowrap">
+                      <span className="font-semibold">{q.number}</span>
+                      <div className="sub">CC: {q.costCenter}</div>
+                    </td>
+                    <td>{q.sourcePrNumber ?? '—'}<div className="sub">{q.justification ?? ''}</div></td>
+                    <td>
+                      {vencedora?.supplierName ?? '—'}
+                      {q.selection?.justification && <div className="sub">{q.selection.justification}</div>}
+                    </td>
+                    <td className="whitespace-nowrap">{vencedora?.totalValue != null ? moeda(vencedora.totalValue) : '—'}</td>
+                    <td><Badge classe={marca.classe}>{marca.rotulo}</Badge></td>
+                    <td className="whitespace-nowrap">
+                      <Link className="botao" to={linkDoProcesso(q.id)}>Analisar e decidir</Link>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>

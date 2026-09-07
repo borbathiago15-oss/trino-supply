@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { contagemPorItem, ehSubgrupo, itensVisiveis, localizar, type ItemMenu, type SubgrupoMenu } from './menu';
 import { useAvisos } from '@/sessao/AvisosProvider';
@@ -71,7 +71,7 @@ function Subgrupo({ sub, aberto, alternar, itemAtual, pendencias }: {
  * deixava o menu apontando para outro lugar. `escolha` guarda o que a pessoa
  * abriu ou fechou com a mão; `undefined` significa "ainda estou seguindo a rota".
  */
-export function Sidebar() {
+export function Sidebar({ aberto = false, aoFechar }: { aberto?: boolean; aoFechar?: () => void } = {}) {
   const usuario = useUsuario();
   const { pathname } = useLocation();
   const { avisos } = useAvisos();
@@ -81,13 +81,23 @@ export function Sidebar() {
   const pendencias = contagemPorItem(avisos);
 
   const [escolha, setEscolha] = useState<{ grupo?: string | null; sub?: string | null }>({});
-  useEffect(() => { setEscolha({}); }, [pathname]);
+  // trocar de tela devolve o menu à rota e fecha a gaveta do celular: quem tocou
+  // num item quer ver a tela, não o menu por cima dela
+  const fechar = useRef(aoFechar);
+  fechar.current = aoFechar;
+  useEffect(() => { setEscolha({}); fechar.current?.(); }, [pathname]);
 
   const grupoAberto = escolha.grupo !== undefined ? escolha.grupo : (atual?.grupo.titulo ?? null);
   const subAberto = escolha.sub !== undefined ? escolha.sub : (atual?.subgrupo?.rotulo ?? null);
 
   return (
-    <aside className="flex w-[252px] shrink-0 flex-col gap-0.5 bg-fundo px-3 pb-7 pt-5 text-slate-300" aria-label="Menu">
+    <aside
+      className={'flex w-[252px] shrink-0 flex-col gap-0.5 overflow-y-auto bg-fundo px-3 pb-7 pt-5 text-slate-300 '
+        // no notebook o menu é a coluna de sempre; no celular ele sai do fluxo e
+        // vira gaveta, senão sobram 138px de conteúdo numa tela de 390px
+        + 'fixed inset-y-0 left-0 z-40 transition-transform lg:static lg:z-auto lg:translate-x-0 '
+        + (aberto ? 'translate-x-0 shadow-2xl' : '-translate-x-full')}
+      aria-label="Menu">
       <Link to="/painel" className="block px-2 pb-4 pt-1">
         <img src="/assets/brand/trino-supply-mark.png" width={420} height={108} alt="Trino Supply" className="h-auto w-[196px] max-w-full" />
       </Link>

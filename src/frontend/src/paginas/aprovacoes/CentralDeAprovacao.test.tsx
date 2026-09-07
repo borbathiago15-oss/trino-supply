@@ -85,6 +85,19 @@ describe('<CentralDeAprovacao />', () => {
     expect(within(screen.getByTestId('tabela-scs')).getByText('SC-2026-000009')).toBeInTheDocument();
   });
 
+  it('no celular a fila vira cartão, com o botão de decidir à mão', async () => {
+    // a tabela tem 900px de largura mínima: numa tela de 390px o botão "Analisar e
+    // decidir" ficava em x=784, atrás de um arrasto lateral que ninguém adivinha.
+    // As duas formas mostram o mesmo processo; o CSS escolhe qual aparece.
+    montar();
+    const cartoes = within(await screen.findByTestId('fila-processos-celular'));
+    expect(cartoes.getByText('RFQ-2026-000001')).toBeInTheDocument();
+    expect(cartoes.getByText('Beta Química')).toBeInTheDocument();   // o vencedor da seleção
+    expect(cartoes.getByText('R$ 980,00')).toBeInTheDocument();
+    expect(cartoes.getByRole('link', { name: 'Analisar e decidir' }))
+      .toHaveAttribute('href', linkDoProcesso('q1'));
+  });
+
   it('cada fila some quando quem está logado não tem acesso a ela', async () => {
     vi.mocked(processosParaMinhaAprovacao).mockRejectedValue(new Error('403'));
     vi.mocked(listarSolicitacoesMaterial).mockRejectedValue(new Error('403'));

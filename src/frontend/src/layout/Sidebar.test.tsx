@@ -80,6 +80,32 @@ describe('<Sidebar />', () => {
     expect(menu().getByRole('link', { name: 'Central de Aprovação' })).toBeInTheDocument();
   });
 
+  it('o subgrupo Dashboard aparece no topo e abre sozinho na tela em que se está', () => {
+    // o topo não tem cabeçalho de grupo, e o Sidebar descartava subgrupo aí dentro:
+    // sem este teste, o Dashboard inteiro some do menu sem ninguém perceber
+    montar('/relatorios');
+    expect(menu().getByRole('button', { name: /^Dashboard/ })).toBeInTheDocument();
+    expect(menu().getByRole('link', { name: 'Relatórios' })).toHaveAttribute('aria-current', 'page');
+    expect(menu().getByRole('link', { name: 'Insights & Executivo' })).toBeInTheDocument();
+    expect(menu().getByRole('link', { name: 'Compliance' })).toBeInTheDocument();
+  });
+
+  it('fora do Dashboard ele fica fechado, e o botão abre', async () => {
+    montar('/pedidos');
+    expect(menu().queryByRole('link', { name: 'Relatórios' })).not.toBeInTheDocument();
+
+    await userEvent.click(menu().getByRole('button', { name: /^Dashboard/ }));
+    expect(menu().getByRole('link', { name: 'Relatórios' })).toBeInTheDocument();
+  });
+
+  it('abrir o Dashboard não fecha o grupo em que a pessoa estava trabalhando', async () => {
+    // o subgrupo do topo não tem grupo acima dele; mexer no grupo aberto a partir
+    // daqui derrubaria "Compras" no meio do trabalho de quem só queria espiar
+    montar('/pedidos');
+    await userEvent.click(menu().getByRole('button', { name: /^Dashboard/ }));
+    expect(menu().getByRole('link', { name: 'Pedidos de Compra (O.C.)' })).toHaveAttribute('aria-current', 'page');
+  });
+
   it('o contador diz onde há trabalho parado, somando as views do mesmo item', () => {
     avisosAtuais = [aviso('TRIAGEM', 3, 'triage'), aviso('DEMANDA', 4, 'buy-demands')];
     montar('/gestao-solicitacoes');

@@ -40,15 +40,21 @@ function Fechado({ total }: { total: number }) {
   );
 }
 
-function Subgrupo({ sub, aberto, alternar, itemAtual, pendencias }: {
+/**
+ * `recuo` é o nível do cabeçalho do subgrupo: 1 quando ele mora dentro de um
+ * grupo (Cotações, dentro de Compras) e 0 quando é de topo (Dashboard, que não
+ * tem grupo acima). As folhas entram sempre um nível abaixo do cabeçalho.
+ */
+function Subgrupo({ sub, aberto, alternar, itemAtual, pendencias, recuo = 1 }: {
   sub: SubgrupoMenu; aberto: boolean; alternar: () => void; itemAtual: ItemMenu | null;
-  pendencias: Record<string, number>;
+  pendencias: Record<string, number>; recuo?: number;
 }) {
   return (
     <>
       <button type="button" onClick={alternar}
-        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 pl-5 text-left text-[13.5px] font-semibold ` +
-          (aberto ? 'text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white')}>
+        className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[13.5px] font-semibold `
+          + (recuo === 1 ? 'pl-5 ' : '')
+          + (aberto ? 'text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white')}>
         <span>{sub.rotulo}</span>
         {!aberto && <Fechado total={somar(sub.filhos, pendencias)} />}
         <span className="text-[10px] opacity-80">{aberto ? '▾' : '▸'}</span>
@@ -56,7 +62,7 @@ function Subgrupo({ sub, aberto, alternar, itemAtual, pendencias }: {
       {aberto && (
         <div className="flex flex-col gap-0.5">
           {sub.filhos.map((f) => (
-            <Folha key={f.id} item={f} recuo={2} ativo={f === itemAtual} pendente={pendencias[f.id]} />
+            <Folha key={f.id} item={f} recuo={recuo + 1} ativo={f === itemAtual} pendente={pendencias[f.id]} />
           ))}
         </div>
       )}
@@ -103,8 +109,15 @@ export function Sidebar({ aberto = false, aoFechar }: { aberto?: boolean; aoFech
       </Link>
       <nav className="flex flex-1 flex-col gap-0.5">
         {grupos.map((g) => {
+          // o topo não tem cabeçalho de grupo, mas tem subgrupo (Dashboard) — e até
+          // aqui ele era descartado no `null`, então o item simplesmente sumia do menu
           if (!g.titulo)
-            return g.itens.map((i) => (ehSubgrupo(i) ? null
+            return g.itens.map((i) => (ehSubgrupo(i)
+              ? <Subgrupo key={i.rotulo} sub={i} recuo={0} aberto={subAberto === i.rotulo}
+                  itemAtual={atual?.item ?? null} pendencias={pendencias}
+                  // só o subgrupo muda: mexer no grupo aberto daqui fecharia,
+                  // sem motivo, o grupo em que a pessoa estava trabalhando
+                  alternar={() => setEscolha((e) => ({ ...e, sub: subAberto === i.rotulo ? null : i.rotulo }))} />
               : <Folha key={i.id} item={i} recuo={0} ativo={i === atual?.item} pendente={pendencias[i.id]} />));
           const aberto = grupoAberto === g.titulo;
           return (

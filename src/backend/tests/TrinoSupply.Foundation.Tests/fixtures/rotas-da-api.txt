@@ -4,6 +4,8 @@ DELETE /api/v1/purchase-requisitions/{id:guid}/items/{itemId:guid}
 DELETE /api/v1/suppliers/{id:guid}/documents/{docId:guid}
 GET /api/v1/analytics/compliance
 GET /api/v1/analytics/insights
+GET /api/v1/analytics/report
+GET /api/v1/analytics/report/pdf
 GET /api/v1/analytics/stock
 GET /api/v1/analytics/supplier-scorecard
 GET /api/v1/analytics/supply

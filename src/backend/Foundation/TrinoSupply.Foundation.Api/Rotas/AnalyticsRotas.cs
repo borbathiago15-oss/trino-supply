@@ -1,5 +1,7 @@
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using TrinoSupply.Foundation.Api.Analytics;
+using TrinoSupply.Foundation.Api.Infrastructure;
 using TrinoSupply.Foundation.Api.Compliance;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Insights;
@@ -105,6 +107,52 @@ public static class AnalyticsRotas
                     penalties = r.Penalties.Select(pe => new { code = pe.Code, label = pe.Label, points = pe.Points, evidence = pe.Evidence }),
                 }),
             }, ctx);
+        });
+
+        // Relatório executivo (diretoria): os seis blocos sobre um mesmo recorte, em JSON
+        // para a tela e em PDF para a reunião. O período padrão é o mês corrente — quem
+        // abre a tela quer ver o mês, não doze meses somados.
+        static FiltroRelatorio Recorte(TimeProvider clock, DateOnly? de, DateOnly? ate,
+            string? empresa, string? centroCusto, Guid? compradorId)
+        {
+            // "todos" chega como string vazia do <select> da tela: vazio é ausência de
+            // filtro, não um centro de custo chamado "".
+            static string? Preenchido(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+            var hoje = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+            var f = de ?? new DateOnly(hoje.Year, hoje.Month, 1);
+            var t = ate ?? hoje;
+            if (t < f) (f, t) = (t, f);
+            return new FiltroRelatorio(f, t, Preenchido(empresa), Preenchido(centroCusto), compradorId);
+        }
+
+        analytics.MapGet("/report", async (RelatorioExecutivoService svc, ClaimsPrincipal p, HttpContext ctx,
+            TimeProvider clock, DateOnly? from, DateOnly? to, string? company, string? costCenter,
+            Guid? buyerId, CancellationToken ct) =>
+        {
+            if (!RelatorioExecutivoService.CanView(RoleOf(p)))
+                return Error(ctx, 403, "AN-ERR-900", "Seu papel não acessa o relatório executivo.");
+            if (!ModulesOf(p).Contains(AppModules.Compras) && !ModulesOf(p).Contains(AppModules.Insights))
+                return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para este módulo.");
+            return Ok(await svc.GerarAsync(Recorte(clock, from, to, company, costCenter, buyerId), ct), ctx);
+        });
+
+        analytics.MapGet("/report/pdf", async (RelatorioExecutivoService svc, AppDbContext db,
+            ClaimsPrincipal p, HttpContext ctx, TimeProvider clock,
+            DateOnly? from, DateOnly? to, string? company, string? costCenter, Guid? buyerId,
+            CancellationToken ct) =>
+        {
+            if (!RelatorioExecutivoService.CanView(RoleOf(p)))
+                return Error(ctx, 403, "AN-ERR-900", "Seu papel não acessa o relatório executivo.");
+            if (!ModulesOf(p).Contains(AppModules.Compras) && !ModulesOf(p).Contains(AppModules.Insights))
+                return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para este módulo.");
+            var relatorio = await svc.GerarAsync(Recorte(clock, from, to, company, costCenter, buyerId), ct);
+            var perfil = await db.CompanyProfiles.FirstOrDefaultAsync(ct);
+            var pdf = RelatorioExecutivoPdf.Generate(relatorio, perfil, p.FindFirstValue("name") ?? "Sistema");
+            // sem gravar em stored_document, ao contrário do PDF da O.C.: a O.C. é
+            // documento do processo e fica no histórico; relatório é uma leitura do
+            // momento, e guardar uma cópia por clique só engordaria o banco.
+            return Results.File(pdf, "application/pdf",
+                $"relatorio-compras-{relatorio.From:yyyy-MM-dd}_a_{relatorio.To:yyyy-MM-dd}.pdf");
         });
 
         analytics.MapGet("/stock", async (TrinoSupply.Foundation.Api.Analytics.AnalyticsService svc,

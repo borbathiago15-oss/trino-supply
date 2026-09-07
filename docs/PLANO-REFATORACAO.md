@@ -136,7 +136,7 @@ ser notado.
 
 | Consulta | Teto na auditoria | Hoje |
 |---|---|---|
-| `RequisitionService.ListAsync` (Meus Pedidos) | 100 | página + busca + `total` |
+| `RequisitionService.ListAsync` (Minhas Solicitações) | 100 | página + busca + `total` |
 | `QuotationService.ListAsync` (Processos) | 200 | página + busca + `total` |
 | `PurchaseOrderService.ListAsync` (Pedidos) | 100 | página + busca + `total` (#90) |
 | `SupplierService` | 500 | página + busca + `total` (#90) |
@@ -341,7 +341,7 @@ travar o resto do formulário, que continua editável.
 
 `PR-ERR-050`: a data de necessidade no passado só era recusada no **envio**, não
 na criação. Nos dois formulários de criação o campo passou a ter `min` de hoje.
-Em "Meus Pedidos" a escolha foi outra, de propósito: ali a data pode ter vindo
+Em "Minhas Solicitações (SC)" a escolha foi outra, de propósito: ali a data pode ter vindo
 de um rascunho antigo, e travar o campo impediria de salvar qualquer outra
 correção — então a tela **avisa** que com aquela data o envio é recusado.
 
@@ -433,13 +433,37 @@ item e leva 403 da API.
 | **D4** | **Contadores no menu** ao lado de Central de Aprovação, Gestão de Solicitações e Fila de Atendimento, com o mesmo número dos avisos. O menu passa a dizer onde há trabalho. | baixo | orientação |
 | **D5** | **Corrigir o acordeão**: abrir o grupo da rota atual, inclusive para telas dentro de subgrupo, e acompanhar a navegação. | baixo | defeito |
 | **D6** | **Ordenar os grupos na sequência do processo**: Solicitações de Compra → Compras → Material → Estoque → Cadastros. Hoje Estoque vem antes de Compras, contra o fluxo. | baixo | leitura |
-| **D7** | **Separar o vocabulário**: "Meus Pedidos" → "Minhas Solicitações de Compra"; "Minhas Solicitações" → "Minhas Requisições de Material". | baixo | ruído |
+| **D7** | **Separar o vocabulário**: duas palavras significavam duas coisas cada uma. | baixo | ruído |
 | **D8** | Trocar `mostrar: sempre` de Pedidos de Compra por `podeVerPedidos`. | trivial | coerência |
 
 **Recomendação:** D5 + D3 + D6 + D8 primeiro — são correção e arrumação, sem
 tela nova e sem decisão sua. Depois D2, que é o que de fato tira o usuário do
 menu. D1 e D4 em seguida. D7 fica por último porque mexe em rótulo que a sua
 equipe já decorou: é a única que precisa da sua palavra.
+
+#### D7 — entregue em #111, com a sua decisão
+
+Você escolheu fazer a troca **antes do lançamento**, e a razão é a certa: o
+custo de renomear cresce depois que o time decora o nome errado.
+
+| Antes | Agora | Por quê |
+|---|---|---|
+| Meus Pedidos | **Minhas Solicitações (SC)** | eram SCs chamadas de "pedido" |
+| Pedidos de Compra | **Pedidos de Compra (O.C.)** | "pedido" passa a querer dizer só a O.C. |
+| Minhas Solicitações | **Minhas Solicitações de Material** | colidia com a SC |
+| Gestão de Solicitações | **Triagem de Demandas** | o nome diz o que se faz ali |
+
+A regra que ficou: **cada nome carrega o seu objeto, e "pedido" sozinho quer
+dizer O.C.** Ela vale além do menu — título de tela, texto de aviso, mensagem
+de confirmação. Menu dizendo "solicitação" e tela dizendo "pedido" seria a
+mesma incoerência de sempre, só que espalhada; por isso a troca alcançou também
+os avisos do backend ("3 pedidos seus em andamento" virou "3 solicitações
+suas"), os estados vazios e os títulos de painel.
+
+O que **não** mudou, de propósito: as rotas (`/solicitacoes`, `/pedidos`) e os
+nomes de arquivo. URL é endereço, não vocabulário — trocar quebraria links
+salvos sem ganhar nada para quem usa. Um teste em `menu.test.ts` fixa a regra e
+recusa qualquer item novo que volte a chamar de "pedido" o que não é O.C.
 
 
 ---
@@ -556,7 +580,7 @@ existentes antes de criar o índice.
 | 11 | **INT-A** — componente único de estado de tela | interface · **premissa corrigida**; corrigida a tela sem estado vazio |
 | 12 | **INT-B / ARQ-B** — quebrar as duas maiores unidades | arquitetura · **entregue** — 1.222 → 5 arquivos e 455 → 254 linhas (#109) |
 | 13 | **INT-C** — varredura das regras que a tela ainda não antecipa | interface · **concluído** — #107, #108 e #110 |
-| 14 | **INT-D · D7** — vocabulário do menu (precisa da sua decisão) | interface |
+| 14 | **INT-D · D7** — vocabulário do menu | interface · **entregue** (#111) |
 | 15 | **SEC-D** — zerar o aviso de build | qualidade · **entregue** |
 
 ---
@@ -571,7 +595,7 @@ existentes antes de criar o índice.
 | Segurança | Rate limiting só no login | 🟡 MÉDIO | Cotas por usuário em upload e relatório | **Entregue** | Médio |
 | Segurança | Upload sem limite declarado | 🟡 MÉDIO | Teto de requisição nos oito endpoints | **Entregue** | Médio |
 | Inteligência | Insight descreve mas não age | 🟡 MÉDIO | Ação + link, três regras novas, achado grave no painel | **Entregue** | Alto |
-| Interface | Menu por módulo, processo em zigue-zague; acordeão não segue a rota | 🟠 ALTO | Trilha do processo, próximo passo na tela, menu corrigido | D1–D6 e D8 entregues (#92, #93); falta D7, o vocabulário | Alto |
+| Interface | Menu por módulo, processo em zigue-zague; acordeão não segue a rota | 🟠 ALTO | Trilha do processo, próximo passo na tela, menu corrigido | D1–D8 entregues (#92, #93, #111) | Alto |
 | Interface | 27 telas repetem estado | 🟡 MÉDIO | ~~Componente único~~ — o formato já era uniforme; o defeito era uma tela sem estado vazio | **Corrigido** | Baixo |
 | Arquitetura | `QuotationService` com 1.108 linhas | 🟡 MÉDIO | Separar alçadas | A executar | Médio |
 | Banco | `erp_number` sem índice único | 🟡 MÉDIO | Migration após conferir a produção | **Bloqueado em você** | Médio |

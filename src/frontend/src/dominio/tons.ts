@@ -1,7 +1,7 @@
 /**
  * Os tons que a API usa para colorir situações (`processStatusTone`), traduzidos
  * para as classes do tema. Ficam num lugar só porque a mesma situação aparece
- * em Meus Pedidos, na Gestão de Solicitações e no painel do almoxarifado.
+ * em Minhas Solicitações (SC), na Triagem de Demandas e no painel do almoxarifado.
  */
 const TOM: Record<string, string> = {
   on: 'bg-ok-fundo text-ok',

@@ -27,7 +27,7 @@ async function pedirEAprovar(page: import('@playwright/test').Page, observacao: 
   await expect(page.getByTestId('toast').last()).toContainText('liberada para o almoxarifado');
 }
 
-test.describe('Estoque e Gestão de Solicitações (React)', () => {
+test.describe('Estoque e Triagem de Demandas (React)', () => {
   test('fila do almoxarifado: atende em parte e o faltante vira solicitação de compra', async ({ page }) => {
     const observacao = `E2E fila ${marca}`;
     await pedirEAprovar(page, observacao);
@@ -77,7 +77,7 @@ test.describe('Estoque e Gestão de Solicitações (React)', () => {
 
   test('gestão de solicitações: filtra, designa e muda a prioridade com justificativa', async ({ page }) => {
     await abrirAutenticado(page, '/gestao-solicitacoes');
-    await expect(page.locator('#titulo-pagina')).toHaveText('Gestão de Solicitações');
+    await expect(page.locator('#titulo-pagina')).toHaveText('Triagem de Demandas');
     const tabela = page.getByTestId('tabela-demandas');
     await expect(tabela).toBeVisible();
 

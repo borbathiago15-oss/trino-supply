@@ -84,7 +84,7 @@ test.describe('Pedidos de Compra (React)', () => {
     await page.fill('#password', SENHA);
     await page.click('button[type=submit]');
     await expect(page).toHaveURL(/\/pedidos$/);
-    await expect(page.locator('#titulo-pagina')).toHaveText('Pedidos de Compra');
+    await expect(page.locator('#titulo-pagina')).toHaveText('Pedidos de Compra (O.C.)');
   });
 
   test('o login pela tela vale nas outras rotas da mesma aba', async ({ page }) => {
@@ -96,7 +96,7 @@ test.describe('Pedidos de Compra (React)', () => {
 
     // a sessão fica na aba: outra rota abre sem novo login
     await page.goto('/pedidos');
-    await expect(page.locator('#titulo-pagina')).toHaveText('Pedidos de Compra');
+    await expect(page.locator('#titulo-pagina')).toHaveText('Pedidos de Compra (O.C.)');
     await expect(page.getByTestId('tabela-pedidos')).toBeVisible();
   });
 });

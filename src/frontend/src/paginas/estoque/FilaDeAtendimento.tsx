@@ -128,7 +128,7 @@ export function FilaDeAtendimento() {
                             <strong>{r.assignedToLabel}</strong>
                             {r.assignedToId === usuario.id && <div className="sub">designada a você</div>}
                           </>
-                        : <span className="sub">sem responsável (Gestão de Solicitações)</span>}
+                        : <span className="sub">sem responsável (Triagem de Demandas)</span>}
                     </td>
                     <td>
                       <button type="button" className="botao" onClick={() => abrir(r)}>Atender</button>

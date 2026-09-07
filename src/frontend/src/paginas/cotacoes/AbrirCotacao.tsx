@@ -104,7 +104,7 @@ export function AbrirCotacao() {
       <Painel titulo="Solicitações aguardando cotação">
         <Nota>
           As aprovadas podem ser cotadas agora; as retidas mostram de quem está a aprovação pendente.
-          O comprador responsável vem de Compras → Gestão de Solicitações.
+          O comprador responsável vem de Compras → Triagem de Demandas.
         </Nota>
 
         {conduz && fila.some((r) => !r.blockReason) && (
@@ -212,7 +212,7 @@ function FragmentoSc({ sc, conduz, usuarioId, marcados, todosMarcados, aoMarcarS
         <td className="min-w-[170px]">
           {sc.assignedToLabel
             ? <><strong>{sc.assignedToLabel}</strong>{minha && <div className="sub">designada a você</div>}</>
-            : <span className="sub">designe em Compras → Gestão de Solicitações</span>}
+            : <span className="sub">designe em Compras → Triagem de Demandas</span>}
         </td>
         <td className="min-w-[150px]">
           {sc.blockReason

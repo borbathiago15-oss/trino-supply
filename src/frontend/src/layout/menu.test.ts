@@ -91,4 +91,19 @@ describe('menu', () => {
     expect(folhas.length).toBeGreaterThan(0);
     for (const f of folhas) expect(enderecoDe(f)).toMatch(/^\/[a-z]/);
   });
+
+  it('cada nome do menu carrega o seu objeto: “pedido” quer dizer O.C. (D7)', () => {
+    // duas palavras significavam duas coisas cada uma — era o que mais confundia
+    // quem enxerga o sistema inteiro. Este teste é o que impede a volta.
+    const folhas = MENU.flatMap((g) => g.itens.flatMap((i) => (ehSubgrupo(i) ? i.filhos : [i])));
+    const rotulo = (id: string) => folhas.find((f) => f.id === id)!.rotulo;
+
+    expect(rotulo('pr-mine')).toBe('Minhas Solicitações (SC)');
+    expect(rotulo('buy-orders')).toBe('Pedidos de Compra (O.C.)');
+    expect(rotulo('mr-mine')).toBe('Minhas Solicitações de Material');
+    expect(rotulo('triage')).toBe('Triagem de Demandas');
+
+    // nenhuma outra tela chama de "pedido" o que não é O.C.
+    expect(folhas.filter((f) => /pedido/i.test(f.rotulo)).map((f) => f.id)).toEqual(['buy-orders']);
+  });
 });

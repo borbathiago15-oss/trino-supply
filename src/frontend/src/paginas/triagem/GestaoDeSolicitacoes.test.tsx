@@ -78,7 +78,7 @@ describe('regras da fila de demandas', () => {
   });
 });
 
-describe('tela Gestão de Solicitações', () => {
+describe('tela Triagem de Demandas', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     eu = { id: 'u1', email: 'carla@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['COMPRAS'] };

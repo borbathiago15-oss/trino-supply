@@ -100,6 +100,9 @@ using (var scope = app.Services.CreateScope())
     seedOk = await AdminSeeder.SeedAsync(db, hasher, app.Configuration, app.Logger);
 }
 
+// primeiro de tudo: o que quebrar depois daqui responde no envelope da API e vai para o log
+app.UsarEnvelopeDeFalha();
+
 app.UseDefaultFiles();
 // o SPA é um arquivo só: o navegador precisa revalidar o HTML a cada carga, senão
 // uma versão antiga fica presa no cache depois do deploy (assets seguem cacheáveis)
@@ -149,13 +152,22 @@ app.Use(async (ctx, next) =>
 
 // ---- Envelope de resposta (convenção da suíte: data/error + correlationId) --
 // ---- Endpoints ---------------------------------------------------------------
-app.MapGet("/health", (AppDbContext db) => Results.Json(new
+// O healthcheck do Railway aponta para cá. Recebia o AppDbContext e não perguntava nada
+// a ele: respondia "healthy" com o banco fora do ar, que é a única coisa que este
+// endpoint precisava saber. Agora ele fala com o banco e diz 503 quando não alcança —
+// quem pergunta se está tudo bem recebe a resposta verdadeira.
+app.MapGet("/health", async (AppDbContext db, CancellationToken ct) =>
 {
-    status = "healthy",
-    service = "trino-supply-foundation",
-    setupComplete = seedOk,
-    timestamp = DateTimeOffset.UtcNow,
-}));
+    var banco = await db.Database.CanConnectAsync(ct);
+    return Results.Json(new
+    {
+        status = banco ? "healthy" : "degraded",
+        service = "trino-supply-foundation",
+        database = banco ? "up" : "down",
+        setupComplete = seedOk,
+        timestamp = DateTimeOffset.UtcNow,
+    }, statusCode: banco ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
+});
 
 // ---- Autenticação: login, refresh, sessão e troca de senha ------------------
 app.MapAutenticacao(seedOk);

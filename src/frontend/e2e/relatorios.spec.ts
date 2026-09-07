@@ -24,6 +24,19 @@ test.describe('Relatórios (React)', () => {
     await expect(page.getByTestId('recorte-aplicado')).toContainText('Comprador: todos');
   });
 
+  test('chega-se a Relatórios pelo submenu Dashboard, junto das outras leituras', async ({ page }) => {
+    await abrirAutenticado(page, '/painel');
+    const menu = page.getByRole('navigation');
+
+    // na tela do painel o Dashboard já está aberto: é onde a pessoa está
+    await expect(menu.getByRole('link', { name: 'Insights & Executivo' })).toBeVisible();
+    await expect(menu.getByRole('link', { name: 'Compliance' })).toBeVisible();
+    await menu.getByRole('link', { name: 'Relatórios' }).click();
+
+    await expect(page).toHaveURL(/\/relatorios$/);
+    await expect(page.locator('#titulo-pagina')).toHaveText('Relatórios');
+  });
+
   test('o filtro só consulta ao aplicar, e o recorte vai para a chamada', async ({ page }) => {
     await abrirAutenticado(page, '/relatorios');
     await expect(page.locator('#rel-cc')).toBeVisible();

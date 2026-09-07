@@ -50,11 +50,17 @@ const sempre = () => true;
  */
 export const MENU: GrupoMenu[] = [
   { titulo: null, itens: [
-    { id: 'supply-dash', rotulo: 'Dashboard de Suprimentos', rota: '/painel', mostrar: sempre },
+    // As quatro telas de leitura moram juntas: são o mesmo gesto — olhar o que
+    // aconteceu —, e soltas no topo empurravam a Central de Aprovação para baixo
+    // de coisa que ninguém abre todo dia. Quem só enxerga o painel não paga por
+    // isso: subgrupo com uma tela só vira item simples (`itensVisiveis`).
+    { rotulo: 'Dashboard', filhos: [
+      { id: 'supply-dash', rotulo: 'Dashboard de Suprimentos', rota: '/painel', mostrar: sempre },
+      { id: 'insights', rotulo: 'Insights & Executivo', rota: '/insights', modulo: 'INSIGHTS', mostrar: podeVerCompliance },
+      { id: 'compliance', rotulo: 'Compliance', rota: '/compliance', modulo: 'COMPLIANCE', mostrar: podeVerCompliance },
+      { id: 'reports', rotulo: 'Relatórios', rota: '/relatorios', mostrar: podeVerRelatorios },
+    ]},
     { id: 'pr-approvals', rotulo: 'Central de Aprovação', rota: '/aprovacoes', modulo: 'APROVACAO', mostrar: podeDecidirSc },
-    { id: 'compliance', rotulo: 'Compliance', rota: '/compliance', modulo: 'COMPLIANCE', mostrar: podeVerCompliance },
-    { id: 'insights', rotulo: 'Insights & Executivo', rota: '/insights', modulo: 'INSIGHTS', mostrar: podeVerCompliance },
-    { id: 'reports', rotulo: 'Relatórios', rota: '/relatorios', mostrar: podeVerRelatorios },
   ]},
   { titulo: 'Solicitações de Compra', modulo: 'SOLICITACOES', itens: [
     { rotulo: 'Nova Solicitação', filhos: [

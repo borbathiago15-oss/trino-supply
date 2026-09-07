@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { contagemPorItem, ehSubgrupo, enderecoDe, itensVisiveis, localizar, MENU, type ItemMenu } from './menu';
+import { contagemPorItem, ehSubgrupo, enderecoDe, itensVisiveis, localizar, MENU, type ItemMenu, type SubgrupoMenu } from './menu';
 import type { Perfil } from '@/dominio/papeis';
 
 const folhas = (u: Perfil): ItemMenu[] =>
@@ -34,6 +34,24 @@ describe('menu', () => {
     expect(solicitante.map((i) => i.id)).not.toContain('buy-orders');
     const auditor = folhas({ role: 'Auditor', modules: ['COMPRAS'] });
     expect(auditor.map((i) => i.id)).toContain('buy-orders');
+  });
+
+  it('as telas de leitura moram juntas no subgrupo Dashboard, nesta ordem', () => {
+    const grupos = itensVisiveis({ role: 'SystemAdministrator', modules: [] });
+    const topo = grupos[0].itens;
+    const dashboard = topo.find((i) => ehSubgrupo(i) && i.rotulo === 'Dashboard');
+    expect(dashboard).toBeDefined();
+    expect((dashboard as SubgrupoMenu).filhos.map((f) => f.id))
+      .toEqual(['supply-dash', 'insights', 'compliance', 'reports']);
+    // a Central de Aprovação continua fora: ela é passo do ciclo, não leitura
+    expect(topo.some((i) => !ehSubgrupo(i) && i.id === 'pr-approvals')).toBe(true);
+  });
+
+  it('quem só enxerga o painel não paga clique: o subgrupo de uma tela vira item simples', () => {
+    // sem Insights, Compliance nem Relatórios, "Dashboard" viraria uma gaveta com
+    // uma coisa dentro — dois cliques para a tela que a pessoa mais abre
+    const topo = itensVisiveis({ role: 'Requester', modules: ['SOLICITACOES'] })[0].itens;
+    expect(topo.map((i) => (ehSubgrupo(i) ? i.rotulo : i.id))).toEqual(['supply-dash']);
   });
 
   it('Relatórios segue o mesmo critério da rota: papel de análise e módulo Compras ou Insights', () => {

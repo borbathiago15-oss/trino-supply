@@ -54,6 +54,12 @@ export const dataNoPassado = (iso: string) => !!iso && iso < hojeIso();
 export const resumoDosItens = (r: SolicitacaoCompra) =>
   r.items.map((i) => `${quantidade(i.quantity)}× ${i.catalogCode ? `[${i.catalogCode}] ` : ''}${i.description}`).join(' · ');
 
+/**
+ * A tela "Minhas Solicitações (SC)". O nome do arquivo e da função é o antigo,
+ * de quando a tela se chamava "Meus Pedidos" — no D7 "pedido" passou a querer
+ * dizer só a O.C., e renomear arquivo não muda nada para quem usa o sistema.
+ * O que precisa dizer "solicitação" é o que aparece na tela.
+ */
 export function MeusPedidos() {
   const usuario = useUsuario();
   const { avisar } = useToast();
@@ -113,10 +119,10 @@ export function MeusPedidos() {
         urgencyReason: form.urgenciaMotivo || null,
         urgencyImpact: form.urgenciaImpacto || null,
       });
-      avisar('Pedido atualizado.');
+      avisar('Solicitação atualizada.');
       setEditando(null);
       recarregar();
-    } catch (e) { avisar(mensagem(e, 'Falha ao salvar o pedido.'), 'erro'); }
+    } catch (e) { avisar(mensagem(e, 'Falha ao salvar a solicitação.'), 'erro'); }
     finally { setSalvando(false); }
   }
 
@@ -150,7 +156,7 @@ export function MeusPedidos() {
 
   return (
     <>
-      <Painel titulo="Meus Pedidos de Compra" acoes={
+      <Painel titulo="Minhas Solicitações de Compra (SC)" acoes={
         <input aria-label="Buscar" placeholder="Buscar por número, item, justificativa ou CC"
           className="!w-[320px]" value={busca}
           onChange={(e) => { setTamanho(POR_PAGINA); setBusca(e.target.value); }} />
@@ -160,8 +166,8 @@ export function MeusPedidos() {
         {dados && !lista.length && (
           <Vazio>
             {termo.trim()
-              ? 'Nenhum pedido encontrado para esta busca.'
-              : 'Nenhum pedido ainda. Crie pelo menu “Inclusão de SC” ou “Solicitação em Lote”.'}
+              ? 'Nenhuma solicitação encontrada para esta busca.'
+              : 'Nenhuma SC ainda. Crie pelo menu “Inclusão de SC” ou “Solicitação em Lote”.'}
           </Vazio>
         )}
         {lista.length > 0 && (
@@ -235,7 +241,7 @@ export function MeusPedidos() {
         {lista.length > 0 && (
           <div className="mt-3 flex items-center justify-between gap-3">
             <span className="sub" data-testid="contagem-solicitacoes">
-              Mostrando {lista.length} de {total} pedido(s).
+              Mostrando {lista.length} de {total} solicitação(ões).
             </span>
             {lista.length < total && (
               <button type="button" className="botao-secundario" disabled={carregando}
@@ -248,7 +254,7 @@ export function MeusPedidos() {
       </Painel>
 
       {editando && (
-        <Painel id="form-sc" titulo={`Editar pedido ${editando.number}`}
+        <Painel id="form-sc" titulo={`Editar a SC ${editando.number}`}
           acoes={<button type="button" className="botao-secundario" onClick={cancelarEdicao}>Fechar</button>}>
           <form onSubmit={salvar}>
             <Campo id="sc-edit-justificativa" rotulo="Justificativa">

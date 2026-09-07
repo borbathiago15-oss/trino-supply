@@ -17,7 +17,7 @@ test.describe('Solicitações de Compra (React)', () => {
     await page.selectOption('#sc-cc', { index: 1 });
     await page.getByRole('button', { name: 'Criar rascunho da SC' }).click();
 
-    // ao criar, a tela leva para Meus Pedidos
+    // ao criar, a tela leva para Minhas Solicitações (SC)
     await expect(page).toHaveURL(/\/solicitacoes$/);
     await expect(page.getByTestId('toast')).toContainText('criada como rascunho');
 
@@ -29,7 +29,7 @@ test.describe('Solicitações de Compra (React)', () => {
     await linha.getByRole('button', { name: 'Editar' }).click();
     await page.fill('#sc-edit-justificativa', `${justificativa} revisada`);
     await page.getByRole('button', { name: 'Salvar alterações' }).click();
-    await expect(page.getByTestId('toast').last()).toContainText('Pedido atualizado.');
+    await expect(page.getByTestId('toast').last()).toContainText('Solicitação atualizada.');
     const revisada = page.locator('tr', { hasText: `${justificativa} revisada` }).first();
     await expect(revisada).toBeVisible();
 

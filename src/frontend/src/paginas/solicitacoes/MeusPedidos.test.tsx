@@ -131,7 +131,7 @@ describe('<MeusPedidos />', () => {
   it('sem busca, a lista vazia diz por onde criar a primeira', async () => {
     vi.mocked(listarSolicitacoes).mockResolvedValue(pagina([]));
     montar();
-    await waitFor(() => expect(screen.getByText(/Nenhum pedido ainda/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Nenhuma SC ainda/)).toBeInTheDocument());
   });
 
   it('excluir pede confirmação antes de chamar a API', async () => {
@@ -149,7 +149,7 @@ describe('<MeusPedidos />', () => {
     montar();
     await waitFor(() => expect(screen.getByTestId('tabela-solicitacoes')).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole('button', { name: 'Editar' })[0]);
-    expect(screen.getByRole('heading', { name: /Editar pedido SC-2026-000001/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Editar a SC SC-2026-000001/ })).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
     await waitFor(() => expect(atualizarSolicitacao).toHaveBeenCalledWith('sc-SC-2026-000001', expect.objectContaining({
       justification: 'Reposição de EPI', clearNeededBy: true, neededBy: null,

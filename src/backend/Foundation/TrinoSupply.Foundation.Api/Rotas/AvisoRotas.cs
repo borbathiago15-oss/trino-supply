@@ -56,7 +56,7 @@ public static class AvisoRotas
                 if (overdue > 0) alerts.Add(new
                 {
                     kind = "ATRASO", severity = "alta", count = overdue, view = "pr-mine",
-                    text = $"{overdue} pedido(s) com data de necessidade vencida e ainda não concluído(s).",
+                    text = $"{overdue} solicitação(ões) com data de necessidade vencida e ainda não concluída(s).",
                 });
             }
 
@@ -71,7 +71,7 @@ public static class AvisoRotas
                 });
             }
 
-            // Meus pedidos aguardando aprovação / devolvidos para ajuste
+            // Minhas solicitações (SC) aguardando aprovação / devolvidas para ajuste
             if (mods.Contains(AppModules.Solicitacoes) && actor.CanCreate)
             {
                 var waiting = await db.Requisitions.CountAsync(r => r.RequesterId == uid
@@ -79,13 +79,13 @@ public static class AvisoRotas
                 if (waiting > 0) alerts.Add(new
                 {
                     kind = "AGUARDANDO", severity = "info", count = waiting, view = "pr-mine",
-                    text = $"{waiting} pedido(s) seu(s) em andamento com Suprimentos.",
+                    text = $"{waiting} solicitação(ões) sua(s) em andamento com Suprimentos.",
                 });
                 var returned = await db.Requisitions.CountAsync(r => r.RequesterId == uid && r.Status == RequisitionStatus.Returned);
                 if (returned > 0) alerts.Add(new
                 {
                     kind = "DEVOLVIDO", severity = "alta", count = returned, view = "pr-mine",
-                    text = $"{returned} pedido(s) devolvido(s) para ajuste — revise e reenvie.",
+                    text = $"{returned} solicitação(ões) devolvida(s) para ajuste — revise e reenvie.",
                 });
             }
 

@@ -65,7 +65,7 @@ export function SolicitacaoEmLote() {
         urgencyReason: form.urgenciaMotivo || null,
         urgencyImpact: form.urgenciaImpacto || null,
       });
-      avisar(`SC ${criada.number} criada com ${items.length} item(ns). Revise em “Meus Pedidos” e envie.`);
+      avisar(`SC ${criada.number} criada com ${items.length} item(ns). Revise em “Minhas Solicitações (SC)” e envie.`);
       setQuantidades({});
       navegar('/solicitacoes');
     } catch (e) { avisar(e instanceof Error ? e.message : 'Falha ao gerar a SC.', 'erro'); }

@@ -38,7 +38,7 @@ describe('<Sidebar />', () => {
 
   it('abre sozinho o grupo da tela em que se está', () => {
     montar('/pedidos');
-    expect(menu().getByRole('link', { name: 'Pedidos de Compra' })).toHaveAttribute('aria-current', 'page');
+    expect(menu().getByRole('link', { name: 'Pedidos de Compra (O.C.)' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('abre também o subgrupo, que antes nunca era encontrado', () => {
@@ -49,10 +49,10 @@ describe('<Sidebar />', () => {
     expect(menu().getByRole('button', { name: /^Cotações/ })).toBeInTheDocument();
   });
 
-  it('a rota mais longa vence: /solicitacoes/nova não marca Meus Pedidos', () => {
+  it('a rota mais longa vence: /solicitacoes/nova não marca Minhas Solicitações (SC)', () => {
     montar('/solicitacoes/nova');
     expect(menu().getByRole('link', { name: 'Inclusão de SC' })).toHaveAttribute('aria-current', 'page');
-    expect(menu().getByRole('link', { name: 'Meus Pedidos' })).not.toHaveAttribute('aria-current');
+    expect(menu().getByRole('link', { name: 'Minhas Solicitações (SC)' })).not.toHaveAttribute('aria-current');
   });
 
   it('navegar por link fora do menu reabre o grupo do destino', async () => {
@@ -68,7 +68,7 @@ describe('<Sidebar />', () => {
   it('quem abre e fecha um grupo com a mão continua mandando', async () => {
     montar('/pedidos');
     await userEvent.click(menu().getByRole('button', { name: /^Compras/ }));
-    expect(menu().queryByRole('link', { name: 'Pedidos de Compra' })).not.toBeInTheDocument();
+    expect(menu().queryByRole('link', { name: 'Pedidos de Compra (O.C.)' })).not.toBeInTheDocument();
 
     await userEvent.click(menu().getByRole('button', { name: /^Cadastros/ }));
     expect(menu().getByRole('link', { name: 'Usuários' })).toBeInTheDocument();
@@ -83,7 +83,7 @@ describe('<Sidebar />', () => {
   it('o contador diz onde há trabalho parado, somando as views do mesmo item', () => {
     avisosAtuais = [aviso('TRIAGEM', 3, 'triage'), aviso('DEMANDA', 4, 'buy-demands')];
     montar('/gestao-solicitacoes');
-    // buy-demands não é item de menu: quem atende essas demandas é a Gestão de Solicitações
+    // buy-demands não é item de menu: quem atende essas demandas é a Triagem de Demandas
     expect(menu().getByTestId('pendencia-triage')).toHaveTextContent('7');
   });
 

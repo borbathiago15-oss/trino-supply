@@ -30,6 +30,23 @@ const sempre = () => true;
  * fluxos (SC, material e cotação) e é o passo 2 e o passo 6 do ciclo. Enquanto
  * morava dentro de "Solicitações de Compra", quem acabava de escolher o
  * fornecedor em "Compras" tinha de voltar dois grupos para aprovar.
+ *
+ * ## O vocabulário (D7)
+ *
+ * Duas palavras significavam duas coisas cada uma, e era o que mais confundia
+ * quem enxerga o sistema inteiro. A regra agora é: **cada nome carrega o seu
+ * objeto**, e o rótulo do menu é o mesmo que o título da tela e o texto do
+ * aviso — dizer "pedido" no menu e "solicitação" na tela é o mesmo defeito,
+ * só que espalhado.
+ *
+ * | Palavra | Significa | Onde |
+ * |---|---|---|
+ * | **Solicitação (SC)** | o pedido interno de compra | Minhas Solicitações (SC) |
+ * | **Pedido (O.C.)** | a ordem fechada no ERP, para o fornecedor | Pedidos de Compra (O.C.) |
+ * | **Solicitação de Material** | a retirada do almoxarifado | Minhas Solicitações de Material |
+ * | **Demanda** | o que chega para o comprador triar | Triagem de Demandas |
+ *
+ * "Pedido" sozinho passa a querer dizer O.C., em todo o sistema.
  */
 export const MENU: GrupoMenu[] = [
   { titulo: null, itens: [
@@ -43,22 +60,22 @@ export const MENU: GrupoMenu[] = [
       { id: 'pr-new-unit', rotulo: 'Inclusão de SC', rota: '/solicitacoes/nova', mostrar: podeCriarSc },
       { id: 'pr-new-multi', rotulo: 'Solicitação em Lote', rota: '/solicitacoes/lote', mostrar: podeCriarSc },
     ]},
-    { id: 'pr-mine', rotulo: 'Meus Pedidos', rota: '/solicitacoes', mostrar: sempre },
+    { id: 'pr-mine', rotulo: 'Minhas Solicitações (SC)', rota: '/solicitacoes', mostrar: sempre },
   ]},
   { titulo: 'Compras', modulo: 'COMPRAS', itens: [
-    { id: 'triage', rotulo: 'Gestão de Solicitações', rota: '/gestao-solicitacoes',
+    { id: 'triage', rotulo: 'Triagem de Demandas', rota: '/gestao-solicitacoes',
       mostrar: (u) => podeTriar(u) || podeComprar(u) || podeAlmoxarifado(u) },
     { rotulo: 'Cotações', filhos: [
       { id: 'rfq-queue', rotulo: 'Abrir Cotação', rota: '/cotacoes/abrir', mostrar: podeVerCotacao },
       { id: 'quotations', rotulo: 'Processos de Cotação', rota: '/cotacoes', mostrar: podeVerCotacao },
     ]},
-    { id: 'buy-orders', rotulo: 'Pedidos de Compra', rota: '/pedidos', mostrar: podeVerPedidos },
+    { id: 'buy-orders', rotulo: 'Pedidos de Compra (O.C.)', rota: '/pedidos', mostrar: podeVerPedidos },
     { id: 'contracts', rotulo: 'Contratos', rota: '/contratos', modulo: 'CONTRATOS', mostrar: (u) => podeComprar(u) || ehAdmin(u) },
     { id: 'scorecard', rotulo: 'Scorecard de Fornecedores', rota: '/scorecard', mostrar: (u) => podeComprar(u) || podeVerCompliance(u) },
   ]},
   { titulo: 'Material', modulo: 'MATERIAL', itens: [
     { id: 'mr-new', rotulo: 'Solicitar Material', rota: '/material/nova', mostrar: podePedirMaterial },
-    { id: 'mr-mine', rotulo: 'Minhas Solicitações', rota: '/material', mostrar: sempre },
+    { id: 'mr-mine', rotulo: 'Minhas Solicitações de Material', rota: '/material', mostrar: sempre },
   ]},
   { titulo: 'Estoque', modulo: 'ESTOQUE', itens: [
     { id: 'wh-queue', rotulo: 'Fila de Atendimento', rota: '/estoque/fila', mostrar: podeAlmoxarifado },

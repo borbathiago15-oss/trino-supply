@@ -109,7 +109,7 @@ export function GestaoDeSolicitacoes() {
 
   return (
     <>
-      <Painel titulo="Gestão de Solicitações" acoes={
+      <Painel titulo="Triagem de Demandas" acoes={
         dados && <span className="sub">{visiveis.length} de {dados.total} demanda(s)</span>
       }>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">

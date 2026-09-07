@@ -29,7 +29,7 @@ describe('endereço da tela pelo id', () => {
     expect(enderecoDoId('triage')).toBe('/gestao-solicitacoes');
     expect(enderecoDoId('quotations')).toBe('/cotacoes');
   });
-  it('buy-demands não é item de menu e cai na Gestão de Solicitações', () => {
+  it('buy-demands não é item de menu e cai na Triagem de Demandas', () => {
     // a tela dele deixou de existir; quem cuida dessas demandas é a triagem
     expect(enderecoDoId('buy-demands')).toBe('/gestao-solicitacoes');
   });

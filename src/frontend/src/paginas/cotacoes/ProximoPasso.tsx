@@ -53,7 +53,7 @@ export function proximoPasso(q: Processo): Passo | null {
         titulo: 'Faturamento e confirmação de entrega',
         detalhe: 'A compra está fechada. O que falta acontece na tela do pedido: nota fiscal, recebimento e entrega.',
         rota: unica ? `/pedidos/${unica.id}` : '/pedidos',
-        rotulo: unica ? `Abrir o pedido ${unica.number ?? ''}`.trim() : 'Ir para Pedidos de Compra',
+        rotulo: unica ? `Abrir o pedido ${unica.number ?? ''}`.trim() : 'Ir para Pedidos de Compra (O.C.)',
       };
     }
     default:

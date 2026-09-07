@@ -255,7 +255,7 @@ export function NovaSolicitacao() {
         <button type="submit" className="botao mt-4 w-full" disabled={salvando}>
           {salvando ? 'Criando…' : 'Criar rascunho da SC'}
         </button>
-        <Nota>A SC nasce como rascunho: você revisa em “Meus Pedidos” e envia quando estiver pronta.</Nota>
+        <Nota>A SC nasce como rascunho: você revisa em “Minhas Solicitações (SC)” e envia quando estiver pronta.</Nota>
       </form>
     </Painel>
   );

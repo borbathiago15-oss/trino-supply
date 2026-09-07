@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http.Metadata;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Inventory;
@@ -29,6 +30,41 @@ public static class Api
         ctx.Request.Headers.TryGetValue("X-Correlation-Id", out var v) && !string.IsNullOrWhiteSpace(v)
             ? v.ToString()
             : ctx.TraceIdentifier;
+
+    /// <summary>Código da falha que ninguém previu — a única que não tem regra de negócio atrás.</summary>
+    public const string CodigoDeFalhaInesperada = "SYS-ERR-500";
+
+    /// <summary>
+    /// Falha não prevista responde no mesmo envelope do resto da API e deixa rastro.
+    ///
+    /// Sem isto o 500 sai com corpo vazio: o usuário vê "o servidor não respondeu" e não
+    /// tem número nenhum para relatar, e quem for investigar não consegue ligar a queixa
+    /// dele à linha do log. A correlação passa a aparecer nos dois lados — na mensagem e
+    /// no registro —, que é o que torna o suporte possível.
+    ///
+    /// Vale também em Development, de propósito: o comportamento que só existe em
+    /// produção é o que ninguém testa. A exceção inteira continua indo para o log.
+    /// </summary>
+    public static void UsarEnvelopeDeFalha(this IApplicationBuilder app) =>
+        app.UseExceptionHandler(ramo => ramo.Run(async ctx =>
+        {
+            var falha = ctx.Features.Get<IExceptionHandlerFeature>()?.Error;
+            var correlacao = CorrelationId(ctx);
+            ctx.RequestServices.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("TrinoSupply.Falha")
+                .LogError(falha, "Falha não tratada em {Metodo} {Caminho} (correlação {Correlacao})",
+                    ctx.Request.Method, ctx.Request.Path.Value, correlacao);
+
+            await Results.Json(new
+            {
+                error = new
+                {
+                    code = CodigoDeFalhaInesperada,
+                    message = $"Falha inesperada no servidor. Informe o código {correlacao} ao suporte.",
+                    correlationId = correlacao,
+                },
+            }, statusCode: 500).ExecuteAsync(ctx);
+        }));
 
     // ---- quem está pedindo ---------------------------------------------------
 

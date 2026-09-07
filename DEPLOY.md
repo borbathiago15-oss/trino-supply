@@ -1,16 +1,22 @@
 # Deploy do Trino Supply no Railway
 
-Guia de implantação do serviço **Foundation — Identidade (login)**, o primeiro incremento executável do Trino Supply.
+Guia de implantação do Trino Supply — a plataforma de suprimentos inteira, num
+serviço só.
 
 ## O que sobe
 
 Um único serviço (.NET 9) que serve:
 
-- a **tela de login** em `/` (pt-BR);
-- a **API de autenticação** em `/api/v1/auth/*` (login, refresh rotativo, logout, me);
-- o **health check** em `/health`.
+- a **aplicação React** (SPA) em `/`, com o ciclo completo: solicitação, triagem,
+  cotação, aprovação por alçada, registro da O.C. do ERP, recebimento e estoque;
+- o **Portal do Fornecedor** em `/portal`, com acesso por CNPJ + chave;
+- a **API** em `/api/v1/*` — 117 rotas, todas autenticadas exceto as quatro portas
+  de entrada (login interno, refresh, logout e login do portal);
+- o **health check** em `/health`, que fala com o banco antes de responder.
 
-O banco é PostgreSQL. As migrations rodam automaticamente na inicialização.
+O banco é PostgreSQL, em três schemas (`foundation`, `materials`, `procurement`).
+As migrations rodam automaticamente na inicialização. O `wwwroot` que o serviço
+entrega é **saída do build do Vite** — é o Dockerfile que o gera, não o repositório.
 
 ## Passo a passo (Railway)
 
@@ -48,7 +54,7 @@ Sem Docker:
 
 ```bash
 cd src/backend
-dotnet test                        # 9 testes do serviço de autenticação
+dotnet test                        # 222 testes do backend
 cd Foundation/TrinoSupply.Foundation.Api
 DATABASE_URL=postgresql://postgres:devpass@localhost:55432/trino_supply \
 JWT_SECRET=um-segredo-local-de-32-caracteres-ou-mais \
@@ -65,7 +71,37 @@ dotnet run
 | Log cita `Nenhuma conexão de banco configurada` | `DATABASE_URL` não referenciada | Use `${{Postgres.DATABASE_URL}}` |
 | 429 no login | Rate limit (10 tentativas/min por IP) | Aguarde 1 minuto |
 | "Checking your browser" ao abrir a URL | Proteção de tráfego do Railway | Normal em navegador; resolve sozinho |
+| `/health` responde **503** com `"database":"down"` | O serviço subiu mas não alcança o PostgreSQL | Confira o serviço Postgres do projeto e a `DATABASE_URL` |
+| Tela mostra "Falha inesperada. Informe o código X ao suporte." | Erro não previsto no servidor | Procure o código X no log do Railway: a linha `Falha não tratada` traz o stack trace |
 
-## Roadmap de implementação
+## Conferir que subiu de pé
 
-Este serviço é o primeiro passo da ordem oficial (ADR-011: Foundation antes das APIs). Próximos incrementos: demais domínios do Foundation (organização, workflow, auditoria…), depois PR-001, MMS-002 e MMS-004 — todos já 100% especificados em `docs/`.
+```bash
+curl -s https://SEU-DOMINIO/health
+# {"status":"healthy", ..., "database":"up", "setupComplete":true}
+```
+
+`database` é o que importa: o endpoint pergunta ao PostgreSQL antes de responder,
+e devolve **503** quando não o alcança. `setupComplete:false` quer dizer que o
+administrador ainda não foi semeado — confira `ADMIN_EMAIL`/`ADMIN_PASSWORD`.
+
+## Quando algo quebra em produção
+
+Toda falha não prevista responde no mesmo envelope do resto da API:
+
+```json
+{ "error": { "code": "SYS-ERR-500",
+             "message": "Falha inesperada no servidor. Informe o código 0HN7… ao suporte.",
+             "correlationId": "0HN7…" } }
+```
+
+O usuário lê esse código na tela; o mesmo código aparece no log do Railway, na
+linha `Falha não tratada em GET /api/… (correlação 0HN7…)`, junto do stack trace.
+É por ele que se liga a queixa de quem usou à causa.
+
+## Estado do produto
+
+O ciclo de compras está completo e em produção. O que a plataforma faz, as regras
+que ela não deixa contornar e a verificação antes de entregar estão no
+`CLAUDE.md`; o histórico de refatoração e as decisões, em
+`docs/PLANO-REFATORACAO.md`.

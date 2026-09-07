@@ -47,6 +47,26 @@ public class RotasProtegidasTests
             + string.Join(", ", desprotegidos));
     }
 
+    /// <summary>
+    /// OPS-B: o tratador de falha existe e está registrado. `EnvelopeDeFalhaTests` prova
+    /// o que ele faz, montando o próprio pipeline; aqui se confere que o app de verdade o
+    /// usa — e antes de tudo, porque middleware registrado depois não vê o que quebrou
+    /// antes dele.
+    /// </summary>
+    [Fact]
+    public void O_app_registra_o_envelope_de_falha_antes_do_resto()
+    {
+        // por linha, e não por IndexOf: a chamada comentada continua no texto do arquivo,
+        // e um `//` na frente satisfaria a busca sem registrar nada
+        var linhas = Fontes["rotas.Program.cs"].Split('\n')
+            .Select(l => l.Trim()).ToList();
+        var envelope = linhas.FindIndex(l => l.StartsWith("app.UsarEnvelopeDeFalha()", StringComparison.Ordinal));
+        Assert.True(envelope >= 0, "O Program.cs não registra o tratador de falha (OPS-B).");
+
+        var estaticos = linhas.FindIndex(l => l.StartsWith("app.UseStaticFiles(", StringComparison.Ordinal));
+        Assert.True(envelope < estaticos, "O tratador de falha precisa vir antes do resto do pipeline.");
+    }
+
     [Fact]
     public void A_fonte_conferida_e_mesmo_a_do_app()
     {

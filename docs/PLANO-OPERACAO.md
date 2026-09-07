@@ -123,13 +123,44 @@ Conferido de propósito: repondo o menu no fluxo, os três testes falham.
 dashboards continuam pensados para o notebook. Nenhuma delas é jornada de
 telefone, e mexer nas 27 telas por precaução seria trabalho sem demanda.
 
-### 🟡 OPS-E · Backup do banco não está verificado
+### ⏸️ OPS-E · Backup — **adiado por decisão sua**
 
-O Railway faz backup do PostgreSQL conforme o plano da conta, mas **isso não
-está no repositório e eu não tenho como conferir daqui**. Duas perguntas que
-precisam de resposta antes do primeiro dado real entrar: existe backup
-automático, e alguém já **restaurou** um para ver se funciona? Backup nunca
-testado é esperança, não plano.
+*"Não precisa nesse momento; quando o sistema estiver funcionando ele terá um
+banco em outro local."* O banco de produção de hoje é provisório, então testar
+restauração dele seria ensaiar sobre o que vai ser trocado.
+
+**Fica registrado para a mudança**, porque é o momento em que a pergunta volta:
+quando o banco definitivo entrar, vale confirmar que existe backup automático e
+**restaurar um** antes do primeiro dado real. Backup nunca testado é esperança,
+não plano.
+
+### 🟠 OPS-H · O mesmo número de O.C. do SENIOR entrava duas vezes — **entregue (#114)**
+
+Este achado nasceu da sua decisão sobre o banco. Como o índice único em
+`erp_number` não pode ser aplicado agora — a migration roda na subida e
+**abortaria o app** se o banco atual tiver duplicata —, fui ver o que a
+aplicação já garantia sozinha. Achei um furo de mão única.
+
+Os dois caminhos registram a O.C. do ERP, e conferiam coisas diferentes:
+
+| Caminho | Conferia | Pegava a repetição? |
+|---|---|---|
+| tela do pedido | `ErpNumber == numero` | sim, dos dois lados |
+| processo de cotação | `Number == numero` | **só a vinda dele mesmo** |
+
+No caminho da cotação o pedido nasce com `Number == ErpNumber`, então olhar só o
+número funcionava ali dentro. Mas quando a O.C. foi registrada pela tela do
+pedido, o pedido mantém a própria numeração `PO-ano-sequência` e o número do
+SENIOR fica **só** em `ErpNumber` — a busca por `Number` não achava nada, e o
+mesmo número entrava de novo.
+
+Provado antes de corrigir: o teste registra `OC-9001` pela tela do pedido e
+tenta o mesmo número pela cotação. Antes da correção o segundo pedido era
+**criado**; depois, é recusado com `RFQ-ERR-041`.
+
+É exatamente o que o índice único pegaria — e é a razão de ele continuar
+valendo a pena quando o banco definitivo entrar: a trava na aplicação depende de
+todo caminho lembrar de conferir, e este esqueceu.
 
 ### 🟡 OPS-F · Três filas ainda sem paginação
 
@@ -141,8 +172,13 @@ por precaução.
 
 ### 🟢 OPS-G · Índice único em `erp_number`
 
-Continua esperando o `scripts/verificar-banco.sql` rodar em produção. Se a
-contagem de O.C. repetida vier zero, a migration é imediata.
+**Vale a pena mesmo com a trava do OPS-H em pé** — o furo que o OPS-H fechou é a
+prova: a garantia na aplicação depende de cada caminho lembrar de conferir, e um
+deles não lembrava. O índice não esquece.
+
+Fica para **quando o banco definitivo entrar**: num banco novo a migration
+aplica limpa, sem risco de abortar a subida por duplicata preexistente. No banco
+de hoje, o `scripts/verificar-banco.sql` continua sendo o pré-requisito.
 
 ---
 
@@ -151,11 +187,12 @@ contagem de O.C. repetida vier zero, a migration é imediata.
 | # | Item | Depende de |
 |---|---|---|
 | 1 | **OPS-A + OPS-B + OPS-C** | nada — **entregue em #112** |
-| 2 | **OPS-G** — índice único em `erp_number` | rodar o script em produção |
-| 3 | **OPS-E** — confirmar e testar o backup | acesso ao painel do Railway |
-| 4 | **OPS-D** — celular | **entregue em #113**, com a sua resposta |
-| 5 | **OPS-F** — paginar as três filas | número real do primeiro mês |
+| 2 | **OPS-H** — a O.C. do SENIOR não se repete | nada — **entregue em #114** |
+| 3 | **OPS-G** — índice único em `erp_number` | o banco definitivo, ou o script no atual |
+| 4 | **OPS-E** — confirmar e testar o backup | **adiado**: volta com o banco definitivo |
+| 5 | **OPS-D** — celular | **entregue em #113**, com a sua resposta |
+| 6 | **OPS-F** — paginar as três filas | número real do primeiro mês |
 
-Os itens 2 e 3 dependem de informação que só existe fora do repositório. O 5
-depende de dado que ainda não foi gerado — e paginar antes de medir seria
-resolver um problema que talvez não exista.
+O 3 e o 4 esperam o banco definitivo. O 6 depende de dado que ainda não foi
+gerado — e paginar antes de medir seria resolver um problema que talvez não
+exista.

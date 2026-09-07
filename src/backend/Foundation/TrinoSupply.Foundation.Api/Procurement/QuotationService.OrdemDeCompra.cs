@@ -49,7 +49,12 @@ public partial class QuotationService
         {
             motivo = null;
             if (numero!.Length > 30) return (null, new("RFQ-ERR-041", "O número da OC tem no máximo 30 caracteres."));
-            if (await db.PurchaseOrders.AnyAsync(o => o.Number == numero, ct))
+            // `ErpNumber` junto com `Number`, e não só `Number`: por aqui o pedido nasce
+            // com os dois iguais, então olhar só o número pegava a repetição vinda deste
+            // mesmo caminho — mas não a que vem da tela do pedido, onde o pedido guarda a
+            // própria numeração PO-ano-sequência e o número do SENIOR fica só no
+            // `ErpNumber`. A trava do outro lado já existia; esta era de mão única.
+            if (await db.PurchaseOrders.AnyAsync(o => o.Number == numero || o.ErpNumber == numero, ct))
                 return (null, new("RFQ-ERR-041", $"A OC {numero} já está registrada em outro processo."));
         }
 

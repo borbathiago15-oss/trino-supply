@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TrinoSupply.Foundation.Api.Catalog;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Infrastructure;
+using TrinoSupply.Foundation.Api.Inventory;
 using TrinoSupply.Foundation.Api.Procurement;
 
 namespace TrinoSupply.Foundation.Tests;
@@ -390,6 +391,41 @@ public class QuotationServiceTests
 
         var (_, tooEarly) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, "663", null, null);
         Assert.Equal("RFQ-ERR-040", tooEarly!.Code);
+    }
+
+    /// <summary>
+    /// A O.C. do SENIOR é única no sistema, e os dois caminhos de registro precisam
+    /// concordar sobre isso.
+    ///
+    /// A conferência do processo de cotação olhava só `Number`. Nesse caminho o pedido
+    /// nasce com `Number == ErpNumber`, então ela pegava a repetição vinda dele mesmo —
+    /// mas não a que vem da tela do pedido, onde o pedido guarda a própria numeração
+    /// `PO-ano-sequência` e o número do SENIOR fica só em `ErpNumber`. Pelo outro lado a
+    /// trava existia. O furo era de mão única, e é exatamente o que o índice único no
+    /// banco pegaria.
+    /// </summary>
+    [Fact]
+    public async Task OC_registrada_pela_tela_do_pedido_nao_pode_voltar_pela_cotacao()
+    {
+        var w = await BuildAsync();
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero));
+        var pos = new PurchaseOrderService(w.Db, new InventoryService(w.Db, clock), clock);
+
+        // uma compra avulsa fecha com a O.C. OC-9001: o pedido mantém PO-…, e OC-9001
+        // fica só no ErpNumber
+        var (avulso, _) = await pos.CreateAsync(Carla, w.Alfa.Id, null,
+            [new PoItemInput("Martelete", 1, "UN", 900m, null)], null);
+        var (comOc, semErro) = await pos.RegisterErpOrderAsync(Carla, avulso!.Id, "OC-9001", null);
+        Assert.Null(semErro);
+        Assert.Equal("OC-9001", comOc!.ErpNumber);
+        Assert.NotEqual("OC-9001", comOc.Number);
+
+        // o mesmo número, agora pelo processo de cotação, tem de ser recusado
+        var q = await UpToApprovedAsync(w);
+        var (nada, repetida) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, "OC-9001", null, null);
+        Assert.Null(nada);
+        Assert.Equal("RFQ-ERR-041", repetida!.Code);
+        Assert.Contains("já está registrada", repetida.Message);
     }
 
     [Fact]

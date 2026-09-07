@@ -83,17 +83,45 @@ falha pelo código de correlação.
 
 ## 3. O que ficou aberto, e por quê
 
-### 🟠 OPS-D · A aplicação não cabe num celular
+### 🟠 OPS-D · A aplicação não cabia num celular — **entregue (#113)**
 
-`AppLayout` põe a `Sidebar` de **252px fixos** (`shrink-0`) ao lado do conteúdo,
-sem nenhum tratamento responsivo — nenhum `sm:`, `md:` ou `lg:` nos dois
-arquivos. Num telefone de 360px o menu ocupa 70% da largura e sobra pouco mais
-de 100px para a tela.
+Sua resposta definiu o escopo: *"poucos irão usar o sistema no telefone, em sua
+maioria para **aprovar** ou **ver andamento de pedido**; na grande maioria irá
+usar o notebook."* Então não era redesenhar o sistema para celular — era fazer
+o telefone servir para duas coisas, com o notebook intocado.
 
-**Não decidi sozinho porque a resposta depende de quem usa o quê.** Se o
-almoxarife confirma entrega no galpão e o solicitante abre SC em campo, isto é
-bloqueador de lançamento. Se todo mundo trabalha sentado num desktop, é melhoria
-para depois. É pergunta de operação, não de código.
+**O que eu medi antes de mexer**, com o navegador em 390px:
+
+| | antes | depois |
+|---|---:|---:|
+| conteúdo útil | **138px** | 390px |
+| largura da página | 455–621px (rolava de lado) | 390px |
+| botão "Analisar e decidir" | x=**784** | x=50, com 290px |
+
+138px de conteúdo é a tela quebrando uma palavra por linha. E o botão que o
+aprovador precisa tocar estava 400px fora do campo de visão, atrás de um
+arrasto lateral que ninguém adivinha.
+
+**A casca.** No notebook (≥ `lg`) o menu é a coluna de sempre. Abaixo disso ele
+sai do fluxo e vira gaveta atrás de um botão, com sobreposição que fecha ao
+toque; trocar de tela fecha a gaveta, porque quem tocou num item quer ver a
+tela, não o menu por cima dela.
+
+**A fila de aprovação.** Encolher coluna não resolveu — mesmo escondendo Origem
+e Etapa e encurtando o rótulo do botão, a tabela ainda dava 460px numa caixa de
+316px. Quatro colunas não cabem em 390px, e insistir seria brigar com o meio.
+No celular a fila virou **cartão por processo**: número, etapa, centro de custo,
+fornecedor, valor e o botão em largura cheia. No notebook, a tabela de sempre —
+as duas formas leem a mesma lista derivada uma vez.
+
+**A rede.** Um teste de componente confere que o cartão traz o vencedor, o valor
+e o link do processo; um E2E em 390px confere que a página não rola de lado, que
+o menu abre pelo botão e fecha ao navegar, e que no notebook nada mudou.
+Conferido de propósito: repondo o menu no fluxo, os três testes falham.
+
+**O que não foi feito, e por quê:** as telas de cadastro, importação e os
+dashboards continuam pensados para o notebook. Nenhuma delas é jornada de
+telefone, e mexer nas 27 telas por precaução seria trabalho sem demanda.
 
 ### 🟡 OPS-E · Backup do banco não está verificado
 
@@ -125,9 +153,9 @@ contagem de O.C. repetida vier zero, a migration é imediata.
 | 1 | **OPS-A + OPS-B + OPS-C** | nada — **entregue em #112** |
 | 2 | **OPS-G** — índice único em `erp_number` | rodar o script em produção |
 | 3 | **OPS-E** — confirmar e testar o backup | acesso ao painel do Railway |
-| 4 | **OPS-D** — celular | decidir quem usa o sistema no telefone |
+| 4 | **OPS-D** — celular | **entregue em #113**, com a sua resposta |
 | 5 | **OPS-F** — paginar as três filas | número real do primeiro mês |
 
-Os itens 2, 3 e 4 dependem de informação que só existe fora do repositório. O 5
+Os itens 2 e 3 dependem de informação que só existe fora do repositório. O 5
 depende de dado que ainda não foi gerado — e paginar antes de medir seria
 resolver um problema que talvez não exista.

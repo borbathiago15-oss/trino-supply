@@ -34,9 +34,12 @@ test.describe('Celular (390px)', () => {
     await semRolagemLateral(page);
   });
 
-  test('acompanhar: a lista de solicitações cabe na tela', async ({ page }) => {
+  test('acompanhar: a tela de solicitações cabe no telefone', async ({ page }) => {
+    // sem afirmar sobre a tabela: num banco novo não há SC nenhuma e a tela mostra
+    // o estado vazio. O que este teste protege é a largura, e o campo de busca —
+    // por onde se acha a SC no telefone — existe com ou sem dado
     await abrirAutenticado(page, '/solicitacoes');
-    await expect(page.getByTestId('tabela-solicitacoes')).toBeVisible();
+    await expect(page.getByLabel('Buscar')).toBeVisible();
     await semRolagemLateral(page);
   });
 

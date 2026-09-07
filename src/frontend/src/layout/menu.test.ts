@@ -36,6 +36,17 @@ describe('menu', () => {
     expect(auditor.map((i) => i.id)).toContain('buy-orders');
   });
 
+  it('Relatórios segue o mesmo critério da rota: papel de análise e módulo Compras ou Insights', () => {
+    // o menu não pode abrir uma tela que a API vai recusar com 403, nem esconder
+    // uma que ela aceitaria — os dois lados leem o mesmo par (papel, módulo)
+    expect(folhas({ role: 'Director', modules: ['INSIGHTS'] }).map((i) => i.id)).toContain('reports');
+    expect(folhas({ role: 'Auditor', modules: ['COMPRAS'] }).map((i) => i.id)).toContain('reports');
+    // papel certo, módulo nenhum
+    expect(folhas({ role: 'Director', modules: ['SOLICITACOES'] }).map((i) => i.id)).not.toContain('reports');
+    // módulo certo, papel que não analisa
+    expect(folhas({ role: 'Requester', modules: ['COMPRAS'] }).map((i) => i.id)).not.toContain('reports');
+  });
+
   it('subgrupo com uma tela só vira item simples', () => {
     // Comprador vê "Cadastro de Produtos" mas não "Famílias": o subgrupo Produtos colapsa
     const grupos = itensVisiveis({ role: 'PurchasingOfficer', modules: ['COMPRAS', 'PRODUTOS'] });

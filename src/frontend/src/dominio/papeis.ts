@@ -63,6 +63,15 @@ export const podeVerCotacao = (u: Perfil) =>
   podeConduzirCotacao(u) || podeAprovarGerente(u) || podeAprovarDiretor(u) || u.role === 'Auditor';
 export const podeVerCompliance = (u: Perfil) => entre(u, 'Auditor', 'SupplyManager', 'Director', 'SystemAdministrator');
 
+/**
+ * Relatórios de compras — mesmo critério de `RelatorioExecutivoService.CanView`
+ * (papel) somado ao dos módulos da rota: Compras **ou** Insights. O menu não pode
+ * abrir uma tela que o servidor vai recusar, nem esconder uma que ele aceitaria.
+ */
+export const podeVerRelatorios = (u: Perfil) =>
+  entre(u, 'Approver', 'PurchasingOfficer', 'SupplyManager', 'Director', 'Auditor', 'SystemAdministrator')
+  && (temModulo(u, 'COMPRAS') || temModulo(u, 'INSIGHTS'));
+
 /** Pedidos de compra — mesmo critério de `PurchaseOrderService.CanManage/CanView`. */
 export const podeGerirPedidos = (u: Perfil) => entre(u, 'PurchasingOfficer', 'SupplyManager', 'SystemAdministrator');
 export const podeVerPedidos = (u: Perfil) => podeGerirPedidos(u) || u.role === 'Auditor';

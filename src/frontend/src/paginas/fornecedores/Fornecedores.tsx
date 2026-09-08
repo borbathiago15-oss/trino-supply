@@ -5,7 +5,7 @@ import {
 } from '@/api/fornecedores';
 import { Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { Confirmacao, Dialogo } from '@/componentes/Dialogo';
-import { BadgeAtivo, Campo, Grade2 } from '@/componentes/formulario';
+import { BadgeAtivo, Campo, Grade2, Nota } from '@/componentes/formulario';
 import { CelulaAcoes, MenuAcoes } from '@/componentes/MenuAcoes';
 import { useToast } from '@/componentes/Toast';
 import { podeComprar } from '@/dominio/papeis';
@@ -54,7 +54,7 @@ export function Fornecedores() {
 
   function editar(f: Fornecedor) {
     setEditando(f);
-    setForm({ razao: f.legalName, fantasia: f.tradeName ?? '', cnpj: f.taxId, email: f.email ?? '', telefone: f.phone ?? '' });
+    setForm({ razao: f.legalName, fantasia: f.tradeName ?? '', cnpj: f.taxId ?? '', email: f.email ?? '', telefone: f.phone ?? '' });
     rolarPara('form-fornecedor');
   }
   const cancelar = () => { setEditando(null); setForm(VAZIO); };
@@ -64,12 +64,16 @@ export function Fornecedores() {
     setSalvando(true);
     try {
       if (editando) {
-        // razão social e CNPJ não mudam depois do cadastro
-        await atualizarFornecedor(editando.id, { tradeName: form.fantasia, email: form.email, phone: form.telefone });
-        avisar('Fornecedor atualizado.');
+        // a razão social não muda depois do cadastro; o CNPJ entra uma vez — é assim
+        // que o pré-cadastro que ganhou o BID vira cadastro completo (§7)
+        await atualizarFornecedor(editando.id, {
+          tradeName: form.fantasia, email: form.email, phone: form.telefone,
+          ...(editando.taxId ? {} : { taxId: form.cnpj }),
+        });
+        avisar(!editando.taxId && form.cnpj ? 'Cadastro completado: o fornecedor já pode ser homologado.' : 'Fornecedor atualizado.');
       } else {
         await criarFornecedor({
-          legalName: form.razao, tradeName: form.fantasia || null, taxId: form.cnpj,
+          legalName: form.razao, tradeName: form.fantasia || null, taxId: form.cnpj || null,
           email: form.email || null, phone: form.telefone || null,
         });
         avisar('Fornecedor cadastrado.');
@@ -136,7 +140,9 @@ export function Fornecedores() {
                           <div className="sub">{[f.email, f.phone].filter(Boolean).join(' · ')}</div>
                         )}
                       </td>
-                      <td className="whitespace-nowrap">{f.taxId}</td>
+                      <td className="whitespace-nowrap">
+                        {f.taxId ?? <span className="sub">pré-cadastro</span>}
+                      </td>
                       <td>
                         <Badge classe={marca.classe} title={restritoPorCertidao ? 'Restrito automático: certidão vencida' : undefined}>
                           {marca.rotulo}
@@ -202,9 +208,12 @@ export function Fornecedores() {
                 <input id="forn-razao" required minLength={3} placeholder="ex.: Distribuidora Alfa LTDA"
                   disabled={!!editando} title={editando ? 'A razão social não muda depois do cadastro.' : undefined} {...campo('razao')} />
               </Campo>
-              <Campo id="forn-cnpj" rotulo="CNPJ/CPF">
-                <input id="forn-cnpj" required placeholder="somente números"
-                  disabled={!!editando} title={editando ? 'O CNPJ não muda depois do cadastro.' : undefined} {...campo('cnpj')} />
+              {/* opcional no cadastro (§7) e editável enquanto faltar: é o que separa
+                  o pré-cadastro que cota do fornecedor que pode vencer */}
+              <Campo id="forn-cnpj" rotulo="CNPJ/CPF (opcional no pré-cadastro)">
+                <input id="forn-cnpj" placeholder="informe depois, se ganhar o BID"
+                  disabled={!!editando?.taxId}
+                  title={editando?.taxId ? 'O CNPJ não muda depois de gravado.' : undefined} {...campo('cnpj')} />
               </Campo>
             </Grade2>
             <Grade2 className="mt-3">
@@ -216,8 +225,15 @@ export function Fornecedores() {
               </Campo>
             </Grade2>
             <Campo id="forn-telefone" rotulo="Telefone" className="mt-3">
-              <input id="forn-telefone" placeholder="opcional" {...campo('telefone')} />
+              <input id="forn-telefone" required placeholder="(81) 99999-0000 — com DDD" {...campo('telefone')} />
             </Campo>
+            {!editando?.taxId && (
+              <Nota>
+                Sem CNPJ o fornecedor entra como <strong>pré-cadastro</strong>: participa da cotação,
+                mas não é homologado — e sem homologação não vence o BID. Complete o documento aqui
+                quando ele ganhar.
+              </Nota>
+            )}
             <div className="mt-4 flex flex-wrap gap-2">
               <button type="submit" className="botao" disabled={salvando}>
                 {salvando ? 'Salvando…' : editando ? 'Salvar alterações' : 'Cadastrar fornecedor'}

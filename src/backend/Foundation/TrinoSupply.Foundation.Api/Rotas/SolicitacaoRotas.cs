@@ -46,6 +46,7 @@ public static class SolicitacaoRotas
             justification = r.Justification,
             needType = r.NeedType, deliveryLocation = r.DeliveryLocation,
             company = r.Company, internalNotes = r.InternalNotes,
+            budget = r.Budget,
             costCenter = r.CostCenter,
             currency = r.Currency,
             requesterId = r.RequesterId,
@@ -158,7 +159,7 @@ public static class SolicitacaoRotas
             var items = (body.Items ?? []).Select(i => new ItemInput(i.Description ?? "", i.Quantity, i.UnitOfMeasure, i.EstimatedUnitPrice, i.Notes, i.CatalogItemId)).ToList();
             var (pr, error) = await svc.CreateAsync(actor, body.Justification, body.CostCenter, body.Priority, body.NeededBy, items, body.Kind,
                 new RequisitionService.ScHeaderInput(body.NeedType, body.DeliveryLocation, body.Company, body.InternalNotes,
-                    body.UrgencyReason, body.UrgencyImpact));
+                    body.UrgencyReason, body.UrgencyImpact, body.Budget));
             return error is not null ? PrError(ctx, error)
                 : Results.Json(new { data = PrView(pr!), correlationId = CorrelationId(ctx) }, statusCode: 201);
         });
@@ -167,7 +168,8 @@ public static class SolicitacaoRotas
         {
             if (BuildActor(p) is not { } actor) return Error(ctx, 403, "PR-ERR-001", "Seu papel não acessa o módulo de requisições.");
             var (pr, error) = await svc.UpdateHeaderAsync(actor, id, body.Justification, body.CostCenter, body.Priority, body.NeededBy,
-                body.ClearNeededBy == true, body.UrgencyReason, body.UrgencyImpact);
+                body.ClearNeededBy == true, body.UrgencyReason, body.UrgencyImpact,
+                body.Budget, body.ClearBudget == true);
             return error is not null ? PrError(ctx, error) : Ok(PrView(pr!), ctx);
         });
 

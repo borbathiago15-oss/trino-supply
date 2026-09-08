@@ -44,6 +44,7 @@ test.describe('Cadastros (React)', () => {
 
     await page.fill('#forn-razao', razao);
     await page.fill('#forn-cnpj', cnpj);
+    await page.fill('#forn-telefone', '(81) 3333-1000');
     await page.fill('#forn-fantasia', 'E2E Suprimentos');
     await page.fill('#forn-email', 'contato@e2e.com.br');
     await page.getByRole('button', { name: 'Cadastrar fornecedor' }).click();
@@ -102,11 +103,45 @@ test.describe('Cadastros (React)', () => {
     await expect(linha.locator('td').first()).toContainText('BAH-');
   });
 
+  /**
+   * §7 — o pré-cadastro atravessa a tela: entra sem CNPJ, aparece marcado como tal,
+   * e o documento entra na edição. É o caminho de quem foi cotado antes de existir
+   * cadastro e depois ganhou o BID.
+   */
+  test('fornecedor: pré-cadastro sem CNPJ e o documento completado na edição', async ({ page }) => {
+    await abrirAutenticado(page, '/fornecedores');
+    const razao = `E2E Pre Cadastro ${marca} LTDA`;
+    const cnpj = `${marca}00000377`;
+
+    await page.fill('#forn-razao', razao);
+    await page.fill('#forn-telefone', '(81) 98888-1234');
+    await page.getByRole('button', { name: 'Cadastrar fornecedor' }).click();
+    await expect(page.getByTestId('toast')).toContainText('Fornecedor cadastrado.');
+
+    await page.getByLabel('Buscar').fill(razao);
+    const linha = page.getByTestId('tabela-fornecedores').locator('tr', { hasText: razao }).first();
+    await expect(linha).toContainText('pré-cadastro');
+    await expect(linha).toContainText('Prospect');
+
+    await linha.getByRole('button', { name: 'Editar' }).click();
+    await expect(page.locator('#forn-cnpj')).toBeEnabled();   // falta documento: dá para informar
+    await page.fill('#forn-cnpj', cnpj);
+    await page.getByRole('button', { name: 'Salvar alterações' }).click();
+    await expect(page.getByTestId('toast').last()).toContainText('Cadastro completado');
+
+    await page.getByLabel('Buscar').fill(cnpj);
+    await expect(page.locator(`tr[data-fornecedor="${cnpj}"]`)).toContainText(razao);
+    // gravado, o documento vira identidade e a edição não o troca mais
+    await page.locator(`tr[data-fornecedor="${cnpj}"]`).getByRole('button', { name: 'Editar' }).click();
+    await expect(page.locator('#forn-cnpj')).toBeDisabled();
+  });
+
   test('contrato de parceria: fixa preço de um produto e depois encerra', async ({ page }) => {
     await abrirAutenticado(page, '/fornecedores');
     const cnpj = `${marca}00000280`;
     await page.fill('#forn-razao', `E2E Contrato ${marca} LTDA`);
     await page.fill('#forn-cnpj', cnpj);
+    await page.fill('#forn-telefone', '(81) 3333-2000');
     await page.getByRole('button', { name: 'Cadastrar fornecedor' }).click();
     await expect(page.getByTestId('toast')).toContainText('Fornecedor cadastrado.');
 

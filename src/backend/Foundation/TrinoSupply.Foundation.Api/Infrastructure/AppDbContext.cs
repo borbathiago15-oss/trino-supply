@@ -270,6 +270,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(r => r.NeedType).HasColumnName("need_type").HasMaxLength(60);
             e.Property(r => r.DeliveryLocation).HasColumnName("delivery_location").HasMaxLength(200);
             e.Property(r => r.Company).HasColumnName("company").HasMaxLength(300);
+            e.Property(r => r.Budget).HasColumnName("budget").HasPrecision(18, 4);
             e.Property(r => r.InternalNotes).HasColumnName("internal_notes").HasMaxLength(2000);
             e.Property(r => r.Currency).HasColumnName("currency").HasMaxLength(3);
             e.Property(r => r.RequesterId).HasColumnName("requester_id");
@@ -377,7 +378,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(s => s.Id).HasColumnName("id");
             e.Property(s => s.LegalName).HasColumnName("legal_name").HasMaxLength(300).IsRequired();
             e.Property(s => s.TradeName).HasColumnName("trade_name").HasMaxLength(300);
-            e.Property(s => s.TaxId).HasColumnName("tax_id").HasMaxLength(14).IsRequired();
+            // opcional desde o pré-cadastro (§7): o índice único do Postgres ignora
+            // nulos, então vários fornecedores sem CNPJ convivem sem colidir
+            e.Property(s => s.TaxId).HasColumnName("tax_id").HasMaxLength(14);
             e.Property(s => s.Email).HasColumnName("email").HasMaxLength(320);
             e.Property(s => s.Phone).HasColumnName("phone").HasMaxLength(40);
             e.Property(s => s.PortalKeyHash).HasColumnName("portal_key_hash").HasMaxLength(64);
@@ -582,6 +585,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(q => q.NegotiatedValue).HasColumnName("negotiated_value").HasPrecision(18, 4);
             e.Property(q => q.SavingValue).HasColumnName("saving_value").HasPrecision(18, 4);
             e.Property(q => q.SavingPercent).HasColumnName("saving_percent").HasPrecision(9, 4);
+            e.Property(q => q.CompetitionBaselineValue).HasColumnName("competition_baseline_value").HasPrecision(18, 4);
+            e.Property(q => q.CompetitionSaving).HasColumnName("competition_saving").HasPrecision(18, 4);
+            e.Property(q => q.BudgetBaselineValue).HasColumnName("budget_baseline_value").HasPrecision(18, 4);
+            e.Property(q => q.BudgetSaving).HasColumnName("budget_saving").HasPrecision(18, 4);
             e.Property(q => q.NegotiationNotes).HasColumnName("negotiation_notes").HasMaxLength(1000);
             e.Property(q => q.NegotiatedByLabel).HasColumnName("negotiated_by_label").HasMaxLength(200);
             e.Property(q => q.NegotiatedAt).HasColumnName("negotiated_at");

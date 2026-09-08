@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -100,5 +100,37 @@ describe('tela Inclusão de SC', () => {
 
     expect(screen.queryByTestId('linha-sem-ca')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Unidade')).toHaveValue('SC');
+  });
+
+  it('o orçamento informado vai na SC — é a régua do saving (§17)', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(criarSolicitacao).mockResolvedValue({ id: 'sc1', number: 'PR-2026-000001' } as never);
+    abrir();
+
+    await usuario.type(await screen.findByLabelText('Produto'), rotuloDoProduto(produto({})));
+    await usuario.type(screen.getByLabelText('Quantidade'), '2');
+    await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'reposição de obra');
+    await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
+    await usuario.type(screen.getByLabelText(/Orçamento previsto/), '1200');
+
+    await usuario.click(screen.getByRole('button', { name: /Criar rascunho da SC/ }));
+    await waitFor(() => expect(criarSolicitacao).toHaveBeenCalledWith(
+      expect.objectContaining({ budget: 1200 })));
+  });
+
+  it('sem orçamento, a SC não inventa um — vai nula', async () => {
+    // orçamento zero viraria uma meta que o comprador sempre bate; nulo diz a verdade
+    const usuario = userEvent.setup();
+    vi.mocked(criarSolicitacao).mockResolvedValue({ id: 'sc1', number: 'PR-2026-000001' } as never);
+    abrir();
+
+    await usuario.type(await screen.findByLabelText('Produto'), rotuloDoProduto(produto({})));
+    await usuario.type(screen.getByLabelText('Quantidade'), '2');
+    await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'reposição de obra');
+    await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
+
+    await usuario.click(screen.getByRole('button', { name: /Criar rascunho da SC/ }));
+    await waitFor(() => expect(criarSolicitacao).toHaveBeenCalledWith(
+      expect.objectContaining({ budget: null })));
   });
 });

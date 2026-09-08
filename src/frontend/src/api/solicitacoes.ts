@@ -56,6 +56,8 @@ export interface SolicitacaoCompra {
   deliveryLocation: string | null;
   company: string | null;
   internalNotes: string | null;
+  /** Orçamento previsto pelo solicitante (§17): a régua contra a qual o saving é medido. */
+  budget: number | null;
   costCenter: string;
   requesterId: string;
   requesterLabel: string;
@@ -134,6 +136,8 @@ export interface DadosSc {
   deliveryLocation?: string | null;
   company?: string | null;
   internalNotes?: string | null;
+  /** Quanto o solicitante espera gastar. Fechar abaixo disso é saving (§17). */
+  budget?: number | null;
   urgencyReason: string | null;
   urgencyImpact: string | null;
 }
@@ -148,6 +152,8 @@ export interface EdicaoSc {
   clearNeededBy: boolean;
   urgencyReason: string | null;
   urgencyImpact: string | null;
+  budget?: number | null;
+  clearBudget?: boolean;
 }
 
 export const atualizarSolicitacao = (id: string, dados: EdicaoSc) =>

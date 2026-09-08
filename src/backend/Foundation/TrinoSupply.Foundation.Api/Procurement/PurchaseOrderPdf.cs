@@ -207,12 +207,17 @@ public static class PurchaseOrderPdf
         });
     }
 
-    private static string FormatTaxId(string digits) =>
-        digits.Length == 14
+    private static string FormatTaxId(string? taxId)
+    {
+        // O.C. exige fornecedor homologado, e homologar exige CNPJ (SUP-ERR-013) —
+        // mas o PDF não é lugar de estourar: sem documento, sai o travessão.
+        var digits = taxId ?? "";
+        return digits.Length == 14
             ? $"{digits[..2]}.{digits[2..5]}.{digits[5..8]}/{digits[8..12]}-{digits[12..]}"
             : digits.Length == 11
                 ? $"{digits[..3]}.{digits[3..6]}.{digits[6..9]}-{digits[9..]}"
-                : digits;
+                : digits.Length == 0 ? "—" : digits;
+    }
 }
 
 /// <summary>Valor por extenso em pt-BR (reais e centavos) para o rodapé da OC.</summary>

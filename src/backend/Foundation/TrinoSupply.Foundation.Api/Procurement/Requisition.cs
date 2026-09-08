@@ -49,6 +49,14 @@ public class PurchaseRequisition
     public string? DeliveryLocation { get; set; }                // local de entrega
     public string? Company { get; set; }                         // empresa solicitante (grupo)
     public string? InternalNotes { get; set; }                   // observação interna
+    /// <summary>
+    /// Orçamento informado pelo solicitante: quanto ele previa gastar nesta compra.
+    ///
+    /// É a régua de um dos savings (S.17): fechar abaixo do orçamento é ganho. Opcional
+    /// de propósito — solicitante que não faz ideia do preço não deve ser obrigado a
+    /// inventar um número, e número inventado viraria saving inventado.
+    /// </summary>
+    public decimal? Budget { get; set; }
     public string Currency { get; set; } = "BRL";
     public Guid RequesterId { get; set; }
     public string RequesterLabel { get; set; } = string.Empty;

@@ -108,6 +108,11 @@ public static class CotacaoRotas
             {
                 baselineValue = q.BaselineValue, closedValue = q.NegotiatedValue,
                 value = q.SavingValue, percent = q.SavingPercent,
+                // as outras duas réguas (§17): a concorrência do BID e o orçamento do
+                // solicitante. Nulas quando não se aplicam — fornecedor único não tem
+                // concorrência, e SC sem orçamento não tem meta a bater
+                competitionBaselineValue = q.CompetitionBaselineValue, competitionValue = q.CompetitionSaving,
+                budgetBaselineValue = q.BudgetBaselineValue, budgetValue = q.BudgetSaving,
                 notes = q.NegotiationNotes, byLabel = q.NegotiatedByLabel, at = q.NegotiatedAt,
             },
         };

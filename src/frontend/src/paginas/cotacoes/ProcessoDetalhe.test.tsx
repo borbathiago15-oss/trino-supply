@@ -235,9 +235,10 @@ describe('tela do processo', () => {
     vi.mocked(mapaDeFamilias).mockResolvedValue([lote({})]);
   });
 
-  it('fornecedor fora do cadastro entra na cotação por razão social e CNPJ', async () => {
-    // o comprador cota com muita gente e só cadastra de verdade quem ganha o BID;
-    // o pré-cadastro nasce PROSPECT e concorre, sem poder vencer antes de homologado
+  it('fornecedor fora do cadastro entra na cotação só com razão social e telefone', async () => {
+    // §7: o comprador pede preço por telefone antes de existir cadastro, e nessa hora
+    // o CNPJ ele não tem. O pré-cadastro nasce PROSPECT e concorre; o cadastro completo
+    // é cobrado de quem ganhar o BID
     const usuario = userEvent.setup();
     vi.mocked(lerProcesso).mockResolvedValue(processo({}));
     vi.mocked(criarFornecedor).mockResolvedValue({ id: 's9' } as Awaited<ReturnType<typeof criarFornecedor>>);
@@ -245,29 +246,97 @@ describe('tela do processo', () => {
 
     await usuario.click(await screen.findByRole('button', { name: 'Fornecedor fora do cadastro' }));
     await usuario.type(screen.getByLabelText('Razão social'), 'Gama Distribuidora LTDA');
-    await usuario.type(screen.getByLabelText('CNPJ'), '11.222.333/0001-81');
+    await usuario.type(screen.getByLabelText('Telefone'), '(81) 98888-1234');
     await usuario.click(screen.getByRole('button', { name: 'Incluir na cotação' }));
 
-    // o CNPJ vai só com dígitos, e o convite sai no mesmo gesto
+    // sem CNPJ o cadastro vai com `taxId` nulo, e o convite sai no mesmo gesto
     await waitFor(() => expect(criarFornecedor).toHaveBeenCalledWith({
-      legalName: 'Gama Distribuidora LTDA', tradeName: null, taxId: '11222333000181',
-      email: null, phone: null,
+      legalName: 'Gama Distribuidora LTDA', tradeName: null, taxId: null,
+      email: null, phone: '(81) 98888-1234',
     }));
     await waitFor(() => expect(convidarFornecedor).toHaveBeenCalledWith('q1', ['s9']));
   });
 
-  it('pré-cadastro sem CNPJ válido não chega a criar fornecedor nenhum', async () => {
+  it('com CNPJ informado, o pré-cadastro já vai com o documento em dígitos', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(lerProcesso).mockResolvedValue(processo({}));
+    vi.mocked(criarFornecedor).mockResolvedValue({ id: 's9' } as Awaited<ReturnType<typeof criarFornecedor>>);
+    abrir();
+
+    await usuario.click(await screen.findByRole('button', { name: 'Fornecedor fora do cadastro' }));
+    await usuario.type(screen.getByLabelText('Razão social'), 'Gama Distribuidora LTDA');
+    await usuario.type(screen.getByLabelText('Telefone'), '81 3333-1000');
+    await usuario.type(screen.getByLabelText('CNPJ (opcional)'), '11.222.333/0001-81');
+    await usuario.click(screen.getByRole('button', { name: 'Incluir na cotação' }));
+
+    await waitFor(() => expect(criarFornecedor).toHaveBeenCalledWith({
+      legalName: 'Gama Distribuidora LTDA', tradeName: null, taxId: '11222333000181',
+      email: null, phone: '81 3333-1000',
+    }));
+  });
+
+  it('pré-cadastro sem telefone não chega a criar fornecedor nenhum', async () => {
+    // o telefone é o mínimo do §7: sem ele o comprador não tem como voltar a falar
+    // com quem cotou, e a API recusaria com SUP-ERR-014
     const usuario = userEvent.setup();
     vi.mocked(lerProcesso).mockResolvedValue(processo({}));
     abrir();
 
     await usuario.click(await screen.findByRole('button', { name: 'Fornecedor fora do cadastro' }));
-    await usuario.type(screen.getByLabelText('Razão social'), 'Gama');
-    await usuario.type(screen.getByLabelText('CNPJ'), '123');
+    await usuario.type(screen.getByLabelText('Razão social'), 'Gama Distribuidora LTDA');
     await usuario.click(screen.getByRole('button', { name: 'Incluir na cotação' }));
 
     expect(criarFornecedor).not.toHaveBeenCalled();
     expect(convidarFornecedor).not.toHaveBeenCalled();
+  });
+
+  it('CNPJ informado errado é recusado na tela, sem ida ao servidor', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(lerProcesso).mockResolvedValue(processo({}));
+    abrir();
+
+    await usuario.click(await screen.findByRole('button', { name: 'Fornecedor fora do cadastro' }));
+    await usuario.type(screen.getByLabelText('Razão social'), 'Gama Distribuidora LTDA');
+    await usuario.type(screen.getByLabelText('Telefone'), '81 3333-1000');
+    await usuario.type(screen.getByLabelText('CNPJ (opcional)'), '123');
+    await usuario.click(screen.getByRole('button', { name: 'Incluir na cotação' }));
+
+    expect(await screen.findByText(/CPF\/CNPJ inválido/)).toBeInTheDocument();
+    expect(criarFornecedor).not.toHaveBeenCalled();
+  });
+
+  it('as três réguas do saving aparecem quando existem, e só quando existem (§17)', async () => {
+    vi.mocked(lerProcesso).mockResolvedValue(processo({
+      status: 'AGUARDANDO_GERENTE',
+      saving: {
+        baselineValue: 1000, closedValue: 900, value: 100, percent: 10,
+        competitionBaselineValue: 1200, competitionValue: 300,
+        budgetBaselineValue: null, budgetValue: null,
+        notes: null, byLabel: 'Carla', at: '2026-08-24T12:00:00Z',
+      },
+    }));
+    abrir();
+
+    const reguas = await screen.findByTestId('reguas-de-saving');
+    expect(reguas).toHaveTextContent('Concorrência do BID');
+    // a SC não informou orçamento: a régua some em vez de exibir ganho zero
+    expect(reguas).not.toHaveTextContent('Contra o orçamento');
+  });
+
+  it('sem concorrência nem orçamento, só o ganho de negociação é mostrado', async () => {
+    vi.mocked(lerProcesso).mockResolvedValue(processo({
+      status: 'AGUARDANDO_GERENTE',
+      saving: {
+        baselineValue: 1000, closedValue: 900, value: 100, percent: 10,
+        competitionBaselineValue: null, competitionValue: null,
+        budgetBaselineValue: null, budgetValue: null,
+        notes: null, byLabel: 'Carla', at: '2026-08-24T12:00:00Z',
+      },
+    }));
+    abrir();
+
+    expect(await screen.findByText(/Ganho de negociação/)).toBeInTheDocument();
+    expect(screen.queryByTestId('reguas-de-saving')).not.toBeInTheDocument();
   });
 
   it('proposta de fornecedor sem homologação não pode ser escolhida (SUP-ERR-030)', async () => {

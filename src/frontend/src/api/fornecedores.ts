@@ -62,7 +62,8 @@ export interface Fornecedor {
   id: string;
   legalName: string;
   tradeName: string | null;
-  taxId: string;
+  /** Nulo no pré-cadastro: cotar exige só nome e telefone; o CNPJ vem antes de homologar. */
+  taxId: string | null;
   email: string | null;
   phone: string | null;
   active: boolean;
@@ -108,15 +109,21 @@ export async function buscarFornecedores(
 export interface DadosFornecedor {
   legalName: string;
   tradeName: string | null;
-  taxId: string;
+  /** Opcional (§7): o pré-cadastro entra sem CNPJ e o completa quando ganha o BID. */
+  taxId: string | null;
   email: string | null;
   phone: string | null;
 }
 
 export const criarFornecedor = (dados: DadosFornecedor) => api<Fornecedor>(`${base}/`, { method: 'POST', body: dados });
 
-/** A razão social e o CNPJ não mudam depois do cadastro — a API só aceita o resto. */
-export const atualizarFornecedor = (id: string, dados: { tradeName?: string; email?: string; phone?: string; active?: boolean }) =>
+/**
+ * A razão social não muda depois do cadastro. O CNPJ muda **uma vez**: o pré-cadastro
+ * nasce sem ele e a edição completa o registro; gravado, ele vira identidade e a API
+ * ignora nova tentativa de troca.
+ */
+export const atualizarFornecedor = (id: string, dados:
+  { tradeName?: string; email?: string; phone?: string; active?: boolean; taxId?: string }) =>
   api<Fornecedor>(`${base}/${id}`, { method: 'PATCH', body: dados });
 
 export const salvarHomologacao = (id: string, status: SituacaoHomologacao) =>

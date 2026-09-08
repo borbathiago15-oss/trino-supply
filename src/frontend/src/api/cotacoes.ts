@@ -208,11 +208,27 @@ export interface OcDoProcesso {
   totalValue: number;
 }
 
+/**
+ * As três réguas do saving (§17), lado a lado porque respondem perguntas diferentes:
+ *
+ * | régua        | baseline                              | responde                          |
+ * |--------------|---------------------------------------|-----------------------------------|
+ * | negociação   | primeira proposta do vencedor         | quanto o comprador arrancou       |
+ * | concorrência | maior proposta completa do BID        | quanto a disputa valeu            |
+ * | orçamento    | o que o solicitante disse que tinha   | quanto sobrou do previsto         |
+ *
+ * As duas últimas são nulas quando não se aplicam — proponente único não é
+ * concorrência, e SC sem orçamento não tem meta a bater.
+ */
 export interface GanhoNegociado {
   baselineValue: number;
   closedValue: number;
   value: number;
   percent: number | null;
+  competitionBaselineValue: number | null;
+  competitionValue: number | null;
+  budgetBaselineValue: number | null;
+  budgetValue: number | null;
   notes: string | null;
   byLabel: string | null;
   at: string;

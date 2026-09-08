@@ -67,6 +67,26 @@ export function PainelDeNegociacao({ processo: q, podeNegociar, aoRegistrar, aoA
               {q.saving.byLabel && ` · negociado por ${q.saving.byLabel}`}
               {q.saving.notes && ` · “${q.saving.notes}”`}
             </div>
+            {/* as outras duas réguas do §17. Só aparecem quando existem: o processo com
+                proponente único não finge disputa, e a SC sem orçamento não finge meta */}
+            {(q.saving.competitionValue != null || q.saving.budgetValue != null) && (
+              <ul className="sub mt-2 space-y-1" data-testid="reguas-de-saving">
+                {q.saving.competitionValue != null && (
+                  <li>
+                    <strong>Concorrência do BID: {moeda(q.saving.competitionValue)}</strong>
+                    {' '}— maior proposta {moeda(q.saving.competitionBaselineValue ?? 0)} → fechado{' '}
+                    {moeda(q.saving.closedValue)}
+                  </li>
+                )}
+                {q.saving.budgetValue != null && (
+                  <li>
+                    <strong>Contra o orçamento: {moeda(q.saving.budgetValue)}</strong>
+                    {' '}— previsto pelo solicitante {moeda(q.saving.budgetBaselineValue ?? 0)} → fechado{' '}
+                    {moeda(q.saving.closedValue)}
+                  </li>
+                )}
+              </ul>
+            )}
           </div>
         : <Vazio>Nenhuma negociação registrada. O ganho é medido contra a primeira proposta do fornecedor.</Vazio>}
 

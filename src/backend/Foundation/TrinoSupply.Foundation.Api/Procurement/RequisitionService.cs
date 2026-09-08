@@ -153,7 +153,7 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
 
     // ---- ciclo de vida ------------------------------------------------------
     public record ScHeaderInput(string? NeedType, string? DeliveryLocation, string? Company, string? InternalNotes,
-        string? UrgencyReason = null, string? UrgencyImpact = null);
+        string? UrgencyReason = null, string? UrgencyImpact = null, decimal? Budget = null);
 
     /// <summary>Compra urgente sem justificativa e impacto não entra (insumo do compliance).</summary>
     private static UserError? UrgencyError(string priority, string? reason, string? impact) =>
@@ -205,6 +205,8 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
             DeliveryLocation = Clean(header?.DeliveryLocation),
             Company = Clean(header?.Company),
             InternalNotes = Clean(header?.InternalNotes),
+            // orçamento negativo não é orçamento; zero também não diz nada
+            Budget = header?.Budget is > 0 ? header.Budget : null,
             RequesterId = actor.Id,
             RequesterLabel = actor.Label,
             CreatedAt = now,
@@ -235,7 +237,8 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
 
     public async Task<(PurchaseRequisition? pr, UserError? error)> UpdateHeaderAsync(
         Actor actor, Guid id, string? justification, string? costCenter, string? priority, DateOnly? neededBy,
-        bool clearNeededBy, string? urgencyReason = null, string? urgencyImpact = null, CancellationToken ct = default)
+        bool clearNeededBy, string? urgencyReason = null, string? urgencyImpact = null,
+        decimal? budget = null, bool clearBudget = false, CancellationToken ct = default)
     {
         var (pr, error) = await GetEditableAsync(actor, id, ct);
         if (error is not null) return (null, error);
@@ -263,6 +266,10 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         if (urgencyImpact is not null && pr!.Priority == "URGENT") pr.UrgencyImpact = Clean(urgencyImpact);
         if (clearNeededBy) pr!.NeededBy = null;
         else if (neededBy is not null) pr!.NeededBy = neededBy;
+        // orçamento (§17): a segunda régua de saving. Zero e negativo não são orçamento,
+        // são engano — viram nulo em vez de virar uma meta que o comprador sempre bate.
+        if (clearBudget) pr!.Budget = null;
+        else if (budget is not null) pr!.Budget = budget > 0 ? budget : null;
 
         await TouchAndSaveAsync(pr!, ct);
         return (pr, null);

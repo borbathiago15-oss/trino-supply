@@ -9,7 +9,19 @@ public class Supplier
     public Guid Id { get; set; } = Guid.NewGuid();
     public string LegalName { get; set; } = string.Empty;
     public string? TradeName { get; set; }
-    public string TaxId { get; set; } = string.Empty;   // somente dígitos (CPF 11 / CNPJ 14), único
+    /// <summary>
+    /// CPF/CNPJ, só dígitos (11 ou 14), único quando informado (SUP-BR-001).
+    ///
+    /// **Nulo no pré-cadastro.** O comprador cota antes de cadastrar: o mínimo para
+    /// entrar numa cotação é razão social + telefone, que é o que ele tem na mão
+    /// quando pede preço por telefone ou WhatsApp. O CNPJ vem depois — e é
+    /// obrigatório para homologar (SUP-ERR-013), que por sua vez é o que permite
+    /// vencer o BID (SUP-ERR-030). Ou seja: cotar sem CNPJ pode; ganhar, não.
+    ///
+    /// Nulo é diferente de vazio de propósito: no Postgres o índice único ignora
+    /// nulos, então muitos pré-cadastros convivem sem colidir entre si.
+    /// </summary>
+    public string? TaxId { get; set; }
     public string? Email { get; set; }
     public string? Phone { get; set; }
     /// <summary>Hash SHA-256 da chave do Portal do Fornecedor; a chave em claro nunca é persistida.</summary>

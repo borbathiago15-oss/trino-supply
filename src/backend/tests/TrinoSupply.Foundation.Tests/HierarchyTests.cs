@@ -71,6 +71,10 @@ public class HierarchyTests
         var rfq = new QuotationService(db, clock);
         var sup = new SupplierService(db, clock);
         var (alfa, _) = await sup.CreateAsync(carla.Id, "Alfa LTDA", "Alfa", "12345678000190", null, null);
+        // fornecedor novo nasce PROSPECT: participar da cotação é livre, vencer exige
+        // homologação (SUP-ERR-030). O cenário destes testes é o do fornecedor já
+        // homologado — quem cuida do caminho do prospect é o teste próprio dele.
+        await sup.SetHomologationAsync(alfa!.Id, SupplierHomologation.Homologado);
         return new World(db, prs, rfq, sup, new CompanyService(db, clock), new CostCenterService(db, clock),
             junior, pleno, outroPleno, carla, gustavo, diana, otto, alfa!);
     }

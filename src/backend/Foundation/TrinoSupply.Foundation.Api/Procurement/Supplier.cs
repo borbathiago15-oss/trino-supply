@@ -16,9 +16,22 @@ public class Supplier
     public string? PortalKeyHash { get; set; }
 
     // ---- homologação (V2-P2) -----------------------------------------------
-    /// <summary>Ciclo de vida: PROSPECT → EM_HOMOLOGACAO → HOMOLOGADO → RESTRITO → BLOQUEADO.
-    /// Fornecedores existentes nascem HOMOLOGADO (grandfathering) para a operação não parar.</summary>
-    public string HomologationStatus { get; set; } = SupplierHomologation.Homologado;
+    /// <summary>
+    /// Ciclo de vida: PROSPECT → EM_HOMOLOGACAO → HOMOLOGADO → RESTRITO → BLOQUEADO.
+    ///
+    /// **Fornecedor novo nasce PROSPECT.** O padrão era HOMOLOGADO, por *grandfathering* —
+    /// para os fornecedores que já existiam quando a homologação foi criada a operação não
+    /// podia parar. Só que grandfathering vale para a linha que já estava no banco, e não
+    /// para a próxima: com o padrão HOMOLOGADO, quem cadastrava um fornecedor em dois campos
+    /// (razão social + CNPJ é tudo o que `CreateAsync` exige) via ele nascer apto a vencer um
+    /// BID sem uma certidão sequer. O `SUP-ERR-030` da adjudicação existia, mas nunca
+    /// disparava para fornecedor novo — porque o padrão já passava por ele.
+    ///
+    /// Quem já está no banco continua com o status gravado: a mudança não é retroativa.
+    /// O que muda é o começo — participar da cotação segue livre (é o `PROSPECT` que permite
+    /// cotar antes de cadastrar de verdade); vencer é que passa a exigir homologação.
+    /// </summary>
+    public string HomologationStatus { get; set; } = SupplierHomologation.Prospect;
     /// <summary>Certidões e documentos com validade (CND Federal, FGTS, CNDT, contrato social…).</summary>
     public List<SupplierDocument> Documents { get; set; } = [];
 

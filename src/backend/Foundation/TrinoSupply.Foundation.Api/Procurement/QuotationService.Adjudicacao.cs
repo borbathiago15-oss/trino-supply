@@ -88,8 +88,13 @@ public partial class QuotationService
                 ?? await db.Suppliers.Include(f => f.Documents).SingleAsync(f => f.Id == proposal.SupplierId, ct);
             var situacao = vencedor.EffectiveHomologation(hoje);
             if (situacao != SupplierHomologation.Homologado)
-                return (null, new("SUP-ERR-030",
-                    $"O fornecedor {proposal.SupplierName} está {situacao} — conclua a homologação (ou regularize as certidões) antes de selecioná-lo."));
+                // o prospect é o caso do pré-cadastro feito para cotar: ele ganhou o BID e
+                // agora é a hora de completar a ficha. Dizer só "está PROSPECT" deixaria o
+                // comprador adivinhando qual é o próximo passo
+                return (null, new("SUP-ERR-030", situacao == SupplierHomologation.Prospect
+                    ? $"{proposal.SupplierName} venceu, mas ainda é um pré-cadastro (PROSPECT). "
+                      + "Complete o cadastro em Cadastros → Fornecedores e peça a homologação ao gestor de suprimentos para seguir."
+                    : $"O fornecedor {proposal.SupplierName} está {situacao} — conclua a homologação (ou regularize as certidões) antes de selecioná-lo."));
 
             var (valorItens, total) = ShareOf(proposal, itens);
             novas.Add(new QuotationAward

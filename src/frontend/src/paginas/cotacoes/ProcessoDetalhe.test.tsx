@@ -26,16 +26,16 @@ vi.mock('@/api/pedidos', async (importar) => ({
 }));
 vi.mock('@/api/fornecedores', async (importar) => ({
   ...(await importar<typeof import('@/api/fornecedores')>()),
-  listarFornecedores: vi.fn(),
+  listarFornecedores: vi.fn(), criarFornecedor: vi.fn(),
 }));
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => eu }));
 
 import {
   anexarNaProposta, cancelarProcesso, decidir, encerrarParaAnalise, escolherVencedor,
-  lerProcesso, mapaDeFamilias, registrarNegociacao, registrarOc, registrarProposta,
+  convidarFornecedor, lerProcesso, mapaDeFamilias, registrarNegociacao, registrarOc, registrarProposta,
 } from '@/api/cotacoes';
 import { anexarOc } from '@/api/pedidos';
-import { listarFornecedores } from '@/api/fornecedores';
+import { criarFornecedor, listarFornecedores } from '@/api/fornecedores';
 
 let eu: Usuario = {
   id: 'u1', email: 'carla@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['COMPRAS'],
@@ -233,6 +233,41 @@ describe('tela do processo', () => {
     eu = { id: 'u1', email: 'carla@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['COMPRAS'] };
     vi.mocked(listarFornecedores).mockResolvedValue([]);
     vi.mocked(mapaDeFamilias).mockResolvedValue([lote({})]);
+  });
+
+  it('fornecedor fora do cadastro entra na cotação por razão social e CNPJ', async () => {
+    // o comprador cota com muita gente e só cadastra de verdade quem ganha o BID;
+    // o pré-cadastro nasce PROSPECT e concorre, sem poder vencer antes de homologado
+    const usuario = userEvent.setup();
+    vi.mocked(lerProcesso).mockResolvedValue(processo({}));
+    vi.mocked(criarFornecedor).mockResolvedValue({ id: 's9' } as Awaited<ReturnType<typeof criarFornecedor>>);
+    abrir();
+
+    await usuario.click(await screen.findByRole('button', { name: 'Fornecedor fora do cadastro' }));
+    await usuario.type(screen.getByLabelText('Razão social'), 'Gama Distribuidora LTDA');
+    await usuario.type(screen.getByLabelText('CNPJ'), '11.222.333/0001-81');
+    await usuario.click(screen.getByRole('button', { name: 'Incluir na cotação' }));
+
+    // o CNPJ vai só com dígitos, e o convite sai no mesmo gesto
+    await waitFor(() => expect(criarFornecedor).toHaveBeenCalledWith({
+      legalName: 'Gama Distribuidora LTDA', tradeName: null, taxId: '11222333000181',
+      email: null, phone: null,
+    }));
+    await waitFor(() => expect(convidarFornecedor).toHaveBeenCalledWith('q1', ['s9']));
+  });
+
+  it('pré-cadastro sem CNPJ válido não chega a criar fornecedor nenhum', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(lerProcesso).mockResolvedValue(processo({}));
+    abrir();
+
+    await usuario.click(await screen.findByRole('button', { name: 'Fornecedor fora do cadastro' }));
+    await usuario.type(screen.getByLabelText('Razão social'), 'Gama');
+    await usuario.type(screen.getByLabelText('CNPJ'), '123');
+    await usuario.click(screen.getByRole('button', { name: 'Incluir na cotação' }));
+
+    expect(criarFornecedor).not.toHaveBeenCalled();
+    expect(convidarFornecedor).not.toHaveBeenCalled();
   });
 
   it('proposta de fornecedor sem homologação não pode ser escolhida (SUP-ERR-030)', async () => {

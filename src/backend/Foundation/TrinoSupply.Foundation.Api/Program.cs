@@ -184,6 +184,9 @@ app.MapSolicitacoes();
 // ---- Central de avisos: o que está parado, por papel ------------------------
 app.MapAvisos();
 
+// Comunicados do administrador: o recado que aparece ao abrir o sistema
+app.MapComunicados();
+
 // ---- MMS-004/005 — Estoque e MMS-003 — Solicitação de Material --------------
 app.MapEstoque();
 

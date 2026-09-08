@@ -1,3 +1,4 @@
+DELETE /api/v1/announcements/{id:guid}
 DELETE /api/v1/purchase-requisitions/{id:guid}
 DELETE /api/v1/purchase-requisitions/{id:guid}/attachments/{attachmentId:guid}
 DELETE /api/v1/purchase-requisitions/{id:guid}/items/{itemId:guid}
@@ -10,6 +11,9 @@ GET /api/v1/analytics/stock
 GET /api/v1/analytics/supplier-scorecard
 GET /api/v1/analytics/supply
 GET /api/v1/analytics/tco
+GET /api/v1/announcements/
+GET /api/v1/announcements/current
+GET /api/v1/announcements/{id:guid}/image
 GET /api/v1/approvals/pending
 GET /api/v1/auth/me
 GET /api/v1/companies/
@@ -50,6 +54,7 @@ GET /api/v1/triage/
 GET /api/v1/triage/responsibles
 GET /api/v1/users/
 GET /api/v1/users/pickers
+PATCH /api/v1/announcements/{id:guid}
 PATCH /api/v1/companies/{id:guid}
 PATCH /api/v1/cost-centers/{id:guid}
 PATCH /api/v1/items/{id:guid}
@@ -58,6 +63,9 @@ PATCH /api/v1/purchase-requisitions/{id:guid}
 PATCH /api/v1/suppliers/{id:guid}
 PATCH /api/v1/suppliers/{id:guid}/homologation
 PATCH /api/v1/users/{id:guid}
+POST /api/v1/announcements/
+POST /api/v1/announcements/{id:guid}/dismiss
+POST /api/v1/announcements/{id:guid}/image
 POST /api/v1/auth/change-password
 POST /api/v1/auth/login
 POST /api/v1/auth/logout

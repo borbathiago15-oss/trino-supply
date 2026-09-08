@@ -10,6 +10,7 @@ import { Fornecedores } from '@/paginas/fornecedores/Fornecedores';
 import { Produtos } from '@/paginas/produtos/Produtos';
 import { Usuarios } from '@/paginas/usuarios/Usuarios';
 import { Empresas } from '@/paginas/empresas/Empresas';
+import { Comunicados } from '@/paginas/comunicados/Comunicados';
 import { NovaSolicitacao } from '@/paginas/solicitacoes/NovaSolicitacao';
 import { SolicitacaoEmLote } from '@/paginas/solicitacoes/SolicitacaoEmLote';
 import { MeusPedidos } from '@/paginas/solicitacoes/MeusPedidos';
@@ -68,6 +69,7 @@ export function Rotas() {
           <Route path="/produtos" element={<Produtos />} />
           <Route path="/usuarios" element={<Usuarios />} />
           <Route path="/empresas" element={<Empresas />} />
+          <Route path="/comunicados" element={<Comunicados />} />
           <Route path="/solicitacoes" element={<MeusPedidos />} />
           <Route path="/solicitacoes/nova" element={<NovaSolicitacao />} />
           <Route path="/solicitacoes/lote" element={<SolicitacaoEmLote />} />

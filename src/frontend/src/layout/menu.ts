@@ -98,6 +98,7 @@ export const MENU: GrupoMenu[] = [
       { id: 'company', rotulo: 'Empresas (CNPJs)', rota: '/empresas', mostrar: ehAdmin },
     ]},
     { id: 'users', rotulo: 'Usuários', rota: '/usuarios', modulo: 'USUARIOS', mostrar: ehAdmin },
+    { id: 'announcements', rotulo: 'Comunicados', rota: '/comunicados', mostrar: ehAdmin },
     { id: 'suppliers', rotulo: 'Fornecedores', rota: '/fornecedores', modulo: 'FORNECEDORES', mostrar: podeComprar },
   ]},
 ];

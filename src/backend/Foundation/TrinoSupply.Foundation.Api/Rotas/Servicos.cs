@@ -38,6 +38,7 @@ public static class Servicos
         servicos.AddScoped<CompanyService>();
         servicos.AddScoped<QuotationService>();
         servicos.AddScoped<TriageService>();
+        servicos.AddScoped<TrinoSupply.Foundation.Api.Comunicados.AnnouncementService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Analytics.AnalyticsService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Analytics.RelatorioExecutivoService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Compliance.ComplianceService>();

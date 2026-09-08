@@ -38,6 +38,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<PurchaseOrderInvoice> PurchaseOrderInvoices => Set<PurchaseOrderInvoice>();
     public DbSet<Domain.CostCenterApprover> CostCenterApprovers => Set<Domain.CostCenterApprover>();
     public DbSet<CompanyProfile> CompanyProfiles => Set<CompanyProfile>();
+    public DbSet<Announcement> Announcements => Set<Announcement>();
+    public DbSet<AnnouncementDismissal> AnnouncementDismissals => Set<AnnouncementDismissal>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -771,6 +773,40 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(c => c.PaymentPolicy).HasColumnName("payment_policy").HasMaxLength(8000);
             e.Property(c => c.UpdatedAt).HasColumnName("updated_at");
             e.Property(c => c.UpdatedByLabel).HasColumnName("updated_by_label").HasMaxLength(200);
+        });
+
+        modelBuilder.Entity<Announcement>(e =>
+        {
+            e.ToTable("announcement"); // schema foundation — recado do administrador
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Id).HasColumnName("id");
+            e.Property(a => a.Title).HasColumnName("title").HasMaxLength(200).IsRequired();
+            e.Property(a => a.Body).HasColumnName("body").HasMaxLength(8000);
+            e.Property(a => a.ImageDocumentId).HasColumnName("image_document_id");
+            e.Property(a => a.ImageFileName).HasColumnName("image_file_name").HasMaxLength(260);
+            e.Property(a => a.StartsOn).HasColumnName("starts_on");
+            e.Property(a => a.EndsOn).HasColumnName("ends_on");
+            e.Property(a => a.Active).HasColumnName("active");
+            e.Property(a => a.CreatedBy).HasColumnName("created_by");
+            e.Property(a => a.CreatedByLabel).HasColumnName("created_by_label").HasMaxLength(200);
+            e.Property(a => a.CreatedAt).HasColumnName("created_at");
+            e.Property(a => a.UpdatedAt).HasColumnName("updated_at");
+            // a consulta de todo login é "o que está no ar hoje": ligado, dentro da vigência
+            e.HasIndex(a => new { a.Active, a.StartsOn, a.EndsOn });
+            e.HasMany(a => a.Dismissals).WithOne().HasForeignKey(d => d.AnnouncementId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AnnouncementDismissal>(e =>
+        {
+            e.ToTable("announcement_dismissal");
+            e.HasKey(d => d.Id);
+            e.Property(d => d.Id).HasColumnName("id");
+            e.Property(d => d.AnnouncementId).HasColumnName("announcement_id");
+            e.Property(d => d.UserId).HasColumnName("user_id");
+            e.Property(d => d.DismissedAt).HasColumnName("dismissed_at");
+            // uma leitura por pessoa por comunicado: fechar duas vezes não cria dois registros
+            e.HasIndex(d => new { d.AnnouncementId, d.UserId }).IsUnique();
         });
 
         modelBuilder.Entity<RefreshToken>(e =>

@@ -65,6 +65,12 @@ describe('menu', () => {
     expect(folhas({ role: 'Requester', modules: ['COMPRAS'] }).map((i) => i.id)).not.toContain('reports');
   });
 
+  it('Comunicados é do administrador: quem escreve o recado não é qualquer um', () => {
+    expect(folhas({ role: 'SystemAdministrator', modules: [] }).map((i) => i.id)).toContain('announcements');
+    for (const papel of ['SupplyManager', 'Director', 'PurchasingOfficer', 'Requester'] as const)
+      expect(folhas({ role: papel, modules: [] }).map((i) => i.id)).not.toContain('announcements');
+  });
+
   it('subgrupo com uma tela só vira item simples', () => {
     // Comprador vê "Cadastro de Produtos" mas não "Famílias": o subgrupo Produtos colapsa
     const grupos = itensVisiveis({ role: 'PurchasingOfficer', modules: ['COMPRAS', 'PRODUTOS'] });

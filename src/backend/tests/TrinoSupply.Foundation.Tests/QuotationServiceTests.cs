@@ -1377,6 +1377,56 @@ public class QuotationServiceTests
         Assert.DoesNotContain(fila, e => e.Pr.Id == pr.Id);
     }
 
+    /// <summary>
+    /// A fila cortava em 200 <em>antes</em> de descartar o que já tinha processo. Como a SC
+    /// atendida continua "aberta" até o fim do fluxo, as antigas já resolvidas ocupavam as 200
+    /// vagas e a demanda recente — a que precisa de comprador — nunca chegava à tela.
+    /// </summary>
+    [Fact]
+    public async Task Fila_nao_perde_a_sc_recente_atras_das_antigas_ja_atendidas()
+    {
+        var w = await BuildAsync();
+        var t0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
+        // 600 SCs antigas, todas já dentro de um processo — mais que o teto da fila
+        for (var i = 0; i < 600; i++)
+        {
+            var pr = new PurchaseRequisition
+            {
+                Number = $"PR-2025-{i:000000}", RequesterId = Ana.Id, RequesterLabel = Ana.Label,
+                CostCenter = "CC-01", Justification = "atendida há tempos",
+                Status = RequisitionStatus.Approved, SubmittedAt = t0.AddMinutes(i), DecidedAt = t0.AddMinutes(i),
+                Items = [new RequisitionItem { Sequence = 1, Description = "Item antigo", Quantity = 1, UnitOfMeasure = "UN" }],
+            };
+            w.Db.Requisitions.Add(pr);
+            w.Db.Quotations.Add(new Quotation
+            {
+                Number = $"RFQ-2025-{i:000000}", Kind = QuotationKind.Purchase,
+                Status = QuotationStatus.Open, CostCenter = "CC-01", SourcePrId = pr.Id,
+                CreatedAt = t0.AddMinutes(i),
+                Items = [new QuotationItem { Sequence = 1, Description = "Item antigo", Quantity = 1, UnitOfMeasure = "UN" }],
+            });
+        }
+
+        // e uma SC nova, sem processo nenhum: é ela que o comprador precisa ver
+        var recente = new PurchaseRequisition
+        {
+            Number = "PR-2026-999999", RequesterId = Ana.Id, RequesterLabel = Ana.Label,
+            CostCenter = "CC-01", Justification = "chegou hoje e ninguém cotou",
+            Status = RequisitionStatus.Approved, SubmittedAt = t0.AddYears(1), DecidedAt = t0.AddYears(1),
+            Items = [new RequisitionItem { Sequence = 1, Description = "Luva de vaqueta", Quantity = 10, UnitOfMeasure = "PAR" }],
+        };
+        w.Db.Requisitions.Add(recente);
+        await w.Db.SaveChangesAsync();
+
+        var (fila, _) = await w.Rfq.QueueAsync();
+
+        // antes, as 600 antigas comiam o teto e esta linha voltava vazia
+        Assert.Contains(fila, e => e.Pr.Id == recente.Id);
+        // e o que já tem processo não volta a aparecer
+        Assert.DoesNotContain(fila, e => e.Pr.Number.StartsWith("PR-2025-"));
+    }
+
     /// <summary>"Abrir tudo" depois de uma separação leva apenas os itens que sobraram.</summary>
     [Fact]
     public async Task Abrir_a_sc_inteira_leva_so_os_itens_ainda_sem_processo()

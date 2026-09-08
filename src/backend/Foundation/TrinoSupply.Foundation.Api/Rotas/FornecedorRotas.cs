@@ -193,7 +193,7 @@ public static class FornecedorRotas
         {
             if (!SupplierService.CanMaintain(RoleOf(p)))
                 return Error(ctx, 403, "SUP-ERR-900", "Seu papel não mantém o cadastro de fornecedores.");
-            var (supplier, error) = await svc.UpdateAsync(id, body.TradeName, body.Email, body.Phone, body.Active);
+            var (supplier, error) = await svc.UpdateAsync(id, body.TradeName, body.Email, body.Phone, body.Active, body.TaxId);
             return error is not null ? Error(ctx, error.Code == "SUP-ERR-404" ? 404 : 400, error.Code, error.Message)
                 : Ok(SupplierView(supplier!), ctx);
         });

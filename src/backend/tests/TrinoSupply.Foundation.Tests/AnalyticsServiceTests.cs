@@ -125,8 +125,8 @@ public class AnalyticsServiceTests
     public async Task Dashboard_de_suprimentos_filtra_pedidos_por_fornecedor_e_comprador()
     {
         var w = Build();
-        var (sup1, _) = await w.Sup.CreateAsync(Carla.Id, "Alfa LTDA", "Alfa", "12345678000190", null, null);
-        var (sup2, _) = await w.Sup.CreateAsync(Carla.Id, "Beta LTDA", "Beta", "98765432000110", null, null);
+        var (sup1, _) = await w.Sup.CreateAsync(Carla.Id, "Alfa LTDA", "Alfa", "12345678000190", null, "81 3333-1000");
+        var (sup2, _) = await w.Sup.CreateAsync(Carla.Id, "Beta LTDA", "Beta", "98765432000110", null, "81 3333-2000");
         await w.Pos.CreateAsync(Carla, sup1!.Id, null, [new PoItemInput("Item A", 2, "UN", 100, null)], null);
         await w.Pos.CreateAsync(Carla, sup2!.Id, null, [new PoItemInput("Item B", 1, "UN", 40, null)], null);
 

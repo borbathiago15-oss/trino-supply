@@ -31,7 +31,7 @@ export function PainelDeConvidados({ processo: q, podeConvidar, aoConvidar, aoAv
   aoAvisar: (t: string, tipo?: 'ok' | 'erro') => void;
 }) {
   const [convidado, setConvidado] = useState('');
-  const [novo, setNovo] = useState({ aberto: false, razaoSocial: '', cnpj: '' });
+  const [novo, setNovo] = useState({ aberto: false, razaoSocial: '', telefone: '', cnpj: '' });
   const [criando, setCriando] = useState(false);
   const catalogo = useCarregar(
     async (signal) => listarFornecedores(false, signal).catch(() => []), []);
@@ -50,21 +50,30 @@ export function PainelDeConvidados({ processo: q, podeConvidar, aoConvidar, aoAv
   }
 
   /**
-   * Pré-cadastro para cotar: razão social e CNPJ, que é tudo o que a API exige.
-   * Existe porque a cotação vem antes do cadastro — o comprador chama muita gente
-   * para o BID e só cadastra de verdade quem ganha. O fornecedor nasce PROSPECT:
-   * concorre em pé de igualdade, e a homologação é cobrada na hora de vencer.
+   * Pré-cadastro para cotar: razão social e telefone, que é tudo o que a API exige (§7).
+   * Existe porque a cotação vem antes do cadastro — o comprador pede preço por telefone
+   * ou WhatsApp e, nessa hora, o CNPJ ele não tem. O fornecedor nasce PROSPECT: concorre
+   * em pé de igualdade, e o cadastro completo é cobrado de quem ganhar o BID.
    */
   async function criarEConvidar() {
     const razaoSocial = novo.razaoSocial.trim();
+    const telefone = novo.telefone.replace(/\D/g, '');
     const cnpj = novo.cnpj.replace(/\D/g, '');
-    if (razaoSocial.length < 3 || (cnpj.length !== 14 && cnpj.length !== 11)) return;
+    if (razaoSocial.length < 3 || telefone.length < 10) return;
+    // CNPJ é opcional, mas informado errado não vale a viagem até o servidor
+    if (cnpj.length > 0 && cnpj.length !== 14 && cnpj.length !== 11) {
+      aoAvisar('CPF/CNPJ inválido: informe 11 ou 14 dígitos, ou deixe em branco.', 'erro');
+      return;
+    }
     setCriando(true);
     try {
-      const f = await criarFornecedor({ legalName: razaoSocial, tradeName: null, taxId: cnpj, email: null, phone: null });
+      const f = await criarFornecedor({
+        legalName: razaoSocial, tradeName: null, taxId: cnpj || null,
+        email: null, phone: novo.telefone.trim(),
+      });
       await convidarFornecedor(q.id, [f.id]);
       aoAvisar(`${razaoSocial} entrou na cotação como pré-cadastro.`);
-      setNovo({ aberto: false, razaoSocial: '', cnpj: '' });
+      setNovo({ aberto: false, razaoSocial: '', telefone: '', cnpj: '' });
       catalogo.recarregar();
       aoConvidar();
     } catch (e) {
@@ -139,22 +148,27 @@ export function PainelDeConvidados({ processo: q, podeConvidar, aoConvidar, aoAv
                   <input id="rfq-novo-nome" value={novo.razaoSocial} placeholder="nome da empresa"
                     onChange={(e) => setNovo((n) => ({ ...n, razaoSocial: e.target.value }))} />
                 </Campo>
-                <Campo id="rfq-novo-cnpj" rotulo="CNPJ" className="min-w-[180px]">
-                  <input id="rfq-novo-cnpj" value={novo.cnpj} placeholder="somente números"
+                <Campo id="rfq-novo-telefone" rotulo="Telefone" className="min-w-[180px]">
+                  <input id="rfq-novo-telefone" value={novo.telefone} placeholder="(81) 99999-0000"
+                    onChange={(e) => setNovo((n) => ({ ...n, telefone: e.target.value }))} />
+                </Campo>
+                <Campo id="rfq-novo-cnpj" rotulo="CNPJ (opcional)" className="min-w-[180px]">
+                  <input id="rfq-novo-cnpj" value={novo.cnpj} placeholder="informe depois, se ganhar"
                     onChange={(e) => setNovo((n) => ({ ...n, cnpj: e.target.value }))} />
                 </Campo>
                 <button type="button" className="botao" disabled={criando} onClick={criarEConvidar}>
                   {criando ? 'Incluindo…' : 'Incluir na cotação'}
                 </button>
                 <button type="button" className="botao-secundario" disabled={criando}
-                  onClick={() => setNovo({ aberto: false, razaoSocial: '', cnpj: '' })}>
+                  onClick={() => setNovo({ aberto: false, razaoSocial: '', telefone: '', cnpj: '' })}>
                   Cancelar
                 </button>
               </div>
               <Nota>
-                Pré-cadastro para cotar: razão social e CNPJ bastam. O fornecedor entra como
-                <strong> PROSPECT</strong> e concorre normalmente — <strong>só não pode vencer</strong> antes
-                de o gestor de suprimentos homologá-lo. É o que permite chamar todo mundo para o BID e
+                Pré-cadastro para cotar: <strong>razão social e telefone bastam</strong> — o CNPJ pode
+                ficar para depois. O fornecedor entra como <strong>PROSPECT</strong> e concorre
+                normalmente; <strong>só não pode vencer</strong> antes do cadastro completo e da
+                homologação pelo gestor de suprimentos. É o que permite chamar todo mundo para o BID e
                 cadastrar de verdade apenas quem ganhar.
               </Nota>
             </div>

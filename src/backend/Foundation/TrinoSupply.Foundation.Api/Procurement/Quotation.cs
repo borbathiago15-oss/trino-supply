@@ -62,6 +62,25 @@ public class Quotation
     public decimal? SavingValue { get; set; }                // baseline − fechado
     public decimal? SavingPercent { get; set; }
     public string? NegotiationNotes { get; set; }
+
+    // ---- as outras duas réguas do saving (S.17) -----------------------------
+    // Três coisas diferentes, três números com nome próprio. Somá-las ou trocar uma
+    // pela outra faria o relatório dizer "saving" sem dizer de quê:
+    //
+    // | Régua | Mede |
+    // |---|---|
+    // | negociação (acima) | o que o comprador arrancou do MESMO fornecedor |
+    // | competição | o que valeu ter chamado mais gente para o BID |
+    // | orçamento | o quanto ficou abaixo do que o solicitante previa |
+
+    /// <summary>Maior proposta comparável do BID — só de quem cotou a família inteira.</summary>
+    public decimal? CompetitionBaselineValue { get; set; }
+    /// <summary>Maior proposta − vencedora. Nulo quando só um fornecedor cotou: sem concorrência não há ganho de concorrência.</summary>
+    public decimal? CompetitionSaving { get; set; }
+    /// <summary>Orçamento das SCs de origem, congelado na adjudicação.</summary>
+    public decimal? BudgetBaselineValue { get; set; }
+    /// <summary>Orçamento − fechado. Nulo quando alguma SC do processo não informou orçamento.</summary>
+    public decimal? BudgetSaving { get; set; }
     public string? NegotiatedByLabel { get; set; }
     public DateTimeOffset? NegotiatedAt { get; set; }
 

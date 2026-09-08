@@ -188,7 +188,7 @@ public partial class QuotationService
             var invite = new QuotationSupplier
             {
                 QuotationId = q.Id, SupplierId = s.Id,
-                SupplierName = s.TradeName ?? s.LegalName, TaxId = s.TaxId,
+                SupplierName = s.TradeName ?? s.LegalName, TaxId = s.TaxId ?? "",
                 InvitedBy = actor.Id, InvitedByLabel = actor.Label, InvitedAt = clock.GetUtcNow(),
             };
             // Add explícito (chave pré-gerada em pai já rastreado); o EF liga o convite à cotação

@@ -35,8 +35,8 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
                 || (s.TradeName != null && EF.Functions.ILike(s.TradeName, $"%{termo}%"))
                 || (s.Email != null && EF.Functions.ILike(s.Email, $"%{termo}%"))
                 || (s.Phone != null && EF.Functions.ILike(s.Phone, $"%{termo}%"))
-                || EF.Functions.ILike(s.TaxId, $"%{termo}%")
-                || (digitos.Length > 0 && EF.Functions.ILike(s.TaxId, $"%{digitos}%")));
+                || (s.TaxId != null && EF.Functions.ILike(s.TaxId, $"%{termo}%"))
+                || (digitos.Length > 0 && s.TaxId != null && EF.Functions.ILike(s.TaxId, $"%{digitos}%")));
         }
 
         var total = await q.CountAsync(ct);
@@ -63,17 +63,35 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
         return (list, total);
     }
 
+    /// <summary>Só os dígitos de um documento/telefone — nulo quando não sobra nenhum.</summary>
+    private static string? SoDigitos(string? valor)
+    {
+        var d = new string((valor ?? "").Where(char.IsDigit).ToArray());
+        return d.Length == 0 ? null : d;
+    }
+
+    /// <summary>
+    /// Cadastro de fornecedor. O mínimo é **razão social + telefone**: é com isso
+    /// que o comprador pede preço antes de existir cadastro nenhum (§7). O CPF/CNPJ
+    /// é opcional aqui e obrigatório para homologar — cotar sem ele pode, vencer não.
+    /// </summary>
     public async Task<(Supplier? supplier, UserError? error)> CreateAsync(
-        Guid actorId, string legalName, string? tradeName, string taxId, string? email, string? phone,
+        Guid actorId, string legalName, string? tradeName, string? taxId, string? email, string? phone,
         CancellationToken ct = default)
     {
-        legalName = legalName.Trim();
+        legalName = (legalName ?? "").Trim();
         if (legalName.Length < 3) return (null, new("SUP-ERR-012", "Informe a razão social (mín. 3 caracteres)."));
-        var digits = new string((taxId ?? "").Where(char.IsDigit).ToArray());
-        if (digits.Length is not (11 or 14))
-            return (null, new("SUP-ERR-011", "CPF/CNPJ inválido: informe 11 ou 14 dígitos."));
-        if (await db.Suppliers.AnyAsync(s => s.TaxId == digits, ct))
-            return (null, new("SUP-ERR-010", "Já existe um fornecedor com este CPF/CNPJ."));
+        if ((SoDigitos(phone)?.Length ?? 0) < 10)
+            return (null, new("SUP-ERR-014", "Informe o telefone com DDD (mín. 10 dígitos)."));
+
+        var digits = SoDigitos(taxId);
+        if (digits is not null)
+        {
+            if (digits.Length is not (11 or 14))
+                return (null, new("SUP-ERR-011", "CPF/CNPJ inválido: informe 11 ou 14 dígitos."));
+            if (await db.Suppliers.AnyAsync(s => s.TaxId == digits, ct))
+                return (null, new("SUP-ERR-010", "Já existe um fornecedor com este CPF/CNPJ."));
+        }
 
         var now = clock.GetUtcNow();
         var supplier = new Supplier
@@ -82,7 +100,7 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
             TradeName = string.IsNullOrWhiteSpace(tradeName) ? null : tradeName.Trim(),
             TaxId = digits,
             Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim(),
-            Phone = string.IsNullOrWhiteSpace(phone) ? null : phone.Trim(),
+            Phone = phone!.Trim(),
             CreatedAt = now,
             UpdatedAt = now,
             CreatedBy = actorId,
@@ -93,10 +111,23 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
     }
 
     public async Task<(Supplier? supplier, UserError? error)> UpdateAsync(
-        Guid id, string? tradeName, string? email, string? phone, bool? active, CancellationToken ct = default)
+        Guid id, string? tradeName, string? email, string? phone, bool? active,
+        string? taxId = null, CancellationToken ct = default)
     {
         var supplier = await db.Suppliers.SingleOrDefaultAsync(s => s.Id == id, ct);
         if (supplier is null) return (null, new("SUP-ERR-404", "Fornecedor não encontrado."));
+
+        // o CNPJ só entra uma vez: o pré-cadastro nasce sem ele e a edição completa
+        // o registro. Já gravado, ele é identidade — trocar viraria outro fornecedor.
+        var novoTaxId = SoDigitos(taxId);
+        if (novoTaxId is not null && supplier.TaxId is null)
+        {
+            if (novoTaxId.Length is not (11 or 14))
+                return (null, new("SUP-ERR-011", "CPF/CNPJ inválido: informe 11 ou 14 dígitos."));
+            if (await db.Suppliers.AnyAsync(s => s.TaxId == novoTaxId, ct))
+                return (null, new("SUP-ERR-010", "Já existe um fornecedor com este CPF/CNPJ."));
+            supplier.TaxId = novoTaxId;
+        }
 
         if (tradeName is not null) supplier.TradeName = string.IsNullOrWhiteSpace(tradeName) ? null : tradeName.Trim();
         if (email is not null) supplier.Email = string.IsNullOrWhiteSpace(email) ? null : email.Trim();
@@ -122,6 +153,11 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
         var clean = (status ?? "").Trim().ToUpperInvariant();
         if (!SupplierHomologation.All.Contains(clean))
             return (null, new("SUP-ERR-031", "Situação de homologação inválida."));
+        // pré-cadastro cota; homologado fecha compra. O CNPJ é a fronteira entre os dois:
+        // sem ele não há O.C., nota nem retenção — então não há homologação (§7).
+        if (clean == SupplierHomologation.Homologado && supplier.TaxId is null)
+            return (null, new("SUP-ERR-013",
+                "Fornecedor sem CPF/CNPJ: complete o cadastro antes de homologar."));
         supplier.HomologationStatus = clean;
         supplier.UpdatedAt = clock.GetUtcNow();
         supplier.Version += 1;

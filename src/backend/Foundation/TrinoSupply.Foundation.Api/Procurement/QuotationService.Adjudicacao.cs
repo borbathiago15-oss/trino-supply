@@ -128,7 +128,11 @@ public partial class QuotationService
         q.SelectedBy = actor.Id;
         q.SelectedByLabel = actor.Label;
         q.SelectedAt = now;
-        ApplyAwardSaving(q, novas);
+        // o orçamento vem das SCs que este processo atende — `SourcePrIds` já cobre o
+        // agrupamento multi-SC, então processo de três SCs compara com os três orçamentos
+        var orcamentos = await db.Requisitions.Where(r => q.SourcePrIds.Contains(r.Id))
+            .Select(r => r.Budget).ToListAsync(ct);
+        ApplyAwardSaving(q, novas, orcamentos);
 
         var from = q.Status;
         q.Status = QuotationStatus.AwaitingManager;
@@ -227,10 +231,26 @@ public partial class QuotationService
         return (fatia, Math.Round(fatia + extras * proporcao, 2));
     }
 
-    /// <summary>Ganho agregado: primeira proposta de cada vencedor, na fatia que ele ganhou, menos o fechado.</summary>
-    private void ApplyAwardSaving(Quotation q, IReadOnlyList<QuotationAward> awards)
+    /// <summary>
+    /// As três réguas do saving (S.17), apuradas juntas e guardadas separadas.
+    ///
+    /// | Régua | Base | Mede |
+    /// |---|---|---|
+    /// | **negociação** | 1ª proposta do vencedor | o que o comprador arrancou do mesmo fornecedor |
+    /// | **competição** | maior proposta comparável | o que valeu ter chamado mais gente para o BID |
+    /// | **orçamento** | orçamento das SCs | o quanto ficou abaixo do que o solicitante previa |
+    ///
+    /// Nenhuma substitui a outra, e somar as três contaria o mesmo dinheiro três vezes.
+    /// Cada uma vira nula quando não tem base honesta: sem concorrente que cotasse a
+    /// família inteira não há ganho de concorrência; sem orçamento em toda SC do
+    /// processo não há como comparar com orçamento.
+    /// </summary>
+    private void ApplyAwardSaving(Quotation q, IReadOnlyList<QuotationAward> awards,
+        IReadOnlyList<decimal?>? orcamentos = null)
     {
-        decimal baseline = 0, fechado = 0;
+        decimal baseline = 0, fechado = 0, maiorProposta = 0;
+        var houveConcorrencia = false;
+
         foreach (var a in awards)
         {
             var itens = ItemsOfFamily(q, a.Family);
@@ -238,11 +258,38 @@ public partial class QuotationService
                 .OrderBy(p => p.VersionNumber).First();
             baseline += ShareOf(primeira, itens).total;
             fechado += a.TotalValue;
+
+            // competição: a maior entre as ofertas que cobrem a família inteira. Só entra
+            // quem cotou tudo — comparar com quem cotou metade inflaria o ganho de graça
+            var lote = FamilyMap(q).FirstOrDefault(l => l.Family == a.Family);
+            var completas = lote?.Offers.Where(o => o.Complete).ToList() ?? [];
+            if (completas.Count > 1)
+            {
+                houveConcorrencia = true;
+                maiorProposta += completas.Max(o => o.TotalValue);
+            }
+            else
+            {
+                // sem concorrente nesta família, ela entra pelo próprio valor fechado:
+                // não gera ganho nem esconde o que as outras famílias geraram
+                maiorProposta += a.TotalValue;
+            }
         }
+
         q.BaselineValue = baseline;
         q.NegotiatedValue = fechado;
         q.SavingValue = baseline - fechado;
         q.SavingPercent = baseline > 0 ? Math.Round((baseline - fechado) / baseline * 100m, 2) : 0m;
+
+        q.CompetitionBaselineValue = houveConcorrencia ? maiorProposta : null;
+        q.CompetitionSaving = houveConcorrencia ? maiorProposta - fechado : null;
+
+        // orçamento: só compara quando TODAS as SCs do processo informaram o seu. Com uma
+        // sem orçamento, o total fechado seria comparado a um orçamento parcial — e o
+        // "saving" sairia inflado pela SC que ninguém orçou
+        var completos = orcamentos is not null && orcamentos.Count > 0 && orcamentos.All(o => o is > 0);
+        q.BudgetBaselineValue = completos ? orcamentos!.Sum(o => o!.Value) : null;
+        q.BudgetSaving = completos ? q.BudgetBaselineValue - fechado : null;
     }
 
     /// <summary>Famílias do catálogo, em caixa alta; item digitado (sem catálogo) entra em DIVERSOS.</summary>

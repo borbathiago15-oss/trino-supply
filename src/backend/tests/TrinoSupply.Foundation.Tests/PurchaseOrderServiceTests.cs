@@ -45,7 +45,7 @@ public class PurchaseOrderServiceTests
         var pos = new PurchaseOrderService(db, inv, clock);
         var prs = new RequisitionService(db, new FakeNumbers(), catalog, clock);
 
-        var (fornecedor, _) = await sup.CreateAsync(Carla.Id, "Distribuidora Alfa LTDA", "Alfa", "12345678000190", null, null);
+        var (fornecedor, _) = await sup.CreateAsync(Carla.Id, "Distribuidora Alfa LTDA", "Alfa", "12345678000190", null, "81 3333-1000");
         var (detergente, _) = await catalog.CreateAsync(Carla.Id, "LMP-001", "Detergente neutro 500ml", "MATERIAL DE LIMPEZA", "UN", 3.5m);
         var (local, _) = await inv.CreateLocationAsync(Otavio.Id, "ALM-01", "Almoxarifado Central");
         return new World(pos, sup, prs, inv, catalog, db, fornecedor!, detergente!, local!);
@@ -67,11 +67,60 @@ public class PurchaseOrderServiceTests
     {
         var w = await BuildAsync();
 
-        var (_, dup) = await w.Sup.CreateAsync(Carla.Id, "Outra Empresa", null, "12.345.678/0001-90", null, null);
-        var (_, invalido) = await w.Sup.CreateAsync(Carla.Id, "Empresa X", null, "123", null, null);
+        var (_, dup) = await w.Sup.CreateAsync(Carla.Id, "Outra Empresa", null, "12.345.678/0001-90", null, "81 3333-3000");
+        var (_, invalido) = await w.Sup.CreateAsync(Carla.Id, "Empresa X", null, "123", null, "81 3333-4000");
 
         Assert.Equal("SUP-ERR-010", dup!.Code);   // mesmo CNPJ após normalização
         Assert.Equal("SUP-ERR-011", invalido!.Code);
+    }
+
+    /// <summary>
+    /// §7 — o pré-cadastro. O comprador pede preço antes de existir cadastro: o mínimo
+    /// para entrar numa cotação é razão social + telefone, que é o que ele tem na mão.
+    /// O CNPJ vem depois, e é ele que separa "pode cotar" de "pode vencer".
+    /// </summary>
+    [Fact]
+    public async Task Pre_cadastro_nasce_com_nome_e_telefone_e_so_homologa_com_cnpj()
+    {
+        var w = await BuildAsync();
+
+        var (semTelefone, erroTelefone) = await w.Sup.CreateAsync(
+            Carla.Id, "Ferragens do Norte LTDA", null, null, null, null);
+        Assert.Null(semTelefone);
+        Assert.Equal("SUP-ERR-014", erroTelefone!.Code);
+
+        var (pre, erro) = await w.Sup.CreateAsync(
+            Carla.Id, "Ferragens do Norte LTDA", null, null, null, "(81) 98888-1234");
+        Assert.Null(erro);
+        Assert.Null(pre!.TaxId);
+        // nasce PROSPECT: cotar é livre, vencer o BID é que exige homologação (SUP-ERR-030)
+        Assert.Equal(SupplierHomologation.Prospect, pre.HomologationStatus);
+
+        // dois pré-cadastros sem CNPJ convivem — nulo não colide com nulo no índice único
+        var (outro, erroOutro) = await w.Sup.CreateAsync(
+            Carla.Id, "Parafusos do Agreste ME", null, null, null, "(87) 3555-4321");
+        Assert.Null(erroOutro);
+        Assert.Null(outro!.TaxId);
+
+        // sem documento não há O.C., nota nem retenção — logo não há homologação
+        var (naoHomologou, erroHomologacao) = await w.Sup.SetHomologationAsync(
+            pre.Id, SupplierHomologation.Homologado);
+        Assert.Null(naoHomologou);
+        Assert.Equal("SUP-ERR-013", erroHomologacao!.Code);
+
+        // o cadastro completo entra pela edição, e aí a homologação passa
+        var (completo, erroEdicao) = await w.Sup.UpdateAsync(
+            pre.Id, null, null, null, null, "11.222.333/0001-81");
+        Assert.Null(erroEdicao);
+        Assert.Equal("11222333000181", completo!.TaxId);
+
+        var (homologado, semErro) = await w.Sup.SetHomologationAsync(pre.Id, SupplierHomologation.Homologado);
+        Assert.Null(semErro);
+        Assert.Equal(SupplierHomologation.Homologado, homologado!.HomologationStatus);
+
+        // gravado uma vez, o CNPJ é identidade: a edição não o troca por outro
+        var (mesmo, _) = await w.Sup.UpdateAsync(pre.Id, null, null, null, null, "98.765.432/0001-10");
+        Assert.Equal("11222333000181", mesmo!.TaxId);
     }
 
     [Fact]

@@ -43,8 +43,8 @@ public class QuotationServiceTests
         var prs = new RequisitionService(db, new FakeNumbers(), new CatalogService(db, clock), clock);
         var sup = new SupplierService(db, clock);
 
-        var (alfa, _) = await sup.CreateAsync(Carla.Id, "Alfa LTDA", "Alfa", "12345678000190", null, null);
-        var (beta, _) = await sup.CreateAsync(Carla.Id, "Beta LTDA", "Beta", "98765432000110", null, null);
+        var (alfa, _) = await sup.CreateAsync(Carla.Id, "Alfa LTDA", "Alfa", "12345678000190", null, "81 3333-1000");
+        var (beta, _) = await sup.CreateAsync(Carla.Id, "Beta LTDA", "Beta", "98765432000110", null, "81 3333-2000");
         // fornecedor novo nasce PROSPECT: participar da cotação é livre, vencer exige
         // homologação (SUP-ERR-030). O cenário destes testes é o do fornecedor já
         // homologado — quem cuida do caminho do prospect é o teste próprio dele.
@@ -345,7 +345,7 @@ public class QuotationServiceTests
         var w = await BuildAsync();
 
         var (gama, erroCadastro) = await w.Sup.CreateAsync(
-            Carla.Id, "Gama Distribuidora LTDA", null, "11222333000181", null, null);
+            Carla.Id, "Gama Distribuidora LTDA", null, "11222333000181", null, "81 3333-5000");
         Assert.Null(erroCadastro);
         Assert.Equal(SupplierHomologation.Prospect, gama!.HomologationStatus);
 
@@ -707,6 +707,84 @@ public class QuotationServiceTests
         Assert.Equal(original - nova.TotalValue, escolhida!.SavingValue);
     }
 
+    /// <summary>
+    /// §17 — a segunda régua: o ganho da concorrência. O BID fecha em 922,73 tendo
+    /// recebido 1.030,00 do outro proponente; o que a diretoria quer ver é a diferença
+    /// entre o que se pagou e o que se teria pago sem disputa.
+    /// As três réguas convivem: negociação, concorrência e orçamento respondem
+    /// perguntas diferentes e nenhuma sobrescreve a outra.
+    /// </summary>
+    [Fact]
+    public async Task Saving_da_concorrencia_mede_contra_a_maior_proposta_do_bid()
+    {
+        var w = await BuildAsync();
+        var q = await UpToAnalysisAsync(w);
+        var alfa = q.Proposals.First(p => p.SupplierId == w.Alfa.Id);   //   922,73
+        var beta = q.Proposals.First(p => p.SupplierId == w.Beta.Id);   // 1.030,00
+
+        var (escolhida, erro) = await w.Rfq.SelectWinnerAsync(Carla, q.Id, alfa.Id, "Preço", "Menor preço do BID.");
+        Assert.Null(erro);
+
+        Assert.Equal(beta.TotalValue, escolhida!.CompetitionBaselineValue);
+        Assert.Equal(beta.TotalValue - alfa.TotalValue, escolhida.CompetitionSaving);
+        // sem negociação, a régua da primeira proposta não inventa ganho nenhum
+        Assert.Equal(0m, escolhida.SavingValue);
+        // e sem orçamento na SC a terceira régua não existe — nula, e não zero
+        Assert.Null(escolhida.BudgetBaselineValue);
+        Assert.Null(escolhida.BudgetSaving);
+    }
+
+    /// <summary>
+    /// Proponente único não é concorrência. A régua fica nula em vez de marcar ganho
+    /// zero — que num relatório entraria como "processo disputado sem economia".
+    /// </summary>
+    [Fact]
+    public async Task Sem_concorrente_o_saving_da_concorrencia_e_nulo()
+    {
+        var w = await BuildAsync();
+        var (q, _) = await w.Rfq.CreateFromPrAsync(Carla, w.Pr.Id, QuotationKind.Purchase, null, null);
+        await w.Rfq.InviteSuppliersAsync(Carla, q!.Id, [w.Alfa.Id]);
+        await w.Rfq.SubmitProposalAsync(q.Id, w.Alfa.Id, ProposalFor(q, 857.65m, 65.08m), "PORTAL", "Alfa");
+        var (analise, _) = await w.Rfq.CloseForAnalysisAsync(Carla, q.Id);
+        var alfa = analise!.Proposals.First(p => p.SupplierId == w.Alfa.Id);
+
+        var (escolhida, erro) = await w.Rfq.SelectWinnerAsync(Carla, q.Id, alfa.Id, "Único", "Fornecedor único da praça.");
+        Assert.Null(erro);
+        Assert.Null(escolhida!.CompetitionBaselineValue);
+        Assert.Null(escolhida.CompetitionSaving);
+    }
+
+    /// <summary>
+    /// §17 — a terceira régua: o orçamento que o solicitante informou na SC. Fechar
+    /// abaixo dele é ganho, e é a única régua que existe quando não houve nem
+    /// negociação nem disputa.
+    /// </summary>
+    [Fact]
+    public async Task Saving_do_orcamento_mede_contra_o_valor_informado_na_sc()
+    {
+        var w = await BuildAsync();
+        var (pr, erroPr) = await w.Prs.CreateAsync(Ana, "Ferramentas com orçamento", "CC-01", "NORMAL", null,
+            [new ItemInput("Martelete rebatedor MRP 900", 1, "UN", 900, null),
+             new ItemInput("Pé de cabra", 1, "UN", 70, null)],
+            null, new RequisitionService.ScHeaderInput(null, null, null, null, Budget: 1200m));
+        Assert.Null(erroPr);
+        Assert.Equal(1200m, pr!.Budget);
+        await w.Prs.SubmitAsync(Ana, pr.Id);
+        await w.Prs.ApproveAsync(Bruno, pr.Id, null);
+
+        var (q, _) = await w.Rfq.CreateFromPrAsync(Carla, pr.Id, QuotationKind.Purchase, null, null);
+        await w.Rfq.InviteSuppliersAsync(Carla, q!.Id, [w.Alfa.Id, w.Beta.Id]);
+        await w.Rfq.SubmitProposalAsync(q.Id, w.Alfa.Id, ProposalFor(q, 857.65m, 65.08m), "PORTAL", "Alfa");
+        await w.Rfq.SubmitProposalAsync(q.Id, w.Beta.Id, ProposalFor(q, 950m, 80m), "PORTAL", "Beta");
+        var (analise, _) = await w.Rfq.CloseForAnalysisAsync(Carla, q.Id);
+        var alfa = analise!.Proposals.First(p => p.SupplierId == w.Alfa.Id);
+
+        var (escolhida, erro) = await w.Rfq.SelectWinnerAsync(Carla, q.Id, alfa.Id, "Preço", "Menor preço do BID.");
+        Assert.Null(erro);
+        Assert.Equal(1200m, escolhida!.BudgetBaselineValue);
+        Assert.Equal(1200m - alfa.TotalValue, escolhida.BudgetSaving);
+    }
+
     /// <summary>V2-P2: prospect participa da cotação, mas a seleção exige homologado (SUP-ERR-030).</summary>
     [Fact]
     public async Task Fornecedor_nao_homologado_participa_mas_nao_e_selecionado()
@@ -941,8 +1019,8 @@ public class QuotationServiceTests
         var prs = new RequisitionService(db, new FakeNumbers(), catalog, clock);
         var sup = new SupplierService(db, clock);
 
-        var (alfa, _) = await sup.CreateAsync(Carla.Id, "Alfa LTDA", "Alfa", "12345678000190", null, null);
-        var (beta, _) = await sup.CreateAsync(Carla.Id, "Beta LTDA", "Beta", "98765432000110", null, null);
+        var (alfa, _) = await sup.CreateAsync(Carla.Id, "Alfa LTDA", "Alfa", "12345678000190", null, "81 3333-1000");
+        var (beta, _) = await sup.CreateAsync(Carla.Id, "Beta LTDA", "Beta", "98765432000110", null, "81 3333-2000");
         // vencer exige homologação (SUP-ERR-030); o mundo da compra dividida é o do
         // fornecedor já homologado
         await sup.SetHomologationAsync(alfa!.Id, SupplierHomologation.Homologado);

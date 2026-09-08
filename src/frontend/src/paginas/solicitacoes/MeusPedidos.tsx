@@ -66,7 +66,7 @@ export function MeusPedidos() {
   const [editando, setEditando] = useState<SolicitacaoCompra | null>(null);
   const [form, setForm] = useState({
     justificativa: '', centroCusto: '', prioridade: 'NORMAL' as Prioridade, necessidade: '',
-    urgenciaMotivo: '', urgenciaImpacto: '',
+    urgenciaMotivo: '', urgenciaImpacto: '', orcamento: '',
   });
   const [salvando, setSalvando] = useState(false);
   const [aExcluir, setAExcluir] = useState<SolicitacaoCompra | null>(null);
@@ -100,6 +100,7 @@ export function MeusPedidos() {
     setForm({
       justificativa: r.justification, centroCusto: r.costCenter, prioridade: r.priority,
       necessidade: r.neededBy ?? '', urgenciaMotivo: r.urgencyReason ?? '', urgenciaImpacto: r.urgencyImpact ?? '',
+      orcamento: r.budget != null ? String(r.budget) : '',
     });
     rolarPara('form-sc');
   }
@@ -118,6 +119,8 @@ export function MeusPedidos() {
         clearNeededBy: !form.necessidade,
         urgencyReason: form.urgenciaMotivo || null,
         urgencyImpact: form.urgenciaImpacto || null,
+        budget: Number(form.orcamento) > 0 ? Number(form.orcamento) : null,
+        clearBudget: !form.orcamento,
       });
       avisar('Solicitação atualizada.');
       setEditando(null);
@@ -194,6 +197,7 @@ export function MeusPedidos() {
                           CC: {r.costCenter}
                           {r.neededBy && ` · até ${data(r.neededBy)}`}
                           {r.priority === 'URGENT' && ` · ${ROTULO_PRIORIDADE.URGENT}`}
+                          {r.budget != null && ` · orçamento ${moeda(r.budget)}`}
                         </div>
                         {r.attachments.length > 0 && (
                           <div className="sub">
@@ -287,6 +291,12 @@ export function MeusPedidos() {
             */}
             <Campo id="sc-edit-necessidade" rotulo="Data de necessidade" className="mt-3">
               <input id="sc-edit-necessidade" type="date" {...campo('necessidade')} />
+            </Campo>
+            {/* §17: informar o orçamento aqui dá ao comprador a régua contra a qual o
+                saving do fechamento vai ser medido */}
+            <Campo id="sc-edit-orcamento" rotulo="Orçamento previsto (R$)"
+              dica="(opcional — fechar abaixo dele vira saving)" className="mt-3">
+              <input id="sc-edit-orcamento" type="number" min="0" step="0.01" {...campo('orcamento')} />
             </Campo>
             {dataNoPassado(form.necessidade) && (
               <Aviso testid="data-vencida">

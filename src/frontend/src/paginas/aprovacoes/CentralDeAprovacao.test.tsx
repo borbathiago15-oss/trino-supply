@@ -44,7 +44,7 @@ const material: SolicitacaoMaterial = {
 const scLegado = {
   id: 'sc9', number: 'SC-2026-000009', kind: 'AVULSA', status: 'IN_APPROVAL', cycle: 1, priority: 'NORMAL',
   urgencyReason: null, urgencyImpact: null, neededBy: null, justification: 'Compra antiga',
-  needType: null, deliveryLocation: null, company: null, internalNotes: null, costCenter: 'BAH-001',
+  needType: null, deliveryLocation: null, company: null, internalNotes: null, budget: null, costCenter: 'BAH-001',
   requesterId: 'u9', requesterLabel: 'João', totalEstimatedValue: 500, decisionReason: null,
   decidedByLabel: null, approverLabel: null, approvalIssue: null, assignedToLabel: null, submittedAt: null,
   decidedAt: null, processStatusLabel: null, processStatusTone: null, processStatusHint: null,

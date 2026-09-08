@@ -11,11 +11,12 @@ vi.mock('@/api/fornecedores', async (importar) => ({
   ...(await importar<typeof import('@/api/fornecedores')>()),
   buscarFornecedores: vi.fn(),
   gerarChavePortal: vi.fn(),
+  atualizarFornecedor: vi.fn(),
 }));
 let usuarioAtual: Usuario;
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => usuarioAtual }));
 
-import { buscarFornecedores, gerarChavePortal } from '@/api/fornecedores';
+import { atualizarFornecedor, buscarFornecedores, gerarChavePortal } from '@/api/fornecedores';
 
 const fornecedor = (p: Partial<Fornecedor>): Fornecedor => ({
   id: 'id-' + (p.taxId ?? '1'), legalName: 'Alfa Equipamentos LTDA', tradeName: 'Alfa EPIs',
@@ -68,14 +69,36 @@ describe('<Fornecedores />', () => {
     expect(tabela.getAllByText(/vendas@alfa\.com\.br · 11 4000-0000/)).toHaveLength(2);
   });
 
-  it('editar trava razão social e CNPJ, que a API não altera', async () => {
+  it('editar trava razão social e CNPJ já gravado, que a API não altera', async () => {
     montar();
     await waitFor(() => expect(screen.getByTestId('tabela-fornecedores')).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole('button', { name: 'Editar' })[0]);
     expect(screen.getByLabelText('Razão social')).toBeDisabled();
-    expect(screen.getByLabelText('CNPJ/CPF')).toBeDisabled();
+    expect(screen.getByLabelText(/CNPJ\/CPF/)).toBeDisabled();
     expect(screen.getByLabelText('Nome fantasia')).toHaveValue('Alfa EPIs');
     expect(screen.getByRole('button', { name: 'Salvar alterações' })).toBeInTheDocument();
+  });
+
+  it('pré-cadastro sem CNPJ aparece como tal e a edição completa o documento (§7)', async () => {
+    // o fornecedor que entrou pela cotação chega aqui sem documento; é nesta tela que
+    // ele vira cadastro completo — e só então pode ser homologado (SUP-ERR-013)
+    vi.mocked(buscarFornecedores).mockResolvedValue({
+      itens: [fornecedor({ taxId: null, legalName: 'Gama Distribuidora LTDA', tradeName: null,
+        homologationStatus: 'PROSPECT', effectiveHomologation: 'PROSPECT' })],
+      total: 1,
+    });
+    montar();
+    await waitFor(() => expect(screen.getByTestId('tabela-fornecedores')).toBeInTheDocument());
+    expect(within(screen.getByTestId('tabela-fornecedores')).getByText('pré-cadastro')).toBeInTheDocument();
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Editar' })[0]);
+    const cnpj = screen.getByLabelText(/CNPJ\/CPF/);
+    expect(cnpj).toBeEnabled();          // falta o documento: aqui ele entra
+    await userEvent.type(cnpj, '11222333000181');
+    await userEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+
+    await waitFor(() => expect(atualizarFornecedor).toHaveBeenCalledWith(
+      expect.any(String), expect.objectContaining({ taxId: '11222333000181' })));
   });
 
   it('a chave do portal só é gerada depois de confirmar, e aparece uma vez', async () => {

@@ -234,7 +234,7 @@ public record ResetPasswordRequest(string NewPassword);
 public record ItemRequest(string? Description, decimal Quantity, string? UnitOfMeasure, decimal? EstimatedUnitPrice, string? Notes, Guid? CatalogItemId);
 public record CreateRequisitionRequest(string Justification, string CostCenter, string? Priority, DateOnly? NeededBy, List<ItemRequest>? Items, string? Kind,
     string? NeedType, string? DeliveryLocation, string? Company, string? InternalNotes,
-    string? UrgencyReason = null, string? UrgencyImpact = null);
+    string? UrgencyReason = null, string? UrgencyImpact = null, decimal? Budget = null);
 public interface IFamilyLeadTimes
 {
     int? LeadRequestToQuote { get; }
@@ -280,8 +280,8 @@ public record SupplierContractRequest(string? Number, DateOnly? ValidFrom, DateO
     List<SupplierContractItemRequest>? Items, decimal? ValueLimit = null);
 public record ContractAdjustmentRequest(decimal? RequestedPercent, decimal? AgreedPercent, string? Notes,
     bool? ApplyToPrices = null);
-public record CreateSupplierRequest(string LegalName, string? TradeName, string TaxId, string? Email, string? Phone);
-public record UpdateSupplierRequest(string? TradeName, string? Email, string? Phone, bool? Active);
+public record CreateSupplierRequest(string LegalName, string? TradeName, string? TaxId, string? Email, string? Phone);
+public record UpdateSupplierRequest(string? TradeName, string? Email, string? Phone, bool? Active, string? TaxId = null);
 public record PoItemRequest(string Description, decimal Quantity, string? UnitOfMeasure, decimal? UnitPrice, Guid? CatalogItemId);
 public record CreatePurchaseOrderRequest(Guid SupplierId, string? Notes, List<PoItemRequest>? Items, Guid? SourcePrId);
 public record ReceiveOrderRequest(Guid LocationId);
@@ -315,7 +315,7 @@ public record PortalProposalRequest(int? DeliveryDays, string? PaymentTerms, dec
     decimal? TaxValue = null, decimal? OtherCosts = null);
 public record CompanyProfileRequest(string LegalName, string Address, string? District, string City, string State, string Zip, string TaxId, string? StateRegistration, string? Phone, string? Email, string? DeliveryAddress, string? DeliveryTaxId, string? StandardClauses, string? PaymentPolicy);
 public record UpdateRequisitionRequest(string? Justification, string? CostCenter, string? Priority, DateOnly? NeededBy, bool? ClearNeededBy,
-    string? UrgencyReason = null, string? UrgencyImpact = null);
+    string? UrgencyReason = null, string? UrgencyImpact = null, decimal? Budget = null, bool? ClearBudget = null);
 public record ReasonRequest(string? Reason);
 public record DecisionRequest(string? Reason, string? Comments);
 

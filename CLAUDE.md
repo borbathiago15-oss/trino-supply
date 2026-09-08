@@ -73,8 +73,20 @@ o usuário descobrir no erro do servidor:
   `Program.cs` recusa toda rota `/api` fora de `/auth/{change-password,me,logout,refresh,login}`
   com **IAM-ERR-022**. A política de senha vive em `Auth/PasswordPolicy.cs` e vale
   para os três caminhos que gravam senha.
-- O *saving* de negociação é apurado contra a **primeira** proposta do fornecedor
-  vencedor.
+- **SUP-ERR-013/014** — o pré-cadastro do fornecedor. Cotar vem antes de cadastrar:
+  o mínimo para entrar numa cotação é **razão social + telefone** (`SUP-ERR-014`), e
+  o CPF/CNPJ é **opcional** — o comprador pede preço por telefone e nessa hora não o
+  tem. O fornecedor nasce `PROSPECT` e concorre em pé de igualdade; o documento é
+  exigido para **homologar** (`SUP-ERR-013`), e a homologação é o que permite vencer
+  o BID (`SUP-ERR-030`). Gravado uma vez, o CNPJ é identidade e a edição não o troca.
+- O *saving* tem **três réguas**, que convivem porque respondem perguntas diferentes,
+  e cada uma é nula quando não se aplica:
+  - **negociação** — contra a **primeira** proposta do fornecedor vencedor;
+  - **concorrência** — contra a **maior proposta completa** do BID; nula quando houve
+    um proponente só, para não contar disputa que não existiu;
+  - **orçamento** — contra o valor que o solicitante informou na SC (`budget`); só
+    existe quando **todas** as SCs do processo informaram o seu, senão o total fechado
+    seria comparado a um orçamento parcial.
 
 ## Verificação antes de entregar
 

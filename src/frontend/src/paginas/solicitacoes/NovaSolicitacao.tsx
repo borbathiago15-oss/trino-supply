@@ -19,6 +19,7 @@ const novaLinha = (): LinhaItem => ({ chave: 'i' + ++sequencia, produto: '', uni
 const VAZIO = {
   justificativa: '', local: '', prioridade: 'NORMAL' as Prioridade, necessidade: '',
   urgenciaMotivo: '', urgenciaImpacto: '', familia: '', centroCusto: '', empresa: '', observacao: '',
+  orcamento: '',
 };
 type Formulario = typeof VAZIO;
 
@@ -119,6 +120,7 @@ export function NovaSolicitacao() {
         deliveryLocation: form.local || null,
         company: form.empresa || null,
         internalNotes: form.observacao || null,
+        budget: Number(form.orcamento) > 0 ? Number(form.orcamento) : null,
         urgencyReason: form.urgenciaMotivo || null,
         urgencyImpact: form.urgenciaImpacto || null,
       });
@@ -235,12 +237,21 @@ export function NovaSolicitacao() {
           </Campo>
         </Grade2>
 
-        <Campo id="sc-empresa" rotulo="Empresa" className="mt-3">
-          <input id="sc-empresa" list="empresas-solicitantes" placeholder="empresa solicitante" {...campo('empresa')} />
-          <datalist id="empresas-solicitantes">
-            {(dados?.empresas ?? []).map((e) => <option key={e} value={e} />)}
-          </datalist>
-        </Campo>
+        <Grade2 className="mt-3">
+          <Campo id="sc-empresa" rotulo="Empresa">
+            <input id="sc-empresa" list="empresas-solicitantes" placeholder="empresa solicitante" {...campo('empresa')} />
+            <datalist id="empresas-solicitantes">
+              {(dados?.empresas ?? []).map((e) => <option key={e} value={e} />)}
+            </datalist>
+          </Campo>
+          {/* §17: o orçamento é a régua do saving que só o solicitante conhece. Opcional
+              de propósito — quem não tem número não é obrigado a inventar um */}
+          <Campo id="sc-orcamento" rotulo="Orçamento previsto (R$)"
+            dica="(opcional — fechar abaixo dele vira saving)">
+            <input id="sc-orcamento" type="number" min="0" step="0.01" placeholder="ex.: 1200,00"
+              {...campo('orcamento')} />
+          </Campo>
+        </Grade2>
 
         <Campo id="sc-observacao" rotulo="Observação Interna" className="mt-3">
           <textarea id="sc-observacao" rows={3} {...campo('observacao')} />

@@ -27,6 +27,7 @@ const sc = (p: Partial<SolicitacaoCompra>): SolicitacaoCompra => ({
   id: 'sc-' + (p.number ?? 'SC-1'), number: 'SC-2026-000001', kind: 'AVULSA', status: 'DRAFT', cycle: 1,
   priority: 'NORMAL', urgencyReason: null, urgencyImpact: null, neededBy: null,
   justification: 'Reposição de EPI', needType: null, deliveryLocation: null, company: null, internalNotes: null,
+  budget: null,
   costCenter: 'BAH-001', requesterId: 'u1', requesterLabel: 'Ana', totalEstimatedValue: 250,
   decisionReason: null, decidedByLabel: null, approverLabel: null, approvalIssue: null, assignedToLabel: null,
   submittedAt: null, decidedAt: null, processStatusLabel: null, processStatusTone: null, processStatusHint: null,

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
+import { ModalDeComunicados } from '@/componentes/Comunicados';
 import { AvisosProvider } from '@/sessao/AvisosProvider';
 import { useSessao, useUsuario } from '@/sessao/SessaoProvider';
 import { ROTULO_PAPEL } from '@/dominio/papeis';
@@ -25,6 +26,8 @@ export function AppLayout() {
 
   return (
     <AvisosProvider>
+      {/* o recado do administrador, ao abrir o sistema — por cima de qualquer tela */}
+      <ModalDeComunicados />
       <div className="flex min-h-screen">
         <Sidebar aberto={menuAberto} aoFechar={() => setMenuAberto(false)} />
 

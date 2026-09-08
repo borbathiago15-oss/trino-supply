@@ -1,0 +1,131 @@
+import { api } from './cliente';
+
+/**
+ * Torre de Controle: uma linha por **item** de compra, com a etapa em que ele
+ * está e a situação em que se encontra.
+ */
+
+export interface LinhaDaTorre {
+  itemId: string;
+  requisitionId: string;
+  prNumber: string;
+  sequence: number;
+  catalogCode: string | null;
+  description: string;
+  quantity: number;
+  unitOfMeasure: string;
+  requesterLabel: string;
+  company: string | null;
+  costCenter: string;
+  buyerLabel: string | null;
+  supplierName: string | null;
+  /** Onde o item está no fluxo. */
+  stage: string;
+  stageLabel: string;
+  /** Como ele está — a mesma situação que o solicitante vê. */
+  statusKey: string;
+  statusLabel: string;
+  statusTone: string;
+  priority: string;
+  neededBy: string | null;
+  promisedDate: string | null;
+  late: boolean;
+  value: number | null;
+  quotationId: string | null;
+  quotationNumber: string | null;
+  purchaseOrderId: string | null;
+  purchaseOrderNumber: string | null;
+}
+
+export interface KpisDaTorre {
+  total: number;
+  novos: number;
+  emCotacao: number;
+  aguardandoAprovacao: number;
+  aguardandoOc: number;
+  aguardandoRecebimento: number;
+  atrasados: number;
+  urgentes: number;
+  valor: number;
+}
+
+export interface PaginaDaTorre {
+  items: LinhaDaTorre[];
+  kpis: KpisDaTorre;
+  filterOptions: {
+    companies: string[];
+    costCenters: { code: string; name: string }[];
+    families: string[];
+    requesters: { id: string; label: string }[];
+    buyers: { id: string; label: string }[];
+  };
+  page: number;
+  pageSize: number;
+  total: number;
+  pages: number;
+  /** O filtro derivado bateu no teto: a tela avisa em vez de calar. */
+  capped: boolean;
+  cap: number;
+}
+
+export interface FiltrosDaTorre {
+  busca: string;
+  etapa: string;
+  situacao: string;
+  empresa: string;
+  centroCusto: string;
+  familia: string;
+  solicitante: string;
+  comprador: string;
+  prioridade: string;
+  atrasados: boolean;
+  pagina: number;
+}
+
+export const FILTROS_TORRE_VAZIOS: FiltrosDaTorre = {
+  busca: '', etapa: '', situacao: '', empresa: '', centroCusto: '', familia: '',
+  solicitante: '', comprador: '', prioridade: '', atrasados: false, pagina: 1,
+};
+
+/** As etapas, na ordem em que o item as percorre — os mesmos nomes do servidor. */
+export const ETAPAS = [
+  { key: 'SOLICITACAO', label: 'Solicitação' },
+  { key: 'COTACAO', label: 'Cotação' },
+  { key: 'APROVACAO', label: 'Aprovação' },
+  { key: 'ORDEM_DE_COMPRA', label: 'Ordem de Compra' },
+  { key: 'RECEBIMENTO', label: 'Recebimento' },
+  { key: 'ENCERRADO', label: 'Encerrado' },
+] as const;
+
+/** A cor de cada tom devolvido pelo servidor. */
+export const CLASSE_DO_TOM: Record<string, string> = {
+  '': 'bg-slate-100 text-slate-600',
+  dev: 'bg-slate-100 text-slate-500',
+  warn: 'bg-aviso-fundo text-aviso',
+  teal: 'bg-teal-50 text-teal-800',
+  on: 'bg-ok-fundo text-ok',
+  off: 'bg-perigo-fundo text-perigo',
+  info: 'bg-blue-50 text-blue-800',
+  purple: 'bg-purple-50 text-purple-800',
+  orange: 'bg-orange-50 text-orange-800',
+};
+
+export function consultaDaTorre(f: FiltrosDaTorre, tamanho = 50): string {
+  const q = new URLSearchParams();
+  if (f.busca) q.set('search', f.busca);
+  if (f.etapa) q.set('stage', f.etapa);
+  if (f.situacao) q.set('status', f.situacao);
+  if (f.empresa) q.set('company', f.empresa);
+  if (f.centroCusto) q.set('costCenter', f.centroCusto);
+  if (f.familia) q.set('family', f.familia);
+  if (f.solicitante) q.set('requesterId', f.solicitante);
+  if (f.comprador) q.set('buyerId', f.comprador);
+  if (f.prioridade) q.set('priority', f.prioridade);
+  if (f.atrasados) q.set('late', 'true');
+  q.set('page', String(f.pagina));
+  q.set('pageSize', String(tamanho));
+  return `?${q.toString()}`;
+}
+
+export const torreDeControle = (f: FiltrosDaTorre, signal?: AbortSignal) =>
+  api<PaginaDaTorre>(`/api/v1/control-tower${consultaDaTorre(f)}`, { signal });

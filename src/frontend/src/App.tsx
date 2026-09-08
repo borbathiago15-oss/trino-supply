@@ -10,6 +10,7 @@ import { Fornecedores } from '@/paginas/fornecedores/Fornecedores';
 import { Produtos } from '@/paginas/produtos/Produtos';
 import { Usuarios } from '@/paginas/usuarios/Usuarios';
 import { Empresas } from '@/paginas/empresas/Empresas';
+import { Comunicados } from '@/paginas/comunicados/Comunicados';
 import { NovaSolicitacao } from '@/paginas/solicitacoes/NovaSolicitacao';
 import { SolicitacaoEmLote } from '@/paginas/solicitacoes/SolicitacaoEmLote';
 import { MeusPedidos } from '@/paginas/solicitacoes/MeusPedidos';
@@ -22,6 +23,7 @@ import { Compliance } from '@/paginas/compliance/Compliance';
 import { FilaDeAtendimento } from '@/paginas/estoque/FilaDeAtendimento';
 import { PainelDeAtendimentos } from '@/paginas/estoque/PainelDeAtendimentos';
 import { GestaoDeSolicitacoes } from '@/paginas/triagem/GestaoDeSolicitacoes';
+import { TorreDeControle } from '@/paginas/torre/TorreDeControle';
 import { DashboardSuprimentos } from '@/paginas/painel/DashboardSuprimentos';
 import { Insights } from '@/paginas/insights/Insights';
 import { Relatorios } from '@/paginas/relatorios/Relatorios';
@@ -68,6 +70,7 @@ export function Rotas() {
           <Route path="/produtos" element={<Produtos />} />
           <Route path="/usuarios" element={<Usuarios />} />
           <Route path="/empresas" element={<Empresas />} />
+          <Route path="/comunicados" element={<Comunicados />} />
           <Route path="/solicitacoes" element={<MeusPedidos />} />
           <Route path="/solicitacoes/nova" element={<NovaSolicitacao />} />
           <Route path="/solicitacoes/lote" element={<SolicitacaoEmLote />} />
@@ -80,6 +83,7 @@ export function Rotas() {
           <Route path="/estoque/fila" element={<FilaDeAtendimento />} />
           <Route path="/estoque/atendimentos" element={<PainelDeAtendimentos />} />
           <Route path="/gestao-solicitacoes" element={<GestaoDeSolicitacoes />} />
+          <Route path="/torre" element={<TorreDeControle />} />
           <Route path="/painel" element={<DashboardSuprimentos />} />
           <Route path="/insights" element={<Insights />} />
           <Route path="/relatorios" element={<Relatorios />} />

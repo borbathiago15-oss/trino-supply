@@ -65,6 +65,16 @@ describe('menu', () => {
     expect(folhas({ role: 'Requester', modules: ['COMPRAS'] }).map((i) => i.id)).not.toContain('reports');
   });
 
+  it('a Torre de Controle abre o grupo Compras: é a tela que o comprador deixa aberta', () => {
+    const compras = itensVisiveis({ role: 'PurchasingOfficer', modules: ['COMPRAS'] })
+      .find((g) => g.titulo === 'Compras')!;
+    const primeiro = compras.itens[0];
+    expect(ehSubgrupo(primeiro) ? primeiro.rotulo : primeiro.id).toBe('control-tower');
+    // o auditor enxerga a fila para auditar; quem só solicita, não
+    expect(folhas({ role: 'Auditor', modules: ['COMPRAS'] }).map((i) => i.id)).toContain('control-tower');
+    expect(folhas({ role: 'Requester', modules: ['COMPRAS'] }).map((i) => i.id)).not.toContain('control-tower');
+  });
+
   it('Comunicados é do administrador: quem escreve o recado não é qualquer um', () => {
     expect(folhas({ role: 'SystemAdministrator', modules: [] }).map((i) => i.id)).toContain('announcements');
     for (const papel of ['SupplyManager', 'Director', 'PurchasingOfficer', 'Requester'] as const)

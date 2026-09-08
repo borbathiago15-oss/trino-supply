@@ -57,6 +57,7 @@ public class TabelaDeRotasTests
         app.MapSolicitacoes();
         app.MapAvisos();
         app.MapComunicados();
+        app.MapTorre();
         app.MapEstoque();
         app.MapFornecedores();
         app.MapPedidos();

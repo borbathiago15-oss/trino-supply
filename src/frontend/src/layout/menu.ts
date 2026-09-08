@@ -70,6 +70,9 @@ export const MENU: GrupoMenu[] = [
     { id: 'pr-mine', rotulo: 'Minhas Solicitações (SC)', rota: '/solicitacoes', mostrar: sempre },
   ]},
   { titulo: 'Compras', modulo: 'COMPRAS', itens: [
+    // primeira do grupo: é a tela que o comprador abre e deixa aberta
+    { id: 'control-tower', rotulo: 'Torre de Controle', rota: '/torre',
+      mostrar: (u) => podeComprar(u) || podeVerCompliance(u) || u.role === 'Auditor' },
     { id: 'triage', rotulo: 'Triagem de Demandas', rota: '/gestao-solicitacoes',
       mostrar: (u) => podeTriar(u) || podeComprar(u) || podeAlmoxarifado(u) },
     { rotulo: 'Cotações', filhos: [

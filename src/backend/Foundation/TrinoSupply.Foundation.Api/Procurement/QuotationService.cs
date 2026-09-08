@@ -162,34 +162,49 @@ public partial class QuotationService(AppDbContext db, TimeProvider clock)
         return ready;
     }
 
+    /// <summary>Teto da fila. Corta a fila <em>já filtrada</em> — 500 SCs de fato pendentes.</summary>
+    private const int TetoDaFila = 500;
+
     /// <summary>
     /// Fila de Suprimentos completa: as SCs prontas para cotar — item a item, porque uma SC pode
     /// ter parte dos itens já em processo — e as que já têm comprador designado mas continuam
     /// retidas na aprovação, para o comprador enxergar o que está a caminho.
+    ///
+    /// <para>
+    /// <b>O corte vem depois do filtro, e essa ordem é a correção.</b> Antes, a consulta pegava
+    /// as 200 SCs abertas mais antigas e <em>só então</em> descartava as que já estavam em
+    /// processo. Como toda SC atendida continua "aberta" até o fim do fluxo, as antigas já
+    /// resolvidas ocupavam as 200 vagas e a fila devolvia 148 de 215 — a demanda <em>recente</em>,
+    /// que é a que precisa de comprador, nunca chegava à tela. Agora o banco descarta o que já
+    /// tem processo, O.C. direta ou nenhum item pendente, e o teto se aplica ao que sobrou.
+    /// </para>
     /// </summary>
     public async Task<(List<QueueEntry> ready, List<QueueBlocked> blocked)> QueueAsync(
         CancellationToken ct = default)
     {
         var ativas = db.Quotations
             .Where(q => q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected);
-        // itens já dentro de um processo (fluxo por item)
-        var itensEmProcesso = (await ativas.SelectMany(q => q.Items)
-            .Where(i => i.SourcePrItemId != null).Select(i => i.SourcePrItemId!.Value).ToListAsync(ct))
-            .ToHashSet();
-        // processos do fluxo antigo (sem rastreio por item) levam a SC inteira
-        var scsInteiras = (await ativas.Where(q => q.Items.All(i => i.SourcePrItemId == null))
-            .Select(q => q.SourcePrId).ToListAsync(ct)).ToHashSet();
-        // O.C. emitida fora do processo de cotação (rota de material) também encerra a SC
-        var scsComOcDireta = (await db.PurchaseOrders
-            .Where(o => o.SourcePrId != null && o.QuotationId == null && o.Status != PurchaseOrderStatus.Cancelled)
-            .Select(o => o.SourcePrId!.Value).ToListAsync(ct)).ToHashSet();
 
         var open = await db.Requisitions.Include(r => r.Items)
             .Where(r => r.DeletedAt == null
                         && (r.Status == RequisitionStatus.Submitted || r.Status == RequisitionStatus.Approved
                             || r.Status == RequisitionStatus.InApproval))
-            .OrderBy(r => r.DecidedAt ?? r.SubmittedAt).Take(200).ToListAsync(ct);
-        open = open.Where(r => !scsInteiras.Contains(r.Id) && !scsComOcDireta.Contains(r.Id)).ToList();
+            // processos do fluxo antigo (sem rastreio por item) levam a SC inteira
+            .Where(r => !ativas.Any(q => q.SourcePrId == r.Id && q.Items.All(i => i.SourcePrItemId == null)))
+            // O.C. emitida fora do processo de cotação (rota de material) também encerra a SC
+            .Where(r => !db.PurchaseOrders.Any(o => o.SourcePrId == r.Id && o.QuotationId == null
+                                                    && o.Status != PurchaseOrderStatus.Cancelled))
+            // e ao menos um item ainda fora de processo: SC com tudo cotado não é fila, é histórico
+            .Where(r => r.Items.Any(i => !ativas.Any(q => q.Items.Any(qi => qi.SourcePrItemId == i.Id))))
+            .OrderBy(r => r.DecidedAt ?? r.SubmittedAt).Take(TetoDaFila).ToListAsync(ct);
+
+        // quais itens *destas* SCs já estão em processo — agora sobre o recorte carregado,
+        // e não sobre a base inteira de itens de cotação
+        var idsDeItens = open.SelectMany(r => r.Items).Select(i => i.Id).ToList();
+        var itensEmProcesso = (await ativas.SelectMany(q => q.Items)
+            .Where(i => i.SourcePrItemId != null && idsDeItens.Contains(i.SourcePrItemId!.Value))
+            .Select(i => i.SourcePrItemId!.Value).ToListAsync(ct))
+            .ToHashSet();
 
         var familias = await FamiliesOfAsync(open.SelectMany(r => r.Items).Select(i => i.CatalogItemId), ct);
         QueueEntry? Montar(PurchaseRequisition r)

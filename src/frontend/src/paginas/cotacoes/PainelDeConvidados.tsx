@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { convidarFornecedor, type Processo } from '@/api/cotacoes';
-import { listarFornecedores } from '@/api/fornecedores';
+import { criarFornecedor, listarFornecedores } from '@/api/fornecedores';
 import { Badge, Painel, Vazio } from '@/componentes/basicos';
 import { Campo, Nota } from '@/componentes/formulario';
 import { data } from '@/util/formato';
@@ -31,6 +31,8 @@ export function PainelDeConvidados({ processo: q, podeConvidar, aoConvidar, aoAv
   aoAvisar: (t: string, tipo?: 'ok' | 'erro') => void;
 }) {
   const [convidado, setConvidado] = useState('');
+  const [novo, setNovo] = useState({ aberto: false, razaoSocial: '', cnpj: '' });
+  const [criando, setCriando] = useState(false);
   const catalogo = useCarregar(
     async (signal) => listarFornecedores(false, signal).catch(() => []), []);
 
@@ -45,6 +47,29 @@ export function PainelDeConvidados({ processo: q, podeConvidar, aoConvidar, aoAv
       setConvidado('');
       aoConvidar();
     } catch (e) { aoAvisar(mensagem(e, 'Falha ao convidar o fornecedor.'), 'erro'); }
+  }
+
+  /**
+   * Pré-cadastro para cotar: razão social e CNPJ, que é tudo o que a API exige.
+   * Existe porque a cotação vem antes do cadastro — o comprador chama muita gente
+   * para o BID e só cadastra de verdade quem ganha. O fornecedor nasce PROSPECT:
+   * concorre em pé de igualdade, e a homologação é cobrada na hora de vencer.
+   */
+  async function criarEConvidar() {
+    const razaoSocial = novo.razaoSocial.trim();
+    const cnpj = novo.cnpj.replace(/\D/g, '');
+    if (razaoSocial.length < 3 || (cnpj.length !== 14 && cnpj.length !== 11)) return;
+    setCriando(true);
+    try {
+      const f = await criarFornecedor({ legalName: razaoSocial, tradeName: null, taxId: cnpj, email: null, phone: null });
+      await convidarFornecedor(q.id, [f.id]);
+      aoAvisar(`${razaoSocial} entrou na cotação como pré-cadastro.`);
+      setNovo({ aberto: false, razaoSocial: '', cnpj: '' });
+      catalogo.recarregar();
+      aoConvidar();
+    } catch (e) {
+      aoAvisar(mensagem(e, 'Falha ao incluir o fornecedor na cotação.'), 'erro');
+    } finally { setCriando(false); }
   }
 
   async function copiarConvite(nome: string) {
@@ -99,7 +124,42 @@ export function PainelDeConvidados({ processo: q, podeConvidar, aoConvidar, aoAv
               </select>
             </Campo>
             <button type="button" className="botao" disabled={!convidado} onClick={convidar}>Convidar</button>
+            {!novo.aberto && (
+              <button type="button" className="botao-secundario"
+                onClick={() => setNovo((n) => ({ ...n, aberto: true }))}>
+                Fornecedor fora do cadastro
+              </button>
+            )}
           </div>
+
+          {novo.aberto && (
+            <div data-testid="pre-cadastro-cotacao" className="mt-3 rounded-lg border border-borda bg-superficie-suave p-3">
+              <div className="flex flex-wrap items-end gap-2">
+                <Campo id="rfq-novo-nome" rotulo="Razão social" className="min-w-[260px] flex-1">
+                  <input id="rfq-novo-nome" value={novo.razaoSocial} placeholder="nome da empresa"
+                    onChange={(e) => setNovo((n) => ({ ...n, razaoSocial: e.target.value }))} />
+                </Campo>
+                <Campo id="rfq-novo-cnpj" rotulo="CNPJ" className="min-w-[180px]">
+                  <input id="rfq-novo-cnpj" value={novo.cnpj} placeholder="somente números"
+                    onChange={(e) => setNovo((n) => ({ ...n, cnpj: e.target.value }))} />
+                </Campo>
+                <button type="button" className="botao" disabled={criando} onClick={criarEConvidar}>
+                  {criando ? 'Incluindo…' : 'Incluir na cotação'}
+                </button>
+                <button type="button" className="botao-secundario" disabled={criando}
+                  onClick={() => setNovo({ aberto: false, razaoSocial: '', cnpj: '' })}>
+                  Cancelar
+                </button>
+              </div>
+              <Nota>
+                Pré-cadastro para cotar: razão social e CNPJ bastam. O fornecedor entra como
+                <strong> PROSPECT</strong> e concorre normalmente — <strong>só não pode vencer</strong> antes
+                de o gestor de suprimentos homologá-lo. É o que permite chamar todo mundo para o BID e
+                cadastrar de verdade apenas quem ganhar.
+              </Nota>
+            </div>
+          )}
+
           <Nota>
             O fornecedor responde pelo Portal com CNPJ + chave de acesso — gere a chave em
             Cadastros → Fornecedores. O convite fica registrado na auditoria do processo.

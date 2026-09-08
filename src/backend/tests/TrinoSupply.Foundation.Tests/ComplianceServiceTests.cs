@@ -46,6 +46,11 @@ public class ComplianceServiceTests
         var cp = new ComplianceService(db, clock);
         var (alfa, _) = await sup.CreateAsync(Carla.Id, "Alfa LTDA", "Alfa", "12345678000190", null, null);
         var (beta, _) = await sup.CreateAsync(Carla.Id, "Beta LTDA", "Beta", "98765432000110", null, null);
+        // fornecedor novo nasce PROSPECT: participar da cotação é livre, vencer exige
+        // homologação (SUP-ERR-030). O cenário destes testes é o do fornecedor já
+        // homologado — quem cuida do caminho do prospect é o teste próprio dele.
+        await sup.SetHomologationAsync(alfa!.Id, SupplierHomologation.Homologado);
+        await sup.SetHomologationAsync(beta!.Id, SupplierHomologation.Homologado);
         return new World(rfq, prs, sup, cp, db, alfa!, beta!, clock);
     }
 

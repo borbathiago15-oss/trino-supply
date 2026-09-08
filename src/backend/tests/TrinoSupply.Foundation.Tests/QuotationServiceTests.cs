@@ -45,6 +45,11 @@ public class QuotationServiceTests
 
         var (alfa, _) = await sup.CreateAsync(Carla.Id, "Alfa LTDA", "Alfa", "12345678000190", null, null);
         var (beta, _) = await sup.CreateAsync(Carla.Id, "Beta LTDA", "Beta", "98765432000110", null, null);
+        // fornecedor novo nasce PROSPECT: participar da cotação é livre, vencer exige
+        // homologação (SUP-ERR-030). O cenário destes testes é o do fornecedor já
+        // homologado — quem cuida do caminho do prospect é o teste próprio dele.
+        await sup.SetHomologationAsync(alfa!.Id, SupplierHomologation.Homologado);
+        await sup.SetHomologationAsync(beta!.Id, SupplierHomologation.Homologado);
         var (pr, _) = await prs.CreateAsync(Ana, "Ferramentas manutenção", "CC-01", "NORMAL", null,
             [new ItemInput("Martelete rebatedor MRP 900", 1, "UN", 900, null),
              new ItemInput("Pé de cabra", 1, "UN", 70, null)]);
@@ -324,6 +329,51 @@ public class QuotationServiceTests
             new ProposalInput(5, null, null, null, null, itens, DiscountValue: bruto + 1m, Currency: null),
             "INTERNO", "Carla");
         Assert.Equal("RFQ-ERR-021", descontoAlto!.Code);
+    }
+
+    [Fact]
+    public async Task Pre_cadastro_cota_mas_so_vence_depois_de_homologado()
+    {
+        // O comprador cota com muita gente e só cadastra de verdade quem ganha o BID.
+        // O sistema atende isso pelo PROSPECT: entra na cotação com razão social e CNPJ,
+        // concorre em pé de igualdade, e a homologação é cobrada na hora de vencer — não
+        // na hora de convidar.
+        //
+        // Antes disso, o fornecedor novo nascia HOMOLOGADO por padrão: um cadastro de dois
+        // campos já saía apto a ganhar o processo sem uma certidão sequer, e o SUP-ERR-030
+        // nunca disparava para quem tinha acabado de entrar.
+        var w = await BuildAsync();
+
+        var (gama, erroCadastro) = await w.Sup.CreateAsync(
+            Carla.Id, "Gama Distribuidora LTDA", null, "11222333000181", null, null);
+        Assert.Null(erroCadastro);
+        Assert.Equal(SupplierHomologation.Prospect, gama!.HomologationStatus);
+
+        var (q, _) = await w.Rfq.CreateFromPrAsync(Carla, w.Pr.Id, QuotationKind.Purchase, null, null);
+        // convidar o prospect é livre: é isso que permite cotar antes de cadastrar de verdade
+        var (comConvite, erroConvite) = await w.Rfq.InviteSuppliersAsync(Carla, q!.Id, [w.Alfa.Id, gama.Id]);
+        Assert.Null(erroConvite);
+        Assert.Contains(comConvite!.Suppliers, f => f.SupplierId == gama.Id);
+
+        await w.Rfq.SubmitProposalAsync(q.Id, w.Alfa.Id, ProposalFor(q, 900, 70), "INTERNO", "Alfa");
+        await w.Rfq.SubmitProposalAsync(q.Id, gama.Id, ProposalFor(q, 800, 60), "INTERNO", "Gama");
+        var (emAnalise, erroFechar) = await w.Rfq.CloseForAnalysisAsync(Carla, q.Id);
+        Assert.Null(erroFechar);
+        var daGama = emAnalise!.Proposals.First(p => p.SupplierId == gama.Id);
+
+        // ganhou no preço, mas não passa sem homologação
+        var (_, barrado) = await w.Rfq.SelectWinnerAsync(
+            Carla, q.Id, daGama.Id, "Preço", "Menor preço do processo.");
+        Assert.Equal("SUP-ERR-030", barrado!.Code);
+        Assert.Contains("PROSPECT", barrado.Message);
+
+        // homologado, o mesmo vencedor passa — nada mais muda no processo
+        await w.Sup.SetHomologationAsync(gama.Id, SupplierHomologation.Homologado);
+        var (escolhido, ok) = await w.Rfq.SelectWinnerAsync(
+            Carla, q.Id, daGama.Id, "Preço", "Menor preço do processo.");
+        Assert.Null(ok);
+        Assert.Equal(gama.Id, escolhido!.WinnerSupplierId);
+        Assert.Equal(QuotationStatus.AwaitingManager, escolhido.Status);
     }
 
     [Fact]
@@ -893,6 +943,10 @@ public class QuotationServiceTests
 
         var (alfa, _) = await sup.CreateAsync(Carla.Id, "Alfa LTDA", "Alfa", "12345678000190", null, null);
         var (beta, _) = await sup.CreateAsync(Carla.Id, "Beta LTDA", "Beta", "98765432000110", null, null);
+        // vencer exige homologação (SUP-ERR-030); o mundo da compra dividida é o do
+        // fornecedor já homologado
+        await sup.SetHomologationAsync(alfa!.Id, SupplierHomologation.Homologado);
+        await sup.SetHomologationAsync(beta!.Id, SupplierHomologation.Homologado);
         var (luva, _) = await catalog.CreateAsync(Gustavo.Id, "EPI-001", "Luva de vaqueta", "EPI", "PAR", 20m);
         var (chave, _) = await catalog.CreateAsync(Gustavo.Id, "FER-001", "Chave de fenda 1/4", "FERRAMENTAS", "UN", 30m);
 

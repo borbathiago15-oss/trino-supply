@@ -24,6 +24,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends libfontconfig1 
 WORKDIR /app
 COPY --from=build /app/publish .
 ENV DOTNET_EnableDiagnostics=0
+# Commit da imagem, para o /health dizer o que está no ar. No Railway a variável
+# RAILWAY_GIT_COMMIT_SHA já chega em tempo de execução e tem precedência; este
+# ARG é para quem constrói a imagem por fora (docker build --build-arg GIT_SHA=…).
+ARG GIT_SHA=""
+ENV GIT_SHA=$GIT_SHA
 EXPOSE 8080
 # O Railway injeta PORT; localmente o padrão é 8080
 ENTRYPOINT ["sh", "-c", "ASPNETCORE_URLS=http://0.0.0.0:${PORT:-8080} exec dotnet TrinoSupply.Foundation.Api.dll"]

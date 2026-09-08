@@ -156,6 +156,11 @@ app.Use(async (ctx, next) =>
 // a ele: respondia "healthy" com o banco fora do ar, que é a única coisa que este
 // endpoint precisava saber. Agora ele fala com o banco e diz 503 quando não alcança —
 // quem pergunta se está tudo bem recebe a resposta verdadeira.
+// que commit está no ar, e desde quando — é o que torna verificável a entrega que
+// não passa pelo navegador (ver VersaoImplantada)
+var commit = VersaoImplantada.Commit();
+var iniciadoEm = DateTimeOffset.UtcNow;
+
 app.MapGet("/health", async (AppDbContext db, CancellationToken ct) =>
 {
     var banco = await db.Database.CanConnectAsync(ct);
@@ -165,6 +170,9 @@ app.MapGet("/health", async (AppDbContext db, CancellationToken ct) =>
         service = "trino-supply-foundation",
         database = banco ? "up" : "down",
         setupComplete = seedOk,
+        commit,
+        commitShort = VersaoImplantada.Curto(commit),
+        startedAt = iniciadoEm,
         timestamp = DateTimeOffset.UtcNow,
     }, statusCode: banco ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
 });

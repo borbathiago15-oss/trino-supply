@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  CLASSE_DO_TOM, destinoDaAcao, ETAPAS, FILTROS_TORRE_VAZIOS, torreDeControle,
+  CLASSE_DO_TOM, destinoDaAcao, DIAS_PARA_DESTACAR_ESPERA, ETAPAS, FILTROS_TORRE_VAZIOS,
+  tempoParado, torreDeControle,
   type FiltrosDaTorre, type LinhaDaTorre,
   FAIXAS_DE_FILA,
 } from '@/api/torre';
@@ -37,6 +38,9 @@ function Linha({ i, triando, marcada, aoMarcar, aoLiberar, aoPriorizar }: {
 }) {
   const urgente = i.priority === 'URGENT';
   const destino = destinoDaAcao(i);
+  // parado tempo demais na mesma etapa: o número já está na linha, o destaque é para
+  // ele não passar despercebido no meio de cinquenta linhas
+  const parado = (i.waitingOn?.days ?? 0) >= DIAS_PARA_DESTACAR_ESPERA;
   return (
     <tr data-testid={`linha-${i.itemId}`} className={i.late ? 'bg-perigo-fundo/40' : undefined}>
       {triando && (
@@ -79,8 +83,26 @@ function Linha({ i, triando, marcada, aoMarcar, aoLiberar, aoPriorizar }: {
       </td>
       <td className="whitespace-nowrap">{i.supplierName ?? <span className="sub">—</span>}</td>
       <td className="whitespace-nowrap">{i.stageLabel}</td>
-      <td className="whitespace-nowrap">
+      {/* a situação diz a etapa; a espera diz de quem ela depende e há quanto tempo.
+          Sem a segunda metade, "Aguardando Aprovação" mandava abrir o centro de custo
+          para descobrir quem aprova, e "Em Cotação" mandava abrir o processo para ver
+          qual fornecedor faltava — coisas que o servidor já sabia e não dizia */}
+      <td className="min-w-[210px]">
         <Badge classe={CLASSE_DO_TOM[i.statusTone] ?? CLASSE_DO_TOM['']}>{i.statusLabel}</Badge>
+        {i.waitingOn && (
+          <div className="sub mt-1" data-testid={`espera-${i.itemId}`}>
+            {i.waitingOn.who}
+            {i.waitingOn.days != null && (
+              <>
+                {' · '}
+                <span className={parado ? 'font-bold text-aviso' : undefined}>
+                  {tempoParado(i.waitingOn)}
+                </span>
+              </>
+            )}
+            {i.waitingOn.detail && <div className="text-perigo">{i.waitingOn.detail}</div>}
+          </div>
+        )}
       </td>
       <td className="whitespace-nowrap">
         {data(i.promisedDate ?? i.neededBy)}

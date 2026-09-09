@@ -160,6 +160,16 @@ porque não são óbvias:
   inventar um registro vazio daria um KPI que não conta nada. A regra vive em
   `TorreDeControleService.ExcecaoDe`, e a linha mostra **o motivo**, não só a marca.
 
+**A situação diz a etapa; a espera diz de quem ela depende.** `EsperaDe` responde a outra
+metade da pergunta — *aguardando aprovação de quem, e há quanto tempo* — a partir do que o
+sistema já grava: os aprovadores do nível pendente no centro de custo, e os convidados sem
+proposta na cotação (com o atraso de cada um). Duas coisas mantêm o número honesto: **cada
+etapa conta pelo seu próprio relógio** (o Nível 2 conta desde a aprovação do Nível 1, não
+desde a escolha do vencedor) e **etapa sem marca de entrada fica sem data**, em vez de usar a
+criação da SC e contar como espera um tempo em que a etapa nem existia. Centro **sem aprovador
+cadastrado** diz isso na linha: fila parada porque ninguém pode aprovar é o defeito que
+precisa aparecer, não passar por demora normal.
+
 A **ação da linha e a fila prioritária saem da mesma regra** (`AcaoDe`): a pergunta
 "o que falta fazer aqui, e de quem é" é uma só. Fossem duas regras, o botão e a fila
 discordariam no primeiro caso de canto e o comprador não confiaria em nenhum dos dois.

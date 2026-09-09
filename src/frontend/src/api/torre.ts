@@ -84,6 +84,11 @@ export interface KpisDaTorre {
   emFaturamento: number;
   /** O que o sistema já grava como fora do padrão — sem O.C. do ERP, cancelado, devolvido. */
   excecoes: number;
+  /**
+   * Quantos esperam ação do comprador, pela mesma regra do filtro. Somar etapas aqui
+   * daria um número parecido e diferente do tamanho da lista que o card abre.
+   */
+  precisaDeVoce: number;
   /** Quantos itens em cada faixa de tempo na fila, na ordem de FAIXAS_DE_FILA. */
   porFaixaDeAging: number[] | null;
 }
@@ -146,6 +151,12 @@ export interface FiltrosDaTorre {
   excecoes: boolean;
   /** §5 — a fila prioritária: só o que espera ação do comprador. */
   minhaFila: boolean;
+  /**
+   * Recorte do recebimento: `'sem-nf'` é O.C. emitida sem nota (a bola está com o
+   * fornecedor), `'com-nf'` é nota lançada e material não recebido (com o almoxarifado).
+   * Vazio traz as duas — são filas diferentes, e cada card do topo abre a sua.
+   */
+  faturamento: '' | 'sem-nf' | 'com-nf';
   /** Faixa de tempo na fila (índice em FAIXAS_DE_FILA), ou vazio para todas. */
   faixaDeFila: string;
   pagina: number;
@@ -155,7 +166,8 @@ export const FILTROS_TORRE_VAZIOS: FiltrosDaTorre = {
   busca: '', etapa: '', situacao: '', empresa: '', centroCusto: '', familia: '',
   solicitante: '', comprador: '', prioridade: '', atrasados: false,
   de: '', ate: '', fornecedor: '', numeroOc: '', prazoDe: '', prazoAte: '',
-  valorDe: '', valorAte: '', excecoes: false, minhaFila: false, faixaDeFila: '', pagina: 1,
+  valorDe: '', valorAte: '', excecoes: false, minhaFila: false, faturamento: '',
+  faixaDeFila: '', pagina: 1,
 };
 
 /** As etapas, na ordem em que o item as percorre — os mesmos nomes do servidor. */
@@ -204,6 +216,7 @@ export function consultaDaTorre(f: FiltrosDaTorre, tamanho = 50): string {
   if (f.valorAte.trim() && Number.isFinite(Number(f.valorAte))) q.set('maxValue', f.valorAte.trim());
   if (f.excecoes) q.set('exception', 'true');
   if (f.minhaFila) q.set('needsBuyer', 'true');
+  if (f.faturamento !== '') q.set('invoicing', String(f.faturamento === 'sem-nf'));
   if (f.faixaDeFila !== '') q.set('agingBand', f.faixaDeFila);
   q.set('page', String(f.pagina));
   q.set('pageSize', String(tamanho));

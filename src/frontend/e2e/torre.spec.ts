@@ -40,6 +40,18 @@ test.describe('Torre de Controle (React)', () => {
     await expect(page.getByRole('button', { name: /Em faturamento/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /Aguardando recebimento/ })).toBeVisible();
 
+    // as duas filas do recebimento abrem listas diferentes: o que as separa é a nota
+    // fiscal, e antes as duas caíam no mesmo filtro de etapa
+    const semNota = page.waitForResponse((r) =>
+      r.url().includes('/api/v1/control-tower') && r.url().includes('invoicing=true'));
+    await page.getByRole('button', { name: /Em faturamento/ }).click();
+    expect((await semNota).status()).toBe(200);
+
+    const comNota = page.waitForResponse((r) =>
+      r.url().includes('/api/v1/control-tower') && r.url().includes('invoicing=false'));
+    await page.getByRole('button', { name: /Aguardando recebimento/ }).click();
+    expect((await comNota).status()).toBe(200);
+
     const comExcecao = page.waitForResponse((r) =>
       r.url().includes('/api/v1/control-tower') && r.url().includes('exception=true'));
     await page.getByRole('button', { name: /Exceções/ }).click();

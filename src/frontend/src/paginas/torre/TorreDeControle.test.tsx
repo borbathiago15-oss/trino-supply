@@ -41,7 +41,7 @@ const pagina = (p: Partial<PaginaDaTorre> = {}): PaginaDaTorre => ({
   kpis: {
     total: 12, novos: 4, emCotacao: 3, aguardandoAprovacao: 2, aguardandoOc: 1,
     aguardandoRecebimento: 1, atrasados: 2, urgentes: 1, valor: 24000,
-    emFaturamento: 2, excecoes: 3, porFaixaDeAging: [2, 1, 0, 3],
+    emFaturamento: 2, excecoes: 3, precisaDeVoce: 7, porFaixaDeAging: [2, 1, 0, 3],
   },
   filterOptions: {
     companies: ['Trino Nordeste'], costCenters: [{ code: 'CC-NE-01', name: 'Filial Recife' }],
@@ -427,5 +427,81 @@ describe('Torre de Controle', () => {
     abrir();
     await waitFor(() => expect(screen.getByTestId('tabela-torre')).toBeInTheDocument());
     expect(screen.queryByTestId('espera-i1')).not.toBeInTheDocument();
+  });
+
+  // ---- cada card abre a lista que ele contou ------------------------------
+
+  it('"Em faturamento" e "Aguardando recebimento" abrem listas diferentes', async () => {
+    // os dois números são contados em separado (a NF é o que os separa) e caíam no mesmo
+    // filtro de etapa: clicar em "Em faturamento: 2" mostrava as duas filas juntas
+    const usuario = userEvent.setup();
+    vi.mocked(torreDeControle).mockResolvedValue(pagina());
+    abrir();
+    await screen.findByTestId('tabela-torre');
+
+    await usuario.click(screen.getByRole('button', { name: /Em faturamento/ }));
+    await waitFor(() => expect(torreDeControle).toHaveBeenLastCalledWith(
+      expect.objectContaining({ etapa: 'RECEBIMENTO', faturamento: 'sem-nf' }), expect.anything()));
+
+    await usuario.click(screen.getByRole('button', { name: /Aguardando recebimento/ }));
+    await waitFor(() => expect(torreDeControle).toHaveBeenLastCalledWith(
+      expect.objectContaining({ etapa: 'RECEBIMENTO', faturamento: 'com-nf' }), expect.anything()));
+  });
+
+  it('"Precisa de você" mostra o número que o servidor contou, não uma soma de etapas', async () => {
+    // somar novos + em cotação + aguardando O.C. daria 6 e deixaria de fora a exceção
+    // em etapa de recebimento, que também volta ao comprador
+    vi.mocked(torreDeControle).mockResolvedValue(pagina());
+    abrir();
+    await screen.findByTestId('tabela-torre');
+
+    const card = screen.getByRole('button', { name: /Precisa de você/ });
+    expect(card).toHaveTextContent('7');
+  });
+
+  it('"Itens em aberto" é clicável e limpa o recorte dos outros cards', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(torreDeControle).mockResolvedValue(pagina());
+    abrir();
+    await screen.findByTestId('tabela-torre');
+
+    await usuario.click(screen.getByRole('button', { name: /Atrasados/ }));
+    await waitFor(() => expect(torreDeControle).toHaveBeenLastCalledWith(
+      expect.objectContaining({ atrasados: true }), expect.anything()));
+
+    await usuario.click(screen.getByRole('button', { name: /Itens em aberto/ }));
+    await waitFor(() => expect(torreDeControle).toHaveBeenLastCalledWith(
+      expect.objectContaining({ atrasados: false, etapa: '', excecoes: false, faturamento: '' }),
+      expect.anything()));
+  });
+
+  it('o card troca o recorte inteiro, sem deixar resto do filtro anterior', async () => {
+    // o card promete uma lista; resto de um filtro anterior a faria ser outra
+    const usuario = userEvent.setup();
+    vi.mocked(torreDeControle).mockResolvedValue(pagina());
+    abrir();
+    await screen.findByTestId('tabela-torre');
+
+    await usuario.click(screen.getByRole('button', { name: /Urgentes/ }));
+    await usuario.click(screen.getByRole('button', { name: /Aguardando aprovação/ }));
+
+    await waitFor(() => expect(torreDeControle).toHaveBeenLastCalledWith(
+      expect.objectContaining({ etapa: 'APROVACAO', prioridade: '', atrasados: false }),
+      expect.anything()));
+  });
+
+  it('clicar num card rola até a lista — a tabela fica abaixo de tudo', async () => {
+    const usuario = userEvent.setup();
+    const rolou = vi.fn();
+    vi.mocked(torreDeControle).mockResolvedValue(pagina());
+    abrir();
+    await screen.findByTestId('tabela-torre');
+    // jsdom não implementa scrollIntoView: o espião confirma que a tela pediu a rolagem
+    const lista = document.getElementById('lista-da-torre')!;
+    lista.scrollIntoView = rolou;
+
+    await usuario.click(screen.getByRole('button', { name: /Em cotação/ }));
+
+    await waitFor(() => expect(rolou).toHaveBeenCalled());
   });
 });

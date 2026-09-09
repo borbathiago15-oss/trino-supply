@@ -287,4 +287,84 @@ public class EsperaDaTorreTests
 
         Assert.Null((await w.Torre.ConsultarAsync(new FiltroTorre())).Items.Single().WaitingOn);
     }
+
+    // ---- cada card leva à lista que ele contou -----------------------------
+
+    /// <summary>Deixa o item com O.C. emitida, com ou sem nota fiscal lançada.</summary>
+    private static async Task<Guid> ComPedidoAsync(Mundo w, bool comNota)
+    {
+        var pr = await ScAprovadaAsync(w);
+        var pedido = new PurchaseOrder
+        {
+            Number = $"PO-2026-{Guid.NewGuid().ToString()[..6]}", SourcePrId = pr.Id,
+            SupplierId = Guid.NewGuid(), SupplierName = "Alfa",
+            Status = PurchaseOrderStatus.Issued, CreatedAt = Dia1,
+        };
+        if (comNota)
+            pedido.Invoices.Add(new PurchaseOrderInvoice
+            {
+                OrderId = pedido.Id, Number = "NF-1",
+                IssuedOn = new DateOnly(2026, 9, 2), CreatedAt = Dia1.AddDays(1),
+            });
+        w.Db.PurchaseOrders.Add(pedido);
+        await w.Db.SaveChangesAsync();
+        return pr.Id;
+    }
+
+    [Fact]
+    public async Task Em_faturamento_e_aguardando_recebimento_abrem_listas_diferentes()
+    {
+        // os dois números do topo eram contados em separado e caíam no mesmo filtro:
+        // clicar em "Em faturamento: 1" mostrava as duas linhas, e o card mentia sobre
+        // a própria lista
+        var w = Build();
+        var semNota = await ComPedidoAsync(w, comNota: false);
+        var comNota = await ComPedidoAsync(w, comNota: true);
+
+        var kpis = (await w.Torre.ConsultarAsync(new FiltroTorre())).Kpis;
+        Assert.Equal(1, kpis.EmFaturamento);
+        Assert.Equal(1, kpis.AguardandoRecebimento);
+
+        var faturando = await w.Torre.ConsultarAsync(new FiltroTorre(Stage: "RECEBIMENTO", Invoicing: true));
+        var recebendo = await w.Torre.ConsultarAsync(new FiltroTorre(Stage: "RECEBIMENTO", Invoicing: false));
+
+        Assert.Equal(kpis.EmFaturamento, faturando.Total);
+        Assert.Equal(kpis.AguardandoRecebimento, recebendo.Total);
+        Assert.Equal(semNota, faturando.Items.Single().RequisitionId);
+        Assert.Equal(comNota, recebendo.Items.Single().RequisitionId);
+    }
+
+    [Fact]
+    public async Task Sem_o_recorte_o_recebimento_continua_trazendo_as_duas_filas()
+    {
+        // quem filtra só pela etapa quer as duas: o recorte é opcional, não obrigatório
+        var w = Build();
+        await ComPedidoAsync(w, comNota: false);
+        await ComPedidoAsync(w, comNota: true);
+
+        var pagina = await w.Torre.ConsultarAsync(new FiltroTorre(Stage: "RECEBIMENTO"));
+
+        Assert.Equal(2, pagina.Total);
+    }
+
+    [Fact]
+    public async Task O_numero_de_precisa_de_voce_e_o_tamanho_da_lista_que_ele_abre()
+    {
+        // somar "novos + em cotação + aguardando O.C." dava um número parecido e errado:
+        // deixava de fora a exceção em etapa de recebimento, que volta ao comprador
+        var w = Build();
+        await ScAprovadaAsync(w);                       // novo, sem comprador: é do comprador
+        var comExcecao = await ComPedidoAsync(w, comNota: true);
+        var pedido = w.Db.PurchaseOrders.Single(o => o.SourcePrId == comExcecao);
+        pedido.NoErpReason = "Fechado sem O.C. do ERP por indisponibilidade do sistema";
+        await w.Db.SaveChangesAsync();
+
+        var kpis = (await w.Torre.ConsultarAsync(new FiltroTorre())).Kpis;
+        var fila = await w.Torre.ConsultarAsync(new FiltroTorre(NeedsBuyer: true));
+
+        Assert.Equal(2, kpis.PrecisaDeVoce);            // o novo e a exceção
+        Assert.Equal(kpis.PrecisaDeVoce, fila.Total);
+        // a soma antiga daria 1: a exceção está em etapa de recebimento
+        Assert.Equal(1, kpis.Novos + kpis.EmCotacao + kpis.AguardandoOc);
+    }
 }

@@ -26,7 +26,19 @@ public record FiltroTorre(
     /// <summary>Só o que virou exceção — ver <see cref="ExcecaoDe"/>.</summary>
     bool? Exception = null,
     /// <summary>A fila prioritária do §5: só o que espera ação do comprador.</summary>
-    bool? NeedsBuyer = null);
+    bool? NeedsBuyer = null,
+    /// <summary>
+    /// Separa as duas filas do recebimento, que é o que a nota fiscal faz: <c>true</c> é
+    /// O.C. emitida sem NF (a bola está com o fornecedor), <c>false</c> é NF lançada e
+    /// material não recebido (a bola está com o almoxarifado). Nulo traz as duas.
+    ///
+    /// <para>
+    /// Existe porque os dois números do topo eram contados em separado e caíam no mesmo
+    /// filtro: clicar em "Em faturamento: 3" mostrava as dez linhas das duas filas, e o
+    /// card passava a mentir sobre a própria lista.
+    /// </para>
+    /// </summary>
+    bool? Invoicing = null);
 
 /// <summary>Uma linha da Torre: um item de compra, com o seu próprio andamento.</summary>
 public record LinhaDaTorre(
@@ -68,6 +80,17 @@ public record KpisDaTorre(
     int Total, int Novos, int EmCotacao, int AguardandoAprovacao, int AguardandoOc,
     int AguardandoRecebimento, int Atrasados, int Urgentes, decimal Valor,
     int EmFaturamento = 0, int Excecoes = 0,
+    /// <summary>
+    /// Quantos itens esperam ação do comprador — pela <b>mesma</b> regra do filtro
+    /// (<see cref="AcaoDe"/>), e não por uma soma de etapas montada à parte.
+    ///
+    /// <para>
+    /// Somar "novos + em cotação + aguardando O.C." dava um número parecido e errado: deixava
+    /// de fora a exceção em etapa de aprovação ou recebimento, que volta ao comprador. O card
+    /// dizia 12 e a lista mostrava 14.
+    /// </para>
+    /// </summary>
+    int PrecisaDeVoce = 0,
     /// <summary>Quantos itens em cada faixa de fila, na ordem de <see cref="FaixasDeAging"/>.</summary>
     IReadOnlyList<int>? PorFaixaDeAging = null);
 
@@ -284,7 +307,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
                        || f.Supplier is { Length: > 0 } || f.OrderNumber is { Length: > 0 }
                        || f.DueFrom is not null || f.DueTo is not null
                        || f.MinValue is not null || f.MaxValue is not null
-                       || f.Exception == true || f.NeedsBuyer == true;
+                       || f.Exception == true || f.NeedsBuyer == true || f.Invoicing is not null;
         var ordenada = consulta.OrderByDescending(x => x.sc.CreatedAt).ThenBy(x => x.item.Sequence);
 
         var total = derivado ? 0 : await consulta.CountAsync(ct);
@@ -402,6 +425,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
 
             var (acao, doComprador) = AcaoDe(etapa, excecao, x.sc.AssignedToId is not null);
             if (f.NeedsBuyer == true && !doComprador) continue;
+            if (f.Invoicing is { } semNota && EmFaturamento(pedido) != semNota) continue;
 
             var naFilaDesde = x.sc.DecidedAt ?? x.sc.SubmittedAt;
             if (f.AgingBand is { } faixa && FaixaDeAging(naFilaDesde, agora) != faixa) continue;
@@ -475,7 +499,8 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
         }
 
         int total = 0, novos = 0, cotando = 0, aprovando = 0, aguardandoOc = 0,
-            recebendo = 0, atrasados = 0, urgentes = 0, faturando = 0, excecoes = 0;
+            recebendo = 0, atrasados = 0, urgentes = 0, faturando = 0, excecoes = 0,
+            precisaDeVoce = 0;
         decimal valor = 0;
         var porFaixa = new int[FaixasDeAging.Length];
         foreach (var sc in abertas)
@@ -489,7 +514,11 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
             var previsao = pedido?.PromisedDate ?? sc.NeededBy;
             var atrasada = etapa != "ENCERRADO" && previsao is not null && previsao < hoje;
             var aguardandoNf = EmFaturamento(pedido);
-            var excecao = ExcecaoDe(pedido) is not null;
+            var motivoDaExcecao = ExcecaoDe(pedido);
+            var excecao = motivoDaExcecao is not null;
+            // o KPI usa a mesma regra do filtro: o número do card e o tamanho da lista
+            // que ele abre precisam sair da mesma pergunta
+            var doComprador = AcaoDe(etapa, motivoDaExcecao, sc.AssignedToId is not null).DoComprador;
 
             foreach (var _ in sc.Items)
             {
@@ -505,6 +534,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
                     case "RECEBIMENTO": recebendo++; break;
                 }
                 if (excecao) excecoes++;
+                if (doComprador) precisaDeVoce++;
                 if (atrasada) atrasados++;
                 // o aging conta a espera de quem ainda está na fila: item encerrado
                 // já não espera por ninguém e inflaria a faixa mais velha para sempre
@@ -516,7 +546,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
         }
 
         return new KpisDaTorre(total, novos, cotando, aprovando, aguardandoOc,
-            recebendo, atrasados, urgentes, valor, faturando, excecoes, porFaixa);
+            recebendo, atrasados, urgentes, valor, faturando, excecoes, precisaDeVoce, porFaixa);
     }
 
     /// <summary>

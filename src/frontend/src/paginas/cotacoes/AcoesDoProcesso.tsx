@@ -21,10 +21,16 @@ const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message
  * Falha na leitura não trava nada: sem o mapa a escolha volta a ser a de antes
  * e quem barra é a API — melhor o botão que falha do que a ação escondida.
  */
-function useLotes(processoId: string): LoteDaFamilia[] | null {
+function useLotes(processo: Processo): LoteDaFamilia[] | null {
+  // A chave inclui as propostas vigentes, e não só o id do processo: registrar uma
+  // negociação cria uma versão NOVA da proposta, e o mapa preso ao id continuava
+  // devolvendo o da versão anterior. A tela então não achava a proposta atual no
+  // lote e concluía que o fornecedor "não cotou nenhum item" — logo o fornecedor
+  // com quem se acabou de negociar. Mudou a lista de propostas, o mapa é refeito.
+  const chave = propostasVigentes(processo).map((p) => `${p.id}:${p.version}`).join(',');
   const { dados } = useCarregar(async (signal) => {
-    try { return await mapaDeFamilias(processoId, signal); } catch { return null; }
-  }, [processoId]);
+    try { return await mapaDeFamilias(processo.id, signal); } catch { return null; }
+  }, [processo.id, chave]);
   return dados ?? null;
 }
 
@@ -36,7 +42,13 @@ function useLotes(processoId: string): LoteDaFamilia[] | null {
 export function impedimentoDaProposta(lote: LoteDaFamilia | null, p: Proposta): string | null {
   if (!lote) return null;
   const oferta = ofertaDaProposta(lote, p.id);
-  return oferta ? impedimentoDaOferta(oferta) : 'não cotou nenhum item desta compra';
+  if (oferta) return impedimentoDaOferta(oferta);
+  // A proposta não está no lote. Isso é "não cotou nada" só quando o lote conhece o
+  // fornecedor e mesmo assim não tem esta proposta; se o fornecedor nem aparece no
+  // mapa, o que se tem é um mapa mais velho que a proposta — e barrar por isso é
+  // esconder a ação por causa de um dado atrasado. Nesse caso quem decide é a API.
+  const conheceOFornecedor = lote.offers.some((o) => o.supplierId === p.supplierId);
+  return conheceOFornecedor ? 'não cotou nenhum item desta compra' : null;
 }
 
 /** Fornecedor que pode ou não levar uma família, na forma que o <select> usa. */
@@ -77,7 +89,7 @@ export function FormVencedor({ processo, aoConcluir, aoAvisar }: {
   aoAvisar: (t: string, tipo?: 'ok' | 'erro') => void;
 }) {
   const vigentes = propostasVigentes(processo);
-  const lote = useLotes(processo.id)?.[0] ?? null;
+  const lote = useLotes(processo)?.[0] ?? null;
   const [propostaId, setPropostaId] = useState('');
   const [criterios, setCriterios] = useState<string[]>([]);
   const [justificativa, setJustificativa] = useState('');
@@ -170,7 +182,7 @@ export function FormAdjudicacao({ processo, aoConcluir, aoAvisar }: {
   aoConcluir: () => void;
   aoAvisar: (t: string, tipo?: 'ok' | 'erro') => void;
 }) {
-  const lotes = useLotes(processo.id);
+  const lotes = useLotes(processo);
   const [escolhas, setEscolhas] = useState<Record<string, string>>({});
   const [justificativa, setJustificativa] = useState('');
   const [salvando, setSalvando] = useState(false);

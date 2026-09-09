@@ -61,7 +61,7 @@ public partial class QuotationService
             {
                 QuotationId = q.Id, Sequence = ++seqNo, CatalogItemId = i.CatalogItemId,
                 CatalogCode = i.CatalogCode, Description = i.Description,
-                Quantity = i.Quantity, UnitOfMeasure = i.UnitOfMeasure, Family = FamilyOf(i.CatalogItemId, familias),
+                Quantity = i.Quantity, UnitOfMeasure = i.UnitOfMeasure, Family = FamilyOf(i, familias),
                 SourcePrId = pr.Id, SourcePrNumber = pr.Number, SourcePrItemId = i.Id,
             });
         db.Quotations.Add(q);
@@ -156,7 +156,7 @@ public partial class QuotationService
                 {
                     QuotationId = q.Id, Sequence = ++seqNo, CatalogItemId = i.CatalogItemId,
                     CatalogCode = i.CatalogCode, Description = i.Description,
-                    Quantity = i.Quantity, UnitOfMeasure = i.UnitOfMeasure, Family = FamilyOf(i.CatalogItemId, familias),
+                    Quantity = i.Quantity, UnitOfMeasure = i.UnitOfMeasure, Family = FamilyOf(i, familias),
                     SourcePrId = pr0.Id, SourcePrNumber = pr0.Number, SourcePrItemId = i.Id,
                 });
         db.Quotations.Add(q);

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import type { Produto } from '@/api/catalogo';
 import { ToastProvider } from '@/componentes/Toast';
-import { itensDoFormulario, itensSemCa, NovaSolicitacao, rotuloDoProduto } from './NovaSolicitacao';
+import { familiaDaLinha, itensDoFormulario, itensSemCa, NovaSolicitacao, rotuloDoProduto, SEM_CADASTRO } from './NovaSolicitacao';
 
 vi.mock('@/api/catalogo', () => ({ listarProdutos: vi.fn(), familiasDoCatalogo: vi.fn() }));
 vi.mock('@/api/centrosCusto', () => ({ listarCentrosCusto: vi.fn() }));
@@ -50,10 +50,46 @@ describe('conformidade de EPI na SC (IC-ERR-023)', () => {
     expect(itensSemCa([{ produto: 'bota qualquer' }], catalogo)).toEqual([]);
   });
 
-  it('o item digitado à mão continua virando descrição livre', () => {
+  it('o item digitado à mão continua virando descrição livre, agora com família', () => {
     expect(itensDoFormulario(
-      [{ chave: 'i1', produto: 'cimento a granel', unidade: 'TN', quantidade: '3' }], [produto({})],
-    )).toEqual([{ description: 'cimento a granel', catalogItemId: null, unitOfMeasure: 'TN', quantity: 3 }]);
+      [{ chave: 'i1', produto: 'cimento a granel', unidade: 'TN', quantidade: '3', familia: 'CIVIL' }],
+      [produto({})],
+    )).toEqual([{
+      description: 'cimento a granel', catalogItemId: null, unitOfMeasure: 'TN',
+      quantity: 3, family: 'CIVIL',
+    }]);
+  });
+
+  it('"produto não cadastrado" vira nulo — é ausência declarada, não uma família', () => {
+    // o servidor resolve nulo como DIVERSOS; mandar a marca da tela criaria uma
+    // família chamada "__SEM_CADASTRO__" no relatório de spend
+    const [item] = itensDoFormulario(
+      [{ chave: 'i1', produto: 'peça sob medida', unidade: 'UN', quantidade: '1', familia: SEM_CADASTRO }],
+      [],
+    );
+    expect(item.family).toBeNull();
+  });
+
+  it('produto do catálogo não leva família da tela: a dele é a do cadastro', () => {
+    // aceitar deixaria o mesmo produto em duas famílias conforme quem digitou
+    const p = produto({});
+    const [item] = itensDoFormulario(
+      [{ chave: 'i1', produto: rotuloDoProduto(p), unidade: '', quantidade: '2', familia: 'LIMPEZA' }],
+      [p],
+    );
+    expect(item.catalogItemId).toBe(p.id);
+    expect(item.family).toBeNull();
+  });
+
+  it('a linha mostra a família do catálogo, travada, e a do solicitante quando é livre', () => {
+    const p = produto({});
+    expect(familiaDaLinha(
+      { chave: 'i1', produto: rotuloDoProduto(p), unidade: '', quantidade: '1', familia: 'LIMPEZA' }, [p],
+    )).toEqual({ valor: p.family, travada: true });
+
+    expect(familiaDaLinha(
+      { chave: 'i2', produto: 'peça sob medida', unidade: '', quantidade: '1', familia: 'CIVIL' }, [p],
+    )).toEqual({ valor: 'CIVIL', travada: false });
   });
 });
 

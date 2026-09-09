@@ -123,6 +123,11 @@ export interface ItemNovo {
   catalogItemId: string | null;
   unitOfMeasure: string | null;
   quantity: number;
+  /**
+   * Família escolhida pelo solicitante. Só vale para produto **não cadastrado**: com item
+   * de catálogo o servidor usa a família do produto e ignora esta.
+   */
+  family?: string | null;
 }
 
 export interface DadosSc {

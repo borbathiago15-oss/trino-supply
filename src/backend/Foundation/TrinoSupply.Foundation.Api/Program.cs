@@ -248,7 +248,12 @@ public record CreateUserRequest(string Email, string Name, string Role, string P
 public record UpdateUserRequest(string? Name, string? Role, bool? Active, List<string>? Modules,
     List<string>? CostCenters, Guid? DirectorId, bool? ClearDirector);
 public record ResetPasswordRequest(string NewPassword);
-public record ItemRequest(string? Description, decimal Quantity, string? UnitOfMeasure, decimal? EstimatedUnitPrice, string? Notes, Guid? CatalogItemId);
+/// <summary>
+/// Item pedido na SC. <c>Family</c> é a família escolhida pelo solicitante e só vale para
+/// produto <b>não cadastrado</b>: com item de catálogo, a família é a do produto.
+/// </summary>
+public record ItemRequest(string? Description, decimal Quantity, string? UnitOfMeasure,
+    decimal? EstimatedUnitPrice, string? Notes, Guid? CatalogItemId, string? Family = null);
 public record CreateRequisitionRequest(string Justification, string CostCenter, string? Priority, DateOnly? NeededBy, List<ItemRequest>? Items, string? Kind,
     string? NeedType, string? DeliveryLocation, string? Company, string? InternalNotes,
     string? UrgencyReason = null, string? UrgencyImpact = null, decimal? Budget = null);

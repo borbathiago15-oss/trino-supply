@@ -355,6 +355,14 @@ public partial class QuotationService
             .ToDictionaryAsync(c => c.Id, c => QuotationAward.FamilyKey(c.Family), ct);
     }
 
-    private static string FamilyOf(Guid? catalogItemId, IReadOnlyDictionary<Guid, string> familias) =>
-        catalogItemId is { } id && familias.TryGetValue(id, out var f) ? f : QuotationAward.Default;
+    /// <summary>
+    /// Família do item na cotação. A do <b>item da SC</b> vem primeiro: é ela que o
+    /// solicitante escolheu para o produto não cadastrado, e sem isso o item digitado à
+    /// mão caía sempre em DIVERSOS, fora de todo agrupamento. O catálogo é a origem para o
+    /// produto cadastrado, e continua atendendo os itens gravados antes deste campo existir.
+    /// </summary>
+    private static string FamilyOf(RequisitionItem item, IReadOnlyDictionary<Guid, string> familias) =>
+        !string.IsNullOrWhiteSpace(item.Family) ? QuotationAward.FamilyKey(item.Family)
+        : item.CatalogItemId is { } id && familias.TryGetValue(id, out var f) ? f
+        : QuotationAward.Default;
 }

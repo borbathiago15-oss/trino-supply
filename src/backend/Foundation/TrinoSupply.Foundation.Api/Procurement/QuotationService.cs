@@ -217,7 +217,7 @@ public partial class QuotationService(AppDbContext db, TimeProvider clock)
         {
             var pendentes = r.Items.Where(i => !itensEmProcesso.Contains(i.Id)).OrderBy(i => i.Sequence)
                 .Select(i => new QueueItem(i.Id, i.Sequence, i.CatalogCode, i.Description,
-                    i.Quantity, i.UnitOfMeasure, i.EstimatedUnitPrice, FamilyOf(i.CatalogItemId, familias)))
+                    i.Quantity, i.UnitOfMeasure, i.EstimatedUnitPrice, FamilyOf(i, familias)))
                 .ToList();
             return pendentes.Count == 0 ? null : new QueueEntry(r, pendentes, pendentes.Count < r.Items.Count);
         }

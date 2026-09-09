@@ -310,6 +310,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.RequisitionId).HasColumnName("requisition_id");
             e.Property(i => i.CatalogItemId).HasColumnName("catalog_item_id");
             e.Property(i => i.CatalogCode).HasColumnName("catalog_code").HasMaxLength(50);
+            e.Property(i => i.Family).HasColumnName("family").HasMaxLength(120);
             e.Property(i => i.Sequence).HasColumnName("sequence");
             e.Property(i => i.Description).HasColumnName("description").HasMaxLength(500).IsRequired();
             e.Property(i => i.Quantity).HasColumnName("quantity").HasPrecision(18, 4);

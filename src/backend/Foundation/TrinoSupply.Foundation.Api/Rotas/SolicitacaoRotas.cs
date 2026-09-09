@@ -67,7 +67,7 @@ public static class SolicitacaoRotas
             items = r.Items.OrderBy(i => i.Sequence).Select(i => new
             {
                 itemId = i.Id, sequence = i.Sequence, description = i.Description,
-                catalogCode = i.CatalogCode,
+                catalogCode = i.CatalogCode, catalogItemId = i.CatalogItemId, family = i.Family,
                 quantity = i.Quantity, unitOfMeasure = i.UnitOfMeasure,
                 estimatedUnitPrice = i.EstimatedUnitPrice,
                 estimatedTotal = i.Quantity * (i.EstimatedUnitPrice ?? 0),
@@ -156,7 +156,7 @@ public static class SolicitacaoRotas
         {
             if (BuildActor(p) is not { CanCreate: true } actor)
                 return Error(ctx, 403, "PR-ERR-001", "Seu papel não cria requisições.");
-            var items = (body.Items ?? []).Select(i => new ItemInput(i.Description ?? "", i.Quantity, i.UnitOfMeasure, i.EstimatedUnitPrice, i.Notes, i.CatalogItemId)).ToList();
+            var items = (body.Items ?? []).Select(i => new ItemInput(i.Description ?? "", i.Quantity, i.UnitOfMeasure, i.EstimatedUnitPrice, i.Notes, i.CatalogItemId, i.Family)).ToList();
             var (pr, error) = await svc.CreateAsync(actor, body.Justification, body.CostCenter, body.Priority, body.NeededBy, items, body.Kind,
                 new RequisitionService.ScHeaderInput(body.NeedType, body.DeliveryLocation, body.Company, body.InternalNotes,
                     body.UrgencyReason, body.UrgencyImpact, body.Budget));
@@ -197,7 +197,7 @@ public static class SolicitacaoRotas
         prs.MapPost("/{id:guid}/items", async (Guid id, ItemRequest body, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>
         {
             if (BuildActor(p) is not { } actor) return Error(ctx, 403, "PR-ERR-001", "Seu papel não acessa o módulo de requisições.");
-            var (pr, error) = await svc.AddItemAsync(actor, id, new ItemInput(body.Description ?? "", body.Quantity, body.UnitOfMeasure, body.EstimatedUnitPrice, body.Notes, body.CatalogItemId));
+            var (pr, error) = await svc.AddItemAsync(actor, id, new ItemInput(body.Description ?? "", body.Quantity, body.UnitOfMeasure, body.EstimatedUnitPrice, body.Notes, body.CatalogItemId, body.Family));
             return error is not null ? PrError(ctx, error)
                 : Results.Json(new { data = PrView(pr!), correlationId = CorrelationId(ctx) }, statusCode: 201);
         });

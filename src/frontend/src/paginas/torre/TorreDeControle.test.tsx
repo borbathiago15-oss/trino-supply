@@ -32,7 +32,7 @@ const linha = (p: Partial<LinhaDaTorre> = {}): LinhaDaTorre => ({
   priority: 'NORMAL', neededBy: '2026-09-20', promisedDate: null, late: false,
   value: 200, quotationId: null, quotationNumber: null,
   purchaseOrderId: null, purchaseOrderNumber: null, exceptionReason: null,
-  actionLabel: 'Abrir cotação', needsBuyer: true, waitingOn: null,
+  actionLabel: 'Abrir cotação', needsBuyer: true, waitingOn: null, sla: null,
   ...p,
 });
 
@@ -41,7 +41,8 @@ const pagina = (p: Partial<PaginaDaTorre> = {}): PaginaDaTorre => ({
   kpis: {
     total: 12, novos: 4, emCotacao: 3, aguardandoAprovacao: 2, aguardandoOc: 1,
     aguardandoRecebimento: 1, atrasados: 2, urgentes: 1, valor: 24000,
-    emFaturamento: 2, excecoes: 3, precisaDeVoce: 7, porFaixaDeAging: [2, 1, 0, 3],
+    emFaturamento: 2, excecoes: 3, precisaDeVoce: 7, prazoEstourado: 4,
+    porFaixaDeAging: [2, 1, 0, 3],
   },
   filterOptions: {
     companies: ['Trino Nordeste'], costCenters: [{ code: 'CC-NE-01', name: 'Filial Recife' }],
@@ -503,5 +504,62 @@ describe('Torre de Controle', () => {
     await usuario.click(screen.getByRole('button', { name: /Em cotação/ }));
 
     await waitFor(() => expect(rolou).toHaveBeenCalled());
+  });
+
+  // ---- o prazo da etapa ---------------------------------------------------
+
+  it('a linha diz que o prazo estourou e contra que prazo', async () => {
+    // "prazo estourado" sem o número faz o comprador ir procurar a régua
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({
+      items: [linha({
+        waitingOn: { who: 'Aprovação Nível 1 — Marcos', since: null, days: 8, detail: null },
+        sla: { maxDays: 3, days: 8, status: 'ESTOURADO' },
+      })],
+    }));
+    abrir();
+    const selo = await screen.findByTestId('prazo-i1');
+    expect(selo).toHaveTextContent('prazo estourado');
+    expect(selo).toHaveTextContent('limite 3 dias');
+  });
+
+  it('perto do limite avisa antes, para dar tempo de agir', async () => {
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({
+      items: [linha({
+        waitingOn: { who: 'Proposta — Beta', since: null, days: 6, detail: null },
+        sla: { maxDays: 7, days: 6, status: 'ATENCAO' },
+      })],
+    }));
+    abrir();
+    expect(await screen.findByTestId('prazo-i1')).toHaveTextContent('no limite');
+  });
+
+  it('dentro do prazo e etapa sem prazo não ganham selo nenhum', async () => {
+    // cor em toda linha ensina o comprador a ignorar a cor
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({
+      items: [
+        linha({ itemId: 'i1', waitingOn: { who: 'X', since: null, days: 1, detail: null },
+          sla: { maxDays: 7, days: 1, status: 'OK' } }),
+        linha({ itemId: 'i2', waitingOn: { who: 'Y', since: null, days: 40, detail: null },
+          sla: { maxDays: null, days: null, status: null } }),
+      ],
+    }));
+    abrir();
+    await waitFor(() => expect(screen.getByTestId('tabela-torre')).toBeInTheDocument());
+    expect(screen.queryByTestId('prazo-i1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('prazo-i2')).not.toBeInTheDocument();
+  });
+
+  it('"Prazo estourado" é um card à parte de "Atrasados" — são duas perguntas', async () => {
+    // atrasado é sobre a data prometida ao solicitante; estourado é sobre o tempo da etapa
+    const usuario = userEvent.setup();
+    vi.mocked(torreDeControle).mockResolvedValue(pagina());
+    abrir();
+    await screen.findByTestId('tabela-torre');
+
+    expect(screen.getByRole('button', { name: /Prazo estourado/ })).toHaveTextContent('4');
+
+    await usuario.click(screen.getByRole('button', { name: /Prazo estourado/ }));
+    await waitFor(() => expect(torreDeControle).toHaveBeenLastCalledWith(
+      expect.objectContaining({ prazoEstourado: true, atrasados: false }), expect.anything()));
   });
 });

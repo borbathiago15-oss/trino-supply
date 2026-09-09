@@ -69,6 +69,7 @@ public class TabelaDeRotasTests
         // escapavam de toda conferência daqui — inclusive a de exigir autenticação
         app.MapPagamentos();
         app.MapPesosDoScore();
+        app.MapPrazosDasEtapas();
 
         return ((IEndpointRouteBuilder)app).DataSources
             .SelectMany(d => d.Endpoints).OfType<RouteEndpoint>().ToList();

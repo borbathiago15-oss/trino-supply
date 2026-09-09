@@ -219,6 +219,7 @@ app.MapCadastros();
 // ---- Cadastros de pagamento: formas e condições -------------------------------
 app.MapPagamentos();
 app.MapPesosDoScore();
+app.MapPrazosDasEtapas();
 
 // ---- Dashboards analíticos ---------------------------------------------------
 app.MapAnalytics();
@@ -329,6 +330,8 @@ public record CreateQuotationRequest(Guid? PrId, string? Kind, DateOnly? Deadlin
 public record InviteSuppliersRequest(List<Guid>? SupplierIds, DateOnly? ResponseDeadline = null);
 public record PrazoDoConviteRequest(DateOnly ResponseDeadline);
 public record DispensaDoConviteRequest(string? Reason);
+/// <summary>Os prazos por etapa, em dias: <c>{"COTACAO": 7, "APROVACAO": 3}</c>.</summary>
+public record PrazosDasEtapasRequest(Dictionary<string, int>? Days);
 public record ProposalItemRequest(Guid QuotationItemId, decimal UnitPrice, decimal? Quantity);
 public record InternalProposalRequest(Guid SupplierId, int? DeliveryDays, string? PaymentTerms, decimal? FreightValue,
     DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items, decimal? DiscountValue, string? Currency,

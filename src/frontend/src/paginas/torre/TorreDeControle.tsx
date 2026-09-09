@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CLASSE_DO_TOM, destinoDaAcao, DIAS_PARA_DESTACAR_ESPERA, ETAPAS, FILTROS_TORRE_VAZIOS,
-  tempoParado, torreDeControle,
+  SELO_DO_PRAZO, tempoParado, torreDeControle,
   type FiltrosDaTorre, type LinhaDaTorre,
   FAIXAS_DE_FILA,
 } from '@/api/torre';
@@ -42,6 +42,9 @@ function Linha({ i, triando, marcada, aoMarcar, aoLiberar, aoPriorizar }: {
   // parado tempo demais na mesma etapa: o número já está na linha, o destaque é para
   // ele não passar despercebido no meio de cinquenta linhas
   const parado = (i.waitingOn?.days ?? 0) >= DIAS_PARA_DESTACAR_ESPERA;
+  // o selo do prazo só existe quando há veredito: etapa sem prazo não ganha cor nenhuma
+  const selo = i.sla?.status === 'ATENCAO' || i.sla?.status === 'ESTOURADO'
+    ? SELO_DO_PRAZO[i.sla.status] : null;
   return (
     <tr data-testid={`linha-${i.itemId}`} className={i.late ? 'bg-perigo-fundo/40' : undefined}>
       {triando && (
@@ -102,6 +105,13 @@ function Linha({ i, triando, marcada, aoMarcar, aoLiberar, aoPriorizar }: {
               </>
             )}
             {i.waitingOn.detail && <div className="text-perigo">{i.waitingOn.detail}</div>}
+            {/* o veredito do prazo vem junto do tempo, e diz contra que prazo ele saiu:
+                "prazo estourado" sem o número faz o comprador ir procurar a régua */}
+            {selo && (
+              <div className={'font-bold ' + selo.classe} data-testid={`prazo-${i.itemId}`}>
+                ⏱ {selo.rotulo} · limite {i.sla!.maxDays} dia{i.sla!.maxDays === 1 ? '' : 's'}
+              </div>
+            )}
           </div>
         )}
       </td>
@@ -250,7 +260,8 @@ export function TorreDeControle() {
   };
   /** Algum card está recortando a lista? É o que faz "Itens em aberto" ficar aceso ou não. */
   const temRecorte = aplicados.etapa !== '' || aplicados.atrasados || aplicados.excecoes
-    || aplicados.minhaFila || aplicados.prioridade !== '' || aplicados.faturamento !== '';
+    || aplicados.minhaFila || aplicados.prioridade !== '' || aplicados.faturamento !== ''
+    || aplicados.prazoEstourado;
 
   /** Card de etapa: clicar de novo no que já está ativo desliga o filtro. */
   const porEtapa = (etapa: string, extra: Partial<FiltrosDaTorre> = {}) =>
@@ -296,6 +307,13 @@ export function TorreDeControle() {
             detalhe="NF lançada, material a caminho"
             ativo={aplicados.etapa === 'RECEBIMENTO' && aplicados.faturamento === 'com-nf'}
             aoClicar={() => porEtapa('RECEBIMENTO', { faturamento: 'com-nf' })} />
+          {/* "atrasado" é sobre a data prometida ao solicitante; "prazo estourado" é sobre
+              o tempo da etapa. São duas perguntas: um item pode estar dentro da previsão e
+              mesmo assim parado tempo demais numa etapa */}
+          <KpiFiltro rotulo="Prazo estourado" valor={quantidade(dados.kpis.prazoEstourado)}
+            detalhe="passaram do prazo da etapa"
+            ativo={aplicados.prazoEstourado}
+            aoClicar={() => porCard(aplicados.prazoEstourado ? {} : { prazoEstourado: true })} />
           <KpiFiltro rotulo="Atrasados" valor={quantidade(dados.kpis.atrasados)} detalhe="passaram da previsão"
             ativo={aplicados.atrasados}
             aoClicar={() => porCard(aplicados.atrasados ? {} : { atrasados: true })} />

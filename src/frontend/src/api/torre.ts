@@ -43,7 +43,25 @@ export interface LinhaDaTorre {
   needsBuyer: boolean;
   /** De quem a linha está esperando, e há quanto tempo. Nulo quando não se espera nada. */
   waitingOn: EsperaDaLinha | null;
+  /** Como a espera está contra o prazo da etapa. */
+  sla: SituacaoDoPrazo | null;
 }
+
+/**
+ * A espera contra o prazo da própria etapa. `status` nulo é ausência de veredito — etapa
+ * sem prazo, prazo desligado (zero) ou espera sem data: sem base, um veredito seria invenção.
+ */
+export interface SituacaoDoPrazo {
+  maxDays: number | null;
+  days: number | null;
+  status: 'OK' | 'ATENCAO' | 'ESTOURADO' | null;
+}
+
+/** Como mostrar o veredito do prazo. Sem status, não há o que mostrar. */
+export const SELO_DO_PRAZO: Record<'ATENCAO' | 'ESTOURADO', { rotulo: string; classe: string }> = {
+  ATENCAO: { rotulo: 'no limite', classe: 'text-aviso' },
+  ESTOURADO: { rotulo: 'prazo estourado', classe: 'text-perigo' },
+};
 
 /**
  * De quem a linha está esperando. `who` já vem com o nome de quem tem a bola — o aprovador
@@ -89,6 +107,8 @@ export interface KpisDaTorre {
    * daria um número parecido e diferente do tamanho da lista que o card abre.
    */
   precisaDeVoce: number;
+  /** Quantos passaram do prazo da própria etapa. */
+  prazoEstourado: number;
   /** Quantos itens em cada faixa de tempo na fila, na ordem de FAIXAS_DE_FILA. */
   porFaixaDeAging: number[] | null;
 }
@@ -157,6 +177,8 @@ export interface FiltrosDaTorre {
    * Vazio traz as duas — são filas diferentes, e cada card do topo abre a sua.
    */
   faturamento: '' | 'sem-nf' | 'com-nf';
+  /** Só o que passou do prazo da própria etapa. */
+  prazoEstourado: boolean;
   /** Faixa de tempo na fila (índice em FAIXAS_DE_FILA), ou vazio para todas. */
   faixaDeFila: string;
   pagina: number;
@@ -167,7 +189,7 @@ export const FILTROS_TORRE_VAZIOS: FiltrosDaTorre = {
   solicitante: '', comprador: '', prioridade: '', atrasados: false,
   de: '', ate: '', fornecedor: '', numeroOc: '', prazoDe: '', prazoAte: '',
   valorDe: '', valorAte: '', excecoes: false, minhaFila: false, faturamento: '',
-  faixaDeFila: '', pagina: 1,
+  prazoEstourado: false, faixaDeFila: '', pagina: 1,
 };
 
 /** As etapas, na ordem em que o item as percorre — os mesmos nomes do servidor. */
@@ -217,6 +239,7 @@ export function consultaDaTorre(f: FiltrosDaTorre, tamanho = 50): string {
   if (f.excecoes) q.set('exception', 'true');
   if (f.minhaFila) q.set('needsBuyer', 'true');
   if (f.faturamento !== '') q.set('invoicing', String(f.faturamento === 'sem-nf'));
+  if (f.prazoEstourado) q.set('slaBreached', 'true');
   if (f.faixaDeFila !== '') q.set('agingBand', f.faixaDeFila);
   q.set('page', String(f.pagina));
   q.set('pageSize', String(tamanho));

@@ -34,6 +34,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ProposalItem> ProposalItems => Set<ProposalItem>();
     public DbSet<PaymentMethod> PaymentMethods => Set<PaymentMethod>();
     public DbSet<ScoreWeights> ScoreWeights => Set<ScoreWeights>();
+    public DbSet<StageSla> StageSlas => Set<StageSla>();
     public DbSet<PaymentTermOption> PaymentTermOptions => Set<PaymentTermOption>();
     public DbSet<ProcessEvent> ProcessEvents => Set<ProcessEvent>();
     public DbSet<StoredDocument> StoredDocuments => Set<StoredDocument>();
@@ -470,6 +471,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(w => w.Risk).HasColumnName("risk");
             e.Property(w => w.UpdatedAt).HasColumnName("updated_at");
             e.Property(w => w.UpdatedByLabel).HasColumnName("updated_by_label").HasMaxLength(200);
+        });
+
+        modelBuilder.Entity<StageSla>(e =>
+        {
+            // uma linha por etapa; a etapa é a identidade e não pode repetir
+            e.ToTable("stage_sla", "procurement");
+            e.HasKey(s => s.Id);
+            e.Property(s => s.Id).HasColumnName("id");
+            e.Property(s => s.Stage).HasColumnName("stage").HasMaxLength(40).IsRequired();
+            e.Property(s => s.MaxDays).HasColumnName("max_days");
+            e.Property(s => s.UpdatedAt).HasColumnName("updated_at");
+            e.Property(s => s.UpdatedByLabel).HasColumnName("updated_by_label").HasMaxLength(200);
+            e.HasIndex(s => s.Stage).IsUnique();
         });
 
         modelBuilder.Entity<PaymentTermOption>(e =>

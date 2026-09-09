@@ -20,7 +20,7 @@ public static class TorreRotas
             DateOnly? from, DateOnly? to, bool? late, int? page, int? pageSize,
             string? supplier, string? orderNumber, DateOnly? dueFrom, DateOnly? dueTo,
             decimal? minValue, decimal? maxValue, int? agingBand, bool? exception, bool? needsBuyer,
-            bool? invoicing,
+            bool? invoicing, bool? slaBreached,
             CancellationToken ct) =>
         {
             if (!TorreDeControleService.CanView(RoleOf(p)))
@@ -39,7 +39,7 @@ public static class TorreRotas
                 Supplier: Preenchido(supplier), OrderNumber: Preenchido(orderNumber),
                 DueFrom: dueFrom, DueTo: dueTo, MinValue: minValue, MaxValue: maxValue,
                 AgingBand: agingBand, Exception: exception, NeedsBuyer: needsBuyer,
-                Invoicing: invoicing);
+                Invoicing: invoicing, SlaBreached: slaBreached);
             return Ok(await svc.ConsultarAsync(filtro, ct), ctx);
         }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole())
             .AddEndpointFilter(RequireModules(AppModules.Compras));

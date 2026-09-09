@@ -56,6 +56,7 @@ GET /api/v1/quotations/{id:guid}/price-history
 GET /api/v1/quotations/{id:guid}/score-map
 GET /api/v1/quotations/{id:guid}/timeline
 GET /api/v1/score-weights/
+GET /api/v1/stage-sla/
 GET /api/v1/suppliers/
 GET /api/v1/suppliers/{id:guid}/contract/adjustments
 GET /api/v1/triage/
@@ -140,4 +141,5 @@ POST /api/v1/users/{id:guid}/reset-password
 PUT /api/v1/company
 PUT /api/v1/quotations/{id:guid}/suppliers/{supplierId:guid}/deadline
 PUT /api/v1/score-weights/
+PUT /api/v1/stage-sla/
 PUT /api/v1/suppliers/{id:guid}/contract

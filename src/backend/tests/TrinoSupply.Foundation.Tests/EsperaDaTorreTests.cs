@@ -367,4 +367,53 @@ public class EsperaDaTorreTests
         // a soma antiga daria 1: a exceção está em etapa de recebimento
         Assert.Equal(1, kpis.Novos + kpis.EmCotacao + kpis.AguardandoOc);
     }
+
+    [Fact]
+    public async Task O_prazo_da_etapa_julga_a_mesma_espera_que_a_linha_mostra()
+    {
+        // duas contas para "estourou?" dariam uma linha dizendo 8 dias e um veredito
+        // calculado sobre outro número
+        var w = Build();
+        await ScAprovadaAsync(w);
+        w.Db.StageSlas.Add(new StageSla { Stage = "SOLICITACAO", MaxDays = 2 });
+        await w.Db.SaveChangesAsync();
+        w.Relogio.Agora = new DateTimeOffset(2026, 9, 6, 12, 0, 0, TimeSpan.Zero);
+
+        var linha = (await w.Torre.ConsultarAsync(new FiltroTorre())).Items.Single();
+
+        Assert.Equal(5, linha.WaitingOn!.Days);
+        Assert.Equal(2, linha.Sla!.MaxDays);
+        Assert.Equal("ESTOURADO", linha.Sla.Status);
+    }
+
+    [Fact]
+    public async Task O_card_de_prazo_estourado_abre_a_lista_do_mesmo_tamanho()
+    {
+        var w = Build();
+        await ScAprovadaAsync(w);   // vai estourar: 5 dias parados contra prazo de 2
+        w.Db.StageSlas.Add(new StageSla { Stage = "SOLICITACAO", MaxDays = 2 });
+        await w.Db.SaveChangesAsync();
+        w.Relogio.Agora = new DateTimeOffset(2026, 9, 6, 12, 0, 0, TimeSpan.Zero);
+
+        var pagina = await w.Torre.ConsultarAsync(new FiltroTorre());
+        var estourados = await w.Torre.ConsultarAsync(new FiltroTorre(SlaBreached: true));
+
+        Assert.Equal(1, pagina.Kpis.PrazoEstourado);
+        Assert.Equal(pagina.Kpis.PrazoEstourado, estourados.Total);
+    }
+
+    [Fact]
+    public async Task Dentro_do_prazo_a_linha_nao_vira_estouro()
+    {
+        var w = Build();
+        await ScAprovadaAsync(w);
+        w.Db.StageSlas.Add(new StageSla { Stage = "SOLICITACAO", MaxDays = 10 });
+        await w.Db.SaveChangesAsync();
+        w.Relogio.Agora = new DateTimeOffset(2026, 9, 3, 12, 0, 0, TimeSpan.Zero);
+
+        var pagina = await w.Torre.ConsultarAsync(new FiltroTorre());
+
+        Assert.Equal("OK", pagina.Items.Single().Sla!.Status);
+        Assert.Equal(0, pagina.Kpis.PrazoEstourado);
+    }
 }

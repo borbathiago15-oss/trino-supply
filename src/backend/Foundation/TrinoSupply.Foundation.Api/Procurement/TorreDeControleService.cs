@@ -27,6 +27,8 @@ public record FiltroTorre(
     bool? Exception = null,
     /// <summary>A fila prioritária do §5: só o que espera ação do comprador.</summary>
     bool? NeedsBuyer = null,
+    /// <summary>Só o que passou do prazo da própria etapa.</summary>
+    bool? SlaBreached = null,
     /// <summary>
     /// Separa as duas filas do recebimento, que é o que a nota fiscal faz: <c>true</c> é
     /// O.C. emitida sem NF (a bola está com o fornecedor), <c>false</c> é NF lançada e
@@ -63,7 +65,9 @@ public record LinhaDaTorre(
     /// <summary>Se essa ação é do comprador (é o que define a fila prioritária).</summary>
     bool NeedsBuyer = false,
     /// <summary>De quem a linha está esperando, e há quanto tempo. Nulo quando não se espera nada.</summary>
-    EsperaDaLinha? WaitingOn = null);
+    EsperaDaLinha? WaitingOn = null,
+    /// <summary>Como a espera está contra o prazo desta etapa.</summary>
+    SituacaoDoPrazo? Sla = null);
 
 /// <summary>
 /// Os números do topo (§5).
@@ -91,6 +95,8 @@ public record KpisDaTorre(
     /// </para>
     /// </summary>
     int PrecisaDeVoce = 0,
+    /// <summary>Quantos passaram do prazo da própria etapa.</summary>
+    int PrazoEstourado = 0,
     /// <summary>Quantos itens em cada faixa de fila, na ordem de <see cref="FaixasDeAging"/>.</summary>
     IReadOnlyList<int>? PorFaixaDeAging = null);
 
@@ -307,7 +313,8 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
                        || f.Supplier is { Length: > 0 } || f.OrderNumber is { Length: > 0 }
                        || f.DueFrom is not null || f.DueTo is not null
                        || f.MinValue is not null || f.MaxValue is not null
-                       || f.Exception == true || f.NeedsBuyer == true || f.Invoicing is not null;
+                       || f.Exception == true || f.NeedsBuyer == true || f.Invoicing is not null
+                       || f.SlaBreached == true;
         var ordenada = consulta.OrderByDescending(x => x.sc.CreatedAt).ThenBy(x => x.item.Sequence);
 
         var total = derivado ? 0 : await consulta.CountAsync(ct);
@@ -348,6 +355,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
 
         var familiaPorProduto = await db.CatalogItems
             .Select(i => new { i.Id, i.Family }).ToDictionaryAsync(x => x.Id, x => x.Family, ct);
+        var prazos = await new PrazoDaEtapaService(db, clock).MapaAsync(ct);
 
         // os aprovadores dos centros desta página, de uma vez: perguntar por linha faria
         // uma consulta por item, e a Torre é justamente a tela com muitas linhas
@@ -433,6 +441,10 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
             var espera = EsperaDe(x.sc, cotacao, pedido,
                 alcadaPorCentro.GetValueOrDefault(x.sc.CostCenter.Trim().ToUpperInvariant(),
                     AlcadasDoCentro.Nenhuma), hoje, agora);
+            // o prazo é da etapa e o relógio é o da espera — o mesmo número que a linha
+            // mostra, para o veredito nunca discordar do que está escrito ao lado dele
+            var sla = PrazoDaEtapaService.Avaliar(etapa, espera?.Days, prazos);
+            if (f.SlaBreached == true && !sla.Breached) continue;
 
             linhas.Add(new LinhaDaTorre(
                 x.item.Id, x.sc.Id, x.sc.Number, x.item.Sequence,
@@ -443,7 +455,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
                 situacao.Key, situacao.Label, situacao.Tone,
                 x.sc.Priority, x.sc.NeededBy, pedido?.PromisedDate, atrasado,
                 valor, cotacao?.Id, cotacao?.Number, pedido?.Id, pedido?.Number,
-                naFilaDesde, excecao, acao.Length == 0 ? null : acao, doComprador, espera));
+                naFilaDesde, excecao, acao.Length == 0 ? null : acao, doComprador, espera, sla));
         }
 
         if (derivado)
@@ -477,7 +489,9 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
             .Where(r => r.DeletedAt == null && r.Status != RequisitionStatus.Draft)
             .OrderByDescending(r => r.CreatedAt).Take(2000).ToListAsync(ct);
         var ids = abertas.Select(r => r.Id).ToList();
+        var prazos = await new PrazoDaEtapaService(db, clock).MapaAsync(ct);
         var cotacoes = await db.Quotations.Include(q => q.Items)
+            .Include(q => q.Suppliers).Include(q => q.Proposals)
             .Where(q => ids.Contains(q.SourcePrId)
                         || q.Items.Any(i => i.SourcePrId != null && ids.Contains(i.SourcePrId.Value)))
             .OrderByDescending(q => q.CreatedAt).ToListAsync(ct);
@@ -500,7 +514,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
 
         int total = 0, novos = 0, cotando = 0, aprovando = 0, aguardandoOc = 0,
             recebendo = 0, atrasados = 0, urgentes = 0, faturando = 0, excecoes = 0,
-            precisaDeVoce = 0;
+            precisaDeVoce = 0, estourados = 0;
         decimal valor = 0;
         var porFaixa = new int[FaixasDeAging.Length];
         foreach (var sc in abertas)
@@ -519,6 +533,10 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
             // o KPI usa a mesma regra do filtro: o número do card e o tamanho da lista
             // que ele abre precisam sair da mesma pergunta
             var doComprador = AcaoDe(etapa, motivoDaExcecao, sc.AssignedToId is not null).DoComprador;
+            // o KPI do prazo mede a mesma espera que a linha mostra, pelo mesmo prazo:
+            // duas contas para "estourou?" dariam um card que não bate com a lista
+            var espera = EsperaDe(sc, cotacao, pedido, AlcadasDoCentro.Nenhuma, hoje, agora);
+            var estourou = PrazoDaEtapaService.Avaliar(etapa, espera?.Days, prazos).Breached;
 
             foreach (var _ in sc.Items)
             {
@@ -535,6 +553,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
                 }
                 if (excecao) excecoes++;
                 if (doComprador) precisaDeVoce++;
+                if (estourou) estourados++;
                 if (atrasada) atrasados++;
                 // o aging conta a espera de quem ainda está na fila: item encerrado
                 // já não espera por ninguém e inflaria a faixa mais velha para sempre
@@ -546,7 +565,8 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
         }
 
         return new KpisDaTorre(total, novos, cotando, aprovando, aguardandoOc,
-            recebendo, atrasados, urgentes, valor, faturando, excecoes, precisaDeVoce, porFaixa);
+            recebendo, atrasados, urgentes, valor, faturando, excecoes, precisaDeVoce,
+            estourados, porFaixa);
     }
 
     /// <summary>

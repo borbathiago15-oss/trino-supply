@@ -141,6 +141,7 @@ export function situacaoDaSelecao(marcados: { id: string; centroCusto: string; f
 export interface ItemDoProcesso {
   id: string;
   sequence: number;
+  catalogItemId: string | null;
   catalogCode: string | null;
   description: string;
   quantity: number;
@@ -334,6 +335,38 @@ export interface PropostaManual {
   currency: string;
   notes: string | null;
   items: { quotationItemId: string; unitPrice: number }[];
+}
+
+/** O que já se pagou por um item deste processo. Ausente = nunca comprado. */
+export interface HistoricoDoItem {
+  quotationItemId: string;
+  average: number;
+  last: number;
+  min: number;
+  max: number;
+  purchases: number;
+  lastSupplier: string;
+  lastAt: string;
+}
+
+export interface HistoricoDoProcesso {
+  /** Acima de quantos por cento a variação merece aviso — quem define é o servidor. */
+  warnAbovePct: number;
+  items: HistoricoDoItem[];
+}
+
+export const historicoDoProcesso = (id: string, signal?: AbortSignal) =>
+  api<HistoricoDoProcesso>(`${base}/${id}/price-history`, { signal });
+
+/**
+ * Variação do preço digitado contra a média já paga. Nula quando não há histórico:
+ * zero diria "está no preço de sempre" para um produto que nunca foi comprado, e isso
+ * é afirmar em vez de admitir que não se sabe.
+ */
+export function variacaoDoPreco(h: HistoricoDoItem | undefined, precoDigitado: string): number | null {
+  const preco = Number(precoDigitado.replace(',', '.'));
+  if (!h || h.average <= 0 || !precoDigitado.trim() || Number.isNaN(preco) || preco <= 0) return null;
+  return Math.round((preco / h.average - 1) * 1000) / 10;
 }
 
 /** Preço que o contrato de parceria já fixou para um item deste processo. */

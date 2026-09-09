@@ -10,7 +10,9 @@ test.describe('Torre de Controle (React)', () => {
   test('abre com os KPIs, a lista por item e o recorte na chamada', async ({ page }) => {
     const consulta = page.waitForResponse((r) => r.url().includes('/api/v1/control-tower'));
     await abrirAutenticado(page, '/torre');
-    await expect(page.locator('#titulo-pagina')).toHaveText('Torre de Controle');
+    // "Torre de Controle" passou a ser o subgrupo do menu, que abriga esta tela e a
+    // triagem; o título da página é o da tela, que é a lista por item
+    await expect(page.locator('#titulo-pagina')).toHaveText('Itens de Compra');
     expect((await consulta).status()).toBe(200);
 
     // os KPIs também são filtros: cada um é um botão

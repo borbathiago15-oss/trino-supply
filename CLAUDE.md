@@ -160,6 +160,16 @@ porque não são óbvias:
   inventar um registro vazio daria um KPI que não conta nada. A regra vive em
   `TorreDeControleService.ExcecaoDe`, e a linha mostra **o motivo**, não só a marca.
 
+**O prazo é da etapa, e o relógio é o da espera.** `StageSla` guarda quanto tempo cada etapa
+pode levar (editável pelo administrador; `PrazoDaEtapaService.Padrao` é só o ponto de partida)
+e `Avaliar` julga contra o **mesmo número que a linha mostra** — medir contra a criação da SC
+cobraria da aprovação o tempo que o item passou em cotação. Ele **mede e expõe, nunca
+bloqueia**, como o Compliance Score: estourado aparece na linha, entra no filtro e conta no
+card, mas não impede aprovar, cotar nem fechar. **Zero desliga** a cobrança da etapa, e a
+atenção chega a 80% do prazo — avisar no dia do vencimento é avisar tarde para agir. "Atrasado"
+e "prazo estourado" são **perguntas diferentes**: o primeiro é sobre a data prometida ao
+solicitante, o segundo sobre o tempo da etapa.
+
 **Cada card do topo abre exatamente a lista que ele contou.** Não é detalhe de tela: o card é
 um número que promete uma lista, e as duas coisas precisam sair da mesma pergunta. Por isso
 `PrecisaDeVoce` é contado por `AcaoDe` (a soma de etapas deixava de fora a exceção que volta ao

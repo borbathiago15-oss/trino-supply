@@ -230,6 +230,7 @@ public partial class QuotationService
             VersionNumber = version,
             DeliveryDays = input.DeliveryDays,
             PaymentTerms = string.IsNullOrWhiteSpace(input.PaymentTerms) ? null : input.PaymentTerms.Trim(),
+            PaymentMethodName = string.IsNullOrWhiteSpace(input.PaymentMethodName) ? null : input.PaymentMethodName.Trim(),
             PaymentDays = input.PaymentDays,
             FreightValue = input.FreightValue,
             TaxValue = input.TaxValue,
@@ -307,7 +308,8 @@ public partial class QuotationService
             atual.DeliveryDays, atual.PaymentTerms, atual.FreightValue, atual.ValidUntil,
             string.IsNullOrWhiteSpace(notes) ? atual.Notes : notes.Trim(),
             atual.Items.Select(i => new ProposalItemInput(i.QuotationItemId, i.UnitPrice, i.Quantity)).ToList(),
-            bruto - fechado.Value, atual.Currency, atual.PaymentDays, atual.TaxValue, atual.OtherCosts);
+            bruto - fechado.Value, atual.Currency, atual.PaymentDays, atual.TaxValue, atual.OtherCosts,
+            atual.PaymentMethodName);
         var (nova, error) = await SubmitProposalAsync(q.Id, supplierId, input, "NEGOCIACAO", actor.Label, ct);
         if (error is not null) return (null, error);
 

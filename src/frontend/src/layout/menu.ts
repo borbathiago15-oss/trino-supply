@@ -111,6 +111,10 @@ export const MENU: GrupoMenu[] = [
     { id: 'users', rotulo: 'Usuários', rota: '/usuarios', modulo: 'USUARIOS', mostrar: ehAdmin },
     { id: 'announcements', rotulo: 'Comunicados', rota: '/comunicados', mostrar: ehAdmin },
     { id: 'suppliers', rotulo: 'Fornecedores', rota: '/fornecedores', modulo: 'FORNECEDORES', mostrar: podeComprar },
+    { rotulo: 'Pagamento', filhos: [
+      { id: 'payment-methods', rotulo: 'Formas de Pagamento', rota: '/formas-pagamento', modulo: 'COMPRAS', mostrar: podeComprar },
+      { id: 'payment-terms', rotulo: 'Condições de Pagamento', rota: '/condicoes-pagamento', modulo: 'COMPRAS', mostrar: podeComprar },
+    ]},
   ]},
 ];
 

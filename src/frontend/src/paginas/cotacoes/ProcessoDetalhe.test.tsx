@@ -10,8 +10,9 @@ import { ToastProvider } from '@/componentes/Toast';
 import { ProcessoDetalhe } from './ProcessoDetalhe';
 import { textoDoConvite } from './PainelDeConvidados';
 import { candidatasDaFamilia, impedimentoDaProposta, propostasDaFamilia } from './AcoesDoProcesso';
-import { montarProposta } from './PainelPropostaManual';
+import { daCondicao, montarProposta } from './PainelPropostaManual';
 import { lote, oferta, processo, proposta } from '@/test/cotacoes';
+import { listarCondicoesDePagamento, listarFormasDePagamento } from '@/api/pagamentos';
 
 vi.mock('@/api/cotacoes', async (importar) => ({
   ...(await importar<typeof import('@/api/cotacoes')>()),
@@ -19,6 +20,10 @@ vi.mock('@/api/cotacoes', async (importar) => ({
   escolherVencedor: vi.fn(), decidir: vi.fn(), registrarOc: vi.fn(),
   registrarNegociacao: vi.fn(), cancelarProcesso: vi.fn(), registrarProposta: vi.fn(),
   anexarNaProposta: vi.fn(), mapaDeFamilias: vi.fn(),
+}));
+vi.mock('@/api/pagamentos', () => ({
+  listarFormasDePagamento: vi.fn().mockResolvedValue([]),
+  listarCondicoesDePagamento: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('@/api/pedidos', async (importar) => ({
   ...(await importar<typeof import('@/api/pedidos')>()),
@@ -213,6 +218,40 @@ describe('proposta lançada à mão', () => {
   it('sem fornecedor também não', () => {
     expect(montarProposta('', {}, { i1: '12' }).erro).toBe('Escolha o fornecedor da proposta.');
   });
+
+  it('a forma escolhida vai junto da condição — são o "como" e o "quando"', () => {
+    const { proposta: p } = montarProposta(
+      's1',
+      { condicaoPagamento: 'Parcelado 30/60/90', formaPagamento: 'Boleto Bancário', prazoPagamento: '30' },
+      { i1: '12' },
+    );
+    expect(p?.paymentTerms).toBe('Parcelado 30/60/90');
+    expect(p?.paymentMethodName).toBe('Boleto Bancário');
+    expect(p?.paymentDays).toBe(30);
+  });
+
+  it('condição sem forma não inventa forma: o campo vazio vira nulo, não texto', () => {
+    const { proposta: p } = montarProposta('s1', { condicaoPagamento: 'À Vista' }, { i1: '12' });
+    expect(p?.paymentMethodName).toBeNull();
+  });
+});
+
+describe('condição escolhida preenche o prazo', () => {
+  const condicao = (parcelas: number, primeira: number | null) => ({
+    id: 'c1', name: 'Parcelado 30/60/90', installments: parcelas,
+    firstDueDays: primeira, isDefault: false, active: true,
+  });
+
+  it('traz o prazo da primeira parcela — é o número que se redigitava a cada cotação', () => {
+    expect(daCondicao(condicao(3, 30))).toEqual({ condicaoPagamento: 'Parcelado 30/60/90', prazoPagamento: '30' });
+    // à vista é zero dia, e zero é um prazo: não pode virar "sem prazo"
+    expect(daCondicao(condicao(1, 0)).prazoPagamento).toBe('0');
+  });
+
+  it('condição que não define prazo não apaga o que o comprador já digitou', () => {
+    // devolver prazoPagamento: '' aqui limparia o campo ao trocar a condição
+    expect(daCondicao(condicao(2, null))).toEqual({ condicaoPagamento: 'Parcelado 30/60/90' });
+  });
 });
 
 describe('impedimento da proposta', () => {
@@ -264,6 +303,10 @@ describe('tela do processo', () => {
     eu = { id: 'u1', email: 'carla@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['COMPRAS'] };
     vi.mocked(listarFornecedores).mockResolvedValue([]);
     vi.mocked(mapaDeFamilias).mockResolvedValue([lote({})]);
+    // o resetAllMocks acima apaga a implementação vinda da fábrica do vi.mock:
+    // sem repor aqui, o painel de proposta chamaria `.then` em undefined
+    vi.mocked(listarFormasDePagamento).mockResolvedValue([]);
+    vi.mocked(listarCondicoesDePagamento).mockResolvedValue([]);
   });
 
   it('fornecedor fora do cadastro entra na cotação só com razão social e telefone', async () => {

@@ -6,6 +6,8 @@ import { PedidoDetalhe } from '@/paginas/pedidos/PedidoDetalhe';
 import { PedidosLista } from '@/paginas/pedidos/PedidosLista';
 import { CentrosCusto } from '@/paginas/centros-custo/CentrosCusto';
 import { Familias } from '@/paginas/familias/Familias';
+import { FormasDePagamento } from '@/paginas/pagamentos/FormasDePagamento';
+import { CondicoesDePagamento } from '@/paginas/pagamentos/CondicoesDePagamento';
 import { Fornecedores } from '@/paginas/fornecedores/Fornecedores';
 import { Produtos } from '@/paginas/produtos/Produtos';
 import { Usuarios } from '@/paginas/usuarios/Usuarios';
@@ -66,6 +68,8 @@ export function Rotas() {
           <Route path="/pedidos/:id" element={<PedidoDetalhe />} />
           <Route path="/fornecedores" element={<Fornecedores />} />
           <Route path="/familias" element={<Familias />} />
+          <Route path="/formas-pagamento" element={<FormasDePagamento />} />
+          <Route path="/condicoes-pagamento" element={<CondicoesDePagamento />} />
           <Route path="/centros-custo" element={<CentrosCusto />} />
           <Route path="/produtos" element={<Produtos />} />
           <Route path="/usuarios" element={<Usuarios />} />

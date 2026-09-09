@@ -38,6 +38,7 @@ export function MapaDeCotacao({ processo, aoBaixarAnexo }: {
     { rotulo: 'Validade da proposta', valor: (p) => data(p.validUntil) },
     { rotulo: 'Moeda', valor: (p) => p.currency || 'BRL' },
     { rotulo: 'Condição de pagamento', valor: (p) => p.paymentTerms || '—' },
+    { rotulo: 'Forma de pagamento', valor: (p) => p.paymentMethodName || '—' },
     { rotulo: 'Prazo para pagamento', valor: (p) => (p.paymentDays != null ? `${p.paymentDays} dias` : '—') },
     { rotulo: 'Prazo de entrega', valor: (p) => (p.deliveryDays != null ? `${p.deliveryDays} dias` : '—') },
     { rotulo: 'Observação', valor: (p) => p.notes || '—' },

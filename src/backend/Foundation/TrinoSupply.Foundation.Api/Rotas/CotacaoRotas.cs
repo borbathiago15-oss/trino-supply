@@ -28,7 +28,8 @@ public static class CotacaoRotas
         {
             id = p.Id, supplierId = p.SupplierId, supplierName = p.SupplierName,
             version = p.VersionNumber, totalValue = p.TotalValue, deliveryDays = p.DeliveryDays,
-            paymentTerms = p.PaymentTerms, paymentDays = p.PaymentDays,
+            paymentTerms = p.PaymentTerms, paymentMethodName = p.PaymentMethodName,
+            paymentDays = p.PaymentDays,
             freightValue = p.FreightValue, taxValue = p.TaxValue, otherCosts = p.OtherCosts,
             validUntil = p.ValidUntil,
             discountValue = p.DiscountValue, currency = p.Currency,
@@ -275,7 +276,8 @@ public static class CotacaoRotas
             if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não registra propostas.");
             var input = new ProposalInput(body.DeliveryDays, body.PaymentTerms, body.FreightValue, body.ValidUntil, body.Notes,
                 (body.Items ?? []).Select(i => new ProposalItemInput(i.QuotationItemId, i.UnitPrice, i.Quantity)).ToList(),
-                body.DiscountValue, body.Currency, body.PaymentDays, body.TaxValue, body.OtherCosts);
+                body.DiscountValue, body.Currency, body.PaymentDays, body.TaxValue, body.OtherCosts,
+                body.PaymentMethodName);
             var (proposal, error) = await svc.SubmitProposalAsync(id, body.SupplierId, input, "INTERNO", p.FindFirstValue("name") ?? "Usuário");
             if (error is not null) return Error(ctx, error.Code == "RFQ-ERR-020" ? 409 : 400, error.Code, error.Message);
             var q = await svc.GetAsync(id);
@@ -398,7 +400,8 @@ public static class CotacaoRotas
                 .Select(p => new
                 {
                     id = p.Id, version = p.VersionNumber, totalValue = p.TotalValue,
-                    deliveryDays = p.DeliveryDays, paymentTerms = p.PaymentTerms, freightValue = p.FreightValue,
+                    deliveryDays = p.DeliveryDays, paymentTerms = p.PaymentTerms,
+                    paymentMethodName = p.PaymentMethodName, freightValue = p.FreightValue,
                     validUntil = p.ValidUntil, notes = p.Notes, submittedAt = p.SubmittedAt,
                     attachmentDocumentId = p.AttachmentDocumentId, attachmentFileName = p.AttachmentFileName,
                     items = p.Items.Select(i => new { quotationItemId = i.QuotationItemId, unitPrice = i.UnitPrice, quantity = i.Quantity }),

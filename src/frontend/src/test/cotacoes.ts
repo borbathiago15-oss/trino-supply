@@ -7,7 +7,8 @@ import type { LoteDaFamilia, OfertaDaFamilia, Processo, Proposta } from '@/api/c
  */
 export const proposta = (p: Partial<Proposta>): Proposta => ({
   id: 'p1', supplierId: 's1', supplierName: 'Alfa EPIs', version: 1, totalValue: 1200,
-  deliveryDays: 10, paymentTerms: '30 dias', paymentDays: 30, freightValue: 100, taxValue: null,
+  deliveryDays: 10, paymentTerms: '30 dias', paymentMethodName: null, paymentDays: 30,
+  freightValue: 100, taxValue: null,
   otherCosts: null, discountValue: null, validUntil: null, currency: 'BRL', notes: null,
   submittedVia: 'PORTAL', submittedByLabel: null, submittedAt: '2026-09-01T12:00:00Z',
   attachmentDocumentId: null, attachmentFileName: null, isLatest: true, isWinner: false,

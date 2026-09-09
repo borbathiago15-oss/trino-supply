@@ -158,6 +158,7 @@ export interface Proposta {
   totalValue: number;
   deliveryDays: number | null;
   paymentTerms: string | null;
+  paymentMethodName: string | null;
   paymentDays: number | null;
   freightValue: number | null;
   taxValue: number | null;
@@ -311,6 +312,7 @@ export interface PropostaManual {
   supplierId: string;
   deliveryDays: number | null;
   paymentTerms: string | null;
+  paymentMethodName: string | null;
   paymentDays: number | null;
   freightValue: number | null;
   taxValue: number | null;

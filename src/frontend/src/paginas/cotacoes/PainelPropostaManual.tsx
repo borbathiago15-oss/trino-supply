@@ -1,8 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   anexarNaProposta, propostaVigenteDe, registrarProposta,
   type Processo, type PropostaManual,
 } from '@/api/cotacoes';
+import {
+  listarCondicoesDePagamento, listarFormasDePagamento,
+  type CondicaoDePagamento, type FormaDePagamento,
+} from '@/api/pagamentos';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
 import { quantidade } from '@/util/formato';
 
@@ -36,6 +40,7 @@ export function montarProposta(
       supplierId,
       deliveryDays: inteiro(campos.prazoEntrega ?? ''),
       paymentTerms: campos.condicaoPagamento || null,
+      paymentMethodName: campos.formaPagamento || null,
       paymentDays: inteiro(campos.prazoPagamento ?? ''),
       freightValue: numero(campos.frete ?? ''),
       taxValue: numero(campos.impostos ?? ''),
@@ -50,9 +55,20 @@ export function montarProposta(
 }
 
 const VAZIO = {
-  prazoEntrega: '', condicaoPagamento: '', prazoPagamento: '', frete: '',
+  prazoEntrega: '', condicaoPagamento: '', formaPagamento: '', prazoPagamento: '', frete: '',
   impostos: '', outros: '', desconto: '', validade: '', moeda: 'BRL', observacao: '',
 };
+
+/**
+ * A condição escolhida traz junto o prazo da primeira parcela: é o mesmo número toda
+ * vez para a mesma condição, e era o que o comprador redigitava a cada cotação. Fica
+ * editável — a condição diz o padrão, o fornecedor pode ter combinado outro.
+ */
+export function daCondicao(c: CondicaoDePagamento): { condicaoPagamento: string; prazoPagamento?: string } {
+  return c.firstDueDays == null
+    ? { condicaoPagamento: c.name }
+    : { condicaoPagamento: c.name, prazoPagamento: String(c.firstDueDays) };
+}
 
 /** Proposta que chegou por e-mail: o comprador lança o que o fornecedor respondeu. */
 export function PainelPropostaManual({ processo, aoRegistrar, aoAvisar }: {
@@ -62,6 +78,8 @@ export function PainelPropostaManual({ processo, aoRegistrar, aoAvisar }: {
 }) {
   const [fornecedor, setFornecedor] = useState(processo.suppliers[0]?.supplierId ?? '');
   const [campos, setCampos] = useState<Record<string, string>>(VAZIO);
+  const [formas, setFormas] = useState<FormaDePagamento[]>([]);
+  const [condicoes, setCondicoes] = useState<CondicaoDePagamento[]>([]);
   const [precos, setPrecos] = useState<Record<string, string>>({});
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -70,6 +88,24 @@ export function PainelPropostaManual({ processo, aoRegistrar, aoAvisar }: {
     value: campos[k] ?? '',
     onChange: (e: { target: { value: string } }) => setCampos((c) => ({ ...c, [k]: e.target.value })),
   });
+
+  // Os cadastros alimentam as duas listas. Falhar aqui não pode travar o registro da
+  // proposta: sem lista, os campos continuam sendo texto livre, que é como era antes.
+  useEffect(() => {
+    const controle = new AbortController();
+    listarFormasDePagamento(false, controle.signal).then(setFormas).catch(() => {});
+    listarCondicoesDePagamento(false, controle.signal).then((lista) => {
+      setCondicoes(lista);
+      const sugerida = lista.find((c) => c.isDefault);
+      if (sugerida) setCampos((c) => (c.condicaoPagamento ? c : { ...c, ...daCondicao(sugerida) }));
+    }).catch(() => {});
+    return () => controle.abort();
+  }, []);
+
+  function escolherCondicao(nome: string) {
+    const escolhida = condicoes.find((c) => c.name === nome);
+    setCampos((c) => (escolhida ? { ...c, ...daCondicao(escolhida) } : { ...c, condicaoPagamento: nome }));
+  }
 
   async function salvar() {
     const { proposta, erro } = montarProposta(fornecedor, campos, precos);
@@ -117,7 +153,16 @@ export function PainelPropostaManual({ processo, aoRegistrar, aoAvisar }: {
             <input id="ip-entrega" type="number" min="0" {...campo('prazoEntrega')} />
           </Campo>
           <Campo id="ip-pagamento" rotulo="Cond. pagamento">
-            <input id="ip-pagamento" placeholder="ex.: 30/60 dias" {...campo('condicaoPagamento')} />
+            {condicoes.length ? (
+              <select id="ip-pagamento" value={campos.condicaoPagamento ?? ''}
+                onChange={(e) => escolherCondicao(e.target.value)}>
+                <option value="">—</option>
+                {condicoes.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+              </select>
+            ) : (
+              // sem cadastro (ou com a lista fora do ar) o campo volta a ser o que era
+              <input id="ip-pagamento" placeholder="ex.: 30/60 dias" {...campo('condicaoPagamento')} />
+            )}
           </Campo>
         </Grade2>
       </Grade2>
@@ -143,20 +188,33 @@ export function PainelPropostaManual({ processo, aoRegistrar, aoAvisar }: {
 
       <Grade2 className="mt-3">
         <Grade2>
-          <Campo id="ip-prazo-pag" rotulo="Prazo p/ pagamento (dias)">
+          <Campo id="ip-forma-pag" rotulo="Forma de pagamento">
+            {formas.length ? (
+              <select id="ip-forma-pag" {...campo('formaPagamento')}>
+                <option value="">—</option>
+                {formas.map((f) => <option key={f.id} value={f.name}>{f.name}</option>)}
+              </select>
+            ) : (
+              <input id="ip-forma-pag" placeholder="ex.: Boleto Bancário" {...campo('formaPagamento')} />
+            )}
+          </Campo>
+          <Campo id="ip-prazo-pag" rotulo="Prazo p/ pagamento (dias)"
+            dica="vem da condição escolhida; ajuste se o fornecedor combinou outro">
             <input id="ip-prazo-pag" type="number" min="0" placeholder="ex.: 28" {...campo('prazoPagamento')} />
           </Campo>
+        </Grade2>
+        <Grade2>
           <Campo id="ip-validade" rotulo="Validade da proposta">
             <input id="ip-validade" type="date" {...campo('validade')} />
           </Campo>
+          <Campo id="ip-moeda" rotulo="Moeda">
+            <select id="ip-moeda" {...campo('moeda')}>
+              <option value="BRL">Real (BRL)</option>
+              <option value="USD">Dólar (USD)</option>
+              <option value="EUR">Euro (EUR)</option>
+            </select>
+          </Campo>
         </Grade2>
-        <Campo id="ip-moeda" rotulo="Moeda">
-          <select id="ip-moeda" {...campo('moeda')}>
-            <option value="BRL">Real (BRL)</option>
-            <option value="USD">Dólar (USD)</option>
-            <option value="EUR">Euro (EUR)</option>
-          </select>
-        </Campo>
       </Grade2>
 
       <Campo id="ip-obs" rotulo="Observação da proposta" className="mt-3">

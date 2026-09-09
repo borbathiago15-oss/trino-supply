@@ -32,6 +32,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<QuotationAward> QuotationAwards => Set<QuotationAward>();
     public DbSet<Proposal> Proposals => Set<Proposal>();
     public DbSet<ProposalItem> ProposalItems => Set<ProposalItem>();
+    public DbSet<PaymentMethod> PaymentMethods => Set<PaymentMethod>();
+    public DbSet<PaymentTermOption> PaymentTermOptions => Set<PaymentTermOption>();
     public DbSet<ProcessEvent> ProcessEvents => Set<ProcessEvent>();
     public DbSet<StoredDocument> StoredDocuments => Set<StoredDocument>();
     public DbSet<RequisitionAttachment> RequisitionAttachments => Set<RequisitionAttachment>();
@@ -439,6 +441,35 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(i => new { i.SupplierId, i.CatalogItemId });
         });
 
+        modelBuilder.Entity<PaymentMethod>(e =>
+        {
+            e.ToTable("payment_method", "procurement"); // forma: por onde o dinheiro sai
+            e.HasKey(m => m.Id);
+            e.Property(m => m.Id).HasColumnName("id");
+            e.Property(m => m.Name).HasColumnName("name").HasMaxLength(80).IsRequired();
+            e.Property(m => m.Active).HasColumnName("active");
+            e.Property(m => m.CreatedAt).HasColumnName("created_at");
+            e.Property(m => m.UpdatedAt).HasColumnName("updated_at");
+            // o nome é a identidade do cadastro: é por ele que a proposta antiga
+            // continua legível, e é ele que não pode repetir
+            e.HasIndex(m => m.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<PaymentTermOption>(e =>
+        {
+            e.ToTable("payment_term_option", "procurement"); // condição: quando se paga
+            e.HasKey(c => c.Id);
+            e.Property(c => c.Id).HasColumnName("id");
+            e.Property(c => c.Name).HasColumnName("name").HasMaxLength(80).IsRequired();
+            e.Property(c => c.Installments).HasColumnName("installments");
+            e.Property(c => c.FirstDueDays).HasColumnName("first_due_days");
+            e.Property(c => c.IsDefault).HasColumnName("is_default");
+            e.Property(c => c.Active).HasColumnName("active");
+            e.Property(c => c.CreatedAt).HasColumnName("created_at");
+            e.Property(c => c.UpdatedAt).HasColumnName("updated_at");
+            e.HasIndex(c => c.Name).IsUnique();
+        });
+
         modelBuilder.Entity<ContractAdjustment>(e =>
         {
             e.ToTable("contract_adjustment", "procurement"); // pleitos de reajuste (V2-P4 — cost avoidance)
@@ -673,6 +704,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(p => p.TotalValue).HasColumnName("total_value").HasPrecision(18, 4);
             e.Property(p => p.DeliveryDays).HasColumnName("delivery_days");
             e.Property(p => p.PaymentTerms).HasColumnName("payment_terms").HasMaxLength(200);
+            e.Property(p => p.PaymentMethodName).HasColumnName("payment_method_name").HasMaxLength(80);
             e.Property(p => p.PaymentDays).HasColumnName("payment_days");
             e.Property(p => p.FreightValue).HasColumnName("freight_value").HasPrecision(18, 4);
             e.Property(p => p.TaxValue).HasColumnName("tax_value").HasPrecision(18, 4);

@@ -211,7 +211,11 @@ public class Proposal
     public int VersionNumber { get; set; } = 1;
     public decimal TotalValue { get; set; }
     public int? DeliveryDays { get; set; }
+    // Condição e forma são o nome do cadastro copiado para cá, não a chave dele: a
+    // proposta é imutável, e renomear ou desativar o cadastro depois não pode mudar
+    // o que o fornecedor propôs — é a mesma razão de SupplierName ser snapshot.
     public string? PaymentTerms { get; set; }                  // condição (ex.: 30/60 dias, à vista)
+    public string? PaymentMethodName { get; set; }             // forma (boleto, Pix, depósito…)
     public int? PaymentDays { get; set; }                      // prazo para pagamento, em dias
     public decimal? FreightValue { get; set; }
     public decimal? TaxValue { get; set; }                    // impostos destacados na proposta (V2-P2)

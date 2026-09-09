@@ -9,7 +9,7 @@ public record ProposalInput(
     int? DeliveryDays, string? PaymentTerms, decimal? FreightValue, DateOnly? ValidUntil,
     string? Notes, IReadOnlyList<ProposalItemInput> Items,
     decimal? DiscountValue = null, string? Currency = null, int? PaymentDays = null,
-    decimal? TaxValue = null, decimal? OtherCosts = null);
+    decimal? TaxValue = null, decimal? OtherCosts = null, string? PaymentMethodName = null);
 /// <summary>SC já designada a um comprador, mas ainda retida na aprovação.</summary>
 public record QueueBlocked(PurchaseRequisition Pr, string Reason);
 

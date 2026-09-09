@@ -98,6 +98,7 @@ using (var scope = app.Services.CreateScope())
     await db.Database.MigrateAsync();
     var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher<User>>();
     seedOk = await AdminSeeder.SeedAsync(db, hasher, app.Configuration, app.Logger);
+    await PagamentoSeeder.SeedAsync(db, scope.ServiceProvider.GetRequiredService<TimeProvider>());
 }
 
 // primeiro de tudo: o que quebrar depois daqui responde no envelope da API e vai para o log
@@ -215,6 +216,9 @@ app.MapPedidos();
 // ---- Cadastros: centros de custo, triagem de demandas e empresas -------------
 app.MapCadastros();
 
+// ---- Cadastros de pagamento: formas e condições -------------------------------
+app.MapPagamentos();
+
 // ---- Dashboards analíticos ---------------------------------------------------
 app.MapAnalytics();
 
@@ -308,13 +312,17 @@ public record CreateCompanyRequest(string LegalName, string TaxId, string? State
     string? District, string City, string State, string Zip, string? Phone, string? Email);
 public record UpdateCompanyRequest(string? LegalName, string? StateRegistration, string? Address, string? District,
     string? City, string? State, string? Zip, string? Phone, string? Email, bool? Active);
+public record CreatePaymentMethodRequest(string? Name);
+public record UpdatePaymentMethodRequest(string? Name, bool? Active);
+public record CreatePaymentTermRequest(string? Name, int Installments, int? FirstDueDays, bool IsDefault = false);
+public record UpdatePaymentTermRequest(string? Name, int? Installments, int? FirstDueDays, bool? IsDefault, bool? Active);
 public record CreateQuotationRequest(Guid? PrId, string? Kind, DateOnly? Deadline, string? Notes,
     List<Guid>? PrItemIds = null);
 public record InviteSuppliersRequest(List<Guid>? SupplierIds);
 public record ProposalItemRequest(Guid QuotationItemId, decimal UnitPrice, decimal? Quantity);
 public record InternalProposalRequest(Guid SupplierId, int? DeliveryDays, string? PaymentTerms, decimal? FreightValue,
     DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items, decimal? DiscountValue, string? Currency,
-    int? PaymentDays = null, decimal? TaxValue = null, decimal? OtherCosts = null);
+    int? PaymentDays = null, decimal? TaxValue = null, decimal? OtherCosts = null, string? PaymentMethodName = null);
 public record SelectWinnerRequest(Guid ProposalId, List<string>? Criteria, string Justification,
     List<AwardRequest>? Awards = null);
 /// <summary>Escolha do vencedor de uma família (compra dividida entre vários fornecedores).</summary>

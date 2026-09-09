@@ -1,4 +1,6 @@
-import type { LoteDaFamilia, OfertaDaFamilia, Processo, Proposta } from '@/api/cotacoes';
+import type {
+  FornecedorConvidado, LoteDaFamilia, OfertaDaFamilia, Processo, Proposta,
+} from '@/api/cotacoes';
 
 /**
  * Fixtures do processo de cotação, compartilhadas pelos testes da lista e do
@@ -26,15 +28,20 @@ export const processo = (p: Partial<Processo>): Processo => ({
     quantity: 100, unitOfMeasure: 'PAR', sourcePrNumber: 'SC-2026-000001', family: 'EPI',
   }],
   families: ['EPI'],
-  suppliers: [{
-    supplierId: 's1', supplierName: 'Alfa EPIs', taxId: '12345678000199',
-    invitedAt: '2026-09-01T11:00:00Z', invitedByLabel: 'Carla', hasProposal: true,
-  }],
+  suppliers: [convidado({ hasProposal: true })],
   proposals: [proposta({})],
   selection: null, managerApproval: null, directorApproval: null,
   awards: [], splitAward: false, pendingPoSuppliers: [], purchaseOrders: [],
   purchaseOrderId: null, purchaseOrderNumber: null, saving: null,
   ...p,
+});
+
+/** Um convite, com o prazo e a situação que o servidor devolve. */
+export const convidado = (p: Partial<FornecedorConvidado> = {}): FornecedorConvidado => ({
+  supplierId: 's1', supplierName: 'Alfa EPIs', taxId: '12345678000199',
+  invitedAt: '2026-09-01T11:00:00Z', invitedByLabel: 'Carla', hasProposal: false,
+  responseDeadline: '2026-10-01', daysLate: 0, late: false,
+  waived: false, waivedReason: null, extensions: 0, ...p,
 });
 
 /** Oferta de um fornecedor para uma família, como o mapa por família devolve. */

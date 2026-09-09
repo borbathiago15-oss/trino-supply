@@ -56,12 +56,19 @@ public static class CotacaoRotas
                 family = QuotationAward.FamilyKey(i.Family),
             }),
             families = q.Families,
-            suppliers = q.Suppliers.Select(s => new
-            {
-                supplierId = s.SupplierId, supplierName = s.SupplierName, taxId = s.TaxId,
-                invitedAt = s.InvitedAt, invitedByLabel = s.InvitedByLabel,
-                hasProposal = q.Proposals.Any(p => p.SupplierId == s.SupplierId),
-            }),
+            // a situação de cada convite sai da mesma regra que a Torre usa (a data é a única
+            // coisa que a vista traz de fora; o resto é do serviço, que é onde há teste)
+            suppliers = QuotationService.SituacaoDosConvites(q, DateOnly.FromDateTime(DateTime.UtcNow))
+                .Select(s => new
+                {
+                    supplierId = s.SupplierId, supplierName = s.SupplierName,
+                    taxId = q.Suppliers.Single(x => x.SupplierId == s.SupplierId).TaxId,
+                    invitedAt = q.Suppliers.Single(x => x.SupplierId == s.SupplierId).InvitedAt,
+                    invitedByLabel = q.Suppliers.Single(x => x.SupplierId == s.SupplierId).InvitedByLabel,
+                    hasProposal = s.Responded,
+                    responseDeadline = s.Deadline, daysLate = s.DaysLate, late = s.Late,
+                    waived = s.Waived, waivedReason = s.WaivedReason, extensions = s.Extensions,
+                }),
             proposals = q.Proposals.OrderBy(p => p.SupplierName).ThenByDescending(p => p.VersionNumber)
                 .Select(p => ProposalView(p, q)),
             selection = q.SelectedAt is null ? null : new
@@ -343,8 +350,38 @@ public static class CotacaoRotas
             var role = RoleOf(p);
             if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não convida fornecedores.");
             var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
-            var (q, error) = await svc.InviteSuppliersAsync(actor, id, body.SupplierIds ?? []);
+            var (q, error) = await svc.InviteSuppliersAsync(actor, id, body.SupplierIds ?? [], default, body.ResponseDeadline);
             return error is not null ? Error(ctx, error.Code == "RFQ-ERR-010" ? 400 : 409, error.Code, error.Message) : Ok(QuotationView(q!), ctx);
+        });
+
+        // ---- o prazo de cada convite -------------------------------------------
+        // As duas saídas do fornecedor que não respondeu: mais tempo, ou o processo segue
+        // sem ele. São rotas separadas porque são decisões opostas, e um só endpoint com
+        // "ação" no corpo esconderia isso de quem lê o log.
+        rfq.MapPut("/{id:guid}/suppliers/{supplierId:guid}/deadline", async (
+            Guid id, Guid supplierId, PrazoDoConviteRequest body, QuotationService svc,
+            ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            var role = RoleOf(p);
+            if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não conduz processos de compra.");
+            var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+            var (q, error) = await svc.ProrrogarConviteAsync(actor, id, supplierId, body.ResponseDeadline);
+            return error is not null
+                ? Error(ctx, error.Code is "RFQ-ERR-071" ? 400 : error.Code == "RFQ-ERR-404" ? 404 : 409, error.Code, error.Message)
+                : Ok(QuotationView(q!), ctx);
+        });
+
+        rfq.MapPost("/{id:guid}/suppliers/{supplierId:guid}/waive", async (
+            Guid id, Guid supplierId, DispensaDoConviteRequest body, QuotationService svc,
+            ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            var role = RoleOf(p);
+            if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não conduz processos de compra.");
+            var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+            var (q, error) = await svc.DispensarConviteAsync(actor, id, supplierId, body.Reason ?? "");
+            return error is not null
+                ? Error(ctx, error.Code is "RFQ-ERR-072" ? 400 : error.Code == "RFQ-ERR-404" ? 404 : 409, error.Code, error.Message)
+                : Ok(QuotationView(q!), ctx);
         });
 
         // registro interno de proposta recebida fora do portal (e-mail/telefone)

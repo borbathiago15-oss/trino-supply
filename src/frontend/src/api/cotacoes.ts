@@ -157,6 +157,20 @@ export interface FornecedorConvidado {
   invitedAt: string;
   invitedByLabel: string | null;
   hasProposal: boolean;
+  /** Até quando **este** convite tem para responder. Nulo = sem prazo combinado. */
+  responseDeadline: string | null;
+  /**
+   * Dias além do prazo. Nulo quando não há prazo nenhum: dizer "0 dias de atraso" sobre
+   * um convite sem data seria afirmar uma pontualidade que ninguém combinou.
+   */
+  daysLate: number | null;
+  /** Atrasado é o convite vivo, sem proposta e com prazo vencido. */
+  late: boolean;
+  /** O processo seguiu sem ele — o convite fica, com o motivo. */
+  waived: boolean;
+  waivedReason: string | null;
+  /** Quantas vezes o prazo foi esticado. Folga repetida é fato sobre o fornecedor. */
+  extensions: number;
 }
 
 export interface ItemDaProposta { quotationItemId: string; unitPrice: number; quantity: number }
@@ -318,8 +332,34 @@ export async function listarProcessos(
 export const lerProcesso = async (id: string, signal?: AbortSignal) =>
   normalizar(await api<Processo>(`${base}/${id}`, { signal }));
 
-export const convidarFornecedor = (id: string, supplierIds: string[]) =>
-  api<Processo>(`${base}/${id}/suppliers`, { method: 'POST', body: { supplierIds } });
+export const convidarFornecedor = (id: string, supplierIds: string[], responseDeadline?: string | null) =>
+  api<Processo>(`${base}/${id}/suppliers`, {
+    method: 'POST', body: { supplierIds, responseDeadline: responseDeadline || null },
+  });
+
+/** Estica o prazo de um convite — é o que devolve ao fornecedor o direito de propor. */
+export const prorrogarConvite = (id: string, supplierId: string, responseDeadline: string) =>
+  api<Processo>(`${base}/${id}/suppliers/${supplierId}/deadline`, {
+    method: 'PUT', body: { responseDeadline },
+  });
+
+/** Segue sem o fornecedor. O convite não some: fica marcado, com o motivo. */
+export const dispensarConvite = (id: string, supplierId: string, reason: string) =>
+  api<Processo>(`${base}/${id}/suppliers/${supplierId}/waive`, { method: 'POST', body: { reason } });
+
+/**
+ * Como está um convite, em uma frase. É o que a linha diz sem obrigar quem lê a cruzar
+ * a data do prazo com a coluna da proposta.
+ */
+export function situacaoDoConvite(s: FornecedorConvidado): { rotulo: string; classe: string } {
+  if (s.hasProposal) return { rotulo: 'RECEBIDA', classe: 'bg-ok-fundo text-ok' };
+  if (s.waived) return { rotulo: 'SEGUIU SEM ELE', classe: 'bg-slate-100 text-slate-600' };
+  if (s.late) {
+    const dias = s.daysLate ?? 0;
+    return { rotulo: `ATRASADA · ${dias} dia${dias === 1 ? '' : 's'}`, classe: 'bg-perigo-fundo text-perigo' };
+  }
+  return { rotulo: 'AGUARDANDO', classe: 'bg-slate-100 text-slate-600' };
+}
 
 export interface PropostaManual {
   supplierId: string;

@@ -211,6 +211,32 @@ public class QuotationSupplier
     public Guid InvitedBy { get; set; }
     public string InvitedByLabel { get; set; } = string.Empty;
     public DateTimeOffset InvitedAt { get; set; }
+
+    /// <summary>
+    /// Até quando <b>este</b> fornecedor tem para responder.
+    ///
+    /// <para>
+    /// É do convite e não do processo porque os convites não saem no mesmo dia: com um prazo
+    /// só, quem foi chamado na quinta-feira recebe a folga que se deu a quem foi chamado na
+    /// segunda — e o comprador cobra o atraso errado. Nulo cai no prazo do processo, que é o
+    /// que mantém legível todo convite anterior a esta regra.
+    /// </para>
+    /// </summary>
+    public DateOnly? ResponseDeadline { get; set; }
+
+    /// <summary>Quantas vezes o prazo deste convite foi esticado — folga repetida é informação.</summary>
+    public int DeadlineExtensions { get; set; }
+
+    // ---- seguir sem este fornecedor ----------------------------------------
+    // O convite dispensado **não some**: apagá-lo faria o processo parecer que nunca chamou
+    // aquele fornecedor, e é justamente o "chamei e ele não respondeu" que explica um BID
+    // com dois proponentes em vez de três.
+    public DateTimeOffset? WaivedAt { get; set; }
+    public string? WaivedByLabel { get; set; }
+    public string? WaivedReason { get; set; }
+
+    /// <summary>O prazo que vale para este convite: o próprio, ou o do processo.</summary>
+    public DateOnly? PrazoEfetivo(DateOnly? doProcesso) => ResponseDeadline ?? doProcesso;
 }
 
 /// <summary>Proposta comercial — imutável e versionada; nova versão supersede (RFQ-BR-004).</summary>

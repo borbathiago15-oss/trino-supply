@@ -326,7 +326,9 @@ public record CreatePaymentTermRequest(string? Name, int Installments, int? Firs
 public record UpdatePaymentTermRequest(string? Name, int? Installments, int? FirstDueDays, bool? IsDefault, bool? Active);
 public record CreateQuotationRequest(Guid? PrId, string? Kind, DateOnly? Deadline, string? Notes,
     List<Guid>? PrItemIds = null);
-public record InviteSuppliersRequest(List<Guid>? SupplierIds);
+public record InviteSuppliersRequest(List<Guid>? SupplierIds, DateOnly? ResponseDeadline = null);
+public record PrazoDoConviteRequest(DateOnly ResponseDeadline);
+public record DispensaDoConviteRequest(string? Reason);
 public record ProposalItemRequest(Guid QuotationItemId, decimal UnitPrice, decimal? Quantity);
 public record InternalProposalRequest(Guid SupplierId, int? DeliveryDays, string? PaymentTerms, decimal? FreightValue,
     DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items, decimal? DiscountValue, string? Currency,

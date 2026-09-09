@@ -9,11 +9,29 @@ import { AbrirCotacao, linkDoProcesso } from './AbrirCotacao';
 
 vi.mock('@/api/cotacoes', async (importar) => ({
   ...(await importar<typeof import('@/api/cotacoes')>()),
-  filaDeCotacao: vi.fn(), abrirProcesso: vi.fn(),
+  filaDeCotacao: vi.fn(), abrirProcesso: vi.fn(), fecharPorContrato: vi.fn(),
 }));
+vi.mock('@/api/fornecedores', () => ({ listarFornecedores: vi.fn() }));
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => eu }));
 
-import { abrirProcesso, filaDeCotacao } from '@/api/cotacoes';
+import { abrirProcesso, fecharPorContrato, filaDeCotacao } from '@/api/cotacoes';
+import { listarFornecedores } from '@/api/fornecedores';
+
+/** Fornecedor da lista, com o contrato no estado que o teste precisa. */
+const parceiro = (over: { id: string; nome: string; vigente: boolean; itens?: number }) => ({
+  id: over.id, legalName: over.nome, tradeName: over.nome, taxId: '12345678000190',
+  email: null, phone: '81 3333-1000', active: true,
+  homologationStatus: 'HOMOLOGADO' as const, effectiveHomologation: 'HOMOLOGADO' as const,
+  documents: [],
+  contract: {
+    number: 'CT-2026-001', validFrom: null, validUntil: '2026-12-31', notes: null,
+    valueLimit: null, consumed: null, balance: null, current: over.vigente,
+    items: Array.from({ length: over.itens ?? 2 }, () => ({
+      catalogItemId: null, catalogCode: null, description: 'Bota', unitOfMeasure: 'PAR',
+      unitPrice: 45, paymentTerms: null, paymentDays: null, deliveryDays: null, notes: null,
+    })),
+  },
+});
 
 let eu: Usuario = {
   id: 'u1', email: 'carla@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['COMPRAS'],
@@ -84,6 +102,9 @@ describe('tela Abrir Cotação', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     eu = { id: 'u1', email: 'carla@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['COMPRAS'] };
+    // o resetAllMocks apaga a implementação da fábrica: sem repor, a tela chamaria
+    // `.then` em undefined ao carregar os parceiros
+    vi.mocked(listarFornecedores).mockResolvedValue([]);
   });
 
   it('a SC retida não é selecionável e mostra de quem é a aprovação', async () => {
@@ -172,5 +193,64 @@ describe('tela Abrir Cotação', () => {
     await screen.findByTestId('fila-cotacao');
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Um processo com os itens/ })).not.toBeInTheDocument();
+  });
+
+  describe('fechar pelo contrato de parceria', () => {
+    const comFila = async () => {
+      vi.mocked(filaDeCotacao).mockResolvedValue([sc({})]);
+      abrir();
+      await waitFor(() => expect(screen.getByTestId('fila-cotacao')).toBeInTheDocument());
+    };
+
+    it('só aparece quando existe fornecedor com contrato vigente', async () => {
+      // contrato vencido não é opção: fechar por ele seria fechar por um preço
+      // que já não vale, e é o mesmo CT-ERR-020 que o servidor recusaria
+      vi.mocked(listarFornecedores).mockResolvedValue([
+        parceiro({ id: 'f1', nome: 'Vencido', vigente: false }),
+      ] as never);
+      await comFila();
+      expect(screen.queryByTestId('fechar-por-contrato')).not.toBeInTheDocument();
+    });
+
+    it('contrato vigente mas sem item cadastrado também não conta', async () => {
+      // contrato sem produto não fixa preço de nada — oferecer o caminho aqui
+      // levaria direto ao CT-ERR-021 para todos os itens
+      vi.mocked(listarFornecedores).mockResolvedValue([
+        parceiro({ id: 'f1', nome: 'Sem itens', vigente: true, itens: 0 }),
+      ] as never);
+      await comFila();
+      expect(screen.queryByTestId('fechar-por-contrato')).not.toBeInTheDocument();
+    });
+
+    it('com parceiro vigente, fecha os itens marcados pelo contrato escolhido', async () => {
+      vi.mocked(listarFornecedores).mockResolvedValue([
+        parceiro({ id: 'f1', nome: 'Pernambuco', vigente: true }),
+      ] as never);
+      vi.mocked(fecharPorContrato).mockResolvedValue({ id: 'q9', number: 'RFQ-2026-000009' });
+      await comFila();
+
+      const painel = screen.getByTestId('fechar-por-contrato');
+      const botao = within(painel).getByRole('button', { name: /Fechar pelo contrato/ });
+      // sem fornecedor escolhido o botão não libera, mesmo com item marcado
+      await userEvent.click(screen.getAllByRole('checkbox')[0]);
+      expect(botao).toBeDisabled();
+
+      await userEvent.selectOptions(
+        within(painel).getByLabelText('Fornecedor parceiro'), 'f1');
+      expect(botao).toBeEnabled();
+
+      await userEvent.click(botao);
+      await waitFor(() => expect(fecharPorContrato)
+        .toHaveBeenCalledWith(['i1'], 'f1'));
+    });
+
+    it('o número do contrato aparece na opção, para não escolher o parceiro errado', async () => {
+      vi.mocked(listarFornecedores).mockResolvedValue([
+        parceiro({ id: 'f1', nome: 'Pernambuco', vigente: true }),
+      ] as never);
+      await comFila();
+      expect(within(screen.getByTestId('fechar-por-contrato'))
+        .getByRole('option', { name: /Pernambuco — contrato CT-2026-001/ })).toBeInTheDocument();
+    });
   });
 });

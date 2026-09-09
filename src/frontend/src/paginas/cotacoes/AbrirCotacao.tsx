@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  abrirProcesso, agruparPorFamilia, filaDeCotacao, ROTULO_TIPO, situacaoDaSelecao,
+  abrirProcesso, agruparPorFamilia, fecharPorContrato, filaDeCotacao, ROTULO_TIPO, situacaoDaSelecao,
   type ScNaFila, type TipoCotacao,
 } from '@/api/cotacoes';
 import { Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
@@ -9,6 +9,7 @@ import { Confirmacao } from '@/componentes/Dialogo';
 import { Nota } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
 import { podeConduzirCotacao } from '@/dominio/papeis';
+import { listarFornecedores, type Fornecedor } from '@/api/fornecedores';
 import { useUsuario } from '@/sessao/SessaoProvider';
 import { moeda, quantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
@@ -35,6 +36,30 @@ export function AbrirCotacao() {
 
   const { dados, erro, carregando, recarregar } = useCarregar(filaDeCotacao, []);
   const fila = dados ?? [];
+  const [parceiro, setParceiro] = useState('');
+  const [parceiros, setParceiros] = useState<Fornecedor[]>([]);
+
+  // Só fornecedor com contrato VIGENTE aparece aqui. Oferecer um contrato vencido seria
+  // convidar o comprador a fechar por um preço que já não vale — a mesma régua que o
+  // servidor aplica em CT-ERR-020, antecipada na tela para ele não descobrir no erro.
+  useEffect(() => {
+    if (!conduz) return;
+    const controle = new AbortController();
+    listarFornecedores(false, controle.signal)
+      .then((f) => setParceiros(f.filter((x) => x.contract?.current && x.contract.items.length > 0)))
+      .catch(() => setParceiros([]));
+    return () => controle.abort();
+  }, [conduz]);
+
+  async function fecharContrato() {
+    setAbrindo(true);
+    try {
+      const q = await fecharPorContrato(lista.map((m) => m.id), parceiro);
+      avisar(`Processo ${q.number} fechado pelo contrato e enviado para aprovação.`);
+      navegar(linkDoProcesso(q.id));
+    } catch (e) { avisar(mensagem(e, 'Falha ao fechar pelo contrato.'), 'erro'); }
+    finally { setAbrindo(false); }
+  }
   const lista = useMemo(() => Object.values(marcados), [marcados]);
   const selecao = situacaoDaSelecao(lista);
 
@@ -132,6 +157,36 @@ export function AbrirCotacao() {
                 Um processo por família ({selecao.familias})
               </button>
             </div>
+
+            {/* Terceiro caminho: o item contratado não precisa de novo BID. Fica separado
+                dos outros dois porque não é "abrir cotação" — é fechar uma decisão que já
+                foi tomada quando o contrato foi assinado. */}
+            {parceiros.length > 0 && (
+              <div className="mt-3 border-t border-borda pt-3" data-testid="fechar-por-contrato">
+                <p className="sub mb-2">
+                  Ou <strong>feche pelo contrato de parceria</strong>: o preço já foi acordado, então
+                  o processo vai direto para aprovação, sem convite nem espera. Item fora do contrato
+                  não entra — o sistema diz qual é para você separar.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select aria-label="Fornecedor parceiro" className="w-auto"
+                    value={parceiro} onChange={(e) => setParceiro(e.target.value)}>
+                    <option value="">Escolha o fornecedor parceiro…</option>
+                    {parceiros.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.tradeName ?? f.legalName}
+                        {f.contract.number ? ` — contrato ${f.contract.number}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <button type="button" className="botao-secundario"
+                    disabled={!parceiro || !selecao.podeJuntar || abrindo}
+                    onClick={fecharContrato}>
+                    Fechar pelo contrato ({selecao.total})
+                  </button>
+                </div>
+              </div>
+            )}
             {selecao.aviso && <p className="mt-2 text-[12.5px] text-perigo">{selecao.aviso}</p>}
           </div>
         )}

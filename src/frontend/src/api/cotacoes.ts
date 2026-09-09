@@ -93,6 +93,16 @@ export const abrirProcesso = (dados: NovoProcesso) =>
   api<{ id: string; number: string }>('/api/v1/quotations/', { method: 'POST', body: dados });
 
 /**
+ * Fecha os itens pelo contrato de parceria: o processo nasce já decidido, com o preço
+ * acordado, e para nas aprovações. Não pula o BID — reconhece que ele aconteceu quando o
+ * contrato foi negociado. Item fora do contrato é recusado (CT-ERR-021) com o nome dele
+ * na mensagem, para o comprador separar o que fecha do que ainda precisa ser cotado.
+ */
+export const fecharPorContrato = (prItemIds: string[], supplierId: string) =>
+  api<{ id: string; number: string }>('/api/v1/quotations/por-contrato',
+    { method: 'POST', body: { prItemIds, supplierId } });
+
+/**
  * Itens marcados na fila, agrupados por família — a base das duas ações da
  * tela: um processo só, ou um processo por família.
  */

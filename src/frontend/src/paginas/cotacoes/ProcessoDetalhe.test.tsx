@@ -10,8 +10,9 @@ import { ToastProvider } from '@/componentes/Toast';
 import { ProcessoDetalhe } from './ProcessoDetalhe';
 import { textoDoConvite } from './PainelDeConvidados';
 import { candidatasDaFamilia, impedimentoDaProposta, propostasDaFamilia } from './AcoesDoProcesso';
-import { daCondicao, montarProposta } from './PainelPropostaManual';
+import { daCondicao, doContrato, montarProposta } from './PainelPropostaManual';
 import { lote, oferta, processo, proposta } from '@/test/cotacoes';
+import { precosDeContrato } from '@/api/cotacoes';
 import { listarCondicoesDePagamento, listarFormasDePagamento } from '@/api/pagamentos';
 
 vi.mock('@/api/cotacoes', async (importar) => ({
@@ -19,8 +20,54 @@ vi.mock('@/api/cotacoes', async (importar) => ({
   lerProcesso: vi.fn(), convidarFornecedor: vi.fn(), encerrarParaAnalise: vi.fn(),
   escolherVencedor: vi.fn(), decidir: vi.fn(), registrarOc: vi.fn(),
   registrarNegociacao: vi.fn(), cancelarProcesso: vi.fn(), registrarProposta: vi.fn(),
-  anexarNaProposta: vi.fn(), mapaDeFamilias: vi.fn(),
+  anexarNaProposta: vi.fn(), mapaDeFamilias: vi.fn(), precosDeContrato: vi.fn(),
 }));
+describe('preço vindo do contrato de parceria', () => {
+  const cobertura = (over = {}) => ({
+    current: true, contractNumber: 'CT-2026-001', validUntil: '2026-12-31',
+    items: [
+      { quotationItemId: 'i-pvc', description: 'BOTA BIQUEIRA DE PVC', unitPrice: 45,
+        deliveryDays: 7, paymentTerms: '30 dias', paymentDays: 30 },
+      { quotationItemId: 'i-aco', description: 'BOTA BIQUEIRA DE AÇO', unitPrice: 72,
+        deliveryDays: 10, paymentTerms: '30 dias', paymentDays: 30 },
+    ],
+    ...over,
+  });
+
+  it('preenche o preço de cada item coberto, e o prazo e a condição do contrato', () => {
+    const { precos, campos } = doContrato(cobertura(), {}, {});
+    expect(precos).toEqual({ 'i-pvc': '45', 'i-aco': '72' });
+    expect(campos.prazoEntrega).toBe('7');
+    expect(campos.condicaoPagamento).toBe('30 dias');
+    expect(campos.prazoPagamento).toBe('30');
+  });
+
+  it('não escreve por cima do que o comprador já digitou', () => {
+    // ele pode ter fechado melhor que o contrato; apagar seria o formulário
+    // desfazendo a negociação que acabou de ser feita
+    const { precos, campos } = doContrato(cobertura(), { 'i-pvc': '40' }, { prazoEntrega: '3' });
+    expect(precos['i-pvc']).toBe('40');
+    expect(precos['i-aco']).toBe('72');
+    expect(campos.prazoEntrega).toBe('3');
+  });
+
+  it('contrato fora da vigência não preenche nada', () => {
+    // preço vencido entrando calado é pior que campo vazio: fecharia por valor que não vale
+    expect(doContrato(cobertura({ current: false }), {}, {})).toEqual({ precos: {}, campos: {} });
+  });
+
+  it('sem contrato, o formulário segue como era', () => {
+    expect(doContrato(null, { 'i-pvc': '9' }, {})).toEqual({ precos: { 'i-pvc': '9' }, campos: {} });
+    expect(doContrato(cobertura({ items: [] }), {}, {})).toEqual({ precos: {}, campos: {} });
+  });
+
+  it('preço zero do contrato ainda é preço e é preenchido', () => {
+    const c = cobertura({ items: [{ quotationItemId: 'i-x', description: 'Brinde',
+      unitPrice: 0, deliveryDays: null, paymentTerms: null, paymentDays: null }] });
+    expect(doContrato(c, {}, {}).precos).toEqual({ 'i-x': '0' });
+  });
+});
+
 vi.mock('@/api/pagamentos', () => ({
   listarFormasDePagamento: vi.fn().mockResolvedValue([]),
   listarCondicoesDePagamento: vi.fn().mockResolvedValue([]),
@@ -148,8 +195,20 @@ describe('regras das ações por etapa', () => {
       expect(acoesDisponiveis(processo({ status }), conduz).cancelar).toBe(false);
     expect(acoesDisponiveis(processo({ status: 'EM_ANALISE' }), conduz).cancelar).toBe(true);
   });
-  it('mais de uma família manda escolher fornecedor por família', () => {
-    expect(acoesDisponiveis(processo({ families: ['EPI', 'FERRAMENTA'] }), conduz).porFamilia).toBe(true);
+  it('mais de um item manda escolher na grade item × fornecedor', () => {
+    // o critério deixou de ser a família: a divisão passou a poder acontecer DENTRO de
+    // uma família só (o papel com um fornecedor, a caneta com outro)
+    const item = (id: string, description: string) => ({
+      id, sequence: 1, catalogCode: null, description, quantity: 10,
+      unitOfMeasure: 'UN', sourcePrNumber: null, family: 'MATERIAL DE ESCRITORIO',
+    });
+    const doisItens = processo({
+      families: ['MATERIAL DE ESCRITORIO'],
+      items: [item('i1', 'Papel ofício A4'), item('i2', 'Caixa de caneta')],
+    });
+    expect(acoesDisponiveis(doisItens, conduz).porItem).toBe(true);
+    // um item só não vira grade: a escolha simples diz mais, com prazo e condição
+    expect(acoesDisponiveis(processo({ items: [item('i1', 'Papel')] }), conduz).porItem).toBe(false);
   });
   it('só concorre a uma família quem cotou a família inteira', () => {
     const q = processo({
@@ -307,6 +366,8 @@ describe('tela do processo', () => {
     // sem repor aqui, o painel de proposta chamaria `.then` em undefined
     vi.mocked(listarFormasDePagamento).mockResolvedValue([]);
     vi.mocked(listarCondicoesDePagamento).mockResolvedValue([]);
+    vi.mocked(precosDeContrato).mockResolvedValue(
+      { current: false, contractNumber: null, validUntil: null, items: [] });
   });
 
   it('fornecedor fora do cadastro entra na cotação só com razão social e telefone', async () => {

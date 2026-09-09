@@ -640,6 +640,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(a => a.Id).HasColumnName("id");
             e.Property(a => a.QuotationId).HasColumnName("quotation_id");
             e.Property(a => a.Family).HasColumnName("family").HasMaxLength(120).IsRequired();
+            e.Property(a => a.QuotationItemId).HasColumnName("quotation_item_id");
             e.Property(a => a.SupplierId).HasColumnName("supplier_id");
             e.Property(a => a.SupplierName).HasColumnName("supplier_name").HasMaxLength(300);
             e.Property(a => a.ProposalId).HasColumnName("proposal_id");
@@ -653,8 +654,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(a => a.SelectedAt).HasColumnName("selected_at");
             e.Property(a => a.PurchaseOrderId).HasColumnName("purchase_order_id");
             e.Property(a => a.PurchaseOrderNumber).HasColumnName("purchase_order_number").HasMaxLength(30);
-            // uma família só é adjudicada uma vez por processo
-            e.HasIndex(a => new { a.QuotationId, a.Family }).IsUnique();
+            // Um escopo é adjudicado uma vez só por processo. O escopo passou a ser
+            // (família, item), porque a mesma família agora se divide entre fornecedores —
+            // com `quotation_item_id` nulo significando a família inteira. Os nulos entram
+            // na comparação (`NULLS NOT DISTINCT`): sem isso o banco deixaria passar duas
+            // adjudicações da mesma família inteira, que é exatamente o que este índice
+            // impedia antes.
+            e.HasIndex(a => new { a.QuotationId, a.Family, a.QuotationItemId })
+                .IsUnique().AreNullsDistinct(false);
         });
 
         modelBuilder.Entity<QuotationItem>(e =>

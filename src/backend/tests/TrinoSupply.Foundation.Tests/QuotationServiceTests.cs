@@ -1056,6 +1056,162 @@ public class QuotationServiceTests
         return analise!;
     }
 
+    /// <summary>
+    /// Mundo do caso do cliente: <b>uma família só</b>, com dois itens, e os preços cruzados —
+    /// a Alfa é mais barata no papel, a Beta na caneta. Antes da adjudicação por item, esta
+    /// compra era obrigada a ir inteira para um dos dois.
+    /// </summary>
+    private static async Task<(SplitWorld W, Quotation Q, QuotationItem Papel, QuotationItem Caneta)>
+        MesmaFamiliaAsync()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        var db = new AppDbContext(options);
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero));
+        var catalog = new CatalogService(db, clock);
+        var rfq = new QuotationService(db, clock);
+        var prs = new RequisitionService(db, new FakeNumbers(), catalog, clock);
+        var sup = new SupplierService(db, clock);
+
+        var (alfa, _) = await sup.CreateAsync(Carla.Id, "Alfa LTDA", "Alfa", "12345678000190", null, "81 3333-1000");
+        var (beta, _) = await sup.CreateAsync(Carla.Id, "Beta LTDA", "Beta", "98765432000110", null, "81 3333-2000");
+        await sup.SetHomologationAsync(alfa!.Id, SupplierHomologation.Homologado);
+        await sup.SetHomologationAsync(beta!.Id, SupplierHomologation.Homologado);
+
+        var (papelCat, _) = await catalog.CreateAsync(Gustavo.Id, "ESC-001", "Papel ofício A4", "MATERIAL DE ESCRITORIO", "RS", 5m);
+        var (canetaCat, _) = await catalog.CreateAsync(Gustavo.Id, "ESC-002", "Caixa de caneta", "MATERIAL DE ESCRITORIO", "CX", 4m);
+
+        var (pr, _) = await prs.CreateAsync(Ana, "Material de escritório", "CC-01", "NORMAL", null,
+            [new ItemInput("", 10, null, null, null, papelCat!.Id), new ItemInput("", 10, null, null, null, canetaCat!.Id)],
+            "CATALOGO");
+        await prs.SubmitAsync(Ana, pr!.Id);
+        await prs.ApproveAsync(Bruno, pr.Id, null);
+
+        var w = new SplitWorld(rfq, prs, sup, db, alfa, beta, pr);
+        var (q, _) = await rfq.CreateFromPrAsync(Carla, pr.Id, QuotationKind.Purchase, null, null);
+        await rfq.InviteSuppliersAsync(Carla, q!.Id, [alfa.Id, beta.Id]);
+        var papel = q.Items.Single(i => i.Description.Contains("Papel"));
+        var caneta = q.Items.Single(i => i.Description.Contains("caneta"));
+
+        // Alfa: papel a 5 (melhor) e caneta a 4        → 50 + 40 = 90
+        await rfq.SubmitProposalAsync(q.Id, alfa.Id, new ProposalInput(5, "30 dias", null, null, null,
+            [new ProposalItemInput(papel.Id, 5m, null), new ProposalItemInput(caneta.Id, 4m, null)]), "PORTAL", "Alfa");
+        // Beta: papel a 7 e caneta a 3 (melhor)        → 70 + 30 = 100
+        await rfq.SubmitProposalAsync(q.Id, beta.Id, new ProposalInput(8, "28 dias", null, null, null,
+            [new ProposalItemInput(papel.Id, 7m, null), new ProposalItemInput(caneta.Id, 3m, null)]), "PORTAL", "Beta");
+        var (analise, _) = await rfq.CloseForAnalysisAsync(Carla, q.Id);
+        return (w, analise!, papel, caneta);
+    }
+
+    /// <summary>
+    /// O pedido do cliente, ao pé da letra: mesma família, o papel vai para um fornecedor e a
+    /// caneta para outro. Antes isso era impossível — a família era indivisível, e a compra
+    /// inteira ia para quem tivesse o melhor total.
+    /// </summary>
+    [Fact]
+    public async Task Itens_da_mesma_familia_podem_ir_para_fornecedores_diferentes()
+    {
+        var (w, q, papel, caneta) = await MesmaFamiliaAsync();
+        var alfa = q.Proposals.Single(p => p.SupplierId == w.Alfa.Id);
+        var beta = q.Proposals.Single(p => p.SupplierId == w.Beta.Id);
+
+        var (dividida, error) = await w.Rfq.AwardByItemAsync(Carla, q.Id, [
+            new AwardInput("", alfa.Id, "Preço", "Alfa tem o melhor preço no papel.", papel.Id),
+            new AwardInput("", beta.Id, "Preço", "Beta tem o melhor preço na caneta.", caneta.Id),
+        ]);
+
+        Assert.Null(error);
+        Assert.True(dividida!.IsSplitAward);
+        Assert.Equal(2, dividida.AwardList.Count);
+
+        var doPapel = dividida.AwardList.Single(a => a.QuotationItemId == papel.Id);
+        var daCaneta = dividida.AwardList.Single(a => a.QuotationItemId == caneta.Id);
+        Assert.Equal(w.Alfa.Id, doPapel.SupplierId);
+        Assert.Equal(w.Beta.Id, daCaneta.SupplierId);
+        Assert.Equal(50m, doPapel.TotalValue);   // 10 × 5
+        Assert.Equal(30m, daCaneta.TotalValue);  // 10 × 3
+
+        // a família vem do item: a tela não precisa repeti-la, e não pode errá-la
+        Assert.All(dividida.AwardList, a => Assert.Equal("MATERIAL DE ESCRITORIO", a.Family));
+
+        // e dividir é mais barato do que qualquer fornecedor sozinho (Alfa 90, Beta 100)
+        Assert.Equal(80m, dividida.AwardList.Sum(a => a.TotalValue));
+    }
+
+    /// <summary>Item sem vencedor trava a adjudicação — a compra não pode sair pela metade.</summary>
+    [Fact]
+    public async Task Item_sem_vencedor_impede_fechar_a_adjudicacao()
+    {
+        var (w, q, papel, _) = await MesmaFamiliaAsync();
+        var alfa = q.Proposals.Single(p => p.SupplierId == w.Alfa.Id);
+
+        var (nada, erro) = await w.Rfq.AwardByItemAsync(Carla, q.Id, [
+            new AwardInput("", alfa.Id, "Preço", "Só o papel.", papel.Id),
+        ]);
+        Assert.Null(nada);
+        Assert.Equal("RFQ-ERR-023", erro!.Code);
+        // a mensagem diz QUAL item falta, não só que falta algum
+        Assert.Contains("Caixa de caneta", erro.Message);
+    }
+
+    /// <summary>O mesmo item adjudicado duas vezes é o furo que o índice único também barra.</summary>
+    [Fact]
+    public async Task Item_adjudicado_duas_vezes_e_recusado()
+    {
+        var (w, q, papel, caneta) = await MesmaFamiliaAsync();
+        var alfa = q.Proposals.Single(p => p.SupplierId == w.Alfa.Id);
+        var beta = q.Proposals.Single(p => p.SupplierId == w.Beta.Id);
+
+        var (nada, erro) = await w.Rfq.AwardByItemAsync(Carla, q.Id, [
+            new AwardInput("", alfa.Id, "Preço", "Papel com a Alfa.", papel.Id),
+            new AwardInput("", beta.Id, "Preço", "Papel com a Beta também?", papel.Id),
+            new AwardInput("", beta.Id, "Preço", "Caneta com a Beta.", caneta.Id),
+        ]);
+        Assert.Null(nada);
+        Assert.Equal("RFQ-ERR-023", erro!.Code);
+        Assert.Contains("Papel ofício A4", erro.Message);
+    }
+
+    /// <summary>
+    /// A régua de "cotou?" acompanha o grão: por item, basta ter cotado AQUELE item. É o que
+    /// destrava o fornecedor que só quis cotar parte da família — antes ele era recusado pelo
+    /// RFQ-ERR-024 por não cobrir a família inteira.
+    /// </summary>
+    [Fact]
+    public async Task Por_item_basta_ter_cotado_aquele_item()
+    {
+        var (w, q, papel, caneta) = await MesmaFamiliaAsync();
+        var alfa = q.Proposals.Single(p => p.SupplierId == w.Alfa.Id);
+        var beta = q.Proposals.Single(p => p.SupplierId == w.Beta.Id);
+
+        // uma proposta nova da Beta, só com a caneta: não cobre a família inteira
+        await w.Rfq.SubmitProposalAsync(q.Id, w.Beta.Id, new ProposalInput(8, "28 dias", null, null, null,
+            [new ProposalItemInput(caneta.Id, 2m, null)]), "PORTAL", "Beta");
+        var q2 = await w.Rfq.GetAsync(q.Id);
+        var betaSoCaneta = q2!.Proposals.Where(p => p.SupplierId == w.Beta.Id)
+            .OrderByDescending(p => p.VersionNumber).First();
+        Assert.NotEqual(beta.Id, betaSoCaneta.Id);
+
+        // o item que ela NÃO cotou continua barrado, com o nome do item na mensagem.
+        // Vem antes do caminho feliz de propósito: a adjudicação que dá certo tira o
+        // processo da análise, e daí em diante toda chamada leva RFQ-ERR-020
+        var (nada, erro) = await w.Rfq.AwardByItemAsync(Carla, q.Id, [
+            new AwardInput("", betaSoCaneta.Id, "Preço", "Papel com a Beta?", papel.Id),
+            new AwardInput("", betaSoCaneta.Id, "Preço", "Caneta com a Beta.", caneta.Id),
+        ]);
+        Assert.Null(nada);
+        Assert.Equal("RFQ-ERR-024", erro!.Code);
+        Assert.Contains("Papel ofício A4", erro.Message);
+
+        // e a caneta, que ela cotou, passa — mesmo sem a proposta cobrir a família inteira
+        var (dividida, error) = await w.Rfq.AwardByItemAsync(Carla, q.Id, [
+            new AwardInput("", alfa.Id, "Preço", "Papel com a Alfa.", papel.Id),
+            new AwardInput("", betaSoCaneta.Id, "Preço", "Caneta com a Beta, a 2.", caneta.Id),
+        ]);
+        Assert.Null(error);
+        Assert.Equal(20m, dividida!.AwardList.Single(a => a.QuotationItemId == caneta.Id).TotalValue);
+    }
+
     /// <summary>A família do item vem do catálogo e é o lote da adjudicação.</summary>
     [Fact]
     public async Task Itens_da_cotacao_carregam_a_familia_do_catalogo()
@@ -1472,5 +1628,113 @@ public class QuotationServiceTests
         var itemFer = ticket.Items!.Single(i => i.Id == chave.Id);
         Assert.Null(itemFer.QuotationNumber);
         Assert.Equal(ProcessStatus.Pending.Key, itemFer.Process!.Key);
+    }
+
+    // ---- preço vindo do contrato de parceria -------------------------------
+
+    /// <summary>
+    /// Mundo do caso relatado: contrato de parceria com dois itens de catálogo cujos nomes
+    /// quase se repetem — bota de PVC e bota de aço. A SC pede os dois.
+    /// </summary>
+    private static async Task<(SplitWorld W, Quotation Q, QuotationItem Pvc, QuotationItem Aco)>
+        ContratoDeBotasAsync(DateOnly? validoAte = null)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        var db = new AppDbContext(options);
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero));
+        var catalog = new CatalogService(db, clock);
+        var rfq = new QuotationService(db, clock);
+        var prs = new RequisitionService(db, new FakeNumbers(), catalog, clock);
+        var sup = new SupplierService(db, clock);
+
+        var (pernambuco, _) = await sup.CreateAsync(Carla.Id, "Pernambuco Distribuidora LTDA",
+            "Pernambuco", "12345678000190", null, "81 3333-1000");
+        var (outro, _) = await sup.CreateAsync(Carla.Id, "Ferramentas Gerais LTDA",
+            "Ferramentas Gerais", "98765432000110", null, "81 3333-2000");
+        await sup.SetHomologationAsync(pernambuco!.Id, SupplierHomologation.Homologado);
+
+        var (pvcCat, _) = await catalog.CreateAsync(Gustavo.Id, "EPI-010", "BOTA BIQUEIRA DE PVC", "EPI", "PAR", 50m);
+        var (acoCat, _) = await catalog.CreateAsync(Gustavo.Id, "EPI-011", "BOTA BIQUEIRA DE AÇO", "EPI", "PAR", 80m);
+
+        await sup.SaveContractAsync(pernambuco.Id, "CT-2026-001",
+            new DateOnly(2026, 1, 1), validoAte ?? new DateOnly(2026, 12, 31), null,
+            [
+                new SupplierService.ContractItemInput(pvcCat!.Id, "BOTA BIQUEIRA DE PVC", "EPI-010", "PAR", 45m, "30 dias", 30, 7, null),
+                new SupplierService.ContractItemInput(acoCat!.Id, "BOTA BIQUEIRA DE AÇO", "EPI-011", "PAR", 72m, "30 dias", 30, 10, null),
+            ]);
+
+        var (pr, _) = await prs.CreateAsync(Ana, "Reposição de botas", "CC-01", "NORMAL", null,
+            [new ItemInput("", 1, null, null, null, pvcCat.Id), new ItemInput("", 1, null, null, null, acoCat.Id)],
+            "CATALOGO");
+        await prs.SubmitAsync(Ana, pr!.Id);
+        await prs.ApproveAsync(Bruno, pr.Id, null);
+
+        var (q, _) = await rfq.CreateFromPrAsync(Carla, pr.Id, QuotationKind.Purchase, null, null);
+        await rfq.InviteSuppliersAsync(Carla, q!.Id, [pernambuco.Id, outro!.Id]);
+        var w = new SplitWorld(rfq, prs, sup, db, pernambuco, outro, pr);
+        return (w, q, q.Items.Single(i => i.Description.Contains("PVC")), q.Items.Single(i => i.Description.Contains("AÇO")));
+    }
+
+    /// <summary>
+    /// O caso relatado: com contrato de parceria vigente, o preço do item vem do contrato
+    /// em vez de o comprador redigitar o que já foi combinado.
+    /// </summary>
+    [Fact]
+    public async Task Contrato_vigente_devolve_o_preco_de_cada_item_do_processo()
+    {
+        var (w, q, pvc, aco) = await ContratoDeBotasAsync();
+        var cobertura = await w.Rfq.ContractPricesAsync(q.Id, w.Alfa.Id);
+
+        Assert.True(cobertura.Current);
+        Assert.Equal("CT-2026-001", cobertura.ContractNumber);
+        Assert.Equal(45m, cobertura.Items.Single(i => i.QuotationItemId == pvc.Id).UnitPrice);
+        Assert.Equal(72m, cobertura.Items.Single(i => i.QuotationItemId == aco.Id).UnitPrice);
+        // prazo de entrega e condição também vêm do contrato: são parte do que foi acordado
+        Assert.Equal(7, cobertura.Items.Single(i => i.QuotationItemId == pvc.Id).DeliveryDays);
+        Assert.Equal("30 dias", cobertura.Items.Single(i => i.QuotationItemId == aco.Id).PaymentTerms);
+    }
+
+    /// <summary>
+    /// Nomes quase iguais não podem trocar de preço. É por isso que o casamento é pelo
+    /// produto do catálogo, e nunca pela descrição.
+    /// </summary>
+    [Fact]
+    public async Task Itens_de_nome_parecido_nao_trocam_de_preco()
+    {
+        var (w, q, pvc, aco) = await ContratoDeBotasAsync();
+        var cobertura = await w.Rfq.ContractPricesAsync(q.Id, w.Alfa.Id);
+
+        var doPvc = cobertura.Items.Single(i => i.QuotationItemId == pvc.Id);
+        var doAco = cobertura.Items.Single(i => i.QuotationItemId == aco.Id);
+        Assert.Contains("PVC", doPvc.Description);
+        Assert.Equal(45m, doPvc.UnitPrice);
+        Assert.Contains("AÇO", doAco.Description);
+        Assert.Equal(72m, doAco.UnitPrice);
+    }
+
+    /// <summary>
+    /// Contrato fora da vigência não preenche nada. Preço vencido entrando calado na
+    /// proposta é pior que campo vazio: o comprador fecharia por um valor que não vale mais.
+    /// </summary>
+    [Fact]
+    public async Task Contrato_vencido_nao_preenche_preco()
+    {
+        var (w, q, _, _) = await ContratoDeBotasAsync(validoAte: new DateOnly(2026, 6, 30));
+        var cobertura = await w.Rfq.ContractPricesAsync(q.Id, w.Alfa.Id);
+
+        Assert.False(cobertura.Current);
+        Assert.Empty(cobertura.Items);
+    }
+
+    /// <summary>Fornecedor sem contrato continua cotando do zero — é o caminho normal.</summary>
+    [Fact]
+    public async Task Fornecedor_sem_contrato_nao_traz_preco()
+    {
+        var (w, q, _, _) = await ContratoDeBotasAsync();
+        var cobertura = await w.Rfq.ContractPricesAsync(q.Id, w.Beta.Id);
+
+        Assert.False(cobertura.Current);
+        Assert.Empty(cobertura.Items);
     }
 }

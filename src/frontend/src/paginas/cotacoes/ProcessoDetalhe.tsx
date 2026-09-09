@@ -15,7 +15,8 @@ import { podeAprovarDiretor, podeAprovarGerente, podeConduzirCotacao } from '@/d
 import { useUsuario } from '@/sessao/SessaoProvider';
 import { moeda } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
-import { FormAdjudicacao, FormRegistroOc, FormVencedor } from './AcoesDoProcesso';
+import { FormRegistroOc, FormVencedor, useLotesDoProcesso } from './AcoesDoProcesso';
+import { GradeDeAdjudicacao } from './GradeDeAdjudicacao';
 import { CabecalhoDoProcesso } from './CabecalhoDoProcesso';
 import { MapaDeCotacao } from './MapaDeCotacao';
 import { PainelDeConvidados } from './PainelDeConvidados';
@@ -46,6 +47,9 @@ export function ProcessoDetalhe() {
 
   const { dados, erro, carregando, recarregar } = useCarregar(
     (signal) => lerProcesso(id, signal), [id]);
+  // antes dos returns antecipados: hook que só roda às vezes muda a contagem entre
+  // renders, e o React aborta a árvore inteira. Por isso ele aceita processo nulo
+  const lotes = useLotesDoProcesso(dados);
 
   if (erro) return <Painel><Erro>{erro}</Erro></Painel>;
   if (!dados) return <Painel>{carregando && <Carregando texto="Abrindo o processo…" />}</Painel>;
@@ -159,8 +163,8 @@ export function ProcessoDetalhe() {
             </div>
           )}
 
-          {pode.escolherVencedor && (pode.porFamilia
-            ? <FormAdjudicacao processo={q} aoConcluir={recarregar} aoAvisar={aviso} />
+          {pode.escolherVencedor && (pode.porItem
+            ? <GradeDeAdjudicacao processo={q} lotes={lotes} aoConcluir={recarregar} aoAvisar={aviso} />
             : <FormVencedor processo={q} aoConcluir={recarregar} aoAvisar={aviso} />)}
 
           {pode.conflitoSegregacao && (

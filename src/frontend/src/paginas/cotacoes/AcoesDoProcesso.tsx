@@ -21,16 +21,24 @@ const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message
  * Falha na leitura não trava nada: sem o mapa a escolha volta a ser a de antes
  * e quem barra é a API — melhor o botão que falha do que a ação escondida.
  */
-function useLotes(processo: Processo): LoteDaFamilia[] | null {
+export function useLotesDoProcesso(processo: Processo | null): LoteDaFamilia[] | null {
+  // a tela do processo carrega o mapa uma vez e reparte entre a grade e os impedimentos:
+  // duas buscas do mesmo dado divergiriam no primeiro instante entre uma e outra
+  return useLotes(processo);
+}
+
+function useLotes(processo: Processo | null): LoteDaFamilia[] | null {
   // A chave inclui as propostas vigentes, e não só o id do processo: registrar uma
   // negociação cria uma versão NOVA da proposta, e o mapa preso ao id continuava
   // devolvendo o da versão anterior. A tela então não achava a proposta atual no
   // lote e concluía que o fornecedor "não cotou nenhum item" — logo o fornecedor
   // com quem se acabou de negociar. Mudou a lista de propostas, o mapa é refeito.
-  const chave = propostasVigentes(processo).map((p) => `${p.id}:${p.version}`).join(',');
+  const chave = processo ? propostasVigentes(processo).map((p) => `${p.id}:${p.version}`).join(',') : '';
+  const id = processo?.id ?? '';
   const { dados } = useCarregar(async (signal) => {
-    try { return await mapaDeFamilias(processo.id, signal); } catch { return null; }
-  }, [processo.id, chave]);
+    if (!id) return null;
+    try { return await mapaDeFamilias(id, signal); } catch { return null; }
+  }, [id, chave]);
   return dados ?? null;
 }
 

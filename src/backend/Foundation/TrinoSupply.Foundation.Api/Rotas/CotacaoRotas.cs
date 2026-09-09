@@ -79,7 +79,8 @@ public static class CotacaoRotas
             // adjudicação por família: a mesma compra pode ficar com vários fornecedores, um por família
             awards = q.AwardList.Select(a => new
             {
-                id = a.Id, family = a.Family, supplierId = a.SupplierId, supplierName = a.SupplierName,
+                id = a.Id, family = a.Family, quotationItemId = a.QuotationItemId,
+                supplierId = a.SupplierId, supplierName = a.SupplierName,
                 proposalId = a.ProposalId, proposalVersion = a.ProposalVersion,
                 itemsValue = a.ItemsValue, totalValue = a.TotalValue,
                 criteria = a.Criteria, justification = a.Justification,
@@ -197,6 +198,28 @@ public static class CotacaoRotas
         });
 
         // mapa da adjudicação por família: quem cotou cada família inteira e por quanto (V2 — compra dividida)
+        // Preços que o contrato de parceria já fixou para os itens deste processo. Quem
+        // registra a proposta usa isto para não redigitar o que já foi combinado.
+        rfq.MapGet("/{id:guid}/contract-prices/{supplierId:guid}",
+            async (Guid id, Guid supplierId, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            if (!QuotationService.CanConduct(RoleOf(p)))
+                return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não registra propostas.");
+            var cobertura = await svc.ContractPricesAsync(id, supplierId);
+            return Ok(new
+            {
+                current = cobertura.Current,
+                contractNumber = cobertura.ContractNumber,
+                validUntil = cobertura.ValidUntil,
+                items = cobertura.Items.Select(i => new
+                {
+                    quotationItemId = i.QuotationItemId, description = i.Description,
+                    unitPrice = i.UnitPrice, deliveryDays = i.DeliveryDays,
+                    paymentTerms = i.PaymentTerms, paymentDays = i.PaymentDays,
+                }),
+            }, ctx);
+        });
+
         rfq.MapGet("/{id:guid}/family-map", async (Guid id, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
         {
             if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");
@@ -299,12 +322,15 @@ public static class CotacaoRotas
             if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não seleciona fornecedores.");
             var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
             var criteria = body.Criteria is { Count: > 0 } ? string.Join(", ", body.Criteria) : null;
-            // compra dividida: uma escolha por família; sem 'awards', o vencedor leva todas as famílias
+            // Compra dividida: uma escolha por escopo. O escopo é a família, ou o item quando
+            // a tela manda `quotationItemId` — que é a divisão dentro da mesma família. Sem
+            // 'awards', o vencedor leva tudo. Os três caminhos entram na mesma validação.
             var (q, error) = body.Awards is { Count: > 0 }
                 ? await svc.AwardByFamilyAsync(actor, id, body.Awards.Select(a => new AwardInput(
                         a.Family, a.ProposalId,
                         a.Criteria is { Count: > 0 } ? string.Join(", ", a.Criteria) : criteria,
-                        string.IsNullOrWhiteSpace(a.Justification) ? body.Justification : a.Justification)).ToList())
+                        string.IsNullOrWhiteSpace(a.Justification) ? body.Justification : a.Justification,
+                        a.QuotationItemId)).ToList())
                 : await svc.SelectWinnerAsync(actor, id, body.ProposalId, criteria, body.Justification);
             return error is not null ? Error(ctx, error.Code == "RFQ-ERR-020" ? 409 : 422, error.Code, error.Message) : Ok(QuotationView(q!), ctx);
         });

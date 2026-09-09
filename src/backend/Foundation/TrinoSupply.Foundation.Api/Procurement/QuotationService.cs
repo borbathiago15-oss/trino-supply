@@ -48,7 +48,13 @@ public record FamilyLot(string Family, int ItemCount, decimal Quantity, IReadOnl
 /// Escolha do fornecedor de UMA família (lote) da cotação. A mesma compra pode ter várias:
 /// cada família com o seu vencedor, a sua justificativa e, na ponta, a sua O.C.
 /// </summary>
-public record AwardInput(string Family, Guid ProposalId, string? Criteria, string Justification);
+/// <summary>
+/// Uma adjudicação pedida pela tela. <see cref="QuotationItemId"/> nulo adjudica a
+/// <b>família inteira</b>; preenchido, adjudica <b>aquele item</b> — é o que permite o
+/// papel ir para um fornecedor e a caneta para outro, dentro da mesma família.
+/// </summary>
+public record AwardInput(string Family, Guid ProposalId, string? Criteria, string Justification,
+    Guid? QuotationItemId = null);
 
 /// <summary>
 /// Processo fechado de compras (RFQ-001): PR aprovada → cotação → propostas →

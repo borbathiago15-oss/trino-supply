@@ -181,6 +181,8 @@ export interface Proposta {
 export interface Adjudicacao {
   id: string;
   family: string;
+  /** Item adjudicado quando a divisão é por item; nulo significa a família inteira. */
+  quotationItemId: string | null;
   supplierId: string;
   supplierName: string;
   proposalId: string;
@@ -324,6 +326,31 @@ export interface PropostaManual {
   items: { quotationItemId: string; unitPrice: number }[];
 }
 
+/** Preço que o contrato de parceria já fixou para um item deste processo. */
+export interface PrecoDeContrato {
+  quotationItemId: string;
+  description: string;
+  unitPrice: number;
+  deliveryDays: number | null;
+  paymentTerms: string | null;
+  paymentDays: number | null;
+}
+
+/**
+ * O que o contrato de parceria com este fornecedor já responde sobre o processo.
+ * `current` falso significa que não há contrato vigente — e aí nada é preenchido:
+ * preço de contrato vencido entrando calado na proposta é pior do que campo vazio.
+ */
+export interface CoberturaDoContrato {
+  current: boolean;
+  contractNumber: string | null;
+  validUntil: string | null;
+  items: PrecoDeContrato[];
+}
+
+export const precosDeContrato = (id: string, supplierId: string, signal?: AbortSignal) =>
+  api<CoberturaDoContrato>(`${base}/${id}/contract-prices/${supplierId}`, { signal });
+
 export const registrarProposta = (id: string, dados: PropostaManual) =>
   api<Processo>(`${base}/${id}/proposals`, { method: 'POST', body: dados });
 
@@ -347,8 +374,15 @@ export interface EscolhaDoVencedor {
   proposalId: string;
   criteria: string[];
   justification: string;
-  /** Compra dividida: um vencedor por família. */
-  awards?: { family: string; proposalId: string; criteria: string[]; justification: string | null }[];
+  /**
+   * Compra dividida. Cada entrada adjudica um escopo: a família (`family`), ou um item
+   * dentro dela (`quotationItemId`) — o papel com um fornecedor e a caneta com outro.
+   * Com o item apontado, a família vem dele no servidor e não precisa ser repetida aqui.
+   */
+  awards?: {
+    family: string; proposalId: string; criteria: string[]; justification: string | null;
+    quotationItemId?: string;
+  }[];
 }
 
 export const escolherVencedor = (id: string, escolha: EscolhaDoVencedor) =>
@@ -505,8 +539,13 @@ export function acoesDisponiveis(
     negociar: conduz && (emAberto || emAnalise) && vigentes.length > 0,
     encerrar: conduz && emAberto,
     escolherVencedor: conduz && emAnalise && vigentes.length > 0,
-    /** Mais de uma família: escolhe-se um fornecedor por família. */
-    porFamilia: q.families.length > 1,
+    /**
+     * Mais de um item: a escolha vira grade item × fornecedor. É o que permite dividir
+     * a compra — entre famílias e, agora, dentro da mesma família (o papel com um
+     * fornecedor e a caneta com outro). Com um item só, a grade seria uma tabela de uma
+     * linha e a escolha simples diz mais, porque mostra prazo e condição de pagamento.
+     */
+    porItem: q.items.length > 1,
     decidirNivel1: aprovaNivel1 && q.status === 'AGUARDANDO_GERENTE' && !barrado1,
     decidirNivel2: aprovaNivel2 && q.status === 'AGUARDANDO_DIRETOR' && !barrado2,
     registrarOc: conduz && q.status === 'APROVADO_PARA_EMISSAO',

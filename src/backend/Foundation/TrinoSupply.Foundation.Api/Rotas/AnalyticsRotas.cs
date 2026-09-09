@@ -4,6 +4,7 @@ using TrinoSupply.Foundation.Api.Analytics;
 using TrinoSupply.Foundation.Api.Infrastructure;
 using TrinoSupply.Foundation.Api.Compliance;
 using TrinoSupply.Foundation.Api.Domain;
+using TrinoSupply.Foundation.Api.Procurement;
 using TrinoSupply.Foundation.Api.Insights;
 using static TrinoSupply.Foundation.Api.Rotas.Api;
 
@@ -82,6 +83,30 @@ public static class AnalyticsRotas
             if (!ModulesOf(p).Contains(AppModules.Compras) && !ModulesOf(p).Contains(AppModules.Fornecedores))
                 return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para este módulo.");
             return Ok(await svc.SupplierScorecardAsync(months ?? 6), ctx);
+        });
+
+        // De quem a empresa depende, por produto. Fica no painel de compliance porque é
+        // risco, não desempenho: a lista só traz o que merece ação, e cada linha diz qual.
+        analytics.MapGet("/supplier-concentration", async (HistoricoDePrecoService svc,
+            ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            if (!TrinoSupply.Foundation.Api.Compliance.ComplianceService.CanView(RoleOf(p)))
+                return Error(ctx, 403, "CP-ERR-900", "Seu papel não acessa o painel de compliance.");
+            if (!ModulesOf(p).Contains(AppModules.Compliance))
+                return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para este módulo.");
+            var riscos = await svc.ConcentracaoAsync();
+            return Ok(new
+            {
+                minPurchases = HistoricoDePrecoService.ComprasMinimasParaRisco,
+                items = riscos.Select(r => new
+                {
+                    catalogItemId = r.CatalogItemId, description = r.Description,
+                    total = r.Total, purchases = r.Compras, suppliers = r.Fornecedores,
+                    level = r.Nivel, recommendation = r.Recomendacao,
+                    topSupplierId = r.Maior.SupplierId, topSupplier = r.Maior.SupplierName,
+                    topShare = r.Maior.Pct, topValue = r.Maior.Valor,
+                }),
+            }, ctx);
         });
 
         // Compliance Score (V2-P2 §14): derivado dos fatos do processo; mede e expõe, nunca bloqueia

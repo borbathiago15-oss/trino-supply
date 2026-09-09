@@ -312,6 +312,58 @@ jobs:
           retention-days: 7
 
   # ---------------------------------------------------------------------------
+  # Dependências com vulnerabilidade conhecida, no que vai para produção.
+  #
+  # O recorte é proposital: `src/frontend` e o projeto .NET são o que o Dockerfile
+  # empacota. O monorepo `platform/` não é implantado, e travar o CI por ele seria
+  # bloquear entrega por causa de código que ninguém executa.
+  # ---------------------------------------------------------------------------
+  dependencias:
+    name: Dependências — vulnerabilidades conhecidas
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - name: Instalar dependências do frontend
+        working-directory: src/frontend
+        run: npm ci
+
+      # `--omit=dev` porque o que chega ao navegador é o bundle: falha em ferramenta
+      # de build é para corrigir, não para impedir o deploy de uma correção urgente.
+      - name: npm audit (dependências de produção)
+        working-directory: src/frontend
+        run: npm audit --omit=dev --audit-level=moderate
+
+      # o mesmo, sem travar: fica visível no log e não bloqueia a entrega
+      - name: npm audit (ferramentas de desenvolvimento — informativo)
+        working-directory: src/frontend
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      # `dotnet list --vulnerable` sai com código 0 mesmo achando: quem falha é o grep
+      - name: Pacotes .NET vulneráveis (inclui transitivos)
+        run: |
+          dotnet restore src/backend/TrinoSupply.sln
+          saida=$(dotnet list src/backend/TrinoSupply.sln package --vulnerable --include-transitive)
+          echo "$saida"
+          if echo "$saida" | grep -qiE '^\s*>\s'; then
+            echo "::error::Pacote .NET com vulnerabilidade conhecida — veja a lista acima."
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
   # App .NET (Trino Supply) — o que hoje está em produção no Railway.
   # ---------------------------------------------------------------------------
   dotnet:

@@ -29,10 +29,17 @@ public static class Anexos
 
         using var ms = new MemoryStream();
         await file.CopyToAsync(ms);
+        var conteudo = ms.ToArray();
+        // o Content-Type é escrito por quem envia: a lista acima só barra quem é honesto.
+        // A palavra final é dos primeiros bytes do arquivo (DOC-ERR-004).
+        if (!AssinaturaDeArquivo.Confere(file.ContentType, conteudo))
+            return (null, new("DOC-ERR-004",
+                "O conteúdo do arquivo não corresponde ao formato declarado. Envie o arquivo original."));
+
         var doc = new StoredDocument
         {
             FileName = Path.GetFileName(file.FileName), ContentType = file.ContentType, SizeBytes = file.Length,
-            Content = ms.ToArray(), EntityType = entityType, EntityId = entityId,
+            Content = conteudo, EntityType = entityType, EntityId = entityId,
             UploadedByLabel = p.FindFirstValue("name") ?? "Suprimentos", UploadedAt = clock.GetUtcNow(),
         };
         db.StoredDocuments.Add(doc);

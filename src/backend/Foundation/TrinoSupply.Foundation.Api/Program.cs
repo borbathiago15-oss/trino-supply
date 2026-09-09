@@ -103,6 +103,11 @@ using (var scope = app.Services.CreateScope())
 // primeiro de tudo: o que quebrar depois daqui responde no envelope da API e vai para o log
 app.UsarEnvelopeDeFalha();
 
+// e logo em seguida a segurança do transporte e do navegador — antes dos arquivos
+// estáticos, para o HTML e os anexos saírem com os mesmos cabeçalhos que o JSON
+app.UsarHttpsAtrasDoProxy(app.Environment.IsProduction());
+app.UsarCabecalhosDeSeguranca();
+
 app.UseDefaultFiles();
 // o SPA é um arquivo só: o navegador precisa revalidar o HTML a cada carga, senão
 // uma versão antiga fica presa no cache depois do deploy (assets seguem cacheáveis)

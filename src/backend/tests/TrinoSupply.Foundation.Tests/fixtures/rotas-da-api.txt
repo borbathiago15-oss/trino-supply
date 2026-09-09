@@ -34,6 +34,8 @@ GET /api/v1/items/summary
 GET /api/v1/items/{id:guid}/price-history
 GET /api/v1/material-requisitions/
 GET /api/v1/material-requisitions/panel
+GET /api/v1/payment-methods/
+GET /api/v1/payment-terms/
 GET /api/v1/portal/quotations
 GET /api/v1/portal/quotations/{id:guid}
 GET /api/v1/product-families/
@@ -53,6 +55,7 @@ GET /api/v1/quotations/{id:guid}/family-map
 GET /api/v1/quotations/{id:guid}/price-history
 GET /api/v1/quotations/{id:guid}/score-map
 GET /api/v1/quotations/{id:guid}/timeline
+GET /api/v1/score-weights/
 GET /api/v1/suppliers/
 GET /api/v1/suppliers/{id:guid}/contract/adjustments
 GET /api/v1/triage/
@@ -63,6 +66,8 @@ PATCH /api/v1/announcements/{id:guid}
 PATCH /api/v1/companies/{id:guid}
 PATCH /api/v1/cost-centers/{id:guid}
 PATCH /api/v1/items/{id:guid}
+PATCH /api/v1/payment-methods/{id:guid}
+PATCH /api/v1/payment-terms/{id:guid}
 PATCH /api/v1/product-families/{id:guid}
 PATCH /api/v1/purchase-requisitions/{id:guid}
 PATCH /api/v1/suppliers/{id:guid}
@@ -88,6 +93,8 @@ POST /api/v1/material-requisitions/{id:guid}/approve
 POST /api/v1/material-requisitions/{id:guid}/cancel
 POST /api/v1/material-requisitions/{id:guid}/fulfill
 POST /api/v1/material-requisitions/{id:guid}/reject
+POST /api/v1/payment-methods/
+POST /api/v1/payment-terms/
 POST /api/v1/portal/login
 POST /api/v1/portal/proposals/{proposalId:guid}/attachment
 POST /api/v1/portal/quotations/{id:guid}/proposal
@@ -130,4 +137,5 @@ POST /api/v1/triage/priority
 POST /api/v1/users/
 POST /api/v1/users/{id:guid}/reset-password
 PUT /api/v1/company
+PUT /api/v1/score-weights/
 PUT /api/v1/suppliers/{id:guid}/contract

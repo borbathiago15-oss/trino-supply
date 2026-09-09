@@ -33,6 +33,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Proposal> Proposals => Set<Proposal>();
     public DbSet<ProposalItem> ProposalItems => Set<ProposalItem>();
     public DbSet<PaymentMethod> PaymentMethods => Set<PaymentMethod>();
+    public DbSet<ScoreWeights> ScoreWeights => Set<ScoreWeights>();
     public DbSet<PaymentTermOption> PaymentTermOptions => Set<PaymentTermOption>();
     public DbSet<ProcessEvent> ProcessEvents => Set<ProcessEvent>();
     public DbSet<StoredDocument> StoredDocuments => Set<StoredDocument>();
@@ -454,6 +455,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // o nome é a identidade do cadastro: é por ele que a proposta antiga
             // continua legível, e é ele que não pode repetir
             e.HasIndex(m => m.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<ScoreWeights>(e =>
+        {
+            // uma linha só: a régua com que se compara proposta é da empresa, não do processo
+            e.ToTable("score_weights", "procurement");
+            e.HasKey(w => w.Id);
+            e.Property(w => w.Id).HasColumnName("id");
+            e.Property(w => w.Price).HasColumnName("price");
+            e.Property(w => w.Delivery).HasColumnName("delivery");
+            e.Property(w => w.Payment).HasColumnName("payment");
+            e.Property(w => w.Otif).HasColumnName("otif");
+            e.Property(w => w.Risk).HasColumnName("risk");
+            e.Property(w => w.UpdatedAt).HasColumnName("updated_at");
+            e.Property(w => w.UpdatedByLabel).HasColumnName("updated_by_label").HasMaxLength(200);
         });
 
         modelBuilder.Entity<PaymentTermOption>(e =>

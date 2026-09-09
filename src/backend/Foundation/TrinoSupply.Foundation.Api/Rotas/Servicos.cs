@@ -40,6 +40,7 @@ public static class Servicos
         servicos.AddScoped<TriageService>();
         servicos.AddScoped<PagamentoService>();
         servicos.AddScoped<HistoricoDePrecoService>();
+        servicos.AddScoped<ScoreWeightsService>();
         servicos.AddScoped<TorreDeControleService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Comunicados.AnnouncementService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Analytics.AnalyticsService>();

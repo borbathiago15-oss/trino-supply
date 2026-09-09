@@ -218,6 +218,7 @@ app.MapCadastros();
 
 // ---- Cadastros de pagamento: formas e condições -------------------------------
 app.MapPagamentos();
+app.MapPesosDoScore();
 
 // ---- Dashboards analíticos ---------------------------------------------------
 app.MapAnalytics();

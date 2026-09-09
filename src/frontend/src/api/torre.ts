@@ -35,6 +35,8 @@ export interface LinhaDaTorre {
   quotationNumber: string | null;
   purchaseOrderId: string | null;
   purchaseOrderNumber: string | null;
+  /** Por que a linha é exceção, ou nulo quando ela segue o caminho normal. */
+  exceptionReason: string | null;
 }
 
 export interface KpisDaTorre {
@@ -47,6 +49,10 @@ export interface KpisDaTorre {
   atrasados: number;
   urgentes: number;
   valor: number;
+  /** O.C. emitida e nenhuma NF: quem deve agir é o fornecedor. */
+  emFaturamento: number;
+  /** O que o sistema já grava como fora do padrão — sem O.C. do ERP, cancelado, devolvido. */
+  excecoes: number;
 }
 
 export interface PaginaDaTorre {
@@ -91,6 +97,8 @@ export interface FiltrosDaTorre {
   /** §5.1 — faixa de valor da linha. */
   valorDe: string;
   valorAte: string;
+  /** §5 — só o que virou exceção. */
+  excecoes: boolean;
   pagina: number;
 }
 
@@ -98,7 +106,7 @@ export const FILTROS_TORRE_VAZIOS: FiltrosDaTorre = {
   busca: '', etapa: '', situacao: '', empresa: '', centroCusto: '', familia: '',
   solicitante: '', comprador: '', prioridade: '', atrasados: false,
   de: '', ate: '', fornecedor: '', numeroOc: '', prazoDe: '', prazoAte: '',
-  valorDe: '', valorAte: '', pagina: 1,
+  valorDe: '', valorAte: '', excecoes: false, pagina: 1,
 };
 
 /** As etapas, na ordem em que o item as percorre — os mesmos nomes do servidor. */
@@ -145,6 +153,7 @@ export function consultaDaTorre(f: FiltrosDaTorre, tamanho = 50): string {
   // faixa de valor: zero é um valor legítimo, então o que descarta é o campo vazio
   if (f.valorDe.trim() && Number.isFinite(Number(f.valorDe))) q.set('minValue', f.valorDe.trim());
   if (f.valorAte.trim() && Number.isFinite(Number(f.valorAte))) q.set('maxValue', f.valorAte.trim());
+  if (f.excecoes) q.set('exception', 'true');
   q.set('page', String(f.pagina));
   q.set('pageSize', String(tamanho));
   return `?${q.toString()}`;

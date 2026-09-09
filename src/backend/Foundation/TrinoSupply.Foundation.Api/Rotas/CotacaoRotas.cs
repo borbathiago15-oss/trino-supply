@@ -198,6 +198,21 @@ public static class CotacaoRotas
         });
 
         // mapa da adjudicação por família: quem cotou cada família inteira e por quanto (V2 — compra dividida)
+        // Compra por contrato: abre o processo já decidido e o deixa nas aprovações. Não
+        // pula o BID — reconhece que ele aconteceu quando o contrato foi negociado.
+        rfq.MapPost("/por-contrato", async (FecharPorContratoRequest body, QuotationService svc,
+            ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            var role = RoleOf(p);
+            if (!QuotationService.CanConduct(role))
+                return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não conduz processos de compra.");
+            var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+            var (q, error) = await svc.FecharPorContratoAsync(actor, body.PrItemIds ?? [], body.SupplierId);
+            return error is not null
+                ? Error(ctx, error.Code is "RFQ-ERR-404" ? 404 : 422, error.Code, error.Message)
+                : Results.Json(new { data = QuotationView(q!), correlationId = CorrelationId(ctx) }, statusCode: 201);
+        });
+
         // Preços que o contrato de parceria já fixou para os itens deste processo. Quem
         // registra a proposta usa isto para não redigitar o que já foi combinado.
         rfq.MapGet("/{id:guid}/contract-prices/{supplierId:guid}",

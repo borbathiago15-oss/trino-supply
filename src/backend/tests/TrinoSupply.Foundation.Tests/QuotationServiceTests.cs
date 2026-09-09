@@ -1737,4 +1737,79 @@ public class QuotationServiceTests
         Assert.False(cobertura.Current);
         Assert.Empty(cobertura.Items);
     }
+
+    // ---- fechar pelo contrato de parceria -----------------------------------
+
+    /// <summary>
+    /// O pedido do cliente: com contrato vigente, o preço já foi acordado — a concorrência
+    /// aconteceu na assinatura. O processo abre já decidido e para nas aprovações, que é o
+    /// que continua decidindo dinheiro.
+    /// </summary>
+    [Fact]
+    public async Task Contrato_abre_o_processo_ja_decidido_e_para_nas_aprovacoes()
+    {
+        var (w, q, _, _) = await ContratoDeBotasAsync();
+        var pr = await w.Db.Requisitions.Include(r => r.Items)
+            .SingleAsync(r => r.Id == w.Pr.Id);
+        // o processo aberto pelo mundo de teste é descartado: aqui o caminho é o do contrato
+        await w.Rfq.CancelAsync(Carla, q.Id, "teste");
+
+        var (fechado, erro) = await w.Rfq.FecharPorContratoAsync(
+            Carla, pr.Items.Select(i => i.Id).ToList(), w.Alfa.Id);
+
+        Assert.Null(erro);
+        // para exatamente na alçada: não emite O.C. nem pula aprovação
+        Assert.Equal(QuotationStatus.AwaitingManager, fechado!.Status);
+        Assert.Equal(w.Alfa.Id, fechado.WinnerSupplierId);
+        // preço do contrato, não da tabela do catálogo (45 e 72, contra 50 e 80)
+        Assert.Equal(117m, fechado.AwardList.Sum(a => a.TotalValue));
+        // a justificativa diz de onde veio a decisão, e cita o contrato
+        Assert.Contains("CT-2026-001", fechado.SelectionJustification);
+    }
+
+    /// <summary>
+    /// Cobertura parcial não fecha: item sem preço acordado não pode entrar de carona no
+    /// contrato, e a mensagem diz qual é para o comprador separar.
+    /// </summary>
+    [Fact]
+    public async Task Item_fora_do_contrato_nao_entra_de_carona()
+    {
+        var (w, q, _, _) = await ContratoDeBotasAsync();
+        await w.Rfq.CancelAsync(Carla, q.Id, "teste");
+
+        // um item novo, que o contrato não cobre
+        var catalogo = new CatalogService(w.Db, new FixedTimeProvider(new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero)));
+        var (capa, _) = await catalogo.CreateAsync(Gustavo.Id, "EPI-020", "CAPA DE CHUVA", "EPI", "UN", 40m);
+        var (pr2, _) = await w.Prs.CreateAsync(Ana, "Mais EPI", "CC-01", "NORMAL", null,
+            [new ItemInput("", 1, null, null, null, capa!.Id)], "CATALOGO");
+        await w.Prs.SubmitAsync(Ana, pr2!.Id);
+        await w.Prs.ApproveAsync(Bruno, pr2.Id, null);
+
+        var pr = await w.Db.Requisitions.Include(r => r.Items).SingleAsync(r => r.Id == w.Pr.Id);
+        var todos = pr.Items.Select(i => i.Id).Concat(pr2.Items.Select(i => i.Id)).ToList();
+
+        var (nada, erro) = await w.Rfq.FecharPorContratoAsync(Carla, todos, w.Alfa.Id);
+
+        Assert.Null(nada);
+        Assert.Equal("CT-ERR-021", erro!.Code);
+        Assert.Contains("CAPA DE CHUVA", erro.Message);
+    }
+
+    /// <summary>
+    /// Fornecedor sem contrato vigente não tem caminho rápido: a compra segue por cotação,
+    /// que é onde o preço dele ainda precisa ser disputado.
+    /// </summary>
+    [Fact]
+    public async Task Sem_contrato_vigente_nao_ha_caminho_rapido()
+    {
+        var (w, q, _, _) = await ContratoDeBotasAsync();
+        await w.Rfq.CancelAsync(Carla, q.Id, "teste");
+        var pr = await w.Db.Requisitions.Include(r => r.Items).SingleAsync(r => r.Id == w.Pr.Id);
+
+        var (nada, erro) = await w.Rfq.FecharPorContratoAsync(
+            Carla, pr.Items.Select(i => i.Id).ToList(), w.Beta.Id);
+
+        Assert.Null(nada);
+        Assert.Equal("CT-ERR-020", erro!.Code);
+    }
 }

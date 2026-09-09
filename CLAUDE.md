@@ -88,6 +88,29 @@ o usuário descobrir no erro do servidor:
     existe quando **todas** as SCs do processo informaram o seu, senão o total fechado
     seria comparado a um orçamento parcial.
 
+## Segurança que vale para o app inteiro
+
+Não são regras de uma tela: valem para toda resposta e todo upload, e estão no
+pipeline justamente para uma rota nova não nascer sem elas.
+
+- **DOC-ERR-004 — o upload é conferido pelo conteúdo, não pelo que declara.** O
+  `Content-Type` é escrito por quem envia; a lista de tipos aceitos, sozinha, só barra
+  quem é honesto. `Domain/AssinaturaDeArquivo.cs` decide pelos primeiros bytes. Formato
+  novo na lista de aceitos **precisa** entrar também na tabela de assinaturas — há teste
+  que falha se um ficar sem o outro. Texto (CSV) não tem começo obrigatório: tem começo
+  proibido (binário conhecido e `<`, que é como HTML, SVG e XML abrem).
+- **Cabeçalhos de segurança em toda resposta** (`Infrastructure/Seguranca.cs`): CSP sem
+  `unsafe-inline` em script — o `index.html` não tem script embutido, e é isso que faz
+  XSS injetado não executar —, `nosniff`, `frame-ancestors 'none'`, `Referrer-Policy` e
+  `Permissions-Policy`. Resposta de `/api` sai com `no-store`.
+- **HTTPS atrás do proxy.** O Railway termina o TLS na borda e o contêiner recebe HTTP:
+  o esquema verdadeiro vem no `X-Forwarded-Proto`. A decisão de redirecionar e de mandar
+  HSTS acontece **antes** do `UseForwardedHeaders`, que consome esse cabeçalho — lendo
+  depois dele, o valor já não existe. Sem o cabeçalho não se redireciona nada, que é o
+  que evita laço em desenvolvimento e no healthcheck.
+- **Dependência vulnerável trava o CI** no que vai para produção (`src/frontend` e o
+  projeto .NET). O monorepo `platform/` não é implantado e fica fora do gate.
+
 ## Verificação antes de entregar
 
 ```bash

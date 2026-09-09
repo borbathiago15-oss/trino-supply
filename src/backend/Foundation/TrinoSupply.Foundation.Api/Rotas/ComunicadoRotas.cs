@@ -111,10 +111,17 @@ public static class ComunicadoRotas
 
             using var ms = new MemoryStream();
             await file.CopyToAsync(ms, ct);
+            var conteudo = ms.ToArray();
+            // a imagem do comunicado é servida para todo mundo que abre o sistema: aqui o
+            // tipo declarado não basta, quem decide são os primeiros bytes (DOC-ERR-004)
+            if (!AssinaturaDeArquivo.Confere(file.ContentType, conteudo))
+                return Error(ctx, 400, "DOC-ERR-004",
+                    "O conteúdo do arquivo não corresponde ao formato declarado. Envie a imagem original.");
+
             var doc = new StoredDocument
             {
                 FileName = Path.GetFileName(file.FileName), ContentType = file.ContentType, SizeBytes = file.Length,
-                Content = ms.ToArray(), EntityType = "COMUNICADO_IMAGEM", EntityId = id,
+                Content = conteudo, EntityType = "COMUNICADO_IMAGEM", EntityId = id,
                 UploadedByLabel = p.FindFirstValue("name") ?? "Administrador", UploadedAt = clock.GetUtcNow(),
             };
             db.StoredDocuments.Add(doc);

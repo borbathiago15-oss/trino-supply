@@ -65,6 +65,10 @@ public class TabelaDeRotasTests
         app.MapAnalytics();
         app.MapCotacoes();
         app.MapDocumentos();
+        // os dois últimos entraram atrasados, e enquanto estiveram fora as suas rotas
+        // escapavam de toda conferência daqui — inclusive a de exigir autenticação
+        app.MapPagamentos();
+        app.MapPesosDoScore();
 
         return ((IEndpointRouteBuilder)app).DataSources
             .SelectMany(d => d.Endpoints).OfType<RouteEndpoint>().ToList();

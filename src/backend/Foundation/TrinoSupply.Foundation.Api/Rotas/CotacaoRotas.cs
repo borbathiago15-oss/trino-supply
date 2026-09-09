@@ -178,7 +178,8 @@ public static class CotacaoRotas
 
         // score multicritério da escolha (V2-P4, decisão C5): INFORMATIVO — nunca decide nem bloqueia
         rfq.MapGet("/{id:guid}/score-map", async (Guid id, QuotationService svc,
-            TrinoSupply.Foundation.Api.Analytics.AnalyticsService analytics, ClaimsPrincipal p, HttpContext ctx) =>
+            TrinoSupply.Foundation.Api.Analytics.AnalyticsService analytics,
+            ScoreWeightsService pesos, ClaimsPrincipal p, HttpContext ctx) =>
         {
             if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");
             var q = await svc.GetAsync(id);
@@ -190,15 +191,17 @@ public static class CotacaoRotas
                 pr.SupplierId, pr.SupplierName, pr.TotalValue, pr.DeliveryDays, pr.PaymentDays,
                 scorecard.TryGetValue(pr.SupplierId, out var sc) ? sc.OtifPercent : null,
                 scorecard.TryGetValue(pr.SupplierId, out var sc2) ? sc2.RiskScore : null)).ToList();
+            // a régua é a da empresa: a mesma que a tela publica e a mesma que entra na conta
+            var regua = (await pesos.AtuaisAsync()).Criterios();
             return Ok(new
             {
                 note = "Score informativo: compara as propostas mais recentes; a escolha continua sendo do comprador com justificativa.",
-                criteria = MultiCriteriaScore.Criterios.Select(c => new
+                criteria = regua.Select(c => new
                 {
                     code = c.Code, label = c.Label,
                     weightPct = Math.Round(c.Weight * 100, 1), help = c.Help,
                 }),
-                items = MultiCriteriaScore.Compute(inputs),
+                items = MultiCriteriaScore.Compute(inputs, regua),
             }, ctx);
         });
 

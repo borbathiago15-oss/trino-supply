@@ -99,6 +99,16 @@ o usuário descobrir no erro do servidor:
   - **orçamento** — contra o valor que o solicitante informou na SC (`budget`); só
     existe quando **todas** as SCs do processo informaram o seu, senão o total fechado
     seria comparado a um orçamento parcial.
+- **O score multicritério informa; a régua dele é da empresa.** Ele compara as propostas
+  vigentes por preço, entrega, pagamento, OTIF e risco, aparece na tela do processo e
+  **nunca decide nem bloqueia** (decisão C5): a escolha continua do comprador, com
+  justificativa. Os pesos vivem em `ScoreWeights`, uma linha só, editável pelo administrador
+  — `MultiCriteriaScore.Padrao` é apenas o ponto de partida de quem nunca configurou. Três
+  coisas andam juntas e não se separam: os pesos **somam 100** (`SCR-ERR-010`), a régua
+  publicada na tela é a **mesma** que entra na conta — publicar uma e calcular por outra
+  faria a explicação parecer conferida —, e **peso 0 desliga o critério** em vez de deixá-lo
+  no denominador puxando o score para baixo. Critério **sem dado** também sai da conta:
+  fornecedor novo não é punido por ser novo.
 
 ## Segurança que vale para o app inteiro
 

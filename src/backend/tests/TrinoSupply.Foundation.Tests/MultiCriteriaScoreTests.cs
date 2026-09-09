@@ -66,16 +66,16 @@ public class MultiCriteriaScoreTests
     {
         // a tela mostra "Preço 40% · Entrega 20% · …" como se fosse a repartição de um todo;
         // se a soma não fechasse, a explicação estaria mentindo sobre a própria conta
-        Assert.Equal(1.0, MultiCriteriaScore.Criterios.Sum(c => c.Weight), 6);
-        Assert.Equal(5, MultiCriteriaScore.Criterios.Select(c => c.Code).Distinct().Count());
+        Assert.Equal(1.0, MultiCriteriaScore.Padrao.Sum(c => c.Weight), 6);
+        Assert.Equal(5, MultiCriteriaScore.Padrao.Select(c => c.Code).Distinct().Count());
     }
 
     [Fact]
     public void O_peso_usado_na_conta_e_o_mesmo_que_a_tela_recebe()
     {
         // preço 40 e OTIF 20: com preço 100 num e OTIF 100 no outro, quem leva o preço ganha
-        var preco = MultiCriteriaScore.Criterios.Single(c => c.Code == "price").Weight;
-        var otif = MultiCriteriaScore.Criterios.Single(c => c.Code == "otif").Weight;
+        var preco = MultiCriteriaScore.Padrao.Single(c => c.Code == "price").Weight;
+        var otif = MultiCriteriaScore.Padrao.Single(c => c.Code == "otif").Weight;
 
         var rows = MultiCriteriaScore.Compute(
         [

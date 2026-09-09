@@ -114,6 +114,9 @@ export const MENU: GrupoMenu[] = [
     { id: 'users', rotulo: 'Usuários', rota: '/usuarios', modulo: 'USUARIOS', mostrar: ehAdmin },
     { id: 'announcements', rotulo: 'Comunicados', rota: '/comunicados', mostrar: ehAdmin },
     { id: 'suppliers', rotulo: 'Fornecedores', rota: '/fornecedores', modulo: 'FORNECEDORES', mostrar: podeComprar },
+    // a régua com que o sistema compara proposta é cadastro como outro qualquer — e fica
+    // aqui, e não na tela da cotação, porque vale para toda cotação e não para uma
+    { id: 'score-weights', rotulo: 'Pesos do Score', rota: '/pesos-score', modulo: 'COMPRAS', mostrar: ehAdmin },
     { rotulo: 'Pagamento', filhos: [
       { id: 'payment-methods', rotulo: 'Formas de Pagamento', rota: '/formas-pagamento', modulo: 'COMPRAS', mostrar: podeComprar },
       { id: 'payment-terms', rotulo: 'Condições de Pagamento', rota: '/condicoes-pagamento', modulo: 'COMPRAS', mostrar: podeComprar },

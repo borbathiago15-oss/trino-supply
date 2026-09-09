@@ -8,6 +8,7 @@ import { CentrosCusto } from '@/paginas/centros-custo/CentrosCusto';
 import { Familias } from '@/paginas/familias/Familias';
 import { FormasDePagamento } from '@/paginas/pagamentos/FormasDePagamento';
 import { CondicoesDePagamento } from '@/paginas/pagamentos/CondicoesDePagamento';
+import { PesosDoScore } from '@/paginas/score/PesosDoScore';
 import { Fornecedores } from '@/paginas/fornecedores/Fornecedores';
 import { Produtos } from '@/paginas/produtos/Produtos';
 import { Usuarios } from '@/paginas/usuarios/Usuarios';
@@ -70,6 +71,7 @@ export function Rotas() {
           <Route path="/familias" element={<Familias />} />
           <Route path="/formas-pagamento" element={<FormasDePagamento />} />
           <Route path="/condicoes-pagamento" element={<CondicoesDePagamento />} />
+          <Route path="/pesos-score" element={<PesosDoScore />} />
           <Route path="/centros-custo" element={<CentrosCusto />} />
           <Route path="/produtos" element={<Produtos />} />
           <Route path="/usuarios" element={<Usuarios />} />

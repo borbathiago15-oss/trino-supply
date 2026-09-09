@@ -13,22 +13,33 @@ public record CriterioDoScore(string Code, string Label, double Weight, string H
 
 /// <summary>
 /// Score multicritério da escolha (V2-P4, decisão C5: INFORMATIVO — nunca decide nem bloqueia).
-/// Compara as propostas mais recentes: preço (peso 40), prazo de entrega (20), prazo de
-/// pagamento (10), OTIF histórico do fornecedor (20) e risco interno (10). Cada componente é
-/// normalizado contra o melhor da disputa; componente sem dado sai da conta (pesos renormalizados).
+/// Compara as propostas mais recentes por preço, prazo de entrega, prazo de pagamento, OTIF
+/// histórico do fornecedor e risco interno. Cada componente é normalizado contra o melhor da
+/// disputa; componente sem dado sai da conta (pesos renormalizados).
+///
+/// <para>
+/// <b>Os pesos vêm de fora.</b> Quem compara é a empresa, e a régua com que ela compara é dela:
+/// os valores de <see cref="Padrao"/> são só o ponto de partida de quem ainda não definiu a sua.
+/// </para>
 /// </summary>
 public static class MultiCriteriaScore
 {
     /// <summary>
-    /// Os critérios e seus pesos, publicados junto do resultado.
+    /// Os critérios, com o peso de fábrica e a explicação de cada um.
     ///
     /// <para>
-    /// Estão aqui, e não escondidos na conta, porque um score que não diz de que é feito é um
-    /// palpite com cara de medida: o comprador precisa saber que preço vale o dobro de OTIF
-    /// antes de decidir se concorda com a ordem.
+    /// A lista é publicada junto do resultado, e não escondida na conta, porque um score que não
+    /// diz de que é feito é um palpite com cara de medida: quem lê precisa saber quanto vale
+    /// cada coisa antes de decidir se concorda com a ordem.
+    /// </para>
+    ///
+    /// <para>
+    /// O <b>peso</b> daqui é apenas o padrão — a empresa troca o seu em <c>ScoreWeights</c>. O
+    /// que não se troca é o resto: o código, o rótulo e a explicação são de quem escreveu a
+    /// conta, não de quem configura a régua.
     /// </para>
     /// </summary>
-    public static readonly IReadOnlyList<CriterioDoScore> Criterios =
+    public static readonly IReadOnlyList<CriterioDoScore> Padrao =
     [
         new("price", "Preço", 0.4, "O menor total da disputa vale 100; os outros caem na proporção."),
         new("delivery", "Prazo de entrega", 0.2, "O prazo mais curto vale 100."),
@@ -37,8 +48,14 @@ public static class MultiCriteriaScore
         new("risk", "Risco interno", 0.1, "100 menos o risco do scorecard: quanto maior, menos risco."),
     ];
 
-    public static List<ScoreRow> Compute(IReadOnlyList<ScoreInput> inputs)
+    /// <param name="criterios">
+    /// A régua a usar. Omitida, vale o padrão — é o que mantém honesto todo teste e toda
+    /// chamada que não tem opinião sobre peso.
+    /// </param>
+    public static List<ScoreRow> Compute(
+        IReadOnlyList<ScoreInput> inputs, IReadOnlyList<CriterioDoScore>? criterios = null)
     {
+        var regua = criterios ?? Padrao;
         var validos = inputs.Where(i => i.Total > 0).ToList();
         if (validos.Count == 0) return [];
 
@@ -58,15 +75,20 @@ public static class MultiCriteriaScore
             double? otif = i.OtifPercent;
             double? risk = i.RiskScore is { } r ? 100.0 - r : null;
 
-            // os pesos saem de Criterios, e não de números soltos aqui: publicar uma tabela
-            // na tela e usar outra na conta seria a pior forma de mentir — a explicação
-            // pareceria conferida
-            var partes = new List<(double valor, double peso)> { (price, Peso("price")) };
-            if (delivery is not null) partes.Add((delivery.Value, Peso("delivery")));
-            if (payment is not null) partes.Add((payment.Value, Peso("payment")));
-            if (otif is not null) partes.Add((otif.Value, Peso("otif")));
-            if (risk is not null) partes.Add((risk.Value, Peso("risk")));
-            var score = Math.Round(partes.Sum(p => p.valor * p.peso) / partes.Sum(p => p.peso), 1);
+            // os pesos saem da mesma régua que a tela recebe, e não de números soltos aqui:
+            // publicar uma tabela na tela e usar outra na conta seria a pior forma de mentir —
+            // a explicação pareceria conferida
+            var partes = new List<(double valor, double peso)> { (price, Peso(regua, "price")) };
+            if (delivery is not null) partes.Add((delivery.Value, Peso(regua, "delivery")));
+            if (payment is not null) partes.Add((payment.Value, Peso(regua, "payment")));
+            if (otif is not null) partes.Add((otif.Value, Peso(regua, "otif")));
+            if (risk is not null) partes.Add((risk.Value, Peso(regua, "risk")));
+
+            // critério desligado (peso 0) não entra: mantê-lo faria o denominador crescer sem
+            // que o valor contasse, e o score cairia por causa de algo que a empresa dispensou
+            partes = partes.Where(p => p.peso > 0).ToList();
+            var soma = partes.Sum(p => p.peso);
+            var score = soma > 0 ? Math.Round(partes.Sum(p => p.valor * p.peso) / soma, 1) : 0;
 
             return new ScoreRow(i.SupplierId, i.SupplierName, score,
                 Math.Round(price, 1),
@@ -78,5 +100,6 @@ public static class MultiCriteriaScore
         return rows;
     }
 
-    private static double Peso(string code) => Criterios.Single(c => c.Code == code).Weight;
+    private static double Peso(IReadOnlyList<CriterioDoScore> regua, string code) =>
+        regua.FirstOrDefault(c => c.Code == code)?.Weight ?? 0;
 }

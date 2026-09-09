@@ -121,22 +121,16 @@ public partial class QuotationService
         // saving de referência (V2-P2): último preço pago de cada item de catálogo, congelado agora
         var catalogIds = q.Items.Where(i => itensDaOc.Contains(i.Id) && i.CatalogItemId is not null)
             .Select(i => i.CatalogItemId!.Value).Distinct().ToList();
-        var ultimosPrecos = catalogIds.Count == 0
-            ? new Dictionary<Guid, decimal>()
-            : (await db.PurchaseOrderItems
-                .Where(i => i.CatalogItemId != null && catalogIds.Contains(i.CatalogItemId.Value)
-                            && i.UnitPrice != null)
-                .Join(db.PurchaseOrders.Where(o => o.Status != PurchaseOrderStatus.Cancelled),
-                      i => i.OrderId, o => o.Id, (i, o) => new { i.CatalogItemId, i.UnitPrice, o.CreatedAt })
-                .ToListAsync(ct))
-              .GroupBy(x => x.CatalogItemId!.Value)
-              .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.CreatedAt).First().UnitPrice!.Value);
+        // o último preço pago vem do histórico, que é onde essa regra passou a morar.
+        // Antes a consulta vivia aqui, privada: nada mais no sistema conseguia perguntar
+        // "quanto já pagamos por isto?", e era a mesma pergunta
+        var historico = await new HistoricoDePrecoService(db).ResumoAsync(catalogIds, ct);
 
         foreach (var pi in proposal.Items.Where(pi => itensDaOc.Contains(pi.QuotationItemId)))
         {
             var qi = q.Items.Single(x => x.Id == pi.QuotationItemId);
-            var ultimo = qi.CatalogItemId is not null && ultimosPrecos.TryGetValue(qi.CatalogItemId.Value, out var v)
-                ? v : (decimal?)null;
+            var ultimo = qi.CatalogItemId is not null && historico.TryGetValue(qi.CatalogItemId.Value, out var h)
+                ? h.Ultimo : (decimal?)null;
             order.Items.Add(new PurchaseOrderItem
             {
                 Description = qi.Description, UnitOfMeasure = qi.UnitOfMeasure,

@@ -299,12 +299,15 @@ public static class CotacaoRotas
             if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não seleciona fornecedores.");
             var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
             var criteria = body.Criteria is { Count: > 0 } ? string.Join(", ", body.Criteria) : null;
-            // compra dividida: uma escolha por família; sem 'awards', o vencedor leva todas as famílias
+            // Compra dividida: uma escolha por escopo. O escopo é a família, ou o item quando
+            // a tela manda `quotationItemId` — que é a divisão dentro da mesma família. Sem
+            // 'awards', o vencedor leva tudo. Os três caminhos entram na mesma validação.
             var (q, error) = body.Awards is { Count: > 0 }
                 ? await svc.AwardByFamilyAsync(actor, id, body.Awards.Select(a => new AwardInput(
                         a.Family, a.ProposalId,
                         a.Criteria is { Count: > 0 } ? string.Join(", ", a.Criteria) : criteria,
-                        string.IsNullOrWhiteSpace(a.Justification) ? body.Justification : a.Justification)).ToList())
+                        string.IsNullOrWhiteSpace(a.Justification) ? body.Justification : a.Justification,
+                        a.QuotationItemId)).ToList())
                 : await svc.SelectWinnerAsync(actor, id, body.ProposalId, criteria, body.Justification);
             return error is not null ? Error(ctx, error.Code == "RFQ-ERR-020" ? 409 : 422, error.Code, error.Message) : Ok(QuotationView(q!), ctx);
         });

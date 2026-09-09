@@ -326,7 +326,14 @@ public record InternalProposalRequest(Guid SupplierId, int? DeliveryDays, string
 public record SelectWinnerRequest(Guid ProposalId, List<string>? Criteria, string Justification,
     List<AwardRequest>? Awards = null);
 /// <summary>Escolha do vencedor de uma família (compra dividida entre vários fornecedores).</summary>
-public record AwardRequest(string Family, Guid ProposalId, List<string>? Criteria, string? Justification);
+/// <summary>
+/// Uma adjudicação. <c>QuotationItemId</c> nulo adjudica a família inteira (como sempre);
+/// preenchido, adjudica aquele item — é o que divide papel e caneta entre fornecedores
+/// diferentes na mesma família. Com item apontado, <c>Family</c> é ignorada: ela vem do
+/// próprio item, no servidor.
+/// </summary>
+public record AwardRequest(string Family, Guid ProposalId, List<string>? Criteria, string? Justification,
+    Guid? QuotationItemId = null);
 public record QuotationDecisionRequest(string Decision, string? Reason);
 public record RegisterPoRequest(string? ErpNumber, DateOnly? IssuedOn, string? Notes,
     string? OverLimitJustification = null, Guid? SupplierId = null, string? NoErpReason = null);

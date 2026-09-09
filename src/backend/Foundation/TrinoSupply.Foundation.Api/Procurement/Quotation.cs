@@ -166,6 +166,18 @@ public class QuotationAward
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid QuotationId { get; set; }
     public string Family { get; set; } = string.Empty;          // lote adjudicado (caixa alta)
+    /// <summary>
+    /// O item que esta adjudicação cobre, quando a divisão é <b>por item</b> — o caso de
+    /// "o fornecedor A leva o papel e o B leva a caneta", dentro da mesma família.
+    ///
+    /// <para>
+    /// <b>Nulo é a família inteira</b>, que é como toda adjudicação era antes e continua
+    /// sendo quando um fornecedor leva o lote todo. Manter os dois significados na mesma
+    /// coluna evita reescrever as adjudicações já gravadas: o que existe hoje continua
+    /// válido e continua querendo dizer exatamente o que dizia.
+    /// </para>
+    /// </summary>
+    public Guid? QuotationItemId { get; set; }
     public Guid SupplierId { get; set; }
     public string SupplierName { get; set; } = string.Empty;    // snapshot
     public Guid ProposalId { get; set; }

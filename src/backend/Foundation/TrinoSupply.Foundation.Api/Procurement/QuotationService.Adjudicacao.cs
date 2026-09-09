@@ -30,6 +30,15 @@ public partial class QuotationService
         Actor actor, Guid id, IReadOnlyList<AwardInput> awards, CancellationToken ct = default) =>
         AwardAsync(actor, id, awards, todasAsFamilias: false, ct);
 
+    /// <summary>
+    /// Adjudicação <b>por item</b>: dentro da mesma família, cada item pode ir para um
+    /// fornecedor diferente — o papel com um, a caneta com outro. Todo item cotado precisa
+    /// de vencedor, e cada um é adjudicado uma vez só.
+    /// </summary>
+    public Task<(Quotation? q, UserError? error)> AwardByItemAsync(
+        Actor actor, Guid id, IReadOnlyList<AwardInput> awards, CancellationToken ct = default) =>
+        AwardAsync(actor, id, awards, todasAsFamilias: false, ct);
+
     private async Task<(Quotation? q, UserError? error)> AwardAsync(
         Actor actor, Guid id, IReadOnlyList<AwardInput> pedidos, bool todasAsFamilias, CancellationToken ct)
     {
@@ -45,15 +54,32 @@ public partial class QuotationService
         if (todasAsFamilias)
             pedidos = familias.Select(f => pedidos[0] with { Family = f }).ToList();
 
-        var chaves = pedidos.Select(a => QuotationAward.FamilyKey(a.Family)).ToList();
-        if (chaves.Distinct().Count() != chaves.Count)
-            return (null, new("RFQ-ERR-023", "Cada família só pode ser adjudicada uma vez."));
-        if (chaves.FirstOrDefault(f => !familias.Contains(f)) is { } intrusa)
-            return (null, new("RFQ-ERR-023", $"A família {intrusa} não faz parte desta cotação."));
-        var faltando = familias.Where(f => !chaves.Contains(f)).ToList();
-        if (faltando.Count > 0)
-            return (null, new("RFQ-ERR-023",
-                $"Falta escolher o fornecedor da(s) família(s) {string.Join(", ", faltando)} — toda família cotada precisa de um vencedor."));
+        // A conferência é sempre a mesma, e é sobre ITENS: cada item do processo precisa de
+        // exatamente um vencedor. Falar em "família adjudicada duas vezes" já não descreve o
+        // que pode dar errado quando o grão é o item — dois pedidos podem cobrir o mesmo item
+        // por caminhos diferentes (um pela família, outro pelo item) e isso é o mesmo furo.
+        var porItem = pedidos.Any(a => a.QuotationItemId is not null);
+        foreach (var pedido in pedidos)
+        {
+            if (pedido.QuotationItemId is { } item && q.Items.All(i => i.Id != item))
+                return (null, new("RFQ-ERR-023", "O item escolhido não faz parte desta cotação."));
+            if (pedido.QuotationItemId is null
+                && QuotationAward.FamilyKey(pedido.Family) is { } f && !familias.Contains(f))
+                return (null, new("RFQ-ERR-023", $"A família {f} não faz parte desta cotação."));
+        }
+
+        var cobertos = pedidos.SelectMany(a => EscopoDe(q, a)).ToList();
+        var repetido = cobertos.GroupBy(i => i).FirstOrDefault(g => g.Count() > 1);
+        if (repetido is not null)
+            return (null, new("RFQ-ERR-023", porItem
+                ? $"O item {DescricaoDoItem(q, repetido.Key)} foi adjudicado mais de uma vez."
+                : "Cada família só pode ser adjudicada uma vez."));
+
+        var descobertos = q.Items.Where(i => !cobertos.Contains(i.Id)).ToList();
+        if (descobertos.Count > 0)
+            return (null, new("RFQ-ERR-023", porItem
+                ? $"Falta escolher o fornecedor de: {string.Join(", ", descobertos.Select(i => i.Description))} — todo item cotado precisa de um vencedor."
+                : $"Falta escolher o fornecedor da(s) família(s) {string.Join(", ", familias.Where(f => !pedidos.Any(a => QuotationAward.FamilyKey(a.Family) == f)))} — toda família cotada precisa de um vencedor."));
 
         var now = clock.GetUtcNow();
         var hoje = DateOnly.FromDateTime(now.UtcDateTime);
@@ -66,7 +92,11 @@ public partial class QuotationService
         var novas = new List<QuotationAward>();
         foreach (var pedido in pedidos)
         {
-            var familia = QuotationAward.FamilyKey(pedido.Family);
+            // no pedido por item a família vem do próprio item: exigir que a tela a repita
+            // seria pedir um dado que o servidor já tem, e que ela poderia errar
+            var familia = pedido.QuotationItemId is { } alvo
+                ? QuotationAward.FamilyKey(q.Items.Single(i => i.Id == alvo).Family)
+                : QuotationAward.FamilyKey(pedido.Family);
             if (string.IsNullOrWhiteSpace(pedido.Justification))
                 return (null, new("RFQ-ERR-021", familias.Count > 1
                     ? $"A justificativa da escolha é obrigatória (família {familia})."
@@ -78,10 +108,11 @@ public partial class QuotationService
             if (latest.Id != proposal.Id)
                 return (null, new("RFQ-ERR-021", "Selecione a versão mais recente da proposta do fornecedor."));
 
-            var itens = ItemsOfFamily(q, familia);
+            var itens = EscopoDe(q, pedido);
             if (itens.Any(i => proposal.Items.All(pi => pi.QuotationItemId != i)))
-                return (null, new("RFQ-ERR-024",
-                    $"{proposal.SupplierName} não cotou todos os itens da família {familia} — escolha um fornecedor que tenha cotado a família inteira."));
+                return (null, new("RFQ-ERR-024", pedido.QuotationItemId is { } naoCotado
+                    ? $"{proposal.SupplierName} não cotou {DescricaoDoItem(q, naoCotado)}."
+                    : $"{proposal.SupplierName} não cotou todos os itens da família {familia} — escolha um fornecedor que tenha cotado a família inteira."));
 
             // homologação (V2-P2): prospect participa da cotação, mas só homologado é selecionado
             var vencedor = fornecedores.SingleOrDefault(f => f.Id == proposal.SupplierId)
@@ -99,7 +130,7 @@ public partial class QuotationService
             var (valorItens, total) = ShareOf(proposal, itens);
             novas.Add(new QuotationAward
             {
-                QuotationId = q.Id, Family = familia,
+                QuotationId = q.Id, Family = familia, QuotationItemId = pedido.QuotationItemId,
                 SupplierId = proposal.SupplierId, SupplierName = proposal.SupplierName,
                 ProposalId = proposal.Id, ProposalVersion = proposal.VersionNumber,
                 ItemsValue = valorItens, TotalValue = total,
@@ -211,9 +242,30 @@ public partial class QuotationService
             .OrderByDescending(o => o.CanWin).ThenByDescending(o => o.Complete).ThenBy(o => o.TotalValue).ToList();
     }
 
+    /// <summary>O que um pedido de adjudicação cobre: um item, ou a família inteira.</summary>
+    private static List<Guid> EscopoDe(Quotation q, AwardInput pedido) =>
+        pedido.QuotationItemId is { } item ? [item] : ItemsOfFamily(q, QuotationAward.FamilyKey(pedido.Family));
+
+    /// <summary>Descrição do item para a mensagem de erro — id cru não ajuda quem lê.</summary>
+    private static string DescricaoDoItem(Quotation q, Guid itemId) =>
+        q.Items.SingleOrDefault(i => i.Id == itemId)?.Description ?? "o item escolhido";
+
     /// <summary>Itens de uma família dentro do processo (a família do item é snapshot do catálogo).</summary>
     private static List<Guid> ItemsOfFamily(Quotation q, string familia) =>
         q.Items.Where(i => QuotationAward.FamilyKey(i.Family) == familia).Select(i => i.Id).ToList();
+
+    /// <summary>
+    /// O que uma adjudicação cobre. É aqui que os dois grãos convivem: com item apontado,
+    /// ela cobre aquele item só — a divisão do papel e da caneta entre fornecedores
+    /// diferentes; sem item, cobre a família inteira, como sempre cobriu.
+    ///
+    /// <para>
+    /// Todo cálculo a jusante (rateio de frete, valor da O.C., saving) pergunta por aqui em
+    /// vez de assumir a família, e por isso nenhum deles precisou mudar de conta.
+    /// </para>
+    /// </summary>
+    internal static List<Guid> ItemsCovered(Quotation q, QuotationAward award) =>
+        award.QuotationItemId is { } item ? [item] : ItemsOfFamily(q, award.Family);
 
     /// <summary>
     /// Fatia de uma proposta: os itens indicados pelo preço cotado mais o rateio proporcional de
@@ -253,7 +305,9 @@ public partial class QuotationService
 
         foreach (var a in awards)
         {
-            var itens = ItemsOfFamily(q, a.Family);
+            // o baseline compara a MESMA fatia: se a adjudicação é de um item só, a
+            // primeira proposta entra por aquele item, não pela família inteira
+            var itens = ItemsCovered(q, a);
             var primeira = q.Proposals.Where(p => p.SupplierId == a.SupplierId)
                 .OrderBy(p => p.VersionNumber).First();
             baseline += ShareOf(primeira, itens).total;

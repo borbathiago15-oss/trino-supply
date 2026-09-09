@@ -84,8 +84,11 @@ public partial class QuotationService
             return (null, new("RFQ-ERR-040", "Fornecedor vencedor inativo: regularize o cadastro ou solicite ajustes."));
 
         var now = clock.GetUtcNow();
-        var familias = doFornecedor.Select(a => a.Family).OrderBy(f => f).ToList();
-        var itensDaOc = familias.SelectMany(f => ItemsOfFamily(q, f)).Distinct().ToHashSet();
+        var familias = doFornecedor.Select(a => a.Family).Distinct().OrderBy(f => f).ToList();
+        // os itens da O.C. saem do que este fornecedor ganhou de fato. Antes saíam das
+        // famílias dele, o que passou a ser diferente quando a mesma família se divide
+        // entre dois fornecedores: a O.C. de um levaria também o item que o outro venceu
+        var itensDaOc = doFornecedor.SelectMany(a => ItemsCovered(q, a)).Distinct().ToHashSet();
         // sem O.C. do ERP o pedido usa a própria numeração de pedido, a mesma das
         // compras que não vêm de cotação — nada aqui se parece com número do SENIOR
         var referencia = semOc ? await PurchaseOrderService.NextOrderNumberAsync(db, now, ct) : numero!;

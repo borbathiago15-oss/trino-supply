@@ -160,6 +160,14 @@ porque não são óbvias:
   inventar um registro vazio daria um KPI que não conta nada. A regra vive em
   `TorreDeControleService.ExcecaoDe`, e a linha mostra **o motivo**, não só a marca.
 
+**Cada card do topo abre exatamente a lista que ele contou.** Não é detalhe de tela: o card é
+um número que promete uma lista, e as duas coisas precisam sair da mesma pergunta. Por isso
+`PrecisaDeVoce` é contado por `AcaoDe` (a soma de etapas deixava de fora a exceção que volta ao
+comprador) e `FiltroTorre.Invoicing` separa as duas filas do recebimento (as duas caíam no
+mesmo filtro de etapa, e "Em faturamento: 3" abria dez linhas). Clicar troca o **recorte
+inteiro** — resto de um filtro anterior faria a lista ser outra — e rola até a tabela, que fica
+abaixo dos cards e das faixas.
+
 **A situação diz a etapa; a espera diz de quem ela depende.** `EsperaDe` responde a outra
 metade da pergunta — *aguardando aprovação de quem, e há quanto tempo* — a partir do que o
 sistema já grava: os aprovadores do nível pendente no centro de custo, e os convidados sem

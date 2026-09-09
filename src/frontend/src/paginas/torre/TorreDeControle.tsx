@@ -6,7 +6,7 @@ import {
   type FiltrosDaTorre, type LinhaDaTorre,
   FAIXAS_DE_FILA,
 } from '@/api/torre';
-import { Aviso, Badge, Carregando, Erro, FaixaKpis, Kpi, Painel, Vazio } from '@/componentes/basicos';
+import { Aviso, Badge, Carregando, Erro, FaixaKpis, Painel, Vazio } from '@/componentes/basicos';
 import { Campo } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
 import { podeTriar } from '@/dominio/papeis';
@@ -14,6 +14,7 @@ import { designar, designarEmLote, listarResponsaveis, rotuloDoResponsavel } fro
 import { DialogoDePrioridade, type Pleito } from '@/paginas/triagem/DialogoDePrioridade';
 import { useUsuario } from '@/sessao/SessaoProvider';
 import { data, moeda, quantidade } from '@/util/formato';
+import { rolarPara } from '@/util/rolar';
 import { useCarregar } from '@/util/useCarregar';
 
 /** Um KPI que também filtra: clicar leva a Torre para aquela etapa. */
@@ -230,22 +231,49 @@ export function TorreDeControle() {
   };
   const limpar = () => { setRascunho(FILTROS_TORRE_VAZIOS); setAplicados({ ...FILTROS_TORRE_VAZIOS }); };
   const irPara = (p: number) => setAplicados((f) => ({ ...f, pagina: p }));
-  const porEtapa = (etapa: string) =>
-    aplicar({ etapa: aplicados.etapa === etapa ? '' : etapa, atrasados: false });
+
+  /**
+   * Clicar num card do topo é pedir "me mostre estes". Além de filtrar, a tela **rola até
+   * a lista**: com os cards, a faixa de fila e a barra de filtros acima dela, o comprador
+   * clicava, a tabela mudava fora da vista, e parecia que nada tinha acontecido.
+   *
+   * <p>
+   * O recorte vem inteiro, e não só o campo que muda: o card promete uma lista, e restos
+   * de um filtro anterior a fariam ser outra. Só `busca` fica, porque é do comprador.
+   * </p>
+   */
+  const porCard = (recorte: Partial<FiltrosDaTorre>) => {
+    aplicar({
+      ...FILTROS_TORRE_VAZIOS, busca: rascunho.busca, ...recorte,
+    });
+    rolarPara('lista-da-torre');
+  };
+  /** Algum card está recortando a lista? É o que faz "Itens em aberto" ficar aceso ou não. */
+  const temRecorte = aplicados.etapa !== '' || aplicados.atrasados || aplicados.excecoes
+    || aplicados.minhaFila || aplicados.prioridade !== '' || aplicados.faturamento !== '';
+
+  /** Card de etapa: clicar de novo no que já está ativo desliga o filtro. */
+  const porEtapa = (etapa: string, extra: Partial<FiltrosDaTorre> = {}) =>
+    porCard(aplicados.etapa === etapa && aplicados.faturamento === (extra.faturamento ?? '')
+      ? {} : { etapa, ...extra });
 
   return (
     <>
       {dados && (
         <FaixaKpis>
-          <Kpi rotulo="Itens em aberto" valor={quantidade(dados.kpis.total)}
-            detalhe={`${moeda(dados.kpis.valor)} estimados`} />
+          {/* clicável como os outros: era o único card que não levava a lugar nenhum,
+              e "todos os itens" é uma lista tão legítima quanto as demais */}
+          <KpiFiltro rotulo="Itens em aberto" valor={quantidade(dados.kpis.total)}
+            detalhe={`${moeda(dados.kpis.valor)} estimados`}
+            ativo={!temRecorte} aoClicar={() => porCard({})} />
           {/* §5 — a fila prioritária. Vem primeiro entre os filtros porque é por onde
               o comprador começa o dia: o que espera ele, na ordem em que aperta */}
-          <KpiFiltro rotulo="Precisa de você"
-            valor={quantidade(dados.kpis.novos + dados.kpis.emCotacao + dados.kpis.aguardandoOc)}
+          {/* o número vem do servidor pela mesma regra do filtro: somar etapas aqui
+              daria um card que promete 12 e abre uma lista de 14 */}
+          <KpiFiltro rotulo="Precisa de você" valor={quantidade(dados.kpis.precisaDeVoce)}
             detalhe="atrasado e urgente primeiro"
             ativo={aplicados.minhaFila}
-            aoClicar={() => aplicar({ minhaFila: !aplicados.minhaFila, etapa: '', atrasados: false })} />
+            aoClicar={() => porCard(aplicados.minhaFila ? {} : { minhaFila: true })} />
           <KpiFiltro rotulo="Novos" valor={quantidade(dados.kpis.novos)} detalhe="aguardando o comprador"
             ativo={aplicados.etapa === 'SOLICITACAO'} aoClicar={() => porEtapa('SOLICITACAO')} />
           <KpiFiltro rotulo="Em cotação" valor={quantidade(dados.kpis.emCotacao)} detalhe="sourcing em andamento"
@@ -257,21 +285,27 @@ export function TorreDeControle() {
             ativo={aplicados.etapa === 'ORDEM_DE_COMPRA'} aoClicar={() => porEtapa('ORDEM_DE_COMPRA')} />
           {/* §5: duas filas, e o que as separa é a nota fiscal — sem NF a bola está
               com o fornecedor; com NF e sem entrega, com o almoxarifado */}
+          {/* os dois contam em separado e agora abrem listas diferentes: antes caíam no
+              mesmo filtro de etapa, e clicar em "Em faturamento: 3" mostrava as dez linhas
+              das duas filas — o card mentia sobre a própria lista */}
           <KpiFiltro rotulo="Em faturamento" valor={quantidade(dados.kpis.emFaturamento)}
             detalhe="O.C. emitida, sem NF"
-            ativo={aplicados.etapa === 'RECEBIMENTO'} aoClicar={() => porEtapa('RECEBIMENTO')} />
+            ativo={aplicados.etapa === 'RECEBIMENTO' && aplicados.faturamento === 'sem-nf'}
+            aoClicar={() => porEtapa('RECEBIMENTO', { faturamento: 'sem-nf' })} />
           <KpiFiltro rotulo="Aguardando recebimento" valor={quantidade(dados.kpis.aguardandoRecebimento)}
             detalhe="NF lançada, material a caminho"
-            ativo={aplicados.etapa === 'RECEBIMENTO'} aoClicar={() => porEtapa('RECEBIMENTO')} />
+            ativo={aplicados.etapa === 'RECEBIMENTO' && aplicados.faturamento === 'com-nf'}
+            aoClicar={() => porEtapa('RECEBIMENTO', { faturamento: 'com-nf' })} />
           <KpiFiltro rotulo="Atrasados" valor={quantidade(dados.kpis.atrasados)} detalhe="passaram da previsão"
-            ativo={aplicados.atrasados} aoClicar={() => aplicar({ atrasados: !aplicados.atrasados, etapa: '' })} />
+            ativo={aplicados.atrasados}
+            aoClicar={() => porCard(aplicados.atrasados ? {} : { atrasados: true })} />
           <KpiFiltro rotulo="Urgentes" valor={quantidade(dados.kpis.urgentes)} detalhe="prioridade URGENT"
             ativo={aplicados.prioridade === 'URGENT'}
-            aoClicar={() => aplicar({ prioridade: aplicados.prioridade === 'URGENT' ? '' : 'URGENT' })} />
+            aoClicar={() => porCard(aplicados.prioridade === 'URGENT' ? {} : { prioridade: 'URGENT' })} />
           <KpiFiltro rotulo="Exceções" valor={quantidade(dados.kpis.excecoes)}
             detalhe="sem O.C. do ERP, cancelado ou devolvido"
             ativo={aplicados.excecoes}
-            aoClicar={() => aplicar({ excecoes: !aplicados.excecoes, etapa: '' })} />
+            aoClicar={() => porCard(aplicados.excecoes ? {} : { excecoes: true })} />
         </FaixaKpis>
       )}
 
@@ -431,7 +465,7 @@ export function TorreDeControle() {
         {dados && !dados.items.length && <Vazio>Nenhum item de compra neste recorte.</Vazio>}
         {!!dados?.items.length && (
           <>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto" id="lista-da-torre">
               <table data-testid="tabela-torre" className="min-w-[1180px]">
                 <thead>
                   <tr>

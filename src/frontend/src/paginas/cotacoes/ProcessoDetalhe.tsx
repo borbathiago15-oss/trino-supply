@@ -21,6 +21,7 @@ import { CabecalhoDoProcesso } from './CabecalhoDoProcesso';
 import { MapaDeCotacao } from './MapaDeCotacao';
 import { PainelDeConvidados } from './PainelDeConvidados';
 import { PainelDeNegociacao } from './PainelDeNegociacao';
+import { PainelDeScore } from './PainelDeScore';
 import { PainelPropostaManual } from './PainelPropostaManual';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
@@ -105,6 +106,9 @@ export function ProcessoDetalhe() {
           <PainelPropostaManual processo={q} aoRegistrar={recarregar} aoAvisar={aviso} />
         )}
       </Painel>
+
+      {/* o score vem logo depois do mapa: é a mesma comparação, com o que o preço não diz */}
+      {q.proposals.length > 0 && <PainelDeScore processoId={q.id} />}
 
       <PainelDeNegociacao processo={q} podeNegociar={pode.negociar}
         aoRegistrar={recarregar} aoAvisar={aviso} />

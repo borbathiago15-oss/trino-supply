@@ -424,6 +424,92 @@ public class TorreDeControleServiceTests
         Assert.False(TorreDeControleService.EmFaturamento(entregue));
     }
 
+    // ==== §5 — ações rápidas e fila prioritária ================================
+
+    [Fact]
+    public void A_acao_da_linha_e_da_fila_saem_da_mesma_regra()
+    {
+        // fossem duas regras, o botão e a fila discordariam no primeiro caso de canto
+        // e o comprador não confiaria em nenhum dos dois
+        Assert.Equal(("Atribuir comprador", true),
+            TorreDeControleService.AcaoDe("SOLICITACAO", null, temComprador: false));
+        Assert.Equal(("Abrir cotação", true),
+            TorreDeControleService.AcaoDe("SOLICITACAO", null, temComprador: true));
+        Assert.Equal(("Conduzir cotação", true),
+            TorreDeControleService.AcaoDe("COTACAO", null, true));
+        Assert.Equal(("Registrar O.C. do ERP", true),
+            TorreDeControleService.AcaoDe("ORDEM_DE_COMPRA", null, true));
+
+        // etapas de outros donos aparecem na linha, mas não entram na fila do comprador
+        Assert.Equal(("Acompanhar aprovação", false),
+            TorreDeControleService.AcaoDe("APROVACAO", null, true));
+        Assert.Equal(("Faturamento e entrega", false),
+            TorreDeControleService.AcaoDe("RECEBIMENTO", null, true));
+        Assert.Equal(("", false), TorreDeControleService.AcaoDe("ENCERRADO", null, true));
+
+        // exceção volta ao comprador em qualquer etapa — é o caso que ninguém mais resolve
+        foreach (var etapa in TorreDeControleService.Etapas.Select(e => e.Key))
+            Assert.Equal(("Tratar exceção", true),
+                TorreDeControleService.AcaoDe(etapa, "Pedido cancelado", true));
+    }
+
+    [Fact]
+    public async Task A_fila_prioritaria_traz_so_o_que_espera_o_comprador()
+    {
+        var w = Build();
+        await ScAprovadaAsync(w, "Espera o comprador");           // sem cotação: é dele
+        var emAprovacao = await ScAprovadaAsync(w, "Espera o aprovador");
+        var (q, _) = await w.Rfq.CreateFromPrAsync(Carla, emAprovacao.Id, QuotationKind.Purchase, null, null);
+        q!.Status = QuotationStatus.AwaitingManager;
+        await w.Db.SaveChangesAsync();
+
+        var fila = await w.Torre.ConsultarAsync(new FiltroTorre(NeedsBuyer: true));
+
+        var linha = Assert.Single(fila.Items);
+        Assert.Equal("Espera o comprador", linha.Description);
+        Assert.True(linha.NeedsBuyer);
+        Assert.Equal("Atribuir comprador", linha.ActionLabel);
+
+        // a linha do aprovador continua na Torre inteira, com a ação dela
+        var tudo = await w.Torre.ConsultarAsync(new FiltroTorre());
+        var doAprovador = tudo.Items.Single(i => i.Description == "Espera o aprovador");
+        Assert.Equal("Acompanhar aprovação", doAprovador.ActionLabel);
+        Assert.False(doAprovador.NeedsBuyer);
+    }
+
+    [Fact]
+    public async Task A_fila_prioritaria_ordena_por_atraso_urgencia_e_prazo()
+    {
+        // ordenar pela criação, como no resto da Torre, deixaria o item que vence
+        // amanhã atrás do que chegou hoje — o oposto de uma fila de prioridade
+        var w = Build();
+        async Task Sc(string desc, string prioridade, DateOnly? quando)
+        {
+            var (pr, _) = await w.Prs.CreateAsync(Ana, "Reposição", "CC-01", prioridade, quando,
+                [new ItemInput(desc, 10, "UN", 100, null)],
+                null, prioridade == "URGENT"
+                    ? new RequisitionService.ScHeaderInput(null, null, null, null, "parada de linha", "multa")
+                    : null);
+            await w.Prs.SubmitAsync(Ana, pr!.Id);
+            await w.Prs.ApproveAsync(Bruno, pr.Id, null);
+        }
+
+        await Sc("Tranquilo", "NORMAL", new DateOnly(2026, 12, 1));
+        await Sc("Aperta", "NORMAL", new DateOnly(2026, 9, 20));
+        await Sc("Urgente", "URGENT", new DateOnly(2026, 11, 1));
+        // a SC nasce com data futura porque o PR-ERR-050 recusa data vencida no envio;
+        // o atraso é o tempo passando por cima dela, e é assim que ele acontece de verdade
+        await Sc("Atrasado", "NORMAL", new DateOnly(2026, 9, 25));
+        var vencida = await w.Db.Requisitions.SingleAsync(r => r.Items.Any(i => i.Description == "Atrasado"));
+        vencida.NeededBy = new DateOnly(2026, 9, 1);               // hoje é 10/09
+        await w.Db.SaveChangesAsync();
+
+        var fila = await w.Torre.ConsultarAsync(new FiltroTorre(NeedsBuyer: true));
+
+        Assert.Equal(["Atrasado", "Urgente", "Aperta", "Tranquilo"],
+            fila.Items.Select(i => i.Description));
+    }
+
     [Fact]
     public void A_torre_e_de_quem_trabalha_a_fila_de_compras()
     {

@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LinhaDaTorre, PaginaDaTorre } from '@/api/torre';
-import { consultaDaTorre, FILTROS_TORRE_VAZIOS } from '@/api/torre';
+import { consultaDaTorre, destinoDaAcao, FILTROS_TORRE_VAZIOS } from '@/api/torre';
 import { TorreDeControle } from './TorreDeControle';
 
 vi.mock('@/api/torre', async (importar) => ({
@@ -23,6 +23,7 @@ const linha = (p: Partial<LinhaDaTorre> = {}): LinhaDaTorre => ({
   priority: 'NORMAL', neededBy: '2026-09-20', promisedDate: null, late: false,
   value: 200, quotationId: null, quotationNumber: null,
   purchaseOrderId: null, purchaseOrderNumber: null, exceptionReason: null,
+  actionLabel: 'Abrir cotação', needsBuyer: true,
   ...p,
 });
 
@@ -215,6 +216,45 @@ describe('Torre de Controle', () => {
     abrir();
     const tabela = within(await screen.findByTestId('tabela-torre'));
     expect(tabela.queryByText(/⚠/)).not.toBeInTheDocument();
+  });
+
+  it('a linha traz a ação esperada e leva até onde ela se faz (§5)', async () => {
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({
+      items: [
+        linha({ itemId: 'i1', description: 'Sem processo', actionLabel: 'Abrir cotação',
+          needsBuyer: true, buyerLabel: 'Carla' }),
+        linha({ itemId: 'i2', sequence: 2, description: 'Já em cotação', quotationId: 'q1',
+          quotationNumber: 'RFQ-1', actionLabel: 'Conduzir cotação', needsBuyer: true }),
+        linha({ itemId: 'i3', sequence: 3, description: 'Já tem pedido', purchaseOrderId: 'p1',
+          purchaseOrderNumber: 'PO-1', actionLabel: 'Faturamento e entrega', needsBuyer: false }),
+      ],
+    }));
+    abrir();
+
+    const tabela = within(await screen.findByTestId('tabela-torre'));
+    expect(tabela.getByRole('link', { name: 'Abrir cotação' })).toHaveAttribute('href', '/cotacoes/abrir');
+    expect(tabela.getByRole('link', { name: 'Conduzir cotação' })).toHaveAttribute('href', '/cotacoes/q1');
+    expect(tabela.getByRole('link', { name: 'Faturamento e entrega' })).toHaveAttribute('href', '/pedidos/p1');
+  });
+
+  it('item sem comprador manda para a triagem, que é onde se atribui', () => {
+    expect(destinoDaAcao(linha({ buyerLabel: null }))).toBe('/gestao-solicitacoes');
+    expect(destinoDaAcao(linha({ buyerLabel: 'Carla' }))).toBe('/cotacoes/abrir');
+    // com processo, o destino é o processo — a etapa mais adiantada manda
+    expect(destinoDaAcao(linha({ buyerLabel: null, quotationId: 'q9' }))).toBe('/cotacoes/q9');
+    expect(destinoDaAcao(linha({ quotationId: 'q9', purchaseOrderId: 'p9' }))).toBe('/pedidos/p9');
+  });
+
+  it('a fila prioritária é um filtro, e limpa etapa e atrasados ao ligar', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(torreDeControle).mockResolvedValue(pagina());
+    abrir();
+    await screen.findByTestId('tabela-torre');
+
+    await usuario.click(screen.getByRole('button', { name: /Precisa de você/ }));
+    await waitFor(() => expect(torreDeControle).toHaveBeenLastCalledWith(
+      expect.objectContaining({ minhaFila: true, etapa: '', atrasados: false, pagina: 1 }),
+      expect.anything()));
   });
 
   it('sem item no recorte, diz isso em vez de mostrar tabela vazia', async () => {

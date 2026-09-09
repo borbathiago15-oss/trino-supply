@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  CLASSE_DO_TOM, ETAPAS, FILTROS_TORRE_VAZIOS, torreDeControle,
+  CLASSE_DO_TOM, destinoDaAcao, ETAPAS, FILTROS_TORRE_VAZIOS, torreDeControle,
   type FiltrosDaTorre, type LinhaDaTorre,
 } from '@/api/torre';
 import { Aviso, Badge, Carregando, Erro, FaixaKpis, Kpi, Painel, Vazio } from '@/componentes/basicos';
@@ -55,6 +55,16 @@ function Linha({ i }: { i: LinhaDaTorre }) {
         )}
       </td>
       <td className="whitespace-nowrap">{i.value != null ? moeda(i.value) : <span className="sub">—</span>}</td>
+      {/* §5 — a ação rápida: a linha diz o que fazer agora e leva até lá, em vez de
+          obrigar o comprador a descobrir a tela certa para cada etapa */}
+      <td className="whitespace-nowrap">
+        {i.actionLabel ? (
+          <Link className={'botao-secundario inline-block ' + (i.needsBuyer ? 'font-semibold' : '')}
+            to={destinoDaAcao(i)}>
+            {i.actionLabel}
+          </Link>
+        ) : <span className="sub">—</span>}
+      </td>
       {/* o link leva para onde a ação está: o pedido, se já existe; senão a cotação */}
       <td className="whitespace-nowrap">
         {i.purchaseOrderId ? (
@@ -111,6 +121,13 @@ export function TorreDeControle() {
         <FaixaKpis>
           <Kpi rotulo="Itens em aberto" valor={quantidade(dados.kpis.total)}
             detalhe={`${moeda(dados.kpis.valor)} estimados`} />
+          {/* §5 — a fila prioritária. Vem primeiro entre os filtros porque é por onde
+              o comprador começa o dia: o que espera ele, na ordem em que aperta */}
+          <KpiFiltro rotulo="Precisa de você"
+            valor={quantidade(dados.kpis.novos + dados.kpis.emCotacao + dados.kpis.aguardandoOc)}
+            detalhe="atrasado e urgente primeiro"
+            ativo={aplicados.minhaFila}
+            aoClicar={() => aplicar({ minhaFila: !aplicados.minhaFila, etapa: '', atrasados: false })} />
           <KpiFiltro rotulo="Novos" valor={quantidade(dados.kpis.novos)} detalhe="aguardando o comprador"
             ativo={aplicados.etapa === 'SOLICITACAO'} aoClicar={() => porEtapa('SOLICITACAO')} />
           <KpiFiltro rotulo="Em cotação" valor={quantidade(dados.kpis.emCotacao)} detalhe="sourcing em andamento"
@@ -250,7 +267,7 @@ export function TorreDeControle() {
                   <tr>
                     <th>SC</th><th>Produto</th><th>Qtd.</th><th>Solicitante</th><th>CC</th>
                     <th>Comprador</th><th>Fornecedor</th><th>Etapa</th><th>Situação</th>
-                    <th>Previsão</th><th>Valor</th><th>Processo</th>
+                    <th>Previsão</th><th>Valor</th><th>Ação</th><th>Processo</th>
                   </tr>
                 </thead>
                 <tbody>{dados.items.map((i) => <Linha key={i.itemId} i={i} />)}</tbody>

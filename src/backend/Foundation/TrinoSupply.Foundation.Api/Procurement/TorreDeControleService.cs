@@ -18,7 +18,9 @@ public record FiltroTorre(
     DateOnly? DueFrom = null, DateOnly? DueTo = null,
     decimal? MinValue = null, decimal? MaxValue = null,
     /// <summary>Só o que virou exceção — ver <see cref="ExcecaoDe"/>.</summary>
-    bool? Exception = null);
+    bool? Exception = null,
+    /// <summary>A fila prioritária do §5: só o que espera ação do comprador.</summary>
+    bool? NeedsBuyer = null);
 
 /// <summary>Uma linha da Torre: um item de compra, com o seu próprio andamento.</summary>
 public record LinhaDaTorre(
@@ -31,7 +33,11 @@ public record LinhaDaTorre(
     decimal? Value, Guid? QuotationId, string? QuotationNumber,
     Guid? PurchaseOrderId, string? PurchaseOrderNumber,
     /// <summary>Por que este item é exceção, ou nulo quando segue o caminho normal.</summary>
-    string? ExceptionReason = null);
+    string? ExceptionReason = null,
+    /// <summary>A próxima ação esperada — o que a linha pede que se faça agora.</summary>
+    string? ActionLabel = null,
+    /// <summary>Se essa ação é do comprador (é o que define a fila prioritária).</summary>
+    bool NeedsBuyer = false);
 
 /// <summary>
 /// Os números do topo (§5).
@@ -153,6 +159,39 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
     }
 
     /// <summary>
+    /// Qual é a próxima ação esperada do item, e de quem ela é.
+    ///
+    /// <para>
+    /// O documento pede "ações rápidas" na linha e uma "fila prioritária" com os itens
+    /// que exigem ação do comprador — as duas coisas são a mesma pergunta, respondida
+    /// aqui uma vez só. Fossem duas regras, a fila e o botão discordariam no primeiro
+    /// caso de canto, e o comprador não confiaria em nenhum dos dois.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Exceção sempre volta para o comprador</b>, em qualquer etapa: pedido cancelado,
+    /// saldo encerrado, devolução e fechamento sem O.C. do ERP são justamente os casos
+    /// que ninguém mais resolve sozinho.
+    /// </para>
+    /// </summary>
+    public static (string Label, bool DoComprador) AcaoDe(
+        string etapa, string? excecao, bool temComprador)
+    {
+        if (excecao is not null) return ("Tratar exceção", true);
+        return etapa switch
+        {
+            "SOLICITACAO" when !temComprador => ("Atribuir comprador", true),
+            "SOLICITACAO" => ("Abrir cotação", true),
+            "COTACAO" => ("Conduzir cotação", true),
+            // a bola está com os aprovadores: aparece na linha, mas não na fila do comprador
+            "APROVACAO" => ("Acompanhar aprovação", false),
+            "ORDEM_DE_COMPRA" => ("Registrar O.C. do ERP", true),
+            "RECEBIMENTO" => ("Faturamento e entrega", false),
+            _ => ("", false),
+        };
+    }
+
+    /// <summary>
     /// A O.C. saiu e ainda não há nota: quem deve agir é o fornecedor. Com NF lançada e
     /// material não recebido, a bola passa ao almoxarifado — são filas diferentes.
     /// </summary>
@@ -211,7 +250,7 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
                        || f.Supplier is { Length: > 0 } || f.OrderNumber is { Length: > 0 }
                        || f.DueFrom is not null || f.DueTo is not null
                        || f.MinValue is not null || f.MaxValue is not null
-                       || f.Exception == true;
+                       || f.Exception == true || f.NeedsBuyer == true;
         var ordenada = consulta.OrderByDescending(x => x.sc.CreatedAt).ThenBy(x => x.item.Sequence);
 
         var total = derivado ? 0 : await consulta.CountAsync(ct);
@@ -308,6 +347,9 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
             var excecao = ExcecaoDe(pedido);
             if (f.Exception == true && excecao is null) continue;
 
+            var (acao, doComprador) = AcaoDe(etapa, excecao, x.sc.AssignedToId is not null);
+            if (f.NeedsBuyer == true && !doComprador) continue;
+
             linhas.Add(new LinhaDaTorre(
                 x.item.Id, x.sc.Id, x.sc.Number, x.item.Sequence,
                 x.item.CatalogCode, x.item.Description, x.item.Quantity, x.item.UnitOfMeasure,
@@ -316,11 +358,22 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
                 pedido?.SupplierName, etapa, RotuloDaEtapa(etapa),
                 situacao.Key, situacao.Label, situacao.Tone,
                 x.sc.Priority, x.sc.NeededBy, pedido?.PromisedDate, atrasado,
-                valor, cotacao?.Id, cotacao?.Number, pedido?.Id, pedido?.Number, excecao));
+                valor, cotacao?.Id, cotacao?.Number, pedido?.Id, pedido?.Number, excecao,
+                acao.Length == 0 ? null : acao, doComprador));
         }
 
         if (derivado)
         {
+            // a fila prioritária tem ordem própria (§5): atrasado primeiro, depois o
+            // urgente, e dentro disso o prazo mais apertado. Ordenar pela criação, como
+            // no resto da Torre, deixaria o item que vence amanhã atrás do que chegou
+            // hoje — que é o oposto de uma fila de prioridade.
+            if (f.NeedsBuyer == true)
+                linhas = [.. linhas
+                    .OrderByDescending(l => l.Late)
+                    .ThenByDescending(l => l.Priority == "URGENT")
+                    .ThenBy(l => l.PromisedDate ?? l.NeededBy ?? DateOnly.MaxValue)];
+
             // agora o total é o que sobrou do filtro, e a página sai dele
             total = linhas.Count;
             linhas = linhas.Skip((pagina - 1) * tamanho).Take(tamanho).ToList();

@@ -37,6 +37,10 @@ export interface LinhaDaTorre {
   purchaseOrderNumber: string | null;
   /** Por que a linha é exceção, ou nulo quando ela segue o caminho normal. */
   exceptionReason: string | null;
+  /** A próxima ação esperada — o que a linha pede que se faça agora. */
+  actionLabel: string | null;
+  /** Se essa ação é do comprador; é o que define a fila prioritária. */
+  needsBuyer: boolean;
 }
 
 export interface KpisDaTorre {
@@ -99,6 +103,8 @@ export interface FiltrosDaTorre {
   valorAte: string;
   /** §5 — só o que virou exceção. */
   excecoes: boolean;
+  /** §5 — a fila prioritária: só o que espera ação do comprador. */
+  minhaFila: boolean;
   pagina: number;
 }
 
@@ -106,7 +112,7 @@ export const FILTROS_TORRE_VAZIOS: FiltrosDaTorre = {
   busca: '', etapa: '', situacao: '', empresa: '', centroCusto: '', familia: '',
   solicitante: '', comprador: '', prioridade: '', atrasados: false,
   de: '', ate: '', fornecedor: '', numeroOc: '', prazoDe: '', prazoAte: '',
-  valorDe: '', valorAte: '', excecoes: false, pagina: 1,
+  valorDe: '', valorAte: '', excecoes: false, minhaFila: false, pagina: 1,
 };
 
 /** As etapas, na ordem em que o item as percorre — os mesmos nomes do servidor. */
@@ -154,6 +160,7 @@ export function consultaDaTorre(f: FiltrosDaTorre, tamanho = 50): string {
   if (f.valorDe.trim() && Number.isFinite(Number(f.valorDe))) q.set('minValue', f.valorDe.trim());
   if (f.valorAte.trim() && Number.isFinite(Number(f.valorAte))) q.set('maxValue', f.valorAte.trim());
   if (f.excecoes) q.set('exception', 'true');
+  if (f.minhaFila) q.set('needsBuyer', 'true');
   q.set('page', String(f.pagina));
   q.set('pageSize', String(tamanho));
   return `?${q.toString()}`;
@@ -161,3 +168,16 @@ export function consultaDaTorre(f: FiltrosDaTorre, tamanho = 50): string {
 
 export const torreDeControle = (f: FiltrosDaTorre, signal?: AbortSignal) =>
   api<PaginaDaTorre>(`/api/v1/control-tower${consultaDaTorre(f)}`, { signal });
+
+/**
+ * Para onde a ação da linha leva. O rótulo vem do servidor (é a mesma regra que
+ * monta a fila prioritária); o destino é do navegador, porque só ele conhece as
+ * rotas da aplicação.
+ */
+export function destinoDaAcao(i: LinhaDaTorre): string {
+  if (i.purchaseOrderId) return `/pedidos/${i.purchaseOrderId}`;
+  if (i.quotationId) return `/cotacoes/${i.quotationId}`;
+  // sem processo ainda: quem não tem comprador vai para a triagem; o resto, para
+  // a tela que abre a cotação
+  return i.buyerLabel ? '/cotacoes/abrir' : '/gestao-solicitacoes';
+}

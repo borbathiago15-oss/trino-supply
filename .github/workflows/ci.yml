@@ -175,7 +175,9 @@ jobs:
 
       - name: Instalar o Chromium do Playwright
         working-directory: platform/apps/web
-        run: npx playwright install --with-deps chromium
+        run: |
+          sudo grep -rl 'dl\.google\.com' /etc/apt/sources.list.d/ | sudo xargs -r rm -f
+          npx playwright install --with-deps chromium
 
       - name: Subir a API e o frontend
         working-directory: platform
@@ -292,7 +294,15 @@ jobs:
 
       - name: Instalar o Chromium do Playwright
         working-directory: src/frontend
-        run: npx playwright install --with-deps chromium
+        # O `--with-deps` roda `apt-get update`, e o apt do runner traz a fonte do
+        # Google Chrome — que derrubou este job duas vezes seguidas com "Hash Sum
+        # mismatch": o índice servido pelo dl.google.com não bate com o Release do
+        # próprio dl.google.com. É quebra de fora, mas o passo não precisa dessa
+        # fonte para nada: nenhuma biblioteca do Playwright vem dela. Tirando-a
+        # antes, o install passa a depender só dos espelhos do Ubuntu.
+        run: |
+          sudo grep -rl 'dl\.google\.com' /etc/apt/sources.list.d/ | sudo xargs -r rm -f
+          npx playwright install --with-deps chromium
 
       # O cenário de cada execução é montado pelo globalSetup do Playwright.
       - name: Rodar o Playwright

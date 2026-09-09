@@ -1,9 +1,11 @@
 import {
-  classeDoScore, relatorioDeCompliance, type MediaCompliance,
+  classeDoScore, concentracaoDeFornecedor, CONCENTRACAO, relatorioDeCompliance,
+  type MediaCompliance,
 } from '@/api/analytics';
 import { ROTULO_RFQ } from '@/api/cotacoes';
 import { Badge, Carregando, Erro, FaixaKpis, Kpi, Painel, Vazio } from '@/componentes/basicos';
 import { Nota } from '@/componentes/formulario';
+import { moeda } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
 
 const ScoreBadge = ({ score }: { score: number }) => <Badge classe={classeDoScore(score)}>{score}</Badge>;
@@ -27,6 +29,78 @@ function Medias({ titulo, marca, linhas }: { titulo: string; marca: string; linh
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * De quem a empresa depende, por produto.
+ *
+ * A lista traz **só o que merece ação** — produto com compra bem dividida não aparece,
+ * porque encher a tela de linha verde faria a linha vermelha se perder no meio. Pelo mesmo
+ * motivo a recomendação vem em cada linha: "95% num fornecedor" sem dizer o que se faz com
+ * isso é um número que ninguém aciona.
+ */
+function RiscoDeConcentracao() {
+  const { dados, erro, carregando } = useCarregar(concentracaoDeFornecedor, []);
+  const criticos = dados?.items.filter((i) => i.level === 'CRITICO').length ?? 0;
+
+  return (
+    <Painel titulo="Risco de concentração por produto">
+      <Nota>
+        A fatia é sobre o <strong>valor comprado</strong>, não sobre o número de pedidos: dez
+        compras pequenas num fornecedor e uma enorme noutro não fazem do primeiro o dono da
+        conta. Produto com menos de {dados?.minPurchases ?? 3} compras fica de fora — comprado
+        uma vez, ele é 100% concentrado por aritmética, não por dependência.
+      </Nota>
+
+      {erro && <Erro>{erro}</Erro>}
+      {carregando && !dados && <Carregando />}
+
+      {dados && !dados.items.length && (
+        <Vazio>Nenhum produto com dependência relevante de um fornecedor só.</Vazio>
+      )}
+
+      {dados && dados.items.length > 0 && (
+        <>
+          <FaixaKpis>
+            <Kpi rotulo="Produtos em risco" valor={dados.items.length}
+              detalhe="com dependência acima do aceitável" />
+            <Kpi rotulo="Críticos" valor={criticos} detalhe="fornecedor único ou acima de 90%" />
+          </FaixaKpis>
+
+          <div className="overflow-x-auto">
+            <table data-testid="tabela-concentracao" className="min-w-[900px]">
+              <thead>
+                <tr>
+                  <th>Produto</th><th>Fornecedor dominante</th><th>Fatia</th>
+                  <th>Compras</th><th>Total</th><th>Nível</th><th>O que fazer</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dados.items.map((i) => (
+                  <tr key={i.catalogItemId} data-produto={i.catalogItemId}>
+                    <td className="min-w-[220px]">{i.description}</td>
+                    <td className="whitespace-nowrap">{i.topSupplier}</td>
+                    <td className="whitespace-nowrap font-semibold">{i.topShare}%</td>
+                    <td className="whitespace-nowrap">
+                      {i.purchases}
+                      <div className="sub">{i.suppliers} fornecedor(es)</div>
+                    </td>
+                    <td className="whitespace-nowrap">{moeda(i.total)}</td>
+                    <td>
+                      <Badge classe={CONCENTRACAO[i.level]?.classe ?? ''}>
+                        {CONCENTRACAO[i.level]?.rotulo ?? i.level}
+                      </Badge>
+                    </td>
+                    <td className="min-w-[300px] sub">{i.recommendation}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Painel>
   );
 }
 
@@ -106,6 +180,8 @@ export function Compliance() {
           </div>
         </Painel>
       )}
+
+      <RiscoDeConcentracao />
     </>
   );
 }

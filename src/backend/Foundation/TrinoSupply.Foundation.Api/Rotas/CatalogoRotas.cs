@@ -43,6 +43,33 @@ public static class CatalogoRotas
         var catalogGroup = app.MapGroup("/api/v1/items").RequireAuthorization();
         catalogGroup.AddEndpointFilter(RejectSupplierRole());
 
+        // Memória de preço do produto: o que se pagou, de quem e quando. É o que permite
+        // perguntar "estamos pagando acima do que já pagamos?" — antes o preço vivia solto
+        // em cada O.C. e ninguém conseguia olhar a série.
+        catalogGroup.MapGet("/{id:guid}/price-history",
+            async (Guid id, HistoricoDePrecoService svc, ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            if (!QuotationService.CanView(RoleOf(p)))
+                return Error(ctx, 403, "MMS-ERR-900", "Seu papel não acessa o histórico de preço.");
+            var resumo = (await svc.ResumoAsync([id])).GetValueOrDefault(id);
+            return Ok(new
+            {
+                summary = resumo is null ? null : new
+                {
+                    last = resumo.Ultimo, lastAt = resumo.UltimoEm,
+                    lastSupplierId = resumo.UltimoFornecedorId, lastSupplier = resumo.UltimoFornecedor,
+                    average = resumo.Medio, min = resumo.Minimo, max = resumo.Maximo,
+                    purchases = resumo.Compras, suppliers = resumo.Fornecedores,
+                },
+                items = (await svc.SerieAsync(id)).Select(c => new
+                {
+                    at = c.Em, supplierId = c.SupplierId, supplierName = c.SupplierName,
+                    orderNumber = c.OrderNumber, unitPrice = c.UnitPrice,
+                    quantity = c.Quantity, family = c.Family,
+                }),
+            }, ctx);
+        }).AddEndpointFilter(RejectSupplierRole());
+
         catalogGroup.MapGet("/families", async (CatalogService svc, ClaimsPrincipal p, HttpContext ctx) =>
         {
             var role = p.FindFirstValue(ClaimTypes.Role) ?? "";

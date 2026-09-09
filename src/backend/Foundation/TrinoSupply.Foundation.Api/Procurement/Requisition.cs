@@ -92,6 +92,17 @@ public class RequisitionItem
     public Guid RequisitionId { get; set; }
     public Guid? CatalogItemId { get; set; }                     // vínculo com o catálogo (MMS-002), quando houver
     public string? CatalogCode { get; set; }                     // snapshot do código na data da solicitação
+    /// <summary>
+    /// Família do item, em caixa alta. Vem do catálogo quando o produto está cadastrado, e
+    /// de quem solicita quando não está — é o que faz o item digitado à mão parar de cair
+    /// fora de todo agrupamento por família (cotação, Torre, spend).
+    ///
+    /// <para>
+    /// Nulo é o item antigo, gravado antes de o campo existir; a leitura continua caindo
+    /// para a família do catálogo nesse caso, e nada do que já foi solicitado muda.
+    /// </para>
+    /// </summary>
+    public string? Family { get; set; }
     public int Sequence { get; set; }
     public string Description { get; set; } = string.Empty;
     public decimal Quantity { get; set; }

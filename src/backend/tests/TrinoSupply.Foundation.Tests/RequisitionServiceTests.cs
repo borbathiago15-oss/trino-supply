@@ -329,4 +329,59 @@ public class RequisitionServiceTests
         Assert.NotNull(byOther);              // fora do escopo do outro solicitante ⇒ 404
         Assert.NotNull(await db.Requisitions.SingleAsync(r => r.Id == pr.Id)); // nunca some fisicamente
     }
+
+    // ---- família por item (produto não cadastrado) ---------------------------
+
+    /// <summary>
+    /// O item digitado à mão passa a poder declarar a sua família. Sem isso ele caía
+    /// sempre em DIVERSOS e ficava fora de todo agrupamento — cotação, Torre e spend.
+    /// </summary>
+    [Fact]
+    public async Task Item_nao_cadastrado_guarda_a_familia_escolhida()
+    {
+        var (svc, _, _) = Build();
+        var (pr, error) = await svc.CreateAsync(Ana, "Compra avulsa", "CC-TI-001", "NORMAL", null,
+            [new ItemInput("Bota especial sob medida", 2, "PAR", 150m, null, null, "EPI")]);
+
+        Assert.Null(error);
+        Assert.Equal("EPI", pr!.Items.Single().Family);
+    }
+
+    /// <summary>Sem família escolhida, cai em DIVERSOS — a mesma chave que a adjudicação usa.</summary>
+    [Fact]
+    public async Task Item_sem_familia_escolhida_cai_em_diversos()
+    {
+        var (svc, _, _) = Build();
+        var (pr, _) = await svc.CreateAsync(Ana, "Compra avulsa", "CC-TI-001", "NORMAL", null,
+            [new ItemInput("Serviço de calibração", 1, "UN", 400m, null, null, null)]);
+
+        Assert.Equal(QuotationAward.Default, pr!.Items.Single().Family);
+    }
+
+    /// <summary>
+    /// Produto do catálogo não aceita família de fora: a dele é a do cadastro. Aceitar
+    /// deixaria o mesmo produto em duas famílias conforme quem digitou.
+    /// </summary>
+    [Fact]
+    public async Task Produto_do_catalogo_ignora_a_familia_enviada()
+    {
+        var (svc, db, clock) = Build();
+        var catalogo = new CatalogService(db, clock);
+        var (produto, _) = await catalogo.CreateAsync(Ana.Id, "EPI-001", "Luva de vaqueta", "EPI", "PAR", 20m);
+        var (pr, _) = await svc.CreateAsync(Ana, "Reposição", "CC-TI-001", "NORMAL", null,
+            [new ItemInput("", 5, null, null, null, produto!.Id, "LIMPEZA")]);
+
+        Assert.Equal("EPI", pr!.Items.Single().Family);
+    }
+
+    /// <summary>A família entra em caixa alta, como a chave de adjudicação espera.</summary>
+    [Fact]
+    public async Task A_familia_escolhida_e_normalizada()
+    {
+        var (svc, _, _) = Build();
+        var (pr, _) = await svc.CreateAsync(Ana, "Compra avulsa", "CC-TI-001", "NORMAL", null,
+            [new ItemInput("Cadeira de escritório", 1, "UN", 900m, null, null, "  material de escritorio  ")]);
+
+        Assert.Equal("MATERIAL DE ESCRITORIO", pr!.Items.Single().Family);
+    }
 }

@@ -11,14 +11,23 @@ import { useToast } from '@/componentes/Toast';
 import { hojeIso } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
 
-interface LinhaItem { chave: string; produto: string; unidade: string; quantidade: string }
+interface LinhaItem { chave: string; produto: string; unidade: string; quantidade: string; familia: string }
+
+/**
+ * Opção da lista de famílias que diz "este produto não está no catálogo". Não é uma
+ * família: é a ausência dela declarada, e vira DIVERSOS no servidor — a mesma chave que
+ * a adjudicação usa por omissão. Existe porque o solicitante às vezes precisa pedir algo
+ * que ninguém cadastrou ainda, e obrigá-lo a inventar uma família seria pior do que
+ * deixá-lo dizer que não sabe.
+ */
+export const SEM_CADASTRO = '__SEM_CADASTRO__';
 
 let sequencia = 0;
-const novaLinha = (): LinhaItem => ({ chave: 'i' + ++sequencia, produto: '', unidade: '', quantidade: '1' });
+const novaLinha = (): LinhaItem => ({ chave: 'i' + ++sequencia, produto: '', unidade: '', quantidade: '1', familia: '' });
 
 const VAZIO = {
   justificativa: '', local: '', prioridade: 'NORMAL' as Prioridade, necessidade: '',
-  urgenciaMotivo: '', urgenciaImpacto: '', familia: '', centroCusto: '', empresa: '', observacao: '',
+  urgenciaMotivo: '', urgenciaImpacto: '', centroCusto: '', empresa: '', observacao: '',
   orcamento: '',
 };
 type Formulario = typeof VAZIO;
@@ -40,19 +49,35 @@ export function itensSemCa(linhas: { produto: string }[], catalogo: Produto[]): 
 /**
  * Linhas do formulário viram itens da API: escolhido do catálogo vira vínculo,
  * digitado à mão vira descrição livre. Linha sem produto é descartada.
+ *
+ * A família só acompanha o item <b>não cadastrado</b>: com produto do catálogo ela é a
+ * do cadastro, e mandá-la daqui abriria a porta para o mesmo produto ficar em duas
+ * famílias conforme quem digitou. "Produto não cadastrado" vira nulo — é ausência
+ * declarada, e o servidor a resolve como DIVERSOS.
  */
 export function itensDoFormulario(linhas: LinhaItem[], catalogo: Produto[]): ItemNovo[] {
   return linhas
     .map((l) => {
       const doCatalogo = catalogo.find((p) => rotuloDoProduto(p) === l.produto.trim());
+      const familia = l.familia && l.familia !== SEM_CADASTRO ? l.familia : null;
       return {
         description: doCatalogo ? '' : l.produto.trim(),
         catalogItemId: doCatalogo?.id ?? null,
         unitOfMeasure: l.unidade || null,
         quantity: parseFloat(l.quantidade) || 0,
+        family: doCatalogo ? null : familia,
       };
     })
     .filter((i) => i.description || i.catalogItemId);
+}
+
+/**
+ * A família que a linha mostra. Produto do catálogo exibe a dele, e o campo fica travado:
+ * quem escolhe a família de um produto cadastrado é o cadastro, não quem pede.
+ */
+export function familiaDaLinha(l: LinhaItem, catalogo: Produto[]): { valor: string; travada: boolean } {
+  const doCatalogo = catalogo.find((p) => rotuloDoProduto(p) === l.produto.trim());
+  return doCatalogo ? { valor: doCatalogo.family ?? '', travada: true } : { valor: l.familia, travada: false };
 }
 
 export function NovaSolicitacao() {
@@ -116,7 +141,6 @@ export function NovaSolicitacao() {
         neededBy: form.necessidade || null,
         items,
         kind: 'AVULSA',
-        needType: form.familia || null,
         deliveryLocation: form.local || null,
         company: form.empresa || null,
         internalNotes: form.observacao || null,
@@ -141,6 +165,7 @@ export function NovaSolicitacao() {
         <div className="flex flex-col gap-3">
           {linhas.map((l) => {
             const pendente = itensSemCa([l], dados?.catalogo ?? [])[0];
+            const familia = familiaDaLinha(l, dados?.catalogo ?? []);
             return (
             <div key={l.chave} className="rounded-lg border border-borda p-3" data-linha-item>
               <Grade2>
@@ -165,6 +190,23 @@ export function NovaSolicitacao() {
                   </Grade2>
                 </Grade2>
               </Grade2>
+              {/* A família é por item, não por SC: uma solicitação pode misturar EPI e
+                  material de escritório, e é a família que diz para qual lote de compra
+                  cada linha vai. Produto do catálogo mostra a dele, travada — quem
+                  escolhe a família de um produto cadastrado é o cadastro. */}
+              <Campo rotulo="Família do produto" className="mt-3"
+                dica={familia.travada ? '(do cadastro do produto)' : '(escolha ou marque como não cadastrado)'}>
+                <select aria-label={`Família de ${l.produto || 'item ' + l.chave}`}
+                  value={familia.valor} disabled={familia.travada}
+                  onChange={(e) => editarLinha(l.chave, { familia: e.target.value })}>
+                  <option value="">Escolha a família…</option>
+                  {familia.travada && familia.valor
+                    && !(dados?.familias ?? []).includes(familia.valor)
+                    && <option value={familia.valor}>{familia.valor}</option>}
+                  {(dados?.familias ?? []).map((f) => <option key={f} value={f}>{f}</option>)}
+                  {!familia.travada && <option value={SEM_CADASTRO}>Produto não cadastrado</option>}
+                </select>
+              </Campo>
               {pendente && (
                 <Aviso testid="linha-sem-ca">
                   <strong>{pendente.description}</strong> é {pendente.productTypeLabel ?? 'EPI/EPC'} e está sem C.A.
@@ -220,13 +262,10 @@ export function NovaSolicitacao() {
           </Grade2>
         )}
 
+        {/* a família saiu daqui: uma SC pode misturar EPI e material de escritório, e um
+            campo só no cabeçalho obrigava a escolher uma família para o pedido inteiro.
+            Agora ela é por item, junto do produto a que pertence. */}
         <Grade2 className="mt-3">
-          <Campo id="sc-familia" rotulo="Família do produto">
-            <select id="sc-familia" {...campo('familia')}>
-              <option value="">Selecione a família…</option>
-              {(dados?.familias ?? []).map((f) => <option key={f} value={f}>{f}</option>)}
-            </select>
-          </Campo>
           <Campo id="sc-cc" rotulo="Centro de Custo">
             <select id="sc-cc" required {...campo('centroCusto')}>
               <option value="">Selecione o centro de custo…</option>

@@ -22,7 +22,13 @@ public record Actor(Guid Id, string Label, string Role)
 /// <summary>Quem aprova a SC (gerente do CC) e o impedimento, quando houver.</summary>
 public record ApproverHint(Guid? ApproverId, string? ApproverLabel, string? Issue);
 
-public record ItemInput(string Description, decimal Quantity, string? UnitOfMeasure, decimal? EstimatedUnitPrice, string? Notes, Guid? CatalogItemId = null);
+/// <summary>
+/// Um item pedido. <c>Family</c> só é lida quando não há produto de catálogo: com produto
+/// cadastrado, a família é a dele, e aceitar outra aqui deixaria o mesmo produto em duas
+/// famílias diferentes conforme quem digitou.
+/// </summary>
+public record ItemInput(string Description, decimal Quantity, string? UnitOfMeasure,
+    decimal? EstimatedUnitPrice, string? Notes, Guid? CatalogItemId = null, string? Family = null);
 
 /// <summary>
 /// Serviço de domínio do PR-001 (MVP): transições exclusivamente pela máquina de estados
@@ -451,6 +457,9 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
             {
                 CatalogItemId = c.Id,
                 CatalogCode = c.Code,
+                // a família do produto cadastrado é a do catálogo, sempre: o solicitante
+                // não escolhe a família de um produto que já tem a sua
+                Family = QuotationAward.FamilyKey(c.Family),
                 Sequence = sequence,
                 Description = c.Description,
                 Quantity = input.Quantity,
@@ -467,6 +476,9 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
             return (null, new("PR-ERR-030", "O preço estimado não pode ser negativo."));
         return (new RequisitionItem
         {
+            // produto não cadastrado: a família é a que o solicitante escolheu, e DIVERSOS
+            // quando ele não sabe — que é a mesma chave que a adjudicação já usa por omissão
+            Family = QuotationAward.FamilyKey(input.Family),
             Sequence = sequence,
             Description = input.Description.Trim(),
             Quantity = input.Quantity,

@@ -36,6 +36,7 @@ function Linha({ i, triando, marcada, aoMarcar, aoLiberar, aoPriorizar }: {
   aoPriorizar: (i: LinhaDaTorre) => void;
 }) {
   const urgente = i.priority === 'URGENT';
+  const destino = destinoDaAcao(i);
   return (
     <tr data-testid={`linha-${i.itemId}`} className={i.late ? 'bg-perigo-fundo/40' : undefined}>
       {triando && (
@@ -96,12 +97,19 @@ function Linha({ i, triando, marcada, aoMarcar, aoLiberar, aoPriorizar }: {
       {/* §5 — a ação rápida: a linha diz o que fazer agora e leva até lá, em vez de
           obrigar o comprador a descobrir a tela certa para cada etapa */}
       <td className="whitespace-nowrap">
-        {i.actionLabel ? (
-          <Link className={'botao-secundario inline-block ' + (i.needsBuyer ? 'font-semibold' : '')}
-            to={destinoDaAcao(i)}>
-            {i.actionLabel}
-          </Link>
-        ) : <span className="sub">—</span>}
+        {!i.actionLabel ? <span className="sub">—</span>
+          : destino ? (
+            <Link className={'botao-secundario inline-block ' + (i.needsBuyer ? 'font-semibold' : '')}
+              to={destino}>
+              {i.actionLabel}
+            </Link>
+          ) : (
+            // a ação é nesta mesma tela (marcar a linha e atribuir na barra acima):
+            // um link para onde já se está não leva a lugar nenhum
+            <span className="sub" title="Marque a linha e atribua na barra de triagem">
+              {i.actionLabel} aqui ↑
+            </span>
+          )}
       </td>
       {/* o link leva para onde a ação está: o pedido, se já existe; senão a cotação */}
       <td className="whitespace-nowrap">

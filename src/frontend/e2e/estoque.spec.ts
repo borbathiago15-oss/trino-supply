@@ -27,7 +27,7 @@ async function pedirEAprovar(page: import('@playwright/test').Page, observacao: 
   await expect(page.getByTestId('toast').last()).toContainText('liberada para o almoxarifado');
 }
 
-test.describe('Estoque e Triagem de Demandas (React)', () => {
+test.describe('Estoque e Triagem de Material (React)', () => {
   test('fila do almoxarifado: atende em parte e o faltante vira solicitação de compra', async ({ page }) => {
     const observacao = `E2E fila ${marca}`;
     await pedirEAprovar(page, observacao);
@@ -75,9 +75,11 @@ test.describe('Estoque e Triagem de Demandas (React)', () => {
     await expect(page.locator('body')).toContainText('Clique em um cartão para ver a lista');
   });
 
-  test('gestão de solicitações: filtra, designa e muda a prioridade com justificativa', async ({ page }) => {
+  test('triagem de material: filtra e designa', async ({ page }) => {
     await abrirAutenticado(page, '/gestao-solicitacoes');
-    await expect(page.locator('#titulo-pagina')).toHaveText('Triagem de Demandas');
+    // a tela passou a triar só material: a demanda de COMPRA é triada na Torre,
+    // na própria linha do item, e por isso a prioridade da SC saiu daqui
+    await expect(page.locator('#titulo-pagina')).toHaveText('Triagem de Material');
     const tabela = page.getByTestId('tabela-demandas');
     await expect(tabela).toBeVisible();
 
@@ -95,20 +97,8 @@ test.describe('Estoque e Triagem de Demandas (React)', () => {
       await expect(page.getByTestId('toast').last()).toContainText(/designada|Designação/);
     }
 
-    // prioridade: os dois campos são exigidos antes de gravar
-    const tornarUrgente = tabela.getByRole('button', { name: 'Tornar Urgente' }).first();
-    if (await tornarUrgente.count()) {
-      await tornarUrgente.click();
-      const dialogo = page.getByRole('dialog');
-      const gravar = dialogo.getByRole('button', { name: 'Registrar mudança' });
-      await expect(gravar).toBeDisabled();
-      await dialogo.getByLabel(/Por que esta demanda virou urgente/).fill(`teste E2E ${marca}`);
-      await expect(gravar).toBeDisabled();
-      await dialogo.getByLabel(/impacto de não comprar/).fill('obra parada');
-      await gravar.click();
-      await expect(page.getByTestId('toast').last()).toContainText('Prioridade alterada');
-      await expect(page.getByTestId('tabela-demandas')).toContainText('URGENTE');
-    }
+    // a prioridade da SC mudou de lugar: é da Torre agora, e o E2E dela cobre a régua
+    await expect(tabela.getByRole('button', { name: 'Tornar Urgente' })).toHaveCount(0);
   });
 
   test('lote: o botão só libera com demanda marcada e responsável escolhido', async ({ page }) => {

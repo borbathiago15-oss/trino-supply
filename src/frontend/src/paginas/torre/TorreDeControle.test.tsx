@@ -256,7 +256,10 @@ describe('Torre de Controle', () => {
   });
 
   it('item sem comprador manda para a triagem, que é onde se atribui', () => {
-    expect(destinoDaAcao(linha({ buyerLabel: null }))).toBe('/gestao-solicitacoes');
+    // sem comprador a ação é atribuir, e isso se faz na própria Torre: nulo diz que
+    // não há para onde ir. Antes apontava para a triagem, que hoje só lista material
+    // e devolveria uma lista sem esta SC — beco sem saída
+    expect(destinoDaAcao(linha({ buyerLabel: null }))).toBeNull();
     expect(destinoDaAcao(linha({ buyerLabel: 'Carla' }))).toBe('/cotacoes/abrir');
     // com processo, o destino é o processo — a etapa mais adiantada manda
     expect(destinoDaAcao(linha({ buyerLabel: null, quotationId: 'q9' }))).toBe('/cotacoes/q9');

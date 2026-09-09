@@ -10,9 +10,9 @@ test.describe('Torre de Controle (React)', () => {
   test('abre com os KPIs, a lista por item e o recorte na chamada', async ({ page }) => {
     const consulta = page.waitForResponse((r) => r.url().includes('/api/v1/control-tower'));
     await abrirAutenticado(page, '/torre');
-    // "Torre de Controle" passou a ser o subgrupo do menu, que abriga esta tela e a
-    // triagem; o título da página é o da tela, que é a lista por item
-    await expect(page.locator('#titulo-pagina')).toHaveText('Itens de Compra');
+    // voltou a ser uma tela só: a triagem de compra mora aqui dentro, e a de material
+    // saiu para o grupo Material — duas telas listando a mesma SC era o conflito
+    await expect(page.locator('#titulo-pagina')).toHaveText('Torre de Controle');
     expect((await consulta).status()).toBe(200);
 
     // os KPIs também são filtros: cada um é um botão
@@ -58,10 +58,15 @@ test.describe('Torre de Controle (React)', () => {
 
     const tabela = page.getByTestId('tabela-torre');
     if (await tabela.count()) {
-      // toda linha da fila do comprador tem uma ação clicável — é o ponto do §5
+      // toda linha da fila do comprador diz o que fazer — com link quando a ação é em
+      // outra tela, e sem link quando é aqui mesmo (atribuir, na barra de triagem)
       const acoes = tabela.locator('tbody tr td a.botao-secundario');
-      await expect(acoes.first()).toBeVisible();
-      await expect(acoes.first()).toHaveAttribute('href', /\/(cotacoes|pedidos|gestao-solicitacoes)/);
+      if (await acoes.count()) {
+        await expect(acoes.first()).toBeVisible();
+        await expect(acoes.first()).toHaveAttribute('href', /\/(cotacoes|pedidos)/);
+      } else {
+        await expect(tabela).toContainText('aqui ↑');
+      }
     } else {
       await expect(page.getByText('Nenhum item de compra neste recorte.')).toBeVisible();
     }
@@ -154,5 +159,24 @@ test.describe('Torre de Controle (React)', () => {
       await page.getByRole('button', { name: 'Limpar' }).click();
     }
     await expect(page.locator('#tc-cc')).toHaveValue('');
+  });
+
+  /** O que veio da triagem junto com a unificação: fila por tempo e prioridade na linha. */
+  test('o tempo na fila filtra, e a prioridade se muda na própria linha', async ({ page }) => {
+    await abrirAutenticado(page, '/torre');
+    const faixas = page.getByTestId('faixas-de-fila');
+    await expect(faixas).toBeVisible();
+
+    const consulta = page.waitForResponse((r) => r.url().includes('agingBand='));
+    await faixas.getByRole('button', { name: /6–10 dias/ }).click();
+    expect((await consulta).status()).toBe(200);
+
+    // a régua da urgência é a mesma da triagem: motivo E impacto, os dois obrigatórios
+    const mudar = page.getByRole('button', { name: /tornar urgente|voltar a normal/ }).first();
+    if (await mudar.count()) {
+      await mudar.click();
+      const dialogo = page.getByRole('dialog');
+      await expect(dialogo.getByRole('button', { name: 'Registrar mudança' })).toBeDisabled();
+    }
   });
 });

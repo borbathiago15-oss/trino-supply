@@ -191,10 +191,12 @@ export const torreDeControle = (f: FiltrosDaTorre, signal?: AbortSignal) =>
  * monta a fila prioritária); o destino é do navegador, porque só ele conhece as
  * rotas da aplicação.
  */
-export function destinoDaAcao(i: LinhaDaTorre): string {
+export function destinoDaAcao(i: LinhaDaTorre): string | null {
   if (i.purchaseOrderId) return `/pedidos/${i.purchaseOrderId}`;
   if (i.quotationId) return `/cotacoes/${i.quotationId}`;
-  // sem processo ainda: quem não tem comprador vai para a triagem; o resto, para
-  // a tela que abre a cotação
-  return i.buyerLabel ? '/cotacoes/abrir' : '/gestao-solicitacoes';
+  if (i.buyerLabel) return '/cotacoes/abrir';
+  // Sem comprador, a ação é atribuir — e isso se faz AQUI, na barra de triagem da
+  // própria Torre. Nulo é o que diz "não há para onde ir": antes esta linha levava à
+  // tela de triagem, que hoje só lista material e devolveria uma lista sem esta SC.
+  return null;
 }

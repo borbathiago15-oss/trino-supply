@@ -1629,4 +1629,112 @@ public class QuotationServiceTests
         Assert.Null(itemFer.QuotationNumber);
         Assert.Equal(ProcessStatus.Pending.Key, itemFer.Process!.Key);
     }
+
+    // ---- preço vindo do contrato de parceria -------------------------------
+
+    /// <summary>
+    /// Mundo do caso relatado: contrato de parceria com dois itens de catálogo cujos nomes
+    /// quase se repetem — bota de PVC e bota de aço. A SC pede os dois.
+    /// </summary>
+    private static async Task<(SplitWorld W, Quotation Q, QuotationItem Pvc, QuotationItem Aco)>
+        ContratoDeBotasAsync(DateOnly? validoAte = null)
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        var db = new AppDbContext(options);
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero));
+        var catalog = new CatalogService(db, clock);
+        var rfq = new QuotationService(db, clock);
+        var prs = new RequisitionService(db, new FakeNumbers(), catalog, clock);
+        var sup = new SupplierService(db, clock);
+
+        var (pernambuco, _) = await sup.CreateAsync(Carla.Id, "Pernambuco Distribuidora LTDA",
+            "Pernambuco", "12345678000190", null, "81 3333-1000");
+        var (outro, _) = await sup.CreateAsync(Carla.Id, "Ferramentas Gerais LTDA",
+            "Ferramentas Gerais", "98765432000110", null, "81 3333-2000");
+        await sup.SetHomologationAsync(pernambuco!.Id, SupplierHomologation.Homologado);
+
+        var (pvcCat, _) = await catalog.CreateAsync(Gustavo.Id, "EPI-010", "BOTA BIQUEIRA DE PVC", "EPI", "PAR", 50m);
+        var (acoCat, _) = await catalog.CreateAsync(Gustavo.Id, "EPI-011", "BOTA BIQUEIRA DE AÇO", "EPI", "PAR", 80m);
+
+        await sup.SaveContractAsync(pernambuco.Id, "CT-2026-001",
+            new DateOnly(2026, 1, 1), validoAte ?? new DateOnly(2026, 12, 31), null,
+            [
+                new SupplierService.ContractItemInput(pvcCat!.Id, "BOTA BIQUEIRA DE PVC", "EPI-010", "PAR", 45m, "30 dias", 30, 7, null),
+                new SupplierService.ContractItemInput(acoCat!.Id, "BOTA BIQUEIRA DE AÇO", "EPI-011", "PAR", 72m, "30 dias", 30, 10, null),
+            ]);
+
+        var (pr, _) = await prs.CreateAsync(Ana, "Reposição de botas", "CC-01", "NORMAL", null,
+            [new ItemInput("", 1, null, null, null, pvcCat.Id), new ItemInput("", 1, null, null, null, acoCat.Id)],
+            "CATALOGO");
+        await prs.SubmitAsync(Ana, pr!.Id);
+        await prs.ApproveAsync(Bruno, pr.Id, null);
+
+        var (q, _) = await rfq.CreateFromPrAsync(Carla, pr.Id, QuotationKind.Purchase, null, null);
+        await rfq.InviteSuppliersAsync(Carla, q!.Id, [pernambuco.Id, outro!.Id]);
+        var w = new SplitWorld(rfq, prs, sup, db, pernambuco, outro, pr);
+        return (w, q, q.Items.Single(i => i.Description.Contains("PVC")), q.Items.Single(i => i.Description.Contains("AÇO")));
+    }
+
+    /// <summary>
+    /// O caso relatado: com contrato de parceria vigente, o preço do item vem do contrato
+    /// em vez de o comprador redigitar o que já foi combinado.
+    /// </summary>
+    [Fact]
+    public async Task Contrato_vigente_devolve_o_preco_de_cada_item_do_processo()
+    {
+        var (w, q, pvc, aco) = await ContratoDeBotasAsync();
+        var cobertura = await w.Rfq.ContractPricesAsync(q.Id, w.Alfa.Id);
+
+        Assert.True(cobertura.Current);
+        Assert.Equal("CT-2026-001", cobertura.ContractNumber);
+        Assert.Equal(45m, cobertura.Items.Single(i => i.QuotationItemId == pvc.Id).UnitPrice);
+        Assert.Equal(72m, cobertura.Items.Single(i => i.QuotationItemId == aco.Id).UnitPrice);
+        // prazo de entrega e condição também vêm do contrato: são parte do que foi acordado
+        Assert.Equal(7, cobertura.Items.Single(i => i.QuotationItemId == pvc.Id).DeliveryDays);
+        Assert.Equal("30 dias", cobertura.Items.Single(i => i.QuotationItemId == aco.Id).PaymentTerms);
+    }
+
+    /// <summary>
+    /// Nomes quase iguais não podem trocar de preço. É por isso que o casamento é pelo
+    /// produto do catálogo, e nunca pela descrição.
+    /// </summary>
+    [Fact]
+    public async Task Itens_de_nome_parecido_nao_trocam_de_preco()
+    {
+        var (w, q, pvc, aco) = await ContratoDeBotasAsync();
+        var cobertura = await w.Rfq.ContractPricesAsync(q.Id, w.Alfa.Id);
+
+        var doPvc = cobertura.Items.Single(i => i.QuotationItemId == pvc.Id);
+        var doAco = cobertura.Items.Single(i => i.QuotationItemId == aco.Id);
+        Assert.Contains("PVC", doPvc.Description);
+        Assert.Equal(45m, doPvc.UnitPrice);
+        Assert.Contains("AÇO", doAco.Description);
+        Assert.Equal(72m, doAco.UnitPrice);
+    }
+
+    /// <summary>
+    /// Contrato fora da vigência não preenche nada. Preço vencido entrando calado na
+    /// proposta é pior que campo vazio: o comprador fecharia por um valor que não vale mais.
+    /// </summary>
+    [Fact]
+    public async Task Contrato_vencido_nao_preenche_preco()
+    {
+        var (w, q, _, _) = await ContratoDeBotasAsync(validoAte: new DateOnly(2026, 6, 30));
+        var cobertura = await w.Rfq.ContractPricesAsync(q.Id, w.Alfa.Id);
+
+        Assert.False(cobertura.Current);
+        Assert.Empty(cobertura.Items);
+    }
+
+    /// <summary>Fornecedor sem contrato continua cotando do zero — é o caminho normal.</summary>
+    [Fact]
+    public async Task Fornecedor_sem_contrato_nao_traz_preco()
+    {
+        var (w, q, _, _) = await ContratoDeBotasAsync();
+        var cobertura = await w.Rfq.ContractPricesAsync(q.Id, w.Beta.Id);
+
+        Assert.False(cobertura.Current);
+        Assert.Empty(cobertura.Items);
+    }
 }

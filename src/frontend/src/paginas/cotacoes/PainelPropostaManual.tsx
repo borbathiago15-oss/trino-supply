@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
 import {
-  anexarNaProposta, propostaVigenteDe, registrarProposta,
-  type Processo, type PropostaManual,
+  anexarNaProposta, precosDeContrato, propostaVigenteDe, registrarProposta,
+  type CoberturaDoContrato, type Processo, type PropostaManual,
 } from '@/api/cotacoes';
 import {
   listarCondicoesDePagamento, listarFormasDePagamento,
   type CondicaoDePagamento, type FormaDePagamento,
 } from '@/api/pagamentos';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
-import { quantidade } from '@/util/formato';
+import { data, quantidade } from '@/util/formato';
 
 const numero = (v: string) => {
   const n = Number(v.replace(',', '.'));
@@ -70,6 +70,39 @@ export function daCondicao(c: CondicaoDePagamento): { condicaoPagamento: string;
     : { condicaoPagamento: c.name, prazoPagamento: String(c.firstDueDays) };
 }
 
+/**
+ * O que o contrato de parceria preenche no formulário. Devolve só o que ele de fato
+ * define, e <b>nunca por cima do que já foi digitado</b>: o comprador pode ter fechado
+ * um preço melhor que o do contrato, e apagá-lo seria o formulário desfazer a negociação.
+ *
+ * Quando o contrato não está vigente não vem nada — preço vencido entrando calado na
+ * proposta é pior do que campo vazio, porque se fecharia por um valor que não vale mais.
+ */
+export function doContrato(
+  cobertura: CoberturaDoContrato | null,
+  precosAtuais: Record<string, string>,
+  camposAtuais: Record<string, string>,
+): { precos: Record<string, string>; campos: Record<string, string> } {
+  if (!cobertura?.current || cobertura.items.length === 0)
+    return { precos: precosAtuais, campos: camposAtuais };
+
+  const precos = { ...precosAtuais };
+  for (const i of cobertura.items)
+    if (!precos[i.quotationItemId]) precos[i.quotationItemId] = String(i.unitPrice);
+
+  // prazo e condição do contrato valem para a proposta inteira: pegamos os do primeiro
+  // item que os define, porque um contrato negocia isso uma vez, não linha a linha
+  const campos = { ...camposAtuais };
+  const comEntrega = cobertura.items.find((i) => i.deliveryDays != null);
+  if (comEntrega && !campos.prazoEntrega) campos.prazoEntrega = String(comEntrega.deliveryDays);
+  const comCondicao = cobertura.items.find((i) => i.paymentTerms);
+  if (comCondicao && !campos.condicaoPagamento) campos.condicaoPagamento = comCondicao.paymentTerms!;
+  const comPrazoPag = cobertura.items.find((i) => i.paymentDays != null);
+  if (comPrazoPag && !campos.prazoPagamento) campos.prazoPagamento = String(comPrazoPag.paymentDays);
+
+  return { precos, campos };
+}
+
 /** Proposta que chegou por e-mail: o comprador lança o que o fornecedor respondeu. */
 export function PainelPropostaManual({ processo, aoRegistrar, aoAvisar }: {
   processo: Processo;
@@ -80,6 +113,7 @@ export function PainelPropostaManual({ processo, aoRegistrar, aoAvisar }: {
   const [campos, setCampos] = useState<Record<string, string>>(VAZIO);
   const [formas, setFormas] = useState<FormaDePagamento[]>([]);
   const [condicoes, setCondicoes] = useState<CondicaoDePagamento[]>([]);
+  const [contrato, setContrato] = useState<CoberturaDoContrato | null>(null);
   const [precos, setPrecos] = useState<Record<string, string>>({});
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -101,6 +135,25 @@ export function PainelPropostaManual({ processo, aoRegistrar, aoAvisar }: {
     }).catch(() => {});
     return () => controle.abort();
   }, []);
+
+  // Preço de contrato de parceria: escolher o fornecedor traz o que já foi combinado
+  // com ele, em vez de o comprador redigitar. Falhar aqui não trava nada — o formulário
+  // volta a ser o de antes, com os campos em branco.
+  useEffect(() => {
+    if (!fornecedor) { setContrato(null); return; }
+    const controle = new AbortController();
+    precosDeContrato(processo.id, fornecedor, controle.signal)
+      .then((c) => {
+        setContrato(c);
+        setPrecos((p) => doContrato(c, p, campos).precos);
+        setCampos((cs) => doContrato(c, precos, cs).campos);
+      })
+      .catch(() => setContrato(null));
+    return () => controle.abort();
+    // de propósito só o fornecedor: recarregar a cada tecla digitada refaria a chamada
+    // e ainda tentaria preencher por cima do que está sendo escrito
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [processo.id, fornecedor]);
 
   function escolherCondicao(nome: string) {
     const escolhida = condicoes.find((c) => c.name === nome);
@@ -220,6 +273,18 @@ export function PainelPropostaManual({ processo, aoRegistrar, aoAvisar }: {
       <Campo id="ip-obs" rotulo="Observação da proposta" className="mt-3">
         <input id="ip-obs" placeholder="ex.: condição especial, prazo de embalagem…" {...campo('observacao')} />
       </Campo>
+
+      {contrato?.current && contrato.items.length > 0 && (
+        // o comprador precisa saber de onde veio o número: preço que aparece sozinho,
+        // sem dizer por quê, é mais difícil de conferir do que campo em branco
+        <p className="mt-3 rounded-lg bg-ok-fundo px-3 py-2 text-[12.5px] text-ok" data-testid="aviso-contrato">
+          Preços preenchidos pelo <strong>contrato de parceria
+          {contrato.contractNumber ? ` ${contrato.contractNumber}` : ''}</strong>
+          {contrato.validUntil ? ` (vigente até ${data(contrato.validUntil)})` : ''} —
+          {' '}{contrato.items.length} {contrato.items.length === 1 ? 'item coberto' : 'itens cobertos'}.
+          Pode alterar: o contrato é o ponto de partida, não uma trava.
+        </p>
+      )}
 
       <div className="mt-3">
         <p className="mb-1 text-[12.5px] font-semibold text-texto-suave">Preços unitários</p>

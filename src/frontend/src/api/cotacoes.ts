@@ -326,6 +326,31 @@ export interface PropostaManual {
   items: { quotationItemId: string; unitPrice: number }[];
 }
 
+/** Preço que o contrato de parceria já fixou para um item deste processo. */
+export interface PrecoDeContrato {
+  quotationItemId: string;
+  description: string;
+  unitPrice: number;
+  deliveryDays: number | null;
+  paymentTerms: string | null;
+  paymentDays: number | null;
+}
+
+/**
+ * O que o contrato de parceria com este fornecedor já responde sobre o processo.
+ * `current` falso significa que não há contrato vigente — e aí nada é preenchido:
+ * preço de contrato vencido entrando calado na proposta é pior do que campo vazio.
+ */
+export interface CoberturaDoContrato {
+  current: boolean;
+  contractNumber: string | null;
+  validUntil: string | null;
+  items: PrecoDeContrato[];
+}
+
+export const precosDeContrato = (id: string, supplierId: string, signal?: AbortSignal) =>
+  api<CoberturaDoContrato>(`${base}/${id}/contract-prices/${supplierId}`, { signal });
+
 export const registrarProposta = (id: string, dados: PropostaManual) =>
   api<Processo>(`${base}/${id}/proposals`, { method: 'POST', body: dados });
 

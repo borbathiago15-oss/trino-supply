@@ -198,6 +198,28 @@ public static class CotacaoRotas
         });
 
         // mapa da adjudicação por família: quem cotou cada família inteira e por quanto (V2 — compra dividida)
+        // Preços que o contrato de parceria já fixou para os itens deste processo. Quem
+        // registra a proposta usa isto para não redigitar o que já foi combinado.
+        rfq.MapGet("/{id:guid}/contract-prices/{supplierId:guid}",
+            async (Guid id, Guid supplierId, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            if (!QuotationService.CanConduct(RoleOf(p)))
+                return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não registra propostas.");
+            var cobertura = await svc.ContractPricesAsync(id, supplierId);
+            return Ok(new
+            {
+                current = cobertura.Current,
+                contractNumber = cobertura.ContractNumber,
+                validUntil = cobertura.ValidUntil,
+                items = cobertura.Items.Select(i => new
+                {
+                    quotationItemId = i.QuotationItemId, description = i.Description,
+                    unitPrice = i.UnitPrice, deliveryDays = i.DeliveryDays,
+                    paymentTerms = i.PaymentTerms, paymentDays = i.PaymentDays,
+                }),
+            }, ctx);
+        });
+
         rfq.MapGet("/{id:guid}/family-map", async (Guid id, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
         {
             if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");

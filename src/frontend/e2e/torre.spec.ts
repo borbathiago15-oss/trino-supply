@@ -60,6 +60,27 @@ test.describe('Torre de Controle (React)', () => {
     }
   });
 
+  /** §5.1: os filtros que dependem do pedido saem na consulta com o nome certo. */
+  test('fornecedor, número da O.C. e faixa de valor vão para o servidor', async ({ page }) => {
+    await abrirAutenticado(page, '/torre');
+    await expect(page.locator('#tc-fornecedor')).toBeVisible();
+
+    await page.fill('#tc-fornecedor', 'Alfa');
+    await page.fill('#tc-oc', '4521');
+    await page.fill('#tc-valor-de', '100');
+    const consulta = page.waitForResponse((r) =>
+      r.url().includes('/api/v1/control-tower')
+      && r.url().includes('supplier=Alfa')
+      && r.url().includes('orderNumber=4521')
+      && r.url().includes('minValue=100'));
+    await page.getByRole('button', { name: 'Aplicar filtros' }).click();
+    expect((await consulta).status()).toBe(200);
+
+    // e o recorte sem resultado se explica, em vez de mostrar tabela vazia
+    await expect(page.getByTestId('tabela-torre')
+      .or(page.getByText('Nenhum item de compra neste recorte.'))).toBeVisible();
+  });
+
   test('filtrar por centro de custo refaz a consulta e limpar desfaz', async ({ page }) => {
     await abrirAutenticado(page, '/torre');
     await expect(page.locator('#tc-cc')).toBeVisible();

@@ -10,7 +10,13 @@ public record FiltroTorre(
     string? Company = null, string? CostCenter = null, string? Family = null,
     Guid? RequesterId = null, Guid? BuyerId = null, string? Priority = null,
     DateOnly? From = null, DateOnly? To = null, bool? Late = null,
-    int Page = 1, int PageSize = 50);
+    int Page = 1, int PageSize = 50,
+    // §5.1 — os filtros obrigatórios que faltavam. Os quatro abaixo são derivados
+    // (dependem do pedido), então entram pelo caminho com teto, junto de etapa e
+    // situação; `From`/`To` continuam em SQL, sobre a data de criação da SC.
+    string? Supplier = null, string? OrderNumber = null,
+    DateOnly? DueFrom = null, DateOnly? DueTo = null,
+    decimal? MinValue = null, decimal? MaxValue = null);
 
 /// <summary>Uma linha da Torre: um item de compra, com o seu próprio andamento.</summary>
 public record LinhaDaTorre(
@@ -152,7 +158,10 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
         //   deriva, filtra e pagina em memória — e diz quando bateu no teto, em vez
         //   de calar como faz a fila de cotação.
         var derivado = f.Stage is { Length: > 0 } || f.Status is { Length: > 0 }
-                       || f.Family is { Length: > 0 } || f.Late == true;
+                       || f.Family is { Length: > 0 } || f.Late == true
+                       || f.Supplier is { Length: > 0 } || f.OrderNumber is { Length: > 0 }
+                       || f.DueFrom is not null || f.DueTo is not null
+                       || f.MinValue is not null || f.MaxValue is not null;
         var ordenada = consulta.OrderByDescending(x => x.sc.CreatedAt).ThenBy(x => x.item.Sequence);
 
         var total = derivado ? 0 : await consulta.CountAsync(ct);
@@ -223,6 +232,28 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
             if (f.Stage is { Length: > 0 } filtroEtapa && etapa != filtroEtapa) continue;
             if (f.Status is { Length: > 0 } filtroStatus && situacao.Key != filtroStatus) continue;
             if (f.Late == true && !atrasado) continue;
+
+            // §5.1: fornecedor, número da O.C., faixa de prazo e faixa de valor.
+            // Item sem pedido ainda não tem fornecedor nem O.C. — filtrar por eles é
+            // pedir "só o que já foi comprado", então o item sem pedido sai fora.
+            if (f.Supplier is { Length: > 0 } filtroForn
+                && (pedido?.SupplierName is null
+                    || !pedido.SupplierName.Contains(filtroForn, StringComparison.OrdinalIgnoreCase))) continue;
+            if (f.OrderNumber is { Length: > 0 } filtroOc)
+            {
+                // casa com a numeração própria e com a do ERP: quem procura "4521"
+                // tem na mão o número que o ERP devolveu, não o nosso
+                var bateOc = (pedido?.Number is { } n && n.Contains(filtroOc, StringComparison.OrdinalIgnoreCase))
+                             || (pedido?.ErpNumber is { } e && e.Contains(filtroOc, StringComparison.OrdinalIgnoreCase));
+                if (!bateOc) continue;
+            }
+            // a faixa de prazo é sobre a **previsão exibida** na linha (a data prometida
+            // pelo fornecedor, ou a de necessidade enquanto ela não existe) — filtrar por
+            // outra data mostraria linhas que contradizem a coluna ao lado
+            if (f.DueFrom is { } prazoDe && (previsao is null || previsao < prazoDe)) continue;
+            if (f.DueTo is { } prazoAte && (previsao is null || previsao > prazoAte)) continue;
+            if (f.MinValue is { } minimo && (valor is null || valor < minimo)) continue;
+            if (f.MaxValue is { } maximo && (valor is null || valor > maximo)) continue;
 
             linhas.Add(new LinhaDaTorre(
                 x.item.Id, x.sc.Id, x.sc.Number, x.item.Sequence,

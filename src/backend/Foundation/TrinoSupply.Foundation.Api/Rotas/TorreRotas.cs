@@ -18,6 +18,8 @@ public static class TorreRotas
             string? search, string? stage, string? status, string? company, string? costCenter,
             string? family, Guid? requesterId, Guid? buyerId, string? priority,
             DateOnly? from, DateOnly? to, bool? late, int? page, int? pageSize,
+            string? supplier, string? orderNumber, DateOnly? dueFrom, DateOnly? dueTo,
+            decimal? minValue, decimal? maxValue,
             CancellationToken ct) =>
         {
             if (!TorreDeControleService.CanView(RoleOf(p)))
@@ -29,7 +31,8 @@ public static class TorreRotas
             var filtro = new FiltroTorre(
                 Preenchido(search), Preenchido(stage), Preenchido(status), Preenchido(company),
                 Preenchido(costCenter), Preenchido(family), requesterId, buyerId, Preenchido(priority),
-                from, to, late, page ?? 1, pageSize ?? 50);
+                from, to, late, page ?? 1, pageSize ?? 50,
+                Preenchido(supplier), Preenchido(orderNumber), dueFrom, dueTo, minValue, maxValue);
             return Ok(await svc.ConsultarAsync(filtro, ct), ctx);
         }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole())
             .AddEndpointFilter(RequireModules(AppModules.Compras));

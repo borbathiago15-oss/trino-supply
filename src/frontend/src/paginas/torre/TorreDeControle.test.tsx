@@ -32,7 +32,7 @@ const linha = (p: Partial<LinhaDaTorre> = {}): LinhaDaTorre => ({
   priority: 'NORMAL', neededBy: '2026-09-20', promisedDate: null, late: false,
   value: 200, quotationId: null, quotationNumber: null,
   purchaseOrderId: null, purchaseOrderNumber: null, exceptionReason: null,
-  actionLabel: 'Abrir cotação', needsBuyer: true,
+  actionLabel: 'Abrir cotação', needsBuyer: true, waitingOn: null,
   ...p,
 });
 
@@ -362,5 +362,70 @@ describe('Torre de Controle', () => {
     expect(gravar).toBeDisabled();   // só o motivo não basta
     await userEvent.type(screen.getByLabelText(/Qual o impacto de não comprar/), 'Produção parada');
     expect(gravar).toBeEnabled();
+  });
+
+  it('aguardando aprovação diz de quem, e há quanto tempo está parado', async () => {
+    // "Aguardando Aprovação" sozinho mandava abrir o centro de custo para descobrir
+    // quem aprova — o servidor já sabia e não dizia
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({
+      items: [linha({
+        statusLabel: 'Aguardando Aprovação',
+        waitingOn: { who: 'Aprovação Nível 1 — Marcos Gerente', since: '2026-09-01T12:00:00Z', days: 6, detail: null },
+      })],
+    }));
+    abrir();
+    const espera = await screen.findByTestId('espera-i1');
+    expect(espera).toHaveTextContent('Aprovação Nível 1 — Marcos Gerente');
+    expect(espera).toHaveTextContent('há 6 dias');
+  });
+
+  it('em cotação, a linha nomeia o fornecedor que não entregou e o atraso dele', async () => {
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({
+      items: [linha({
+        statusLabel: 'Em Cotação',
+        waitingOn: {
+          who: 'Proposta — Beta, Gama', since: '2026-09-01T12:00:00Z', days: 7,
+          detail: '2 fornecedores além do prazo',
+        },
+      })],
+    }));
+    abrir();
+    const espera = await screen.findByTestId('espera-i1');
+    expect(espera).toHaveTextContent('Proposta — Beta, Gama');
+    expect(espera).toHaveTextContent('2 fornecedores além do prazo');
+  });
+
+  it('parado há um dia não vira alarme; parado há muito, sim', async () => {
+    // destaque que aparece em toda aprovação de segunda-feira para de significar algo
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({
+      items: [
+        linha({ itemId: 'i1', waitingOn: { who: 'Aprovação Nível 1 — Marcos', since: null, days: 1, detail: null } }),
+        linha({ itemId: 'i2', waitingOn: { who: 'Aprovação Nível 2 — Paula', since: null, days: 9, detail: null } }),
+      ],
+    }));
+    abrir();
+    expect(await screen.findByTestId('espera-i1')).toHaveTextContent('há 1 dia');
+    expect(screen.getByTestId('espera-i2')).toHaveTextContent('há 9 dias');
+    expect(screen.getByTestId('espera-i1').querySelector('.text-aviso')).toBeNull();
+    expect(screen.getByTestId('espera-i2').querySelector('.text-aviso')).not.toBeNull();
+  });
+
+  it('sem data de entrada na etapa, diz de quem espera e não inventa o tempo', async () => {
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({
+      items: [linha({ waitingOn: { who: 'Aprovação da solicitação', since: null, days: null, detail: null } })],
+    }));
+    abrir();
+    const espera = await screen.findByTestId('espera-i1');
+    expect(espera).toHaveTextContent('Aprovação da solicitação');
+    expect(espera).not.toHaveTextContent('há');
+  });
+
+  it('linha encerrada não espera ninguém e não mostra a segunda linha', async () => {
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({
+      items: [linha({ statusLabel: 'Pedido Entregue', waitingOn: null })],
+    }));
+    abrir();
+    await waitFor(() => expect(screen.getByTestId('tabela-torre')).toBeInTheDocument());
+    expect(screen.queryByTestId('espera-i1')).not.toBeInTheDocument();
   });
 });

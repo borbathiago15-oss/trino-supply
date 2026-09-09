@@ -41,7 +41,34 @@ export interface LinhaDaTorre {
   actionLabel: string | null;
   /** Se essa ação é do comprador; é o que define a fila prioritária. */
   needsBuyer: boolean;
+  /** De quem a linha está esperando, e há quanto tempo. Nulo quando não se espera nada. */
+  waitingOn: EsperaDaLinha | null;
 }
+
+/**
+ * De quem a linha está esperando. `who` já vem com o nome de quem tem a bola — o aprovador
+ * do nível pendente, o fornecedor que não entregou — porque a etapa sozinha mandava o
+ * comprador sair da tela para descobrir isso.
+ */
+export interface EsperaDaLinha {
+  who: string;
+  since: string | null;
+  /** Dias parados. Nulo quando não há data de entrada na etapa — chutar seria pior. */
+  days: number | null;
+  detail: string | null;
+}
+
+/**
+ * A partir de quantos dias parado a espera merece destaque.
+ *
+ * Cinco dias é folgado de propósito: apertar demais pintaria de vermelho toda aprovação
+ * de segunda-feira, e o destaque que aparece sempre para de significar alguma coisa.
+ */
+export const DIAS_PARA_DESTACAR_ESPERA = 5;
+
+/** Como mostrar o tempo parado — vazio quando não há dias a mostrar. */
+export const tempoParado = (e: EsperaDaLinha | null): string =>
+  e?.days == null ? '' : e.days === 0 ? 'hoje' : `há ${e.days} dia${e.days === 1 ? '' : 's'}`;
 
 export interface KpisDaTorre {
   total: number;

@@ -49,7 +49,9 @@ public record LinhaDaTorre(
     /// <summary>A próxima ação esperada — o que a linha pede que se faça agora.</summary>
     string? ActionLabel = null,
     /// <summary>Se essa ação é do comprador (é o que define a fila prioritária).</summary>
-    bool NeedsBuyer = false);
+    bool NeedsBuyer = false,
+    /// <summary>De quem a linha está esperando, e há quanto tempo. Nulo quando não se espera nada.</summary>
+    EsperaDaLinha? WaitingOn = null);
 
 /// <summary>
 /// Os números do topo (§5).
@@ -103,7 +105,7 @@ public record PaginaDaTorre(
 /// `COUNT`. É a tela que o comprador deixa aberta o dia inteiro; não pode ser a
 /// que traz tudo para descartar quase tudo.
 /// </summary>
-public class TorreDeControleService(AppDbContext db, TimeProvider clock)
+public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
 {
     public const int PaginaMaxima = 200;
     /// <summary>Teto do caminho com filtro derivado — ver `ConsultarAsync`.</summary>
@@ -294,7 +296,10 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
 
         // ---- o andamento das SCs desta página -------------------------------
         var scIds = bruto.Select(x => x.sc.Id).Distinct().ToList();
+        // convites e propostas entram porque a espera da linha é derivada deles: sem o
+        // Include, `SituacaoDosConvites` veria coleção vazia e diria que não falta ninguém
         var cotacoes = await db.Quotations.Include(q => q.Items).Include(q => q.Awards)
+            .Include(q => q.Suppliers).Include(q => q.Proposals)
             .Where(q => scIds.Contains(q.SourcePrId)
                         || q.Items.Any(i => i.SourcePrId != null && scIds.Contains(i.SourcePrId.Value)))
             .OrderByDescending(q => q.CreatedAt).ToListAsync(ct);
@@ -320,6 +325,22 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
 
         var familiaPorProduto = await db.CatalogItems
             .Select(i => new { i.Id, i.Family }).ToDictionaryAsync(x => x.Id, x => x.Family, ct);
+
+        // os aprovadores dos centros desta página, de uma vez: perguntar por linha faria
+        // uma consulta por item, e a Torre é justamente a tela com muitas linhas
+        var centros = bruto.Select(x => x.sc.CostCenter.Trim().ToUpperInvariant())
+            .Where(c => c.Length > 0).Distinct().ToList();
+        var alcadaPorCentro = centros.Count == 0
+            ? []
+            : await db.CostCenters.Where(c => centros.Contains(c.Code.ToUpper()))
+                .Select(c => new
+                {
+                    c.Code,
+                    N1 = c.Approvers.Where(a => a.Level == ApprovalLevels.Level1).Select(a => a.UserName).ToList(),
+                    N2 = c.Approvers.Where(a => a.Level == ApprovalLevels.Level2).Select(a => a.UserName).ToList(),
+                })
+                .ToDictionaryAsync(x => x.Code.ToUpperInvariant(),
+                    x => new AlcadasDoCentro(x.N1, x.N2), ct);
 
         var linhas = new List<LinhaDaTorre>(bruto.Count);
         foreach (var x in bruto)
@@ -385,6 +406,10 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
             var naFilaDesde = x.sc.DecidedAt ?? x.sc.SubmittedAt;
             if (f.AgingBand is { } faixa && FaixaDeAging(naFilaDesde, agora) != faixa) continue;
 
+            var espera = EsperaDe(x.sc, cotacao, pedido,
+                alcadaPorCentro.GetValueOrDefault(x.sc.CostCenter.Trim().ToUpperInvariant(),
+                    AlcadasDoCentro.Nenhuma), hoje, agora);
+
             linhas.Add(new LinhaDaTorre(
                 x.item.Id, x.sc.Id, x.sc.Number, x.item.Sequence,
                 x.item.CatalogCode, x.item.Description, x.item.Quantity, x.item.UnitOfMeasure,
@@ -394,7 +419,7 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
                 situacao.Key, situacao.Label, situacao.Tone,
                 x.sc.Priority, x.sc.NeededBy, pedido?.PromisedDate, atrasado,
                 valor, cotacao?.Id, cotacao?.Number, pedido?.Id, pedido?.Number,
-                naFilaDesde, excecao, acao.Length == 0 ? null : acao, doComprador));
+                naFilaDesde, excecao, acao.Length == 0 ? null : acao, doComprador, espera));
         }
 
         if (derivado)

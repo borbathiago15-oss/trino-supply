@@ -369,6 +369,49 @@ export function variacaoDoPreco(h: HistoricoDoItem | undefined, precoDigitado: s
   return Math.round((preco / h.average - 1) * 1000) / 10;
 }
 
+// ---- Score multicritério (informativo) -------------------------------------
+
+/** Um critério do score e quanto ele pesa. O peso vem do servidor: a tela não o inventa. */
+export interface CriterioDoScore {
+  code: string;
+  label: string;
+  weightPct: number;
+  help: string;
+}
+
+/**
+ * A nota de um fornecedor na disputa. Cada `*Pct` é o componente já normalizado contra o
+ * melhor da disputa; `null` é dado que não existe — e componente sem dado sai da conta em
+ * vez de valer zero, senão o fornecedor novo seria punido por ser novo.
+ */
+export interface LinhaDeScore {
+  supplierId: string;
+  supplierName: string;
+  score: number;
+  pricePct: number | null;
+  deliveryPct: number | null;
+  paymentPct: number | null;
+  otifPct: number | null;
+  riskPct: number | null;
+}
+
+export interface MapaDeScore {
+  note: string;
+  criteria: CriterioDoScore[];
+  items: LinhaDeScore[];
+}
+
+export const mapaDeScore = async (id: string, signal?: AbortSignal) => {
+  const r = await api<MapaDeScore>(`${base}/${id}/score-map`, { signal });
+  return { ...r, criteria: r.criteria ?? [], items: r.items ?? [] };
+};
+
+/** O componente do critério dentro da linha, para a tela não repetir o mapeamento. */
+export const componenteDoScore = (linha: LinhaDeScore, code: string): number | null => ({
+  price: linha.pricePct, delivery: linha.deliveryPct, payment: linha.paymentPct,
+  otif: linha.otifPct, risk: linha.riskPct,
+}[code] ?? null);
+
 /** Preço que o contrato de parceria já fixou para um item deste processo. */
 export interface PrecoDeContrato {
   quotationItemId: string;

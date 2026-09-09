@@ -193,6 +193,11 @@ public static class CotacaoRotas
             return Ok(new
             {
                 note = "Score informativo: compara as propostas mais recentes; a escolha continua sendo do comprador com justificativa.",
+                criteria = MultiCriteriaScore.Criterios.Select(c => new
+                {
+                    code = c.Code, label = c.Label,
+                    weightPct = Math.Round(c.Weight * 100, 1), help = c.Help,
+                }),
                 items = MultiCriteriaScore.Compute(inputs),
             }, ctx);
         });

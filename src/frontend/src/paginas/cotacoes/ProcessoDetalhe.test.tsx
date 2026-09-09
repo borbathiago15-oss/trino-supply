@@ -12,7 +12,7 @@ import { textoDoConvite } from './PainelDeConvidados';
 import { candidatasDaFamilia, impedimentoDaProposta, propostasDaFamilia } from './AcoesDoProcesso';
 import { daCondicao, doContrato, montarProposta } from './PainelPropostaManual';
 import { lote, oferta, processo, proposta } from '@/test/cotacoes';
-import { historicoDoProcesso, precosDeContrato, variacaoDoPreco } from '@/api/cotacoes';
+import { historicoDoProcesso, mapaDeScore, precosDeContrato, variacaoDoPreco } from '@/api/cotacoes';
 import { listarCondicoesDePagamento, listarFormasDePagamento } from '@/api/pagamentos';
 
 vi.mock('@/api/cotacoes', async (importar) => ({
@@ -21,7 +21,7 @@ vi.mock('@/api/cotacoes', async (importar) => ({
   escolherVencedor: vi.fn(), decidir: vi.fn(), registrarOc: vi.fn(),
   registrarNegociacao: vi.fn(), cancelarProcesso: vi.fn(), registrarProposta: vi.fn(),
   anexarNaProposta: vi.fn(), mapaDeFamilias: vi.fn(), precosDeContrato: vi.fn(),
-  historicoDoProcesso: vi.fn(),
+  historicoDoProcesso: vi.fn(), mapaDeScore: vi.fn(),
 }));
 describe('preço vindo do contrato de parceria', () => {
   const cobertura = (over = {}) => ({
@@ -370,6 +370,7 @@ describe('tela do processo', () => {
     vi.mocked(precosDeContrato).mockResolvedValue(
       { current: false, contractNumber: null, validUntil: null, items: [] });
     vi.mocked(historicoDoProcesso).mockResolvedValue({ warnAbovePct: 10, items: [] });
+    vi.mocked(mapaDeScore).mockResolvedValue({ note: '', criteria: [], items: [] });
   });
 
   it('fornecedor fora do cadastro entra na cotação só com razão social e telefone', async () => {
@@ -512,6 +513,30 @@ describe('tela do processo', () => {
     const mapa = await screen.findByTestId('mapa-cotacao');
     expect(within(mapa).getByText('melhor preço', { exact: false })).toBeInTheDocument();
     expect(within(mapa).getByText('menor total')).toBeInTheDocument();
+  });
+
+  it('havendo proposta, o score multicritério aparece junto do mapa', async () => {
+    vi.mocked(lerProcesso).mockResolvedValue(processo({
+      proposals: [proposta({ id: 'p1', supplierName: 'Alfa', totalValue: 1200 })],
+    }));
+    vi.mocked(mapaDeScore).mockResolvedValue({
+      note: 'Score informativo.',
+      criteria: [{ code: 'price', label: 'Preço', weightPct: 40, help: 'menor total vale 100' }],
+      items: [{
+        supplierId: 's1', supplierName: 'Alfa', score: 91.5, pricePct: 100,
+        deliveryPct: null, paymentPct: null, otifPct: null, riskPct: null,
+      }],
+    });
+    abrir();
+    expect(await screen.findByTestId('mapa-score')).toHaveTextContent('91.5');
+  });
+
+  it('sem nenhuma proposta o painel do score nem é montado — não há o que comparar', async () => {
+    vi.mocked(lerProcesso).mockResolvedValue(processo({ proposals: [] }));
+    abrir();
+    expect(await screen.findByText(/Nenhuma proposta lançada ainda/)).toBeInTheDocument();
+    expect(screen.queryByText('Comparação multicritério')).not.toBeInTheDocument();
+    expect(mapaDeScore).not.toHaveBeenCalled();
   });
 
   it('quem escolheu o fornecedor vê o motivo no lugar dos botões de aprovar', async () => {

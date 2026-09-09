@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import {
-  anexarNaProposta, precosDeContrato, propostaVigenteDe, registrarProposta,
-  type CoberturaDoContrato, type Processo, type PropostaManual,
+  anexarNaProposta, historicoDoProcesso, precosDeContrato, propostaVigenteDe,
+  registrarProposta, variacaoDoPreco,
+  type CoberturaDoContrato, type HistoricoDoProcesso, type Processo, type PropostaManual,
 } from '@/api/cotacoes';
 import {
   listarCondicoesDePagamento, listarFormasDePagamento,
   type CondicaoDePagamento, type FormaDePagamento,
 } from '@/api/pagamentos';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
-import { data, quantidade } from '@/util/formato';
+import { data, moeda, quantidade } from '@/util/formato';
 
 const numero = (v: string) => {
   const n = Number(v.replace(',', '.'));
@@ -114,6 +115,7 @@ export function PainelPropostaManual({ processo, aoRegistrar, aoAvisar }: {
   const [formas, setFormas] = useState<FormaDePagamento[]>([]);
   const [condicoes, setCondicoes] = useState<CondicaoDePagamento[]>([]);
   const [contrato, setContrato] = useState<CoberturaDoContrato | null>(null);
+  const [historico, setHistorico] = useState<HistoricoDoProcesso | null>(null);
   const [precos, setPrecos] = useState<Record<string, string>>({});
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -154,6 +156,15 @@ export function PainelPropostaManual({ processo, aoRegistrar, aoAvisar }: {
     // e ainda tentaria preencher por cima do que está sendo escrito
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [processo.id, fornecedor]);
+
+  // Memória de preço dos itens deste processo, para o comprador ver na hora se o que
+  // está digitando foge do que a empresa já pagou. Uma chamada só, para o processo
+  // inteiro: uma por item transformaria vinte linhas em vinte idas ao servidor.
+  useEffect(() => {
+    const controle = new AbortController();
+    historicoDoProcesso(processo.id, controle.signal).then(setHistorico).catch(() => setHistorico(null));
+    return () => controle.abort();
+  }, [processo.id]);
 
   function escolherCondicao(nome: string) {
     const escolhida = condicoes.find((c) => c.name === nome);
@@ -291,10 +302,27 @@ export function PainelPropostaManual({ processo, aoRegistrar, aoAvisar }: {
         <div className="overflow-x-auto">
           <table>
             <tbody>
-              {processo.items.map((i) => (
+              {processo.items.map((i) => {
+                const h = historico?.items.find((x) => x.quotationItemId === i.id);
+                const variacao = variacaoDoPreco(h, precos[i.id] ?? '');
+                const acima = variacao != null && historico != null && variacao > historico.warnAbovePct;
+                return (
                 <tr key={i.id}>
                   <td>
                     {i.description} <span className="sub">({quantidade(i.quantity)} {i.unitOfMeasure})</span>
+                    {/* a memória de preço fica ao lado do campo, não num relatório do mês
+                        seguinte: é aqui que o comprador ainda pode voltar e negociar */}
+                    {h && (
+                      <div className="sub" data-testid={`historico-${i.id}`}>
+                        já pago: média {moeda(h.average)} · última {moeda(h.last)} com {h.lastSupplier}
+                        {' '}({h.purchases} {h.purchases === 1 ? 'compra' : 'compras'})
+                        {variacao != null && (
+                          <span className={acima ? 'ml-1 font-bold text-perigo' : 'ml-1 text-texto-suave'}>
+                            · {variacao > 0 ? '+' : ''}{variacao}%{acima ? ' acima do histórico' : ''}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td className="w-36">
                     <input type="number" min="0" step="0.01" placeholder="R$ unit."
@@ -303,7 +331,8 @@ export function PainelPropostaManual({ processo, aoRegistrar, aoAvisar }: {
                       onChange={(e) => setPrecos((p) => ({ ...p, [i.id]: e.target.value }))} />
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

@@ -12,7 +12,7 @@ import { textoDoConvite } from './PainelDeConvidados';
 import { candidatasDaFamilia, impedimentoDaProposta, propostasDaFamilia } from './AcoesDoProcesso';
 import { daCondicao, doContrato, montarProposta } from './PainelPropostaManual';
 import { lote, oferta, processo, proposta } from '@/test/cotacoes';
-import { precosDeContrato } from '@/api/cotacoes';
+import { historicoDoProcesso, precosDeContrato, variacaoDoPreco } from '@/api/cotacoes';
 import { listarCondicoesDePagamento, listarFormasDePagamento } from '@/api/pagamentos';
 
 vi.mock('@/api/cotacoes', async (importar) => ({
@@ -21,6 +21,7 @@ vi.mock('@/api/cotacoes', async (importar) => ({
   escolherVencedor: vi.fn(), decidir: vi.fn(), registrarOc: vi.fn(),
   registrarNegociacao: vi.fn(), cancelarProcesso: vi.fn(), registrarProposta: vi.fn(),
   anexarNaProposta: vi.fn(), mapaDeFamilias: vi.fn(), precosDeContrato: vi.fn(),
+  historicoDoProcesso: vi.fn(),
 }));
 describe('preço vindo do contrato de parceria', () => {
   const cobertura = (over = {}) => ({
@@ -104,8 +105,8 @@ const abrir = () => render(
 describe('leituras do mapa de cotação', () => {
   const q = processo({
     items: [
-      { id: 'i1', sequence: 1, catalogCode: null, description: 'Luva', quantity: 10, unitOfMeasure: 'PAR', sourcePrNumber: null, family: 'EPI' },
-      { id: 'i2', sequence: 2, catalogCode: null, description: 'Bota', quantity: 5, unitOfMeasure: 'PAR', sourcePrNumber: null, family: 'EPI' },
+      { id: 'i1', sequence: 1, catalogItemId: null, catalogCode: null, description: 'Luva', quantity: 10, unitOfMeasure: 'PAR', sourcePrNumber: null, family: 'EPI' },
+      { id: 'i2', sequence: 2, catalogItemId: null, catalogCode: null, description: 'Bota', quantity: 5, unitOfMeasure: 'PAR', sourcePrNumber: null, family: 'EPI' },
     ],
     proposals: [
       proposta({ id: 'p1', supplierName: 'Alfa', totalValue: 1000, items: [{ quotationItemId: 'i1', unitPrice: 12, quantity: 10 }] }),
@@ -199,7 +200,7 @@ describe('regras das ações por etapa', () => {
     // o critério deixou de ser a família: a divisão passou a poder acontecer DENTRO de
     // uma família só (o papel com um fornecedor, a caneta com outro)
     const item = (id: string, description: string) => ({
-      id, sequence: 1, catalogCode: null, description, quantity: 10,
+      id, sequence: 1, catalogItemId: null, catalogCode: null, description, quantity: 10,
       unitOfMeasure: 'UN', sourcePrNumber: null, family: 'MATERIAL DE ESCRITORIO',
     });
     const doisItens = processo({
@@ -214,8 +215,8 @@ describe('regras das ações por etapa', () => {
     const q = processo({
       families: ['EPI', 'FERRAMENTA'],
       items: [
-        { id: 'i1', sequence: 1, catalogCode: null, description: 'Luva', quantity: 10, unitOfMeasure: 'PAR', sourcePrNumber: null, family: 'EPI' },
-        { id: 'i2', sequence: 2, catalogCode: null, description: 'Furadeira', quantity: 1, unitOfMeasure: 'UN', sourcePrNumber: null, family: 'FERRAMENTA' },
+        { id: 'i1', sequence: 1, catalogItemId: null, catalogCode: null, description: 'Luva', quantity: 10, unitOfMeasure: 'PAR', sourcePrNumber: null, family: 'EPI' },
+        { id: 'i2', sequence: 2, catalogItemId: null, catalogCode: null, description: 'Furadeira', quantity: 1, unitOfMeasure: 'UN', sourcePrNumber: null, family: 'FERRAMENTA' },
       ],
       proposals: [
         proposta({ id: 'p1', supplierName: 'Alfa', items: [{ quotationItemId: 'i1', unitPrice: 12, quantity: 10 }] }),
@@ -368,6 +369,7 @@ describe('tela do processo', () => {
     vi.mocked(listarCondicoesDePagamento).mockResolvedValue([]);
     vi.mocked(precosDeContrato).mockResolvedValue(
       { current: false, contractNumber: null, validUntil: null, items: [] });
+    vi.mocked(historicoDoProcesso).mockResolvedValue({ warnAbovePct: 10, items: [] });
   });
 
   it('fornecedor fora do cadastro entra na cotação só com razão social e telefone', async () => {
@@ -774,4 +776,36 @@ describe('tela do processo', () => {
     const tabela = await screen.findByTestId('ocs-do-processo');
     expect(within(tabela).getByRole('link', { name: 'Faturamento e entrega' })).toHaveAttribute('href', '/pedidos/po1');
   });
+
+describe('memória de preço na proposta', () => {
+  const historico = (over = {}) => ({
+    quotationItemId: 'i1', average: 100, last: 105, min: 90, max: 110,
+    purchases: 4, lastSupplier: 'Alfa', lastAt: '2026-08-01T12:00:00Z', ...over,
+  });
+
+  it('o exemplo do documento: média 100, preço 140 → 40%', () => {
+    expect(variacaoDoPreco(historico(), '140')).toBe(40);
+  });
+
+  it('aceita vírgula, porque é assim que se digita preço aqui', () => {
+    expect(variacaoDoPreco(historico(), '110,5')).toBe(10.5);
+  });
+
+  it('sem histórico não há variação — nulo diz "não sei", zero afirmaria', () => {
+    expect(variacaoDoPreco(undefined, '140')).toBeNull();
+    // média zero também não serve de base: a conta daria infinito
+    expect(variacaoDoPreco(historico({ average: 0 }), '140')).toBeNull();
+  });
+
+  it('campo vazio ou inválido não vira aviso', () => {
+    expect(variacaoDoPreco(historico(), '')).toBeNull();
+    expect(variacaoDoPreco(historico(), '   ')).toBeNull();
+    expect(variacaoDoPreco(historico(), 'abc')).toBeNull();
+    expect(variacaoDoPreco(historico(), '0')).toBeNull();
+  });
+
+  it('pagar menos aparece como variação negativa, sem alarme', () => {
+    expect(variacaoDoPreco(historico(), '80')).toBe(-20);
+  });
+});
 });

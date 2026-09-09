@@ -12,7 +12,7 @@ import {
  * Antes da grade esta compra tinha de ir inteira para um dos dois.
  */
 const item = (id: string, description: string, quantity: number, sequence: number): ItemDoProcesso =>
-  ({ id, sequence, catalogCode: null, description, quantity, unitOfMeasure: 'UN',
+  ({ id, sequence, catalogItemId: null, catalogCode: null, description, quantity, unitOfMeasure: 'UN',
      sourcePrNumber: null, family: 'MATERIAL DE ESCRITORIO' });
 
 const papel = item('i-papel', 'Papel ofício A4', 10, 1);

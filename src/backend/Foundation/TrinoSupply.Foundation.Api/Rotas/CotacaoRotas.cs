@@ -198,6 +198,38 @@ public static class CotacaoRotas
         });
 
         // mapa da adjudicação por família: quem cotou cada família inteira e por quanto (V2 — compra dividida)
+        // Resumo do histórico de preço dos itens DESTE processo, de uma vez. É rota
+        // própria, e não campo da cotação, porque só a tela que registra proposta precisa
+        // dela: pendurá-la na vista do processo cobraria a consulta de todo mundo que
+        // abre a cotação para outra coisa.
+        rfq.MapGet("/{id:guid}/price-history", async (Guid id, QuotationService svc,
+            HistoricoDePrecoService historico, ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            if (!QuotationService.CanView(RoleOf(p)))
+                return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");
+            var q = await svc.GetAsync(id);
+            if (q is null) return Error(ctx, 404, "RFQ-ERR-404", "Cotação não encontrada.");
+
+            var porProduto = await historico.ResumoAsync(
+                q.Items.Where(i => i.CatalogItemId is not null)
+                    .Select(i => i.CatalogItemId!.Value).ToList());
+
+            return Ok(new
+            {
+                warnAbovePct = HistoricoDePrecoService.AvisoAcimaDePct,
+                // item sem catálogo e item nunca comprado saem daqui: a tela trata
+                // "não sei" como ausência, e não como preço médio zero
+                items = q.Items
+                    .Where(i => i.CatalogItemId is not null && porProduto.ContainsKey(i.CatalogItemId!.Value))
+                    .Select(i => porProduto[i.CatalogItemId!.Value] is var h ? new
+                    {
+                        quotationItemId = i.Id, average = h.Medio, last = h.Ultimo,
+                        min = h.Minimo, max = h.Maximo, purchases = h.Compras,
+                        lastSupplier = h.UltimoFornecedor, lastAt = h.UltimoEm,
+                    } : null),
+            }, ctx);
+        });
+
         // Compra por contrato: abre o processo já decidido e o deixa nas aprovações. Não
         // pula o BID — reconhece que ele aconteceu quando o contrato foi negociado.
         rfq.MapPost("/por-contrato", async (FecharPorContratoRequest body, QuotationService svc,

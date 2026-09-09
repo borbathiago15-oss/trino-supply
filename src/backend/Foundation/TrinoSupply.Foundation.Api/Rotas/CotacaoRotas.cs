@@ -79,7 +79,8 @@ public static class CotacaoRotas
             // adjudicação por família: a mesma compra pode ficar com vários fornecedores, um por família
             awards = q.AwardList.Select(a => new
             {
-                id = a.Id, family = a.Family, supplierId = a.SupplierId, supplierName = a.SupplierName,
+                id = a.Id, family = a.Family, quotationItemId = a.QuotationItemId,
+                supplierId = a.SupplierId, supplierName = a.SupplierName,
                 proposalId = a.ProposalId, proposalVersion = a.ProposalVersion,
                 itemsValue = a.ItemsValue, totalValue = a.TotalValue,
                 criteria = a.Criteria, justification = a.Justification,

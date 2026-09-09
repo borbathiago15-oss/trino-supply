@@ -85,8 +85,8 @@ describe('tela Processos de cotação', () => {
       processo({
         sourcePrNumbers: ['SC-1', 'SC-2'], splitAward: true,
         awards: [
-          { id: 'a1', family: 'EPI', supplierId: 's1', supplierName: 'Alfa', proposalId: 'p1', proposalVersion: 1, itemsValue: 100, totalValue: 120, criteria: null, justification: null, byLabel: null, purchaseOrderId: null, purchaseOrderNumber: null },
-          { id: 'a2', family: 'FERRAMENTA', supplierId: 's2', supplierName: 'Beta', proposalId: 'p2', proposalVersion: 1, itemsValue: 80, totalValue: 90, criteria: null, justification: null, byLabel: null, purchaseOrderId: null, purchaseOrderNumber: null },
+          { id: 'a1', family: 'EPI', quotationItemId: null, supplierId: 's1', supplierName: 'Alfa', proposalId: 'p1', proposalVersion: 1, itemsValue: 100, totalValue: 120, criteria: null, justification: null, byLabel: null, purchaseOrderId: null, purchaseOrderNumber: null },
+          { id: 'a2', family: 'FERRAMENTA', quotationItemId: null, supplierId: 's2', supplierName: 'Beta', proposalId: 'p2', proposalVersion: 1, itemsValue: 80, totalValue: 90, criteria: null, justification: null, byLabel: null, purchaseOrderId: null, purchaseOrderNumber: null },
         ],
       }),
     ]));

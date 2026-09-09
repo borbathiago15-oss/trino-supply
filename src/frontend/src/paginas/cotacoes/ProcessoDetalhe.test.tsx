@@ -148,8 +148,20 @@ describe('regras das ações por etapa', () => {
       expect(acoesDisponiveis(processo({ status }), conduz).cancelar).toBe(false);
     expect(acoesDisponiveis(processo({ status: 'EM_ANALISE' }), conduz).cancelar).toBe(true);
   });
-  it('mais de uma família manda escolher fornecedor por família', () => {
-    expect(acoesDisponiveis(processo({ families: ['EPI', 'FERRAMENTA'] }), conduz).porFamilia).toBe(true);
+  it('mais de um item manda escolher na grade item × fornecedor', () => {
+    // o critério deixou de ser a família: a divisão passou a poder acontecer DENTRO de
+    // uma família só (o papel com um fornecedor, a caneta com outro)
+    const item = (id: string, description: string) => ({
+      id, sequence: 1, catalogCode: null, description, quantity: 10,
+      unitOfMeasure: 'UN', sourcePrNumber: null, family: 'MATERIAL DE ESCRITORIO',
+    });
+    const doisItens = processo({
+      families: ['MATERIAL DE ESCRITORIO'],
+      items: [item('i1', 'Papel ofício A4'), item('i2', 'Caixa de caneta')],
+    });
+    expect(acoesDisponiveis(doisItens, conduz).porItem).toBe(true);
+    // um item só não vira grade: a escolha simples diz mais, com prazo e condição
+    expect(acoesDisponiveis(processo({ items: [item('i1', 'Papel')] }), conduz).porItem).toBe(false);
   });
   it('só concorre a uma família quem cotou a família inteira', () => {
     const q = processo({

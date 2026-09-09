@@ -174,6 +174,37 @@ export function TorreDeControle() {
               {['URGENT', 'HIGH', 'NORMAL', 'LOW'].map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </Campo>
+
+          {/* §5.1 — os quatro últimos dependem do pedido: item ainda não comprado
+              não tem fornecedor, O.C. nem valor fechado, e por isso sai do recorte */}
+          <Campo id="tc-fornecedor" rotulo="Fornecedor">
+            <input id="tc-fornecedor" placeholder="parte do nome" {...campo('fornecedor')}
+              onKeyDown={(e) => { if (e.key === 'Enter') aplicar(); }} />
+          </Campo>
+          <Campo id="tc-oc" rotulo="Número da O.C." dica="(nossa ou do ERP)">
+            <input id="tc-oc" placeholder="PO-2026-000123 ou 4521" {...campo('numeroOc')}
+              onKeyDown={(e) => { if (e.key === 'Enter') aplicar(); }} />
+          </Campo>
+          <Campo id="tc-de" rotulo="SC criada de">
+            <input id="tc-de" type="date" {...campo('de')} />
+          </Campo>
+          <Campo id="tc-ate" rotulo="SC criada até">
+            <input id="tc-ate" type="date" {...campo('ate')} />
+          </Campo>
+          <Campo id="tc-prazo-de" rotulo="Previsão de">
+            <input id="tc-prazo-de" type="date" {...campo('prazoDe')} />
+          </Campo>
+          <Campo id="tc-prazo-ate" rotulo="Previsão até">
+            <input id="tc-prazo-ate" type="date" {...campo('prazoAte')} />
+          </Campo>
+          <Campo id="tc-valor-de" rotulo="Valor de (R$)">
+            <input id="tc-valor-de" type="number" min="0" step="0.01" placeholder="0,00"
+              {...campo('valorDe')} onKeyDown={(e) => { if (e.key === 'Enter') aplicar(); }} />
+          </Campo>
+          <Campo id="tc-valor-ate" rotulo="Valor até (R$)">
+            <input id="tc-valor-ate" type="number" min="0" step="0.01" placeholder="0,00"
+              {...campo('valorAte')} onKeyDown={(e) => { if (e.key === 'Enter') aplicar(); }} />
+          </Campo>
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           <button type="button" className="botao" onClick={() => aplicar()}>Aplicar filtros</button>

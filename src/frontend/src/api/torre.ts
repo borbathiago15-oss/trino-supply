@@ -79,12 +79,26 @@ export interface FiltrosDaTorre {
   comprador: string;
   prioridade: string;
   atrasados: boolean;
+  /** §5.1 — período de criação da SC. */
+  de: string;
+  ate: string;
+  /** §5.1 — fornecedor e número da O.C. (própria ou do ERP): casam por trecho. */
+  fornecedor: string;
+  numeroOc: string;
+  /** §5.1 — faixa de prazo, sobre a previsão que a linha mostra. */
+  prazoDe: string;
+  prazoAte: string;
+  /** §5.1 — faixa de valor da linha. */
+  valorDe: string;
+  valorAte: string;
   pagina: number;
 }
 
 export const FILTROS_TORRE_VAZIOS: FiltrosDaTorre = {
   busca: '', etapa: '', situacao: '', empresa: '', centroCusto: '', familia: '',
-  solicitante: '', comprador: '', prioridade: '', atrasados: false, pagina: 1,
+  solicitante: '', comprador: '', prioridade: '', atrasados: false,
+  de: '', ate: '', fornecedor: '', numeroOc: '', prazoDe: '', prazoAte: '',
+  valorDe: '', valorAte: '', pagina: 1,
 };
 
 /** As etapas, na ordem em que o item as percorre — os mesmos nomes do servidor. */
@@ -122,6 +136,15 @@ export function consultaDaTorre(f: FiltrosDaTorre, tamanho = 50): string {
   if (f.comprador) q.set('buyerId', f.comprador);
   if (f.prioridade) q.set('priority', f.prioridade);
   if (f.atrasados) q.set('late', 'true');
+  if (f.de) q.set('from', f.de);
+  if (f.ate) q.set('to', f.ate);
+  if (f.fornecedor.trim()) q.set('supplier', f.fornecedor.trim());
+  if (f.numeroOc.trim()) q.set('orderNumber', f.numeroOc.trim());
+  if (f.prazoDe) q.set('dueFrom', f.prazoDe);
+  if (f.prazoAte) q.set('dueTo', f.prazoAte);
+  // faixa de valor: zero é um valor legítimo, então o que descarta é o campo vazio
+  if (f.valorDe.trim() && Number.isFinite(Number(f.valorDe))) q.set('minValue', f.valorDe.trim());
+  if (f.valorAte.trim() && Number.isFinite(Number(f.valorAte))) q.set('maxValue', f.valorAte.trim());
   q.set('page', String(f.pagina));
   q.set('pageSize', String(tamanho));
   return `?${q.toString()}`;

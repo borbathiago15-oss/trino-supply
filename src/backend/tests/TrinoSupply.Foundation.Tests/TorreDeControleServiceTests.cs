@@ -226,6 +226,119 @@ public class TorreDeControleServiceTests
         }
     }
 
+    // ==== §5.1 — os filtros obrigatórios que faltavam ==========================
+
+    /// <summary>Prende uma O.C. à SC, para os filtros que dependem do pedido terem o que filtrar.</summary>
+    private static async Task<PurchaseOrder> ComPedidoAsync(
+        World w, PurchaseRequisition pr, string fornecedor, string numero,
+        string? erp = null, decimal precoUnitario = 100m, DateOnly? prometida = null)
+    {
+        var itens = await w.Db.RequisitionItems.Where(i => i.RequisitionId == pr.Id).ToListAsync();
+        var pedido = new PurchaseOrder
+        {
+            Number = numero, ErpNumber = erp, Status = PurchaseOrderStatus.Issued,
+            SupplierId = Guid.NewGuid(), SupplierName = fornecedor,
+            SourcePrId = pr.Id, SourcePrNumber = pr.Number,
+            PromisedDate = prometida, CreatedAt = Agora,
+            Items = itens.Select(i => new PurchaseOrderItem
+            {
+                Description = i.Description, Quantity = i.Quantity,
+                UnitOfMeasure = i.UnitOfMeasure, UnitPrice = precoUnitario,
+            }).ToList(),
+        };
+        w.Db.PurchaseOrders.Add(pedido);
+        await w.Db.SaveChangesAsync();
+        return pedido;
+    }
+
+    [Fact]
+    public async Task Filtra_por_fornecedor_e_por_numero_da_oc_inclusive_o_do_ERP()
+    {
+        var w = Build();
+        var alfa = await ScAprovadaAsync(w, "Martelete");
+        var beta = await ScAprovadaAsync(w, "Luva");
+        await ScAprovadaAsync(w, "Pé de cabra");                       // sem pedido nenhum
+        await ComPedidoAsync(w, alfa, "Distribuidora Alfa LTDA", "PO-2026-000001", erp: "4521");
+        await ComPedidoAsync(w, beta, "Beta Química S.A.", "PO-2026-000002", erp: "9987");
+
+        // fornecedor: casa por trecho e ignora caixa — o comprador digita "alfa"
+        var porFornecedor = await w.Torre.ConsultarAsync(new FiltroTorre(Supplier: "alfa"));
+        Assert.Equal("Martelete", Assert.Single(porFornecedor.Items).Description);
+        Assert.Equal(1, porFornecedor.Total);
+
+        // a numeração própria
+        var porNumero = await w.Torre.ConsultarAsync(new FiltroTorre(OrderNumber: "PO-2026-000002"));
+        Assert.Equal("Luva", Assert.Single(porNumero.Items).Description);
+
+        // e a do ERP, que é o número que o comprador tem na mão
+        var porErp = await w.Torre.ConsultarAsync(new FiltroTorre(OrderNumber: "4521"));
+        Assert.Equal("Martelete", Assert.Single(porErp.Items).Description);
+
+        // item sem pedido não tem fornecedor nem O.C.: pedir por eles é pedir o que já
+        // foi comprado, então ele fica de fora em vez de aparecer como "em branco"
+        Assert.DoesNotContain(porFornecedor.Items, i => i.Description == "Pé de cabra");
+        Assert.Empty((await w.Torre.ConsultarAsync(new FiltroTorre(Supplier: "inexistente"))).Items);
+    }
+
+    [Fact]
+    public async Task Filtra_por_faixa_de_prazo_usando_a_previsao_que_a_linha_mostra()
+    {
+        // a previsão exibida é a data prometida pelo fornecedor e, enquanto ela não
+        // existe, a data de necessidade. Filtrar por outra data mostraria linha que
+        // contradiz a coluna ao lado.
+        var w = Build();
+        var cedo = await ScAprovadaAsync(w, "Martelete");
+        var tarde = await ScAprovadaAsync(w, "Luva");
+        await ComPedidoAsync(w, cedo, "Alfa", "PO-1", prometida: new DateOnly(2026, 9, 15));
+        await ComPedidoAsync(w, tarde, "Beta", "PO-2", prometida: new DateOnly(2026, 10, 20));
+
+        var setembro = await w.Torre.ConsultarAsync(new FiltroTorre(
+            DueFrom: new DateOnly(2026, 9, 1), DueTo: new DateOnly(2026, 9, 30)));
+        Assert.Equal("Martelete", Assert.Single(setembro.Items).Description);
+        Assert.Equal(new DateOnly(2026, 9, 15), setembro.Items[0].PromisedDate);
+
+        var doDiaVinte = await w.Torre.ConsultarAsync(new FiltroTorre(DueFrom: new DateOnly(2026, 10, 1)));
+        Assert.Equal("Luva", Assert.Single(doDiaVinte.Items).Description);
+    }
+
+    [Fact]
+    public async Task Filtra_por_faixa_de_valor_sobre_o_valor_da_linha()
+    {
+        var w = Build();
+        var barata = await ScAprovadaAsync(w, "Martelete");     // 10 un
+        var cara = await ScAprovadaAsync(w, "Luva");            // 10 un
+        await ComPedidoAsync(w, barata, "Alfa", "PO-1", precoUnitario: 50m);    // 500
+        await ComPedidoAsync(w, cara, "Beta", "PO-2", precoUnitario: 300m);     // 3.000
+
+        var acimaDeMil = await w.Torre.ConsultarAsync(new FiltroTorre(MinValue: 1000m));
+        Assert.Equal("Luva", Assert.Single(acimaDeMil.Items).Description);
+        Assert.Equal(3000m, acimaDeMil.Items[0].Value);
+
+        var ateMil = await w.Torre.ConsultarAsync(new FiltroTorre(MaxValue: 1000m));
+        Assert.Equal("Martelete", Assert.Single(ateMil.Items).Description);
+
+        var faixa = await w.Torre.ConsultarAsync(new FiltroTorre(MinValue: 100m, MaxValue: 600m));
+        Assert.Equal("Martelete", Assert.Single(faixa.Items).Description);
+    }
+
+    [Fact]
+    public async Task Com_filtro_novo_o_total_fecha_com_o_que_a_pagina_mostra()
+    {
+        // é a mesma regra que já valia para etapa e situação: total que não fecha com o
+        // filtro faz a tela mentir sobre o próprio recorte
+        var w = Build();
+        for (var i = 0; i < 5; i++)
+        {
+            var pr = await ScAprovadaAsync(w, $"Item {i}");
+            await ComPedidoAsync(w, pr, i < 2 ? "Alfa" : "Beta", $"PO-{i}");
+        }
+
+        var alfa = await w.Torre.ConsultarAsync(new FiltroTorre(Supplier: "Alfa", PageSize: 1));
+        Assert.Equal(2, alfa.Total);        // o total é do recorte inteiro…
+        Assert.Single(alfa.Items);          // …e a página é do tamanho pedido
+        Assert.Equal(2, alfa.Pages);
+    }
+
     [Fact]
     public void A_torre_e_de_quem_trabalha_a_fila_de_compras()
     {

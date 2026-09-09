@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LinhaDaTorre, PaginaDaTorre } from '@/api/torre';
+import { consultaDaTorre, FILTROS_TORRE_VAZIOS } from '@/api/torre';
 import { TorreDeControle } from './TorreDeControle';
 
 vi.mock('@/api/torre', async (importar) => ({
@@ -143,6 +144,44 @@ describe('Torre de Controle', () => {
     abrir();
     const aviso = await screen.findByTestId('torre-teto');
     expect(aviso).toHaveTextContent(/teto de 3.000 itens/);
+  });
+
+  it('os filtros do §5.1 chegam ao servidor com o nome que a API espera', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(torreDeControle).mockResolvedValue(pagina());
+    abrir();
+    await screen.findByTestId('tabela-torre');
+
+    await usuario.type(screen.getByLabelText('Fornecedor'), 'Alfa');
+    await usuario.type(screen.getByLabelText(/Número da O\.C\./), '4521');
+    await usuario.type(screen.getByLabelText('Valor de (R$)'), '1000');
+    await usuario.click(screen.getByRole('button', { name: 'Aplicar filtros' }));
+
+    await waitFor(() => expect(torreDeControle).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        fornecedor: 'Alfa', numeroOc: '4521', valorDe: '1000', pagina: 1,
+      }), expect.anything()));
+  });
+
+  it('a consulta monta os parâmetros de faixa e omite o campo vazio', () => {
+    // zero é valor legítimo numa faixa; o que descarta é o campo em branco
+    const cheia = consultaDaTorre({
+      ...FILTROS_TORRE_VAZIOS, fornecedor: ' Alfa ', numeroOc: 'PO-1',
+      prazoDe: '2026-09-01', prazoAte: '2026-09-30', valorDe: '0', valorAte: '5000',
+      de: '2026-08-01', ate: '2026-08-31',
+    });
+    expect(cheia).toContain('supplier=Alfa');          // aparado
+    expect(cheia).toContain('orderNumber=PO-1');
+    expect(cheia).toContain('dueFrom=2026-09-01');
+    expect(cheia).toContain('dueTo=2026-09-30');
+    expect(cheia).toContain('minValue=0');             // zero vai, não é "vazio"
+    expect(cheia).toContain('maxValue=5000');
+    expect(cheia).toContain('from=2026-08-01');
+    expect(cheia).toContain('to=2026-08-31');
+
+    const vazia = consultaDaTorre(FILTROS_TORRE_VAZIOS);
+    for (const p of ['supplier', 'orderNumber', 'dueFrom', 'dueTo', 'minValue', 'maxValue', 'from=', 'to='])
+      expect(vazia).not.toContain(p);
   });
 
   it('sem item no recorte, diz isso em vez de mostrar tabela vazia', async () => {

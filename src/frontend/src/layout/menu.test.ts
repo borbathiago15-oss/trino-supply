@@ -65,18 +65,27 @@ describe('menu', () => {
     expect(folhas({ role: 'Requester', modules: ['COMPRAS'] }).map((i) => i.id)).not.toContain('reports');
   });
 
-  it('a Torre de Controle abre o grupo Compras, com a triagem dentro dela', () => {
+  it('a Torre de Controle abre o grupo Compras, e é uma tela só', () => {
     const compras = itensVisiveis({ role: 'PurchasingOfficer', modules: ['COMPRAS'] })
       .find((g) => g.titulo === 'Compras')!;
     const primeiro = compras.itens[0];
-    // a Torre virou subgrupo: a triagem passou a morar dentro dela, porque a demanda
-    // que chega para o comprador é a etapa de Solicitação da própria Torre
-    expect(ehSubgrupo(primeiro) ? primeiro.rotulo : primeiro.id).toBe('Torre de Controle');
-    expect(ehSubgrupo(primeiro) ? primeiro.filhos.map((f) => f.id) : [])
-      .toEqual(['control-tower', 'triage']);
+    // já foi subgrupo, com a Torre e a triagem lado a lado, e era um erro: as duas
+    // listavam a mesma demanda de compra e o comprador tinha de escolher em qual acreditar
+    expect(ehSubgrupo(primeiro)).toBe(false);
+    expect(ehSubgrupo(primeiro) ? '' : primeiro.id).toBe('control-tower');
     // o auditor enxerga a fila para auditar; quem só solicita, não
     expect(folhas({ role: 'Auditor', modules: ['COMPRAS'] }).map((i) => i.id)).toContain('control-tower');
     expect(folhas({ role: 'Requester', modules: ['COMPRAS'] }).map((i) => i.id)).not.toContain('control-tower');
+  });
+
+  it('a triagem de material saiu de Compras e agora mora no grupo Material', () => {
+    // ela tria pedido ao almoxarifado, que é outro ciclo — ficar ao lado da Torre
+    // era o que fazia as duas parecerem a mesma fila
+    const grupos = itensVisiveis({ role: 'SupplyManager', modules: ['COMPRAS', 'MATERIAL'] });
+    const noGrupo = (titulo: string) => grupos.find((g) => g.titulo === titulo)!.itens
+      .flatMap((i) => (ehSubgrupo(i) ? i.filhos : [i])).map((i) => i.id);
+    expect(noGrupo('Material')).toContain('triage');
+    expect(noGrupo('Compras')).not.toContain('triage');
   });
 
   it('Comunicados é do administrador: quem escreve o recado não é qualquer um', () => {
@@ -150,7 +159,7 @@ describe('menu', () => {
     expect(rotulo('pr-mine')).toBe('Minhas Solicitações (SC)');
     expect(rotulo('buy-orders')).toBe('Pedidos de Compra (O.C.)');
     expect(rotulo('mr-mine')).toBe('Minhas Solicitações de Material');
-    expect(rotulo('triage')).toBe('Triagem de Demandas');
+    expect(rotulo('triage')).toBe('Triagem de Material');
 
     // nenhuma outra tela chama de "pedido" o que não é O.C.
     expect(folhas.filter((f) => /pedido/i.test(f.rotulo)).map((f) => f.id)).toEqual(['buy-orders']);

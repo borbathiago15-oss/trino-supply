@@ -17,6 +17,12 @@ public record FiltroTorre(
     string? Supplier = null, string? OrderNumber = null,
     DateOnly? DueFrom = null, DateOnly? DueTo = null,
     decimal? MinValue = null, decimal? MaxValue = null,
+    /// <summary>
+    /// Faixa de tempo na fila (0 = 0–2 dias, 1 = 3–5, 2 = 6–10, 3 = mais de 10). Veio da
+    /// tela de triagem, que era onde o comprador via há quanto tempo a demanda espera —
+    /// e que era a única razão de aquela tela existir em paralelo a esta.
+    /// </summary>
+    int? AgingBand = null,
     /// <summary>Só o que virou exceção — ver <see cref="ExcecaoDe"/>.</summary>
     bool? Exception = null,
     /// <summary>A fila prioritária do §5: só o que espera ação do comprador.</summary>
@@ -32,6 +38,12 @@ public record LinhaDaTorre(
     string Priority, DateOnly? NeededBy, DateOnly? PromisedDate, bool Late,
     decimal? Value, Guid? QuotationId, string? QuotationNumber,
     Guid? PurchaseOrderId, string? PurchaseOrderNumber,
+    /// <summary>
+    /// Quando o item entrou na fila do comprador: a decisão da SC, ou o envio enquanto
+    /// ela não foi decidida. É a mesma data que a fila de cotação já usa para ordenar —
+    /// duas contas diferentes para "há quanto tempo espera" dariam dois números.
+    /// </summary>
+    DateTimeOffset? OpenedAt = null,
     /// <summary>Por que este item é exceção, ou nulo quando segue o caminho normal.</summary>
     string? ExceptionReason = null,
     /// <summary>A próxima ação esperada — o que a linha pede que se faça agora.</summary>
@@ -53,7 +65,9 @@ public record LinhaDaTorre(
 public record KpisDaTorre(
     int Total, int Novos, int EmCotacao, int AguardandoAprovacao, int AguardandoOc,
     int AguardandoRecebimento, int Atrasados, int Urgentes, decimal Valor,
-    int EmFaturamento = 0, int Excecoes = 0);
+    int EmFaturamento = 0, int Excecoes = 0,
+    /// <summary>Quantos itens em cada faixa de fila, na ordem de <see cref="FaixasDeAging"/>.</summary>
+    IReadOnlyList<int>? PorFaixaDeAging = null);
 
 public record OpcoesDaTorre(
     IReadOnlyList<string> Companies, IReadOnlyList<OpcaoCodigo> CostCenters,
@@ -130,6 +144,23 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
         Etapas.FirstOrDefault(e => e.Key == chave).Label ?? chave;
 
     /// <summary>
+    /// As faixas de tempo na fila, em dias corridos. São as mesmas quatro que a triagem
+    /// usava — mantê-las idênticas é o que permite as duas telas virarem uma sem que
+    /// nenhum número mude de significado no caminho.
+    /// </summary>
+    public static readonly int[] FaixasDeAging = [2, 5, 10, int.MaxValue];
+
+    /// <summary>Índice da faixa: 0 é a mais nova, 3 a que espera há mais de dez dias.</summary>
+    public static int FaixaDeAging(DateTimeOffset? desde, DateTimeOffset agora)
+    {
+        if (desde is null) return 0;
+        var dias = Math.Max(0, (int)(agora - desde.Value).TotalDays);
+        for (var i = 0; i < FaixasDeAging.Length; i++)
+            if (dias <= FaixasDeAging[i]) return i;
+        return FaixasDeAging.Length - 1;
+    }
+
+    /// <summary>
     /// Por que este item é exceção — ou nulo quando ele segue o caminho normal.
     ///
     /// <para>
@@ -202,7 +233,8 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
 
     public async Task<PaginaDaTorre> ConsultarAsync(FiltroTorre f, CancellationToken ct = default)
     {
-        var hoje = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+        var agora = clock.GetUtcNow();
+        var hoje = DateOnly.FromDateTime(agora.UtcDateTime);
         var tamanho = Math.Clamp(f.PageSize, 1, PaginaMaxima);
         var pagina = Math.Max(1, f.Page);
 
@@ -350,6 +382,9 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
             var (acao, doComprador) = AcaoDe(etapa, excecao, x.sc.AssignedToId is not null);
             if (f.NeedsBuyer == true && !doComprador) continue;
 
+            var naFilaDesde = x.sc.DecidedAt ?? x.sc.SubmittedAt;
+            if (f.AgingBand is { } faixa && FaixaDeAging(naFilaDesde, agora) != faixa) continue;
+
             linhas.Add(new LinhaDaTorre(
                 x.item.Id, x.sc.Id, x.sc.Number, x.item.Sequence,
                 x.item.CatalogCode, x.item.Description, x.item.Quantity, x.item.UnitOfMeasure,
@@ -358,8 +393,8 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
                 pedido?.SupplierName, etapa, RotuloDaEtapa(etapa),
                 situacao.Key, situacao.Label, situacao.Tone,
                 x.sc.Priority, x.sc.NeededBy, pedido?.PromisedDate, atrasado,
-                valor, cotacao?.Id, cotacao?.Number, pedido?.Id, pedido?.Number, excecao,
-                acao.Length == 0 ? null : acao, doComprador));
+                valor, cotacao?.Id, cotacao?.Number, pedido?.Id, pedido?.Number,
+                naFilaDesde, excecao, acao.Length == 0 ? null : acao, doComprador));
         }
 
         if (derivado)
@@ -379,7 +414,7 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
             linhas = linhas.Skip((pagina - 1) * tamanho).Take(tamanho).ToList();
         }
 
-        return new PaginaDaTorre(linhas, await KpisAsync(hoje, ct), await OpcoesAsync(ct),
+        return new PaginaDaTorre(linhas, await KpisAsync(hoje, agora, ct), await OpcoesAsync(ct),
             pagina, tamanho, total, (int)Math.Ceiling(total / (double)tamanho), estourou, TetoDerivado);
     }
 
@@ -387,7 +422,7 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
     /// Os números do topo, sobre **tudo** o que está aberto — e não sobre a página.
     /// KPI que muda ao virar a página não é indicador, é contagem de tela.
     /// </summary>
-    private async Task<KpisDaTorre> KpisAsync(DateOnly hoje, CancellationToken ct)
+    private async Task<KpisDaTorre> KpisAsync(DateOnly hoje, DateTimeOffset agora, CancellationToken ct)
     {
         var abertas = await db.Requisitions.Include(r => r.Items)
             .Where(r => r.DeletedAt == null && r.Status != RequisitionStatus.Draft)
@@ -417,6 +452,7 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
         int total = 0, novos = 0, cotando = 0, aprovando = 0, aguardandoOc = 0,
             recebendo = 0, atrasados = 0, urgentes = 0, faturando = 0, excecoes = 0;
         decimal valor = 0;
+        var porFaixa = new int[FaixasDeAging.Length];
         foreach (var sc in abertas)
         {
             cotacaoPorSc.TryGetValue(sc.Id, out var cotacao);
@@ -445,13 +481,17 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
                 }
                 if (excecao) excecoes++;
                 if (atrasada) atrasados++;
+                // o aging conta a espera de quem ainda está na fila: item encerrado
+                // já não espera por ninguém e inflaria a faixa mais velha para sempre
+                if (etapa != "ENCERRADO")
+                    porFaixa[FaixaDeAging(sc.DecidedAt ?? sc.SubmittedAt, agora)]++;
                 if (sc.Priority == "URGENT" && etapa != "ENCERRADO") urgentes++;
             }
             if (etapa != "ENCERRADO") valor += sc.TotalEstimatedValue;
         }
 
         return new KpisDaTorre(total, novos, cotando, aprovando, aguardandoOc,
-            recebendo, atrasados, urgentes, valor, faturando, excecoes);
+            recebendo, atrasados, urgentes, valor, faturando, excecoes, porFaixa);
     }
 
     /// <summary>

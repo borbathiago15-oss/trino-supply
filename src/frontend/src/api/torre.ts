@@ -57,7 +57,21 @@ export interface KpisDaTorre {
   emFaturamento: number;
   /** O que o sistema já grava como fora do padrão — sem O.C. do ERP, cancelado, devolvido. */
   excecoes: number;
+  /** Quantos itens em cada faixa de tempo na fila, na ordem de FAIXAS_DE_FILA. */
+  porFaixaDeAging: number[] | null;
 }
+
+/**
+ * As faixas de tempo na fila. Vieram da tela de triagem sem mudar de fronteira: eram
+ * elas que diziam ao comprador "isto está parado há tempo demais", e o número tem de
+ * continuar querendo dizer a mesma coisa agora que as duas telas viraram uma.
+ */
+export const FAIXAS_DE_FILA = [
+  { rotulo: '0–2 dias', classe: 'bg-ok-fundo text-ok' },
+  { rotulo: '3–5 dias', classe: 'bg-teal-50 text-teal-800' },
+  { rotulo: '6–10 dias', classe: 'bg-aviso-fundo text-aviso' },
+  { rotulo: '+10 dias', classe: 'bg-perigo-fundo text-perigo' },
+] as const;
 
 export interface PaginaDaTorre {
   items: LinhaDaTorre[];
@@ -105,6 +119,8 @@ export interface FiltrosDaTorre {
   excecoes: boolean;
   /** §5 — a fila prioritária: só o que espera ação do comprador. */
   minhaFila: boolean;
+  /** Faixa de tempo na fila (índice em FAIXAS_DE_FILA), ou vazio para todas. */
+  faixaDeFila: string;
   pagina: number;
 }
 
@@ -112,7 +128,7 @@ export const FILTROS_TORRE_VAZIOS: FiltrosDaTorre = {
   busca: '', etapa: '', situacao: '', empresa: '', centroCusto: '', familia: '',
   solicitante: '', comprador: '', prioridade: '', atrasados: false,
   de: '', ate: '', fornecedor: '', numeroOc: '', prazoDe: '', prazoAte: '',
-  valorDe: '', valorAte: '', excecoes: false, minhaFila: false, pagina: 1,
+  valorDe: '', valorAte: '', excecoes: false, minhaFila: false, faixaDeFila: '', pagina: 1,
 };
 
 /** As etapas, na ordem em que o item as percorre — os mesmos nomes do servidor. */
@@ -161,6 +177,7 @@ export function consultaDaTorre(f: FiltrosDaTorre, tamanho = 50): string {
   if (f.valorAte.trim() && Number.isFinite(Number(f.valorAte))) q.set('maxValue', f.valorAte.trim());
   if (f.excecoes) q.set('exception', 'true');
   if (f.minhaFila) q.set('needsBuyer', 'true');
+  if (f.faixaDeFila !== '') q.set('agingBand', f.faixaDeFila);
   q.set('page', String(f.pagina));
   q.set('pageSize', String(tamanho));
   return `?${q.toString()}`;

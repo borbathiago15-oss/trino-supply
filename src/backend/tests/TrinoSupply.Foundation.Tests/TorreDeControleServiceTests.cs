@@ -519,4 +519,36 @@ public class TorreDeControleServiceTests
         foreach (var papel in new[] { Roles.Requester, Roles.Approver, Roles.WarehouseOperator })
             Assert.False(TorreDeControleService.CanView(papel));
     }
+
+    /// <summary>
+    /// As faixas de fila que vieram da triagem. O que este teste protege é a fronteira de
+    /// cada uma: era ela que dizia ao comprador "isto está parado há tempo demais", e
+    /// mudá-la sem querer faria a Torre contar uma fila diferente da que a triagem contava.
+    /// </summary>
+    [Fact]
+    public void Faixas_de_aging_separam_0a2_3a5_6a10_e_mais_de_10_dias()
+    {
+        var agora = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+        int faixa(int diasAtras) =>
+            TorreDeControleService.FaixaDeAging(agora.AddDays(-diasAtras), agora);
+
+        Assert.Equal(0, faixa(0));
+        Assert.Equal(0, faixa(2));   // a fronteira é inclusiva: 2 dias ainda é "0–2"
+        Assert.Equal(1, faixa(3));
+        Assert.Equal(1, faixa(5));
+        Assert.Equal(2, faixa(6));
+        Assert.Equal(2, faixa(10));
+        Assert.Equal(3, faixa(11));
+        Assert.Equal(3, faixa(365));
+    }
+
+    /// <summary>Sem data de entrada não há espera: a faixa é a mais nova, não a mais velha.</summary>
+    [Fact]
+    public void Sem_data_de_entrada_o_item_nao_cai_na_faixa_mais_velha()
+    {
+        // o contrário faria uma SC sem data aparecer como "parada há mais de 10 dias",
+        // e o comprador correria atrás de uma fila que não existe
+        var agora = new DateTimeOffset(2026, 9, 20, 12, 0, 0, TimeSpan.Zero);
+        Assert.Equal(0, TorreDeControleService.FaixaDeAging(null, agora));
+    }
 }

@@ -317,6 +317,8 @@ public record CreateCompanyRequest(string LegalName, string TaxId, string? State
     string? District, string City, string State, string Zip, string? Phone, string? Email);
 public record UpdateCompanyRequest(string? LegalName, string? StateRegistration, string? Address, string? District,
     string? City, string? State, string? Zip, string? Phone, string? Email, bool? Active);
+/// <summary>Fechar pelo contrato: os itens da SC e o fornecedor parceiro.</summary>
+public record FecharPorContratoRequest(List<Guid>? PrItemIds, Guid SupplierId);
 public record CreatePaymentMethodRequest(string? Name);
 public record UpdatePaymentMethodRequest(string? Name, bool? Active);
 public record CreatePaymentTermRequest(string? Name, int Installments, int? FirstDueDays, bool IsDefault = false);

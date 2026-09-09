@@ -47,6 +47,7 @@ GET /api/v1/quotations/my-approvals
 GET /api/v1/quotations/queue
 GET /api/v1/quotations/{id:guid}
 GET /api/v1/quotations/{id:guid}/contract-prices/{supplierId:guid}
+POST /api/v1/quotations/por-contrato
 GET /api/v1/quotations/{id:guid}/family-map
 GET /api/v1/quotations/{id:guid}/score-map
 GET /api/v1/quotations/{id:guid}/timeline

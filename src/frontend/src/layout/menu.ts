@@ -70,11 +70,19 @@ export const MENU: GrupoMenu[] = [
     { id: 'pr-mine', rotulo: 'Minhas Solicitações (SC)', rota: '/solicitacoes', mostrar: sempre },
   ]},
   { titulo: 'Compras', modulo: 'COMPRAS', itens: [
-    // primeira do grupo: é a tela que o comprador abre e deixa aberta
-    { id: 'control-tower', rotulo: 'Torre de Controle', rota: '/torre',
-      mostrar: (u) => podeComprar(u) || podeVerCompliance(u) || u.role === 'Auditor' },
-    { id: 'triage', rotulo: 'Triagem de Demandas', rota: '/gestao-solicitacoes',
-      mostrar: (u) => podeTriar(u) || podeComprar(u) || podeAlmoxarifado(u) },
+    // primeira do grupo: é a tela que o comprador abre e deixa aberta.
+    //
+    // A triagem entrou para dentro dela — atribuir e liberar responsável agora se faz
+    // na própria Torre, porque a demanda que chega para o comprador *é* a etapa de
+    // Solicitação da Torre. A tela dedicada continua no submenu por um motivo concreto:
+    // ela também tria **requisição de material**, que a Torre não mostra, e traz o
+    // tempo de fila por faixa de aging.
+    { rotulo: 'Torre de Controle', filhos: [
+      { id: 'control-tower', rotulo: 'Itens de Compra', rota: '/torre',
+        mostrar: (u) => podeComprar(u) || podeVerCompliance(u) || u.role === 'Auditor' },
+      { id: 'triage', rotulo: 'Triagem de Demandas', rota: '/gestao-solicitacoes',
+        mostrar: (u) => podeTriar(u) || podeComprar(u) || podeAlmoxarifado(u) },
+    ]},
     { rotulo: 'Cotações', filhos: [
       { id: 'rfq-queue', rotulo: 'Abrir Cotação', rota: '/cotacoes/abrir', mostrar: podeVerCotacao },
       { id: 'quotations', rotulo: 'Processos de Cotação', rota: '/cotacoes', mostrar: podeVerCotacao },

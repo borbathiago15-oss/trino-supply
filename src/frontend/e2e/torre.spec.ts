@@ -10,7 +10,9 @@ test.describe('Torre de Controle (React)', () => {
   test('abre com os KPIs, a lista por item e o recorte na chamada', async ({ page }) => {
     const consulta = page.waitForResponse((r) => r.url().includes('/api/v1/control-tower'));
     await abrirAutenticado(page, '/torre');
-    await expect(page.locator('#titulo-pagina')).toHaveText('Torre de Controle');
+    // "Torre de Controle" passou a ser o subgrupo do menu, que abriga esta tela e a
+    // triagem; o título da página é o da tela, que é a lista por item
+    await expect(page.locator('#titulo-pagina')).toHaveText('Itens de Compra');
     expect((await consulta).status()).toBe(200);
 
     // os KPIs também são filtros: cada um é um botão
@@ -112,6 +114,25 @@ test.describe('Torre de Controle (React)', () => {
     // e o recorte sem resultado se explica, em vez de mostrar tabela vazia
     await expect(page.getByTestId('tabela-torre')
       .or(page.getByText('Nenhum item de compra neste recorte.'))).toBeVisible();
+  });
+
+  /** A triagem passou a morar na Torre: a barra existe e a seleção é por SC. */
+  test('a triagem está na Torre, e marcar um item marca a solicitação inteira', async ({ page }) => {
+    await abrirAutenticado(page, '/torre');
+    await expect(page.getByTestId('tabela-torre')
+      .or(page.getByText('Nenhum item de compra neste recorte.'))).toBeVisible();
+
+    const barra = page.getByTestId('triagem-torre');
+    if (!(await barra.count())) return;          // ambiente sem item: nada a triar
+    await expect(barra).toContainText('A atribuição é da SC inteira');
+
+    const caixas = page.getByTestId('tabela-torre').locator('input[type="checkbox"]');
+    if (await caixas.count()) {
+      await caixas.first().check();
+      await expect(barra).toContainText('solicitação(ões) marcada(s)');
+      // sem responsável escolhido, o botão não deixa atribuir
+      await expect(page.getByRole('button', { name: /^Atribuir/ })).toBeDisabled();
+    }
   });
 
   test('filtrar por centro de custo refaz a consulta e limpar desfaz', async ({ page }) => {

@@ -65,11 +65,15 @@ describe('menu', () => {
     expect(folhas({ role: 'Requester', modules: ['COMPRAS'] }).map((i) => i.id)).not.toContain('reports');
   });
 
-  it('a Torre de Controle abre o grupo Compras: é a tela que o comprador deixa aberta', () => {
+  it('a Torre de Controle abre o grupo Compras, com a triagem dentro dela', () => {
     const compras = itensVisiveis({ role: 'PurchasingOfficer', modules: ['COMPRAS'] })
       .find((g) => g.titulo === 'Compras')!;
     const primeiro = compras.itens[0];
-    expect(ehSubgrupo(primeiro) ? primeiro.rotulo : primeiro.id).toBe('control-tower');
+    // a Torre virou subgrupo: a triagem passou a morar dentro dela, porque a demanda
+    // que chega para o comprador é a etapa de Solicitação da própria Torre
+    expect(ehSubgrupo(primeiro) ? primeiro.rotulo : primeiro.id).toBe('Torre de Controle');
+    expect(ehSubgrupo(primeiro) ? primeiro.filhos.map((f) => f.id) : [])
+      .toEqual(['control-tower', 'triage']);
     // o auditor enxerga a fila para auditar; quem só solicita, não
     expect(folhas({ role: 'Auditor', modules: ['COMPRAS'] }).map((i) => i.id)).toContain('control-tower');
     expect(folhas({ role: 'Requester', modules: ['COMPRAS'] }).map((i) => i.id)).not.toContain('control-tower');

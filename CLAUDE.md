@@ -133,6 +133,20 @@ discordariam no primeiro caso de canto e o comprador não confiaria em nenhum do
 O rótulo vem do servidor; o destino é do navegador (`destinoDaAcao`), que é quem
 conhece as rotas. **Exceção volta ao comprador em qualquer etapa.**
 
+**A triagem mora dentro da Torre.** Atribuir e liberar responsável se faz na própria
+Torre, porque a demanda que chega para o comprador *é* a etapa de Solicitação dela —
+sair da tela para atribuir e voltar para acompanhar era o caminho longo para a mesma
+coisa. As chamadas continuam sendo as de `/api/v1/triage`: a regra de quem pode receber
+demanda vive num lugar só, no servidor.
+
+**A atribuição é da SC, e a Torre é por item.** Marcar um item marca a solicitação
+inteira, e a seleção é deduplicada por `requisitionId` — sem isso, uma SC de cinco itens
+iria cinco vezes no mesmo lote. A tela diz isso em vez de deixar o comprador descobrir.
+
+A tela dedicada de Triagem continua existindo, agora no submenu da Torre, por um motivo
+concreto: ela também tria **requisição de material**, que a Torre não mostra, e traz o
+tempo de fila por faixa de aging.
+
 ## Verificação antes de entregar
 
 ```bash

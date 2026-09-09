@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react';
 import {
-  alterarPrioridade, designar, designarEmLote, diasNaFila, FAIXAS_AGING, faixaDeAging,
+  designar, designarEmLote, diasNaFila, FAIXAS_AGING, faixaDeAging,
   FILTROS_VAZIOS, listarDemandas, listarResponsaveis, rotuloDoResponsavel,
   type Demanda, type EscopoTriagem, type FiltrosTriagem, type ItemDemanda, type Responsavel,
 } from '@/api/triagem';
 import { Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
-import { Dialogo } from '@/componentes/Dialogo';
 import { Campo } from '@/componentes/formulario';
+import { DialogoDePrioridade, type Pleito } from './DialogoDePrioridade';
 import { useToast } from '@/componentes/Toast';
 import { podeTriar } from '@/dominio/papeis';
 import { classeDoTom } from '@/dominio/tons';
@@ -31,8 +31,6 @@ export const linhasDe = (t: Demanda): ItemDemanda[] =>
 export const contarPorFaixa = (itens: Demanda[], agora = Date.now()) =>
   FAIXAS_AGING.map((_, i) => itens.filter((t) => faixaDeAging(t, agora) === i).length);
 
-interface Pleito { demanda: Demanda; para: 'URGENT' | 'NORMAL' }
-
 export function GestaoDeSolicitacoes() {
   const usuario = useUsuario();
   const { avisar } = useToast();
@@ -43,8 +41,6 @@ export function GestaoDeSolicitacoes() {
   const [marcadas, setMarcadas] = useState<Record<string, boolean>>({});
   const [responsavelLote, setResponsavelLote] = useState('');
   const [pleito, setPleito] = useState<Pleito | null>(null);
-  const [motivo, setMotivo] = useState('');
-  const [impacto, setImpacto] = useState('');
 
   const { dados, erro, carregando, recarregar } = useCarregar(
     (signal) => listarDemandas(filtros, signal),
@@ -57,7 +53,11 @@ export function GestaoDeSolicitacoes() {
   const responsaveis = equipe.dados ?? [];
 
   const visiveis = useMemo(() => {
-    const todas = dados?.items ?? [];
+    // Só material. A demanda de COMPRA é triada na Torre de Controle, na própria linha
+    // do item — as duas telas listando a mesma SC era o que fazia o comprador ter de
+    // escolher em qual acreditar. O endpoint continua servindo os dois tipos porque a
+    // Torre usa as mesmas chamadas de atribuição; o recorte é de quem lê.
+    const todas = (dados?.items ?? []).filter((t) => t.kind === 'MR');
     return faixa === '' ? todas : todas.filter((t) => faixaDeAging(t) === Number(faixa));
   }, [dados, faixa]);
   const porFaixa = useMemo(() => contarPorFaixa(visiveis), [visiveis]);
@@ -89,27 +89,12 @@ export function GestaoDeSolicitacoes() {
     } catch (e) { avisar(mensagem(e, 'Falha ao designar em lote.'), 'erro'); }
   }
 
-  function abrirPleito(demanda: Demanda, para: 'URGENT' | 'NORMAL') {
-    setMotivo(''); setImpacto(''); setPleito({ demanda, para });
-  }
-
-  async function salvarPrioridade() {
-    if (!pleito) return;
-    try {
-      await alterarPrioridade(pleito.demanda.id, pleito.para, motivo.trim(),
-        pleito.para === 'URGENT' ? impacto.trim() : null);
-      avisar('Prioridade alterada com justificativa registrada.');
-      setPleito(null);
-      recarregar();
-    } catch (e) { avisar(mensagem(e, 'Falha ao alterar a prioridade.'), 'erro'); }
-  }
-
-  // urgente exige motivo e impacto — a mesma régua da SC urgente
-  const pleitoIncompleto = !motivo.trim() || (pleito?.para === 'URGENT' && !impacto.trim());
+  const abrirPleito = (demanda: Demanda, para: 'URGENT' | 'NORMAL') =>
+    setPleito({ id: demanda.id, numero: demanda.number, para });
 
   return (
     <>
-      <Painel titulo="Triagem de Demandas" acoes={
+      <Painel titulo="Triagem de Material" acoes={
         dados && <span className="sub">{visiveis.length} de {dados.total} demanda(s)</span>
       }>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -297,30 +282,8 @@ export function GestaoDeSolicitacoes() {
       </Painel>
 
       {pleito && (
-        <Dialogo aoFechar={() => setPleito(null)}
-          titulo={pleito.para === 'URGENT'
-            ? `Tornar a ${pleito.demanda.number} URGENTE`
-            : `Voltar a ${pleito.demanda.number} para Normal`}
-          acoes={
-            <>
-              <button type="button" className="botao-secundario" onClick={() => setPleito(null)}>Cancelar</button>
-              <button type="button" className="botao" disabled={pleitoIncompleto} onClick={salvarPrioridade}>
-                Registrar mudança
-              </button>
-            </>
-          }>
-          <Campo id="tri-motivo" rotulo={pleito.para === 'URGENT'
-            ? 'Por que esta demanda virou urgente?' : 'Por que esta demanda volta a Normal?'}>
-            <input id="tri-motivo" value={motivo} onChange={(e) => setMotivo(e.target.value)} autoFocus />
-          </Campo>
-          {pleito.para === 'URGENT' && (
-            <Campo id="tri-impacto" rotulo="Qual o impacto de não comprar?"
-              dica="mesma régua da SC urgente" className="mt-3">
-              <input id="tri-impacto" value={impacto} onChange={(e) => setImpacto(e.target.value)} />
-            </Campo>
-          )}
-          {pleitoIncompleto && <p className="sub mt-2">A justificativa fica registrada — os dois campos são obrigatórios.</p>}
-        </Dialogo>
+        <DialogoDePrioridade pleito={pleito} aoFechar={() => setPleito(null)}
+          aoSalvar={recarregar} aoAvisar={avisar} />
       )}
     </>
   );

@@ -70,19 +70,18 @@ export const MENU: GrupoMenu[] = [
     { id: 'pr-mine', rotulo: 'Minhas Solicitações (SC)', rota: '/solicitacoes', mostrar: sempre },
   ]},
   { titulo: 'Compras', modulo: 'COMPRAS', itens: [
-    // primeira do grupo: é a tela que o comprador abre e deixa aberta.
+    // Primeira do grupo, e uma tela só: é a que o comprador abre e deixa aberta.
     //
-    // A triagem entrou para dentro dela — atribuir e liberar responsável agora se faz
-    // na própria Torre, porque a demanda que chega para o comprador *é* a etapa de
-    // Solicitação da Torre. A tela dedicada continua no submenu por um motivo concreto:
-    // ela também tria **requisição de material**, que a Torre não mostra, e traz o
-    // tempo de fila por faixa de aging.
-    { rotulo: 'Torre de Controle', filhos: [
-      { id: 'control-tower', rotulo: 'Itens de Compra', rota: '/torre',
-        mostrar: (u) => podeComprar(u) || podeVerCompliance(u) || u.role === 'Auditor' },
-      { id: 'triage', rotulo: 'Triagem de Demandas', rota: '/gestao-solicitacoes',
-        mostrar: (u) => podeTriar(u) || podeComprar(u) || podeAlmoxarifado(u) },
-    ]},
+    // Já foi um subgrupo, com a Torre e a triagem lado a lado, e era um erro: as duas
+    // listavam a mesma demanda de compra por caminhos diferentes, e o comprador tinha de
+    // escolher em qual acreditar. A triagem de compra vive dentro da Torre — atribuir e
+    // liberar responsável se faz na linha —, e o tempo de fila por faixa veio junto, que
+    // era a única coisa que a outra tela mostrava e esta não.
+    //
+    // A triagem de **material** não veio: é outro ciclo, com outras etapas e outro
+    // atendente. Ela tem tela própria, no grupo Material.
+    { id: 'control-tower', rotulo: 'Torre de Controle', rota: '/torre',
+      mostrar: (u) => podeComprar(u) || podeVerCompliance(u) || u.role === 'Auditor' },
     { rotulo: 'Cotações', filhos: [
       { id: 'rfq-queue', rotulo: 'Abrir Cotação', rota: '/cotacoes/abrir', mostrar: podeVerCotacao },
       { id: 'quotations', rotulo: 'Processos de Cotação', rota: '/cotacoes', mostrar: podeVerCotacao },
@@ -94,6 +93,10 @@ export const MENU: GrupoMenu[] = [
   { titulo: 'Material', modulo: 'MATERIAL', itens: [
     { id: 'mr-new', rotulo: 'Solicitar Material', rota: '/material/nova', mostrar: podePedirMaterial },
     { id: 'mr-mine', rotulo: 'Minhas Solicitações de Material', rota: '/material', mostrar: sempre },
+    // saiu do grupo Compras: o que ela tria é pedido ao almoxarifado, não compra —
+    // e era ficar ao lado da Torre que fazia as duas parecerem a mesma fila
+    { id: 'triage', rotulo: 'Triagem de Material', rota: '/gestao-solicitacoes',
+      mostrar: (u) => podeTriar(u) || podeAlmoxarifado(u) },
   ]},
   { titulo: 'Estoque', modulo: 'ESTOQUE', itens: [
     { id: 'wh-queue', rotulo: 'Fila de Atendimento', rota: '/estoque/fila', mostrar: podeAlmoxarifado },

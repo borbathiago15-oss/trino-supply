@@ -67,6 +67,18 @@ o usuário descobrir no erro do servidor:
   depois deixa de ser exceção e limpa a observação. Vale nos dois caminhos:
   `RFQ-ERR-043` no processo de cotação e `PO-ERR-054` na tela do pedido.
 - **IC-ERR-023** — EPI/EPC só circula com C.A. válido no par produto-fornecedor.
+- **A adjudicação é por escopo, e o escopo pode ser o item.** `QuotationAward.QuotationItemId`
+  nulo quer dizer a família inteira — é o que toda adjudicação antiga significa e continua
+  significando. Preenchido, é aquele item: o papel com um fornecedor e a caneta com outro,
+  dentro da mesma família. Tudo a jusante (rateio de frete, itens da O.C., baseline do
+  saving) pergunta `ItemsCovered(award)` em vez de assumir a família — foi o que permitiu
+  dividir sem refazer conta nenhuma. `RFQ-ERR-023` cobra um vencedor por **item**, e
+  `RFQ-ERR-024` só exige que o fornecedor tenha cotado o que o escopo pede.
+- **Contrato de parceria preenche o preço da proposta, se estiver vigente.**
+  `QuotationService.ContractPricesAsync` casa item do processo com `SupplierContractItem`
+  **pelo produto do catálogo** (código como segundo caminho), nunca pela descrição — "BOTA
+  BIQUEIRA DE PVC" e "BOTA BIQUEIRA DE AÇO" trocariam de preço sem ninguém notar. Fora da
+  vigência não preenche nada: preço vencido entrando calado é pior que campo vazio.
 - **SEC-004** — senha definida por outra pessoa é provisória. Usuário criado pelo
   cadastro, admin semeado pelo ambiente e senha redefinida pelo administrador
   nascem com `must_change_password`; enquanto a marca existe, o middleware do
@@ -143,9 +155,18 @@ demanda vive num lugar só, no servidor.
 inteira, e a seleção é deduplicada por `requisitionId` — sem isso, uma SC de cinco itens
 iria cinco vezes no mesmo lote. A tela diz isso em vez de deixar o comprador descobrir.
 
-A tela dedicada de Triagem continua existindo, agora no submenu da Torre, por um motivo
-concreto: ela também tria **requisição de material**, que a Torre não mostra, e traz o
-tempo de fila por faixa de aging.
+**A Torre é uma tela só, e a de compra não se divide em duas.** Ela já foi um subgrupo,
+com a Torre e a triagem lado a lado, e era um erro: as duas listavam a mesma SC por
+caminhos diferentes e o comprador tinha de escolher em qual acreditar. O que só existia
+na outra veio para cá — o **tempo na fila** por faixa (0–2, 3–5, 6–10, +10 dias, contando
+só quem ainda espera) e a **mudança de prioridade** na própria linha. O diálogo de
+prioridade é compartilhado (`paginas/triagem/DialogoDePrioridade.tsx`): duplicá-lo faria
+uma das telas aceitar urgência sem impacto, e a auditoria ficaria com metade da história.
+
+A triagem de **material** não veio: é outro ciclo, com outras etapas e outro atendente.
+Tem tela própria, no grupo Material, e lista só `MR`. O endpoint `/api/v1/triage` continua
+servindo os dois tipos porque a Torre usa as mesmas chamadas de atribuição — o recorte é
+de quem lê.
 
 ## Verificação antes de entregar
 

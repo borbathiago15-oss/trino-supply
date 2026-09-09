@@ -19,7 +19,7 @@ public static class TorreRotas
             string? family, Guid? requesterId, Guid? buyerId, string? priority,
             DateOnly? from, DateOnly? to, bool? late, int? page, int? pageSize,
             string? supplier, string? orderNumber, DateOnly? dueFrom, DateOnly? dueTo,
-            decimal? minValue, decimal? maxValue, bool? exception, bool? needsBuyer,
+            decimal? minValue, decimal? maxValue, int? agingBand, bool? exception, bool? needsBuyer,
             CancellationToken ct) =>
         {
             if (!TorreDeControleService.CanView(RoleOf(p)))
@@ -28,11 +28,16 @@ public static class TorreRotas
                 return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para este módulo.");
 
             static string? Preenchido(string? v) => string.IsNullOrWhiteSpace(v) ? null : v.Trim();
+            // por nome, e não por posição: o filtro cresce a cada recorte novo, e um
+            // parâmetro inserido no meio silenciosamente deslocava todos os seguintes
             var filtro = new FiltroTorre(
-                Preenchido(search), Preenchido(stage), Preenchido(status), Preenchido(company),
-                Preenchido(costCenter), Preenchido(family), requesterId, buyerId, Preenchido(priority),
-                from, to, late, page ?? 1, pageSize ?? 50,
-                Preenchido(supplier), Preenchido(orderNumber), dueFrom, dueTo, minValue, maxValue, exception, needsBuyer);
+                Search: Preenchido(search), Stage: Preenchido(stage), Status: Preenchido(status),
+                Company: Preenchido(company), CostCenter: Preenchido(costCenter), Family: Preenchido(family),
+                RequesterId: requesterId, BuyerId: buyerId, Priority: Preenchido(priority),
+                From: from, To: to, Late: late, Page: page ?? 1, PageSize: pageSize ?? 50,
+                Supplier: Preenchido(supplier), OrderNumber: Preenchido(orderNumber),
+                DueFrom: dueFrom, DueTo: dueTo, MinValue: minValue, MaxValue: maxValue,
+                AgingBand: agingBand, Exception: exception, NeedsBuyer: needsBuyer);
             return Ok(await svc.ConsultarAsync(filtro, ct), ctx);
         }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole())
             .AddEndpointFilter(RequireModules(AppModules.Compras));

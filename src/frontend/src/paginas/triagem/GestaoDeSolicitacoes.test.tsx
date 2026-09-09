@@ -14,7 +14,7 @@ vi.mock('@/api/triagem', async (importar) => ({
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => eu }));
 
 import {
-  alterarPrioridade, designar, designarEmLote, listarDemandas, listarResponsaveis,
+  designar, designarEmLote, listarDemandas, listarResponsaveis,
 } from '@/api/triagem';
 
 let eu: Usuario = {
@@ -32,7 +32,7 @@ const item = (p: Partial<ItemDemanda>): ItemDemanda => ({
 });
 
 const demanda = (p: Partial<Demanda>): Demanda => ({
-  kind: 'SC', id: 'sc1', number: 'SC-2026-000001', costCenter: 'BAH-001', requesterLabel: 'Ana',
+  kind: 'MR', id: 'mr1', number: 'SM-2026-000001', costCenter: 'BAH-001', requesterLabel: 'Ana',
   summary: '10× Luva', estimatedValue: 250, openedAt: diasAtras(1), status: 'SUBMITTED',
   processStatusLabel: 'Pendente', processStatusTone: '', processStatusHint: 'Aguardando o comprador.',
   splitProcesses: false, priority: 'NORMAL', neededBy: null, justification: 'Reposição de EPI',
@@ -92,10 +92,10 @@ describe('tela Triagem de Demandas', () => {
     abrir();
     const tabela = await screen.findByTestId('tabela-demandas');
     expect(within(tabela).getAllByRole('row')).toHaveLength(3); // cabeçalho + 2 itens
-    expect(within(tabela).getByText('SC-2026-000001/0001')).toBeInTheDocument();
-    expect(within(tabela).getByText('SC-2026-000001/0002')).toBeInTheDocument();
+    expect(within(tabela).getByText('SM-2026-000001/0001')).toBeInTheDocument();
+    expect(within(tabela).getByText('SM-2026-000001/0002')).toBeInTheDocument();
     // só a primeira linha traz a caixa de seleção do lote
-    expect(within(tabela).getAllByLabelText(/Selecionar SC-2026-000001/)).toHaveLength(1);
+    expect(within(tabela).getAllByLabelText(/Selecionar SM-2026-000001/)).toHaveLength(1);
   });
 
   it('o filtro de situação recarrega pela API; o de tempo na fila filtra na tela', async () => {
@@ -120,7 +120,7 @@ describe('tela Triagem de Demandas', () => {
     vi.mocked(designar).mockResolvedValue(undefined);
     abrir();
 
-    await usuario.selectOptions(await screen.findByLabelText('Responsável por SC-2026-000001'), 'u2');
+    await usuario.selectOptions(await screen.findByLabelText('Responsável por SM-2026-000001'), 'u2');
     await waitFor(() => expect(designar).toHaveBeenCalledWith('MR', 'mr9', 'u2'));
   });
 
@@ -133,48 +133,17 @@ describe('tela Triagem de Demandas', () => {
     const botao = await screen.findByRole('button', { name: /Designar selecionadas \(0\)/ });
     expect(botao).toBeDisabled();
 
-    await usuario.click(screen.getByLabelText(/Selecionar SC-2026-000001/));
+    await usuario.click(screen.getByLabelText(/Selecionar SM-2026-000001/));
     expect(screen.getByRole('button', { name: /Designar selecionadas \(1\)/ })).toBeDisabled();
 
     await usuario.selectOptions(screen.getByLabelText('Responsável do lote'), 'u2');
     await usuario.click(screen.getByRole('button', { name: /Designar selecionadas \(1\)/ }));
-    await waitFor(() => expect(designarEmLote).toHaveBeenCalledWith([{ kind: 'SC', id: 'sc1' }], 'u2'));
+    await waitFor(() => expect(designarEmLote).toHaveBeenCalledWith([{ kind: 'MR', id: 'mr1' }], 'u2'));
   });
 
-  it('tornar urgente exige motivo e impacto antes de gravar', async () => {
-    const usuario = userEvent.setup();
-    vi.mocked(listarDemandas).mockResolvedValue(resposta([demanda({})]));
-    vi.mocked(alterarPrioridade).mockResolvedValue(undefined);
-    abrir();
-
-    await usuario.click(await screen.findByRole('button', { name: 'Tornar Urgente' }));
-    const dialogo = screen.getByRole('dialog');
-    const gravar = within(dialogo).getByRole('button', { name: 'Registrar mudança' });
-    expect(gravar).toBeDisabled();
-
-    await usuario.type(within(dialogo).getByLabelText(/Por que esta demanda virou urgente/), 'parada de linha');
-    expect(gravar).toBeDisabled();
-
-    await usuario.type(within(dialogo).getByLabelText(/impacto de não comprar/), 'obra parada');
-    await usuario.click(gravar);
-    await waitFor(() => expect(alterarPrioridade)
-      .toHaveBeenCalledWith('sc1', 'URGENT', 'parada de linha', 'obra parada'));
-  });
-
-  it('voltar a normal pede só o motivo', async () => {
-    const usuario = userEvent.setup();
-    vi.mocked(listarDemandas).mockResolvedValue(resposta([demanda({ priority: 'URGENT', urgencyReason: 'parada' })]));
-    vi.mocked(alterarPrioridade).mockResolvedValue(undefined);
-    abrir();
-
-    await usuario.click(await screen.findByRole('button', { name: 'Voltar a Normal' }));
-    const dialogo = screen.getByRole('dialog');
-    expect(within(dialogo).queryByLabelText(/impacto de não comprar/)).not.toBeInTheDocument();
-
-    await usuario.type(within(dialogo).getByLabelText(/volta a Normal/), 'prazo folgou');
-    await usuario.click(within(dialogo).getByRole('button', { name: 'Registrar mudança' }));
-    await waitFor(() => expect(alterarPrioridade).toHaveBeenCalledWith('sc1', 'NORMAL', 'prazo folgou', null));
-  });
+  // A mudança de prioridade saiu daqui: ela é da SOLICITAÇÃO DE COMPRA, e esta tela
+  // passou a triar só material. Quem a exercita agora é a Torre, e a régua em si está
+  // testada em DialogoDePrioridade.test.tsx, onde o componente compartilhado vive.
 
   it('quem não tria vê o responsável como texto e não recebe as ações', async () => {
     eu = { id: 'u5', email: 'ana@t.com', name: 'Ana', role: 'Requester', modules: ['SOLICITACOES'] };
@@ -183,7 +152,7 @@ describe('tela Triagem de Demandas', () => {
 
     const tabela = await screen.findByTestId('tabela-demandas');
     expect(within(tabela).getByText('Carla')).toBeInTheDocument();
-    expect(screen.queryByLabelText('Responsável por SC-2026-000001')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Responsável por SM-2026-000001')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Tornar Urgente' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Designar selecionadas/ })).not.toBeInTheDocument();
     expect(listarResponsaveis).not.toHaveBeenCalled();

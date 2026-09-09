@@ -27,7 +27,7 @@ async function pedirEAprovar(page: import('@playwright/test').Page, observacao: 
   await expect(page.getByTestId('toast').last()).toContainText('liberada para o almoxarifado');
 }
 
-test.describe('Estoque e Triagem de Demandas (React)', () => {
+test.describe('Estoque e Triagem de Material (React)', () => {
   test('fila do almoxarifado: atende em parte e o faltante vira solicitação de compra', async ({ page }) => {
     const observacao = `E2E fila ${marca}`;
     await pedirEAprovar(page, observacao);
@@ -75,46 +75,38 @@ test.describe('Estoque e Triagem de Demandas (React)', () => {
     await expect(page.locator('body')).toContainText('Clique em um cartão para ver a lista');
   });
 
-  test('gestão de solicitações: filtra, designa e muda a prioridade com justificativa', async ({ page }) => {
+  test('triagem de material: filtra e designa', async ({ page }) => {
     await abrirAutenticado(page, '/gestao-solicitacoes');
-    await expect(page.locator('#titulo-pagina')).toHaveText('Triagem de Demandas');
+    // a tela passou a triar só material: a demanda de COMPRA é triada na Torre,
+    // na própria linha do item, e por isso a prioridade da SC saiu daqui
+    await expect(page.locator('#titulo-pagina')).toHaveText('Triagem de Material');
+
+    // o cenário do CI pode não ter requisição de material — e a tela vazia também é
+    // contrato: ela se explica em vez de mostrar tabela sem linha
     const tabela = page.getByTestId('tabela-demandas');
-    await expect(tabela).toBeVisible();
+    await expect(tabela.or(page.getByText('Nenhuma demanda neste filtro'))).toBeVisible();
 
     // o filtro de tempo na fila age na tela, sem nova consulta
     await page.selectOption('#tri-faixa', '3');
     await page.selectOption('#tri-faixa', '');
-    await expect(tabela).toBeVisible();
 
-    // designar: o select da linha grava e a tela recarrega
-    const linha = tabela.locator('tr[data-demanda]').first();
-    const responsavel = linha.locator('select').first();
-    const opcoes = await responsavel.locator('option').count();
-    if (opcoes > 1) {
-      await responsavel.selectOption({ index: 1 });
-      await expect(page.getByTestId('toast').last()).toContainText(/designada|Designação/);
-    }
-
-    // prioridade: os dois campos são exigidos antes de gravar
-    const tornarUrgente = tabela.getByRole('button', { name: 'Tornar Urgente' }).first();
-    if (await tornarUrgente.count()) {
-      await tornarUrgente.click();
-      const dialogo = page.getByRole('dialog');
-      const gravar = dialogo.getByRole('button', { name: 'Registrar mudança' });
-      await expect(gravar).toBeDisabled();
-      await dialogo.getByLabel(/Por que esta demanda virou urgente/).fill(`teste E2E ${marca}`);
-      await expect(gravar).toBeDisabled();
-      await dialogo.getByLabel(/impacto de não comprar/).fill('obra parada');
-      await gravar.click();
-      await expect(page.getByTestId('toast').last()).toContainText('Prioridade alterada');
-      await expect(page.getByTestId('tabela-demandas')).toContainText('URGENTE');
+    if (await tabela.count()) {
+      // designar: o select da linha grava e a tela recarrega
+      const responsavel = tabela.locator('tr[data-demanda]').first().locator('select').first();
+      if ((await responsavel.locator('option').count()) > 1) {
+        await responsavel.selectOption({ index: 1 });
+        await expect(page.getByTestId('toast').last()).toContainText(/designada|Designação/);
+      }
+      // a prioridade da SC mudou de lugar: é da Torre agora, e o E2E dela cobre a régua
+      await expect(tabela.getByRole('button', { name: 'Tornar Urgente' })).toHaveCount(0);
     }
   });
 
   test('lote: o botão só libera com demanda marcada e responsável escolhido', async ({ page }) => {
     await abrirAutenticado(page, '/gestao-solicitacoes');
     const tabela = page.getByTestId('tabela-demandas');
-    await expect(tabela).toBeVisible();
+    await expect(tabela.or(page.getByText('Nenhuma demanda neste filtro'))).toBeVisible();
+    if (!(await tabela.count())) return;   // sem material no cenário: nada a designar
 
     const botao = page.getByRole('button', { name: /Designar selecionadas/ });
     await expect(botao).toBeDisabled();

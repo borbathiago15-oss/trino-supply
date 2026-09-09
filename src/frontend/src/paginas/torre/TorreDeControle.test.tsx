@@ -41,7 +41,7 @@ const pagina = (p: Partial<PaginaDaTorre> = {}): PaginaDaTorre => ({
   kpis: {
     total: 12, novos: 4, emCotacao: 3, aguardandoAprovacao: 2, aguardandoOc: 1,
     aguardandoRecebimento: 1, atrasados: 2, urgentes: 1, valor: 24000,
-    emFaturamento: 2, excecoes: 3,
+    emFaturamento: 2, excecoes: 3, porFaixaDeAging: [2, 1, 0, 3],
   },
   filterOptions: {
     companies: ['Trino Nordeste'], costCenters: [{ code: 'CC-NE-01', name: 'Filial Recife' }],
@@ -256,7 +256,10 @@ describe('Torre de Controle', () => {
   });
 
   it('item sem comprador manda para a triagem, que é onde se atribui', () => {
-    expect(destinoDaAcao(linha({ buyerLabel: null }))).toBe('/gestao-solicitacoes');
+    // sem comprador a ação é atribuir, e isso se faz na própria Torre: nulo diz que
+    // não há para onde ir. Antes apontava para a triagem, que hoje só lista material
+    // e devolveria uma lista sem esta SC — beco sem saída
+    expect(destinoDaAcao(linha({ buyerLabel: null }))).toBeNull();
     expect(destinoDaAcao(linha({ buyerLabel: 'Carla' }))).toBe('/cotacoes/abrir');
     // com processo, o destino é o processo — a etapa mais adiantada manda
     expect(destinoDaAcao(linha({ buyerLabel: null, quotationId: 'q9' }))).toBe('/cotacoes/q9');
@@ -326,5 +329,38 @@ describe('Torre de Controle', () => {
     abrir();
     expect(await screen.findByText('Nenhum item de compra neste recorte.')).toBeInTheDocument();
     expect(screen.queryByTestId('tabela-torre')).not.toBeInTheDocument();
+  });
+
+  it('as faixas de tempo na fila aparecem e filtram pelo servidor', async () => {
+    // vieram da tela de triagem: era a única coisa que só lá existia, e sem elas a
+    // unificação teria trocado duas telas em conflito por uma função a menos
+    vi.mocked(torreDeControle).mockResolvedValue(pagina());
+    abrir();
+    await waitFor(() => expect(screen.getByTestId('faixas-de-fila')).toBeInTheDocument());
+    const faixas = screen.getByTestId('faixas-de-fila');
+    expect(within(faixas).getByRole('button', { name: /\+10 dias · 3/ })).toBeInTheDocument();
+
+    await userEvent.click(within(faixas).getByRole('button', { name: /6–10 dias/ }));
+    await waitFor(() => expect(vi.mocked(torreDeControle).mock.calls.at(-1)![0].faixaDeFila).toBe('2'));
+  });
+
+  it('quem tria muda a prioridade na própria linha', async () => {
+    // "Tornar Urgente" só existia na tela de triagem; ao unificar, ela vem junto —
+    // senão o comprador perderia a função ao ganhar a tela única
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({ items: [linha({ priority: 'NORMAL' })] }));
+    abrir();
+    await waitFor(() => expect(screen.getByTestId('tabela-torre')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'tornar urgente' }));
+
+    // abre o mesmo diálogo da triagem, com a mesma régua: urgente exige motivo E
+    // impacto, e o botão só libera com os dois
+    expect(screen.getByLabelText('Por que esta demanda virou urgente?')).toBeInTheDocument();
+    const gravar = screen.getByRole('button', { name: 'Registrar mudança' });
+    expect(gravar).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText('Por que esta demanda virou urgente?'), 'Parada de linha');
+    expect(gravar).toBeDisabled();   // só o motivo não basta
+    await userEvent.type(screen.getByLabelText(/Qual o impacto de não comprar/), 'Produção parada');
+    expect(gravar).toBeEnabled();
   });
 });

@@ -3,12 +3,14 @@ import { Link } from 'react-router-dom';
 import {
   CLASSE_DO_TOM, destinoDaAcao, ETAPAS, FILTROS_TORRE_VAZIOS, torreDeControle,
   type FiltrosDaTorre, type LinhaDaTorre,
+  FAIXAS_DE_FILA,
 } from '@/api/torre';
 import { Aviso, Badge, Carregando, Erro, FaixaKpis, Kpi, Painel, Vazio } from '@/componentes/basicos';
 import { Campo } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
 import { podeTriar } from '@/dominio/papeis';
 import { designar, designarEmLote, listarResponsaveis, rotuloDoResponsavel } from '@/api/triagem';
+import { DialogoDePrioridade, type Pleito } from '@/paginas/triagem/DialogoDePrioridade';
 import { useUsuario } from '@/sessao/SessaoProvider';
 import { data, moeda, quantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
@@ -28,10 +30,13 @@ function KpiFiltro({ rotulo, valor, detalhe, ativo, aoClicar }: {
   );
 }
 
-function Linha({ i, triando, marcada, aoMarcar, aoLiberar }: {
+function Linha({ i, triando, marcada, aoMarcar, aoLiberar, aoPriorizar }: {
   i: LinhaDaTorre; triando: boolean; marcada: boolean;
   aoMarcar: (scId: string) => void; aoLiberar: (scId: string) => void;
+  aoPriorizar: (i: LinhaDaTorre) => void;
 }) {
+  const urgente = i.priority === 'URGENT';
+  const destino = destinoDaAcao(i);
   return (
     <tr data-testid={`linha-${i.itemId}`} className={i.late ? 'bg-perigo-fundo/40' : undefined}>
       {triando && (
@@ -45,8 +50,15 @@ function Linha({ i, triando, marcada, aoMarcar, aoLiberar }: {
       <td className="whitespace-nowrap">{i.prNumber}<div className="sub">item {i.sequence}</div></td>
       <td className="min-w-[200px]">
         {i.catalogCode ? `[${i.catalogCode}] ` : ''}{i.description}
-        {i.priority === 'URGENT' && (
-          <Badge classe="ml-2 bg-perigo-fundo text-perigo">URGENTE</Badge>
+        {urgente && <Badge classe="ml-2 bg-perigo-fundo text-perigo">URGENTE</Badge>}
+        {/* a prioridade muda aqui, ao lado de onde ela é lida. Veio da tela de triagem
+            junto com o resto: era a única coisa que só lá existia, e deixá-la para trás
+            teria trocado duas telas em conflito por uma função a menos */}
+        {triando && (
+          <button type="button" className="sub ml-2 underline"
+            onClick={() => aoPriorizar(i)}>
+            {urgente ? 'voltar a normal' : 'tornar urgente'}
+          </button>
         )}
       </td>
       <td className="whitespace-nowrap">{quantidade(i.quantity)} {i.unitOfMeasure}</td>
@@ -85,12 +97,19 @@ function Linha({ i, triando, marcada, aoMarcar, aoLiberar }: {
       {/* §5 — a ação rápida: a linha diz o que fazer agora e leva até lá, em vez de
           obrigar o comprador a descobrir a tela certa para cada etapa */}
       <td className="whitespace-nowrap">
-        {i.actionLabel ? (
-          <Link className={'botao-secundario inline-block ' + (i.needsBuyer ? 'font-semibold' : '')}
-            to={destinoDaAcao(i)}>
-            {i.actionLabel}
-          </Link>
-        ) : <span className="sub">—</span>}
+        {!i.actionLabel ? <span className="sub">—</span>
+          : destino ? (
+            <Link className={'botao-secundario inline-block ' + (i.needsBuyer ? 'font-semibold' : '')}
+              to={destino}>
+              {i.actionLabel}
+            </Link>
+          ) : (
+            // a ação é nesta mesma tela (marcar a linha e atribuir na barra acima):
+            // um link para onde já se está não leva a lugar nenhum
+            <span className="sub" title="Marque a linha e atribua na barra de triagem">
+              {i.actionLabel} aqui ↑
+            </span>
+          )}
       </td>
       {/* o link leva para onde a ação está: o pedido, se já existe; senão a cotação */}
       <td className="whitespace-nowrap">
@@ -127,6 +146,7 @@ export function TorreDeControle() {
   const [rascunho, setRascunho] = useState<FiltrosDaTorre>(FILTROS_TORRE_VAZIOS);
   const [aplicados, setAplicados] = useState<FiltrosDaTorre>(FILTROS_TORRE_VAZIOS);
   const [recarga, setRecarga] = useState(0);
+  const [pleito, setPleito] = useState<Pleito | null>(null);
   const { dados, erro, carregando } = useCarregar(
     (signal) => torreDeControle(aplicados, signal), [aplicados, recarga]);
 
@@ -231,6 +251,28 @@ export function TorreDeControle() {
             ativo={aplicados.excecoes}
             aoClicar={() => aplicar({ excecoes: !aplicados.excecoes, etapa: '' })} />
         </FaixaKpis>
+      )}
+
+      {/* Tempo na fila. Veio da tela de triagem, que era a única a mostrá-lo — e era
+          justamente o que fazia aquela tela existir em paralelo a esta. Fica separado
+          dos KPIs de etapa porque responde outra pergunta: não "onde está", mas
+          "há quanto tempo está parado aí". */}
+      {dados?.kpis.porFaixaDeAging && (
+        <div className="mt-3 flex flex-wrap items-center gap-2" data-testid="faixas-de-fila">
+          <span className="sub">Tempo na fila:</span>
+          {FAIXAS_DE_FILA.map((f, idx) => {
+            const ativo = aplicados.faixaDeFila === String(idx);
+            return (
+              <button key={f.rotulo} type="button"
+                className={`rounded-full px-3 py-1 text-[12.5px] font-semibold ${f.classe}`
+                  + (ativo ? ' ring-2 ring-marca' : '')}
+                aria-pressed={ativo}
+                onClick={() => aplicar({ faixaDeFila: ativo ? '' : String(idx) })}>
+                {f.rotulo} · {quantidade(dados.kpis.porFaixaDeAging![idx] ?? 0)}
+              </button>
+            );
+          })}
+        </div>
       )}
 
       <Painel titulo="Filtros">
@@ -380,7 +422,11 @@ export function TorreDeControle() {
                 <tbody>{dados.items.map((i) => (
                   <Linha key={i.itemId} i={i} triando={triando}
                     marcada={!!marcadas[i.requisitionId]} aoMarcar={alternar}
-                    aoLiberar={tirarResponsavel} />
+                    aoLiberar={tirarResponsavel}
+                    aoPriorizar={(l) => setPleito({
+                      id: l.requisitionId, numero: l.prNumber,
+                      para: l.priority === 'URGENT' ? 'NORMAL' : 'URGENT',
+                    })} />
                 ))}</tbody>
               </table>
             </div>
@@ -398,6 +444,11 @@ export function TorreDeControle() {
           </>
         )}
       </Painel>
+
+      {pleito && (
+        <DialogoDePrioridade pleito={pleito} aoFechar={() => setPleito(null)}
+          aoSalvar={() => setRecarga((n) => n + 1)} aoAvisar={avisar} />
+      )}
     </>
   );
 }

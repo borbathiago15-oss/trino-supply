@@ -392,7 +392,8 @@ describe('tela do processo', () => {
       legalName: 'Gama Distribuidora LTDA', tradeName: null, taxId: null,
       email: null, phone: '(81) 98888-1234',
     }));
-    await waitFor(() => expect(convidarFornecedor).toHaveBeenCalledWith('q1', ['s9']));
+    // sem prazo digitado, o convite vai sem prazo próprio e vale o do processo
+    await waitFor(() => expect(convidarFornecedor).toHaveBeenCalledWith('q1', ['s9'], null));
   });
 
   it('com CNPJ informado, o pré-cadastro já vai com o documento em dígitos', async () => {

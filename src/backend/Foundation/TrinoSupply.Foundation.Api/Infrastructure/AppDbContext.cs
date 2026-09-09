@@ -713,6 +713,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(s => s.InvitedBy).HasColumnName("invited_by");
             e.Property(s => s.InvitedByLabel).HasColumnName("invited_by_label").HasMaxLength(200);
             e.Property(s => s.InvitedAt).HasColumnName("invited_at");
+            e.Property(s => s.ResponseDeadline).HasColumnName("response_deadline");
+            e.Property(s => s.DeadlineExtensions).HasColumnName("deadline_extensions");
+            e.Property(s => s.WaivedAt).HasColumnName("waived_at");
+            e.Property(s => s.WaivedByLabel).HasColumnName("waived_by_label").HasMaxLength(200);
+            e.Property(s => s.WaivedReason).HasColumnName("waived_reason").HasMaxLength(500);
             e.HasIndex(s => new { s.QuotationId, s.SupplierId }).IsUnique();
         });
 

@@ -99,6 +99,17 @@ o usuário descobrir no erro do servidor:
   - **orçamento** — contra o valor que o solicitante informou na SC (`budget`); só
     existe quando **todas** as SCs do processo informaram o seu, senão o total fechado
     seria comparado a um orçamento parcial.
+- **O prazo de resposta é de cada convite, não do processo.** `QuotationSupplier.ResponseDeadline`
+  nulo cai no prazo do processo — é o que mantém legível todo convite anterior à regra. Ele
+  existe porque os convites não saem no mesmo dia: com um prazo só, quem foi chamado na quinta
+  recebe a folga dada a quem foi chamado na segunda. Vencido o prazo **daquele convite**, a
+  proposta é barrada (`RFQ-ERR-020`) e o comprador tem duas saídas, ambas com efeito real:
+  **novo prazo** (`RFQ-ERR-071` recusa data no passado ou que encurte; a contagem de
+  prorrogações fica) e **seguir sem o fornecedor** (`RFQ-ERR-072`, motivo obrigatório). Seguir
+  sem ele **não apaga o convite** — "chamei três e um não veio" é uma história diferente de "só
+  chamei dois", e é ela que explica um BID com menos proponentes. Quem já respondeu não se
+  dispensa: proposta na mesa é o oposto de ausência, e recusá-la é decisão de adjudicação.
+  Reconvidar o dispensado reabre o convite, em vez de criar um segundo.
 - **O score multicritério informa; a régua dele é da empresa.** Ele compara as propostas
   vigentes por preço, entrega, pagamento, OTIF e risco, aparece na tela do processo e
   **nunca decide nem bloqueia** (decisão C5): a escolha continua do comprador, com

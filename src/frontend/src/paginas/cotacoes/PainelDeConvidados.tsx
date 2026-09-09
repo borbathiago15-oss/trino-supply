@@ -1,7 +1,11 @@
 import { useState } from 'react';
-import { convidarFornecedor, type Processo } from '@/api/cotacoes';
+import {
+  convidarFornecedor, dispensarConvite, prorrogarConvite, situacaoDoConvite,
+  type FornecedorConvidado, type Processo,
+} from '@/api/cotacoes';
 import { criarFornecedor, listarFornecedores } from '@/api/fornecedores';
-import { Badge, Painel, Vazio } from '@/componentes/basicos';
+import { Aviso, Badge, Painel, Vazio } from '@/componentes/basicos';
+import { DialogoMotivo } from '@/componentes/DialogoMotivo';
 import { Campo, Nota } from '@/componentes/formulario';
 import { data } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
@@ -31,6 +35,10 @@ export function PainelDeConvidados({ processo: q, podeConvidar, aoConvidar, aoAv
   aoAvisar: (t: string, tipo?: 'ok' | 'erro') => void;
 }) {
   const [convidado, setConvidado] = useState('');
+  const [prazo, setPrazo] = useState('');
+  // o fornecedor de quem se espera resposta e o que se vai fazer com ele
+  const [novoPrazo, setNovoPrazo] = useState<{ s: FornecedorConvidado; data: string } | null>(null);
+  const [dispensando, setDispensando] = useState<FornecedorConvidado | null>(null);
   const [novo, setNovo] = useState({ aberto: false, razaoSocial: '', telefone: '', cnpj: '' });
   const [criando, setCriando] = useState(false);
   const catalogo = useCarregar(
@@ -42,8 +50,10 @@ export function PainelDeConvidados({ processo: q, podeConvidar, aoConvidar, aoAv
   async function convidar() {
     if (!convidado) return;
     try {
-      await convidarFornecedor(q.id, [convidado]);
-      aoAvisar('Fornecedor convidado.');
+      await convidarFornecedor(q.id, [convidado], prazo || null);
+      aoAvisar(prazo
+        ? `Fornecedor convidado, com prazo até ${data(prazo)}.`
+        : 'Fornecedor convidado.');
       setConvidado('');
       aoConvidar();
     } catch (e) { aoAvisar(mensagem(e, 'Falha ao convidar o fornecedor.'), 'erro'); }
@@ -71,7 +81,7 @@ export function PainelDeConvidados({ processo: q, podeConvidar, aoConvidar, aoAv
         legalName: razaoSocial, tradeName: null, taxId: cnpj || null,
         email: null, phone: novo.telefone.trim(),
       });
-      await convidarFornecedor(q.id, [f.id]);
+      await convidarFornecedor(q.id, [f.id], prazo || null);
       aoAvisar(`${razaoSocial} entrou na cotação como pré-cadastro.`);
       setNovo({ aberto: false, razaoSocial: '', telefone: '', cnpj: '' });
       catalogo.recarregar();
@@ -79,6 +89,28 @@ export function PainelDeConvidados({ processo: q, podeConvidar, aoConvidar, aoAv
     } catch (e) {
       aoAvisar(mensagem(e, 'Falha ao incluir o fornecedor na cotação.'), 'erro');
     } finally { setCriando(false); }
+  }
+
+  async function prorrogar() {
+    if (!novoPrazo?.data) return;
+    const { s, data: ate } = novoPrazo;
+    setNovoPrazo(null);
+    try {
+      await prorrogarConvite(q.id, s.supplierId, ate);
+      aoAvisar(`${s.supplierName} tem até ${data(ate)} para responder.`);
+      aoConvidar();
+    } catch (e) { aoAvisar(mensagem(e, 'Falha ao prorrogar o prazo.'), 'erro'); }
+  }
+
+  async function dispensar(motivo: string) {
+    const s = dispensando;
+    setDispensando(null);
+    if (!s) return;
+    try {
+      await dispensarConvite(q.id, s.supplierId, motivo);
+      aoAvisar(`O processo segue sem ${s.supplierName}.`);
+      aoConvidar();
+    } catch (e) { aoAvisar(mensagem(e, 'Falha ao seguir sem o fornecedor.'), 'erro'); }
   }
 
   async function copiarConvite(nome: string) {
@@ -89,14 +121,29 @@ export function PainelDeConvidados({ processo: q, podeConvidar, aoConvidar, aoAv
     } catch { aoAvisar('Não foi possível copiar. Selecione o texto do convite manualmente.', 'erro'); }
   }
 
+  const atrasados = q.suppliers.filter((s) => s.late);
+
   return (
     <Painel titulo="Fornecedores convidados">
+      {atrasados.length > 0 && (
+        <Aviso testid="convites-atrasados">
+          {atrasados.length === 1
+            ? `${atrasados[0].supplierName} passou do prazo e não enviou proposta.`
+            : `${atrasados.length} fornecedores passaram do prazo sem enviar proposta.`}
+          {' '}Dê um novo prazo ou siga sem {atrasados.length === 1 ? 'ele' : 'eles'} — o processo
+          não anda esperando quem já não respondeu.
+        </Aviso>
+      )}
+
       {!q.suppliers.length && <Vazio>Nenhum fornecedor convidado ainda.</Vazio>}
       {q.suppliers.length > 0 && (
         <div className="overflow-x-auto">
           <table data-testid="fornecedores-convidados">
             <thead>
-              <tr><th>Fornecedor</th><th>CNPJ</th><th>Convite</th><th>Proposta</th><th></th></tr>
+              <tr>
+                <th>Fornecedor</th><th>CNPJ</th><th>Convite</th>
+                <th>Prazo de resposta</th><th>Proposta</th><th></th>
+              </tr>
             </thead>
             <tbody>
               {q.suppliers.map((s) => (
@@ -104,15 +151,39 @@ export function PainelDeConvidados({ processo: q, podeConvidar, aoConvidar, aoAv
                   <td>{s.supplierName}</td>
                   <td>{s.taxId}</td>
                   <td className="sub">{data(s.invitedAt)} por {s.invitedByLabel ?? '—'}</td>
-                  <td>
-                    {s.hasProposal
-                      ? <Badge classe="bg-ok-fundo text-ok">RECEBIDA</Badge>
-                      : <Badge classe="bg-slate-100 text-slate-600">AGUARDANDO</Badge>}
+                  <td className="whitespace-nowrap">
+                    {s.responseDeadline ? data(s.responseDeadline) : <span className="sub">a combinar</span>}
+                    {s.extensions > 0 && (
+                      <div className="sub">
+                        prorrogado {s.extensions}×
+                      </div>
+                    )}
                   </td>
                   <td>
+                    <Badge classe={situacaoDoConvite(s).classe}>{situacaoDoConvite(s).rotulo}</Badge>
+                    {s.waived && s.waivedReason && <div className="sub">{s.waivedReason}</div>}
+                  </td>
+                  <td className="whitespace-nowrap">
                     <button type="button" className="botao-secundario" onClick={() => copiarConvite(s.supplierName)}>
                       Copiar convite
                     </button>
+                    {/* as duas saídas só aparecem para quem de fato ainda se espera */}
+                    {podeConvidar && !s.hasProposal && !s.waived && (
+                      <>
+                        {' '}
+                        <button type="button" className="botao-secundario"
+                          data-testid={`novo-prazo-${s.supplierId}`}
+                          onClick={() => setNovoPrazo({ s, data: '' })}>
+                          Novo prazo
+                        </button>
+                        {' '}
+                        <button type="button" className="botao-secundario"
+                          data-testid={`seguir-sem-${s.supplierId}`}
+                          onClick={() => setDispensando(s)}>
+                          Seguir sem ele
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -131,6 +202,9 @@ export function PainelDeConvidados({ processo: q, podeConvidar, aoConvidar, aoAv
                   <option key={f.id} value={f.id}>{f.tradeName || f.legalName}</option>
                 ))}
               </select>
+            </Campo>
+            <Campo id="rfq-prazo" rotulo="Prazo para responder" dica="opcional" className="min-w-[170px]">
+              <input id="rfq-prazo" type="date" value={prazo} onChange={(e) => setPrazo(e.target.value)} />
             </Campo>
             <button type="button" className="botao" disabled={!convidado} onClick={convidar}>Convidar</button>
             {!novo.aberto && (
@@ -176,9 +250,46 @@ export function PainelDeConvidados({ processo: q, podeConvidar, aoConvidar, aoAv
 
           <Nota>
             O fornecedor responde pelo Portal com CNPJ + chave de acesso — gere a chave em
-            Cadastros → Fornecedores. O convite fica registrado na auditoria do processo.
+            Cadastros → Fornecedores. O convite fica registrado na auditoria do processo.{' '}
+            <strong>O prazo é deste convite</strong>, não do processo: convidar em dias
+            diferentes com um prazo só cobraria do último a folga dada ao primeiro. Em branco,
+            vale o prazo do processo{q.deadline ? ` (${data(q.deadline)})` : ''}.
           </Nota>
         </>
+      )}
+      {novoPrazo && (
+        <div data-testid="dialogo-novo-prazo"
+          className="mt-3 rounded-lg border border-borda bg-superficie-suave p-3">
+          <div className="flex flex-wrap items-end gap-2">
+            <Campo id="rfq-novo-prazo" rotulo={`Novo prazo para ${novoPrazo.s.supplierName}`}
+              className="min-w-[200px]">
+              <input id="rfq-novo-prazo" type="date" value={novoPrazo.data}
+                onChange={(e) => setNovoPrazo((n) => (n ? { ...n, data: e.target.value } : n))} />
+            </Campo>
+            <button type="button" className="botao" disabled={!novoPrazo.data} onClick={prorrogar}>
+              Dar novo prazo
+            </button>
+            <button type="button" className="botao-secundario" onClick={() => setNovoPrazo(null)}>
+              Cancelar
+            </button>
+          </div>
+          <Nota>
+            O prazo vencido barra a proposta no Portal — é esta data que reabre a porta para
+            ele, e não só o aviso da tela.
+          </Nota>
+        </div>
+      )}
+
+      {dispensando && (
+        <DialogoMotivo
+          titulo={`Seguir sem ${dispensando.supplierName}`}
+          rotulo="Por que o processo segue sem este fornecedor?"
+          dica="mínimo 10 caracteres — é o que explica depois um BID com menos proponentes"
+          rotuloConfirmar={`Seguir sem ${dispensando.supplierName}`}
+          obrigatorio
+          aoConfirmar={dispensar}
+          aoFechar={() => setDispensando(null)}
+        />
       )}
     </Painel>
   );

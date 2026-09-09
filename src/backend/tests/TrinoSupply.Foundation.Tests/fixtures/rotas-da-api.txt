@@ -127,6 +127,7 @@ POST /api/v1/quotations/{id:guid}/proposals/{proposalId:guid}/attachment
 POST /api/v1/quotations/{id:guid}/register-po
 POST /api/v1/quotations/{id:guid}/select-winner
 POST /api/v1/quotations/{id:guid}/suppliers
+POST /api/v1/quotations/{id:guid}/suppliers/{supplierId:guid}/waive
 POST /api/v1/suppliers/
 POST /api/v1/suppliers/{id:guid}/contract/adjustments
 POST /api/v1/suppliers/{id:guid}/documents
@@ -137,5 +138,6 @@ POST /api/v1/triage/priority
 POST /api/v1/users/
 POST /api/v1/users/{id:guid}/reset-password
 PUT /api/v1/company
+PUT /api/v1/quotations/{id:guid}/suppliers/{supplierId:guid}/deadline
 PUT /api/v1/score-weights/
 PUT /api/v1/suppliers/{id:guid}/contract

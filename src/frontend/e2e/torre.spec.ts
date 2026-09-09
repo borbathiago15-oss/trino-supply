@@ -44,6 +44,27 @@ test.describe('Torre de Controle (React)', () => {
     expect((await comExcecao).status()).toBe(200);
   });
 
+  /** §5: a fila prioritária e a ação da linha, contra a API de verdade. */
+  test('a fila prioritária filtra e a linha oferece a ação da etapa', async ({ page }) => {
+    await abrirAutenticado(page, '/torre');
+    await expect(page.getByRole('button', { name: /Precisa de você/ })).toBeVisible();
+
+    const daFila = page.waitForResponse((r) =>
+      r.url().includes('/api/v1/control-tower') && r.url().includes('needsBuyer=true'));
+    await page.getByRole('button', { name: /Precisa de você/ }).click();
+    expect((await daFila).status()).toBe(200);
+
+    const tabela = page.getByTestId('tabela-torre');
+    if (await tabela.count()) {
+      // toda linha da fila do comprador tem uma ação clicável — é o ponto do §5
+      const acoes = tabela.locator('tbody tr td a.botao-secundario');
+      await expect(acoes.first()).toBeVisible();
+      await expect(acoes.first()).toHaveAttribute('href', /\/(cotacoes|pedidos|gestao-solicitacoes)/);
+    } else {
+      await expect(page.getByText('Nenhum item de compra neste recorte.')).toBeVisible();
+    }
+  });
+
   test('a paginação é do servidor: a página pedida vai na consulta', async ({ page }) => {
     await abrirAutenticado(page, '/torre');
     // esperar o painel de filtros não basta: ele renderiza antes de os dados

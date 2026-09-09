@@ -127,6 +127,12 @@ porque não são óbvias:
   inventar um registro vazio daria um KPI que não conta nada. A regra vive em
   `TorreDeControleService.ExcecaoDe`, e a linha mostra **o motivo**, não só a marca.
 
+A **ação da linha e a fila prioritária saem da mesma regra** (`AcaoDe`): a pergunta
+"o que falta fazer aqui, e de quem é" é uma só. Fossem duas regras, o botão e a fila
+discordariam no primeiro caso de canto e o comprador não confiaria em nenhum dos dois.
+O rótulo vem do servidor; o destino é do navegador (`destinoDaAcao`), que é quem
+conhece as rotas. **Exceção volta ao comprador em qualquer etapa.**
+
 ## Verificação antes de entregar
 
 ```bash

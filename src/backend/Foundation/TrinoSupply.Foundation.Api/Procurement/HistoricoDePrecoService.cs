@@ -18,6 +18,19 @@ public record ResumoDePreco(
     string UltimoFornecedor, decimal Medio, decimal Minimo, decimal Maximo,
     int Compras, int Fornecedores);
 
+/// <summary>Quanto de um produto saiu com um fornecedor.</summary>
+public record FatiaDoFornecedor(
+    Guid SupplierId, string SupplierName, decimal Valor, decimal Pct, int Compras);
+
+/// <summary>
+/// Concentração de compra de um produto. <see cref="Nivel"/> é <c>CRITICO</c>,
+/// <c>ATENCAO</c> ou <c>OK</c> — e a recomendação vem junto porque um número sozinho não
+/// diz o que fazer com ele.
+/// </summary>
+public record ConcentracaoDoProduto(
+    Guid CatalogItemId, string Description, decimal Total, int Compras, int Fornecedores,
+    FatiaDoFornecedor Maior, string Nivel, string Recomendacao);
+
 /// <summary>
 /// Memória de preço do que a empresa comprou.
 ///
@@ -106,6 +119,70 @@ public class HistoricoDePrecoService(AppDbContext db)
 
     /// <summary>Merece aviso? Só variação para cima — pagar menos não é anomalia a resolver.</summary>
     public static bool MereceAviso(decimal? variacaoPct) => variacaoPct > AvisoAcimaDePct;
+
+    // ---- concentração de fornecedor ----------------------------------------
+
+    /// <summary>
+    /// Abaixo de quantas compras o produto não diz nada sobre dependência. Produto
+    /// comprado uma vez é 100% concentrado por aritmética, não por dependência — sem este
+    /// piso a tela encheria de alarme falso e o alarme verdadeiro se perderia no meio.
+    /// </summary>
+    public const int ComprasMinimasParaRisco = 3;
+
+    /// <summary>Acima desta fatia num fornecedor só, a dependência é crítica.</summary>
+    public const decimal CriticoAcimaDePct = 90m;
+
+    /// <summary>Acima desta, merece atenção.</summary>
+    public const decimal AtencaoAcimaDePct = 70m;
+
+    /// <summary>
+    /// De quem a empresa depende, por produto. A fatia é sobre o <b>valor</b> comprado, não
+    /// sobre o número de pedidos: dez compras pequenas num fornecedor e uma enorme noutro
+    /// não fazem do primeiro o dono da conta.
+    /// </summary>
+    public async Task<IReadOnlyList<ConcentracaoDoProduto>> ConcentracaoAsync(
+        CancellationToken ct = default)
+    {
+        var compras = await Compras(db).ToListAsync(ct);
+        var descricoes = await db.CatalogItems.ToDictionaryAsync(c => c.Id, c => c.Description, ct);
+
+        return compras.GroupBy(x => x.CatalogItemId)
+            .Where(g => g.Count() >= ComprasMinimasParaRisco)
+            .Select(g =>
+            {
+                var total = g.Sum(x => x.UnitPrice * x.Quantity);
+                var porFornecedor = g.GroupBy(x => (x.SupplierId, x.SupplierName))
+                    .Select(f => new FatiaDoFornecedor(f.Key.SupplierId, f.Key.SupplierName,
+                        f.Sum(x => x.UnitPrice * x.Quantity),
+                        total > 0 ? Math.Round(f.Sum(x => x.UnitPrice * x.Quantity) / total * 100m, 1) : 0m,
+                        f.Count()))
+                    .OrderByDescending(f => f.Valor).ToList();
+                var maior = porFornecedor[0];
+                var (nivel, recomendacao) = Classificar(maior, porFornecedor.Count);
+                return new ConcentracaoDoProduto(g.Key,
+                    descricoes.GetValueOrDefault(g.Key, "Produto"), total, g.Count(),
+                    porFornecedor.Count, maior, nivel, recomendacao);
+            })
+            .Where(c => c.Nivel != "OK")
+            .OrderByDescending(c => c.Maior.Pct).ThenByDescending(c => c.Total)
+            .ToList();
+    }
+
+    /// <summary>
+    /// O nível e o que fazer. A recomendação é parte do resultado porque "95% num
+    /// fornecedor" sem dizer o que se faz com isso é um número que ninguém aciona.
+    /// </summary>
+    private static (string Nivel, string Recomendacao) Classificar(FatiaDoFornecedor maior, int fornecedores) =>
+        fornecedores == 1
+            ? ("CRITICO", $"Fornecedor único: só {maior.SupplierName} já forneceu este produto. "
+                        + "Homologue uma alternativa antes que a falta dele vire parada.")
+        : maior.Pct >= CriticoAcimaDePct
+            ? ("CRITICO", $"{maior.Pct}% das compras saem com {maior.SupplierName}. "
+                        + "Leve o próximo processo a mais fornecedores para reduzir a dependência.")
+        : maior.Pct >= AtencaoAcimaDePct
+            ? ("ATENCAO", $"{maior.Pct}% concentrados em {maior.SupplierName}. "
+                        + "Vale convidar outro fornecedor na próxima cotação.")
+            : ("OK", string.Empty);
 
     /// <summary>
     /// A base do histórico: item de pedido com preço, de pedido não cancelado. Uma

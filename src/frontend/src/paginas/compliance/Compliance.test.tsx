@@ -1,15 +1,27 @@
 import { render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { classeDoScore, type RelatorioCompliance } from '@/api/analytics';
+import {
+  classeDoScore, type LinhaConcentracao, type RelatorioCompliance,
+} from '@/api/analytics';
 import { ToastProvider } from '@/componentes/Toast';
 import { Compliance } from './Compliance';
 
 vi.mock('@/api/analytics', async (importar) => ({
   ...(await importar<typeof import('@/api/analytics')>()),
   relatorioDeCompliance: vi.fn(),
+  concentracaoDeFornecedor: vi.fn(),
 }));
 
-import { relatorioDeCompliance } from '@/api/analytics';
+import { concentracaoDeFornecedor, relatorioDeCompliance } from '@/api/analytics';
+
+const risco = (p: Partial<LinhaConcentracao> = {}): LinhaConcentracao => ({
+  catalogItemId: 'c1', description: 'BOTA BIQUEIRA DE PVC', total: 12000, purchases: 6,
+  suppliers: 2, level: 'CRITICO', topSupplierId: 's1', topSupplier: 'Pernambuco Distribuidora',
+  topShare: 95, topValue: 11400,
+  recommendation: '95% das compras saem com Pernambuco Distribuidora. '
+    + 'Leve o próximo processo a mais fornecedores para reduzir a dependência.',
+  ...p,
+});
 
 const relatorio = (p: Partial<RelatorioCompliance>): RelatorioCompliance => ({
   evaluated: 4, concluded: 3, averageScore: 82.5, fullCompliance: 2,
@@ -33,7 +45,10 @@ describe('leitura do Compliance Score', () => {
 });
 
 describe('tela Compliance', () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(concentracaoDeFornecedor).mockResolvedValue({ minPurchases: 3, items: [] });
+  });
 
   it('o processo sem penalidade aparece como conforme', async () => {
     vi.mocked(relatorioDeCompliance).mockResolvedValue(relatorio({}));
@@ -68,5 +83,43 @@ describe('tela Compliance', () => {
     expect(within(porComprador).getByText('Carla')).toBeInTheDocument();
     expect(within(porComprador).getByText('86.7')).toBeInTheDocument();
     expect(within(screen.getByTestId('media-por-centro')).getByText('82.5')).toBeInTheDocument();
+  });
+});
+
+describe('risco de concentração', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(relatorioDeCompliance).mockResolvedValue(relatorio({}));
+  });
+
+  it('a linha diz a fatia, o fornecedor dominante e o que fazer', async () => {
+    vi.mocked(concentracaoDeFornecedor).mockResolvedValue({ minPurchases: 3, items: [risco()] });
+    abrir();
+    const tabela = await screen.findByTestId('tabela-concentracao');
+    expect(within(tabela).getByText('95%')).toBeInTheDocument();
+    expect(within(tabela).getByText('Pernambuco Distribuidora')).toBeInTheDocument();
+    expect(within(tabela).getByText('Crítico')).toBeInTheDocument();
+    expect(within(tabela).getByText(/reduzir a dependência/)).toBeInTheDocument();
+  });
+
+  it('conta os críticos à parte, porque não é toda dependência que urge', async () => {
+    vi.mocked(concentracaoDeFornecedor).mockResolvedValue({
+      minPurchases: 3,
+      items: [risco(), risco({ catalogItemId: 'c2', level: 'ATENCAO', topShare: 74 })],
+    });
+    abrir();
+    await screen.findByTestId('tabela-concentracao');
+    const criticos = screen.getByText('Críticos').parentElement!;
+    expect(within(criticos).getByText('1')).toBeInTheDocument();
+    expect(within(screen.getByText('Produtos em risco').parentElement!).getByText('2'))
+      .toBeInTheDocument();
+    expect(screen.getByText('Atenção')).toBeInTheDocument();
+  });
+
+  it('sem produto concentrado a tela diz isso, em vez de tabela vazia', async () => {
+    vi.mocked(concentracaoDeFornecedor).mockResolvedValue({ minPurchases: 3, items: [] });
+    abrir();
+    expect(await screen.findByText(/Nenhum produto com dependência relevante/)).toBeInTheDocument();
+    expect(screen.queryByTestId('tabela-concentracao')).not.toBeInTheDocument();
   });
 });

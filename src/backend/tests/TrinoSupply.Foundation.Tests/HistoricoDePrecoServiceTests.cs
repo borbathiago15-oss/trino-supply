@@ -155,4 +155,110 @@ public class HistoricoDePrecoServiceTests
         Assert.Equal(-20m, HistoricoDePrecoService.VariacaoPercentual(historico, 80m));
         Assert.False(HistoricoDePrecoService.MereceAviso(-20m));
     }
+
+    // ---- concentração de fornecedor -----------------------------------------
+
+    private static void Catalogo(AppDbContext db, Guid id, string descricao)
+    {
+        db.CatalogItems.Add(new TrinoSupply.Foundation.Api.Catalog.CatalogItem
+        {
+            Id = id, Code = "C-" + descricao[..3], Description = descricao,
+            Family = "EPI", UnitOfMeasure = "PAR",
+        });
+        db.SaveChanges();
+    }
+
+    [Fact]
+    public async Task Produto_comprado_uma_vez_nao_vira_alarme_de_dependencia()
+    {
+        // 100% concentrado por aritmética, não por dependência. Sem este piso a tela
+        // encheria de alarme falso e o alarme verdadeiro se perderia no meio
+        var (db, svc) = Build();
+        Catalogo(db, Bota, "Bota");
+        Comprar(db, preco: 10m, quantidade: 1, dia: 1);
+
+        Assert.Empty(await svc.ConcentracaoAsync());
+    }
+
+    [Fact]
+    public async Task Fornecedor_unico_e_critico_e_a_recomendacao_diz_o_que_fazer()
+    {
+        var (db, svc) = Build();
+        Catalogo(db, Bota, "Bota");
+        for (var dia = 1; dia <= 4; dia++) Comprar(db, preco: 10m, quantidade: 1, dia: dia);
+
+        var risco = Assert.Single(await svc.ConcentracaoAsync());
+        Assert.Equal("CRITICO", risco.Nivel);
+        Assert.Equal(1, risco.Fornecedores);
+        Assert.Contains("Fornecedor único", risco.Recomendacao);
+        // a recomendação nomeia quem é: "identifique uma alternativa" sem dizer a quem
+        // não ajuda ninguém a agir
+        Assert.Contains("Alfa", risco.Recomendacao);
+    }
+
+    [Fact]
+    public async Task A_fatia_e_sobre_o_valor_comprado_e_nao_sobre_o_numero_de_pedidos()
+    {
+        // dez compras pequenas num fornecedor e uma enorme noutro não fazem do primeiro
+        // o dono da conta
+        var (db, svc) = Build();
+        Catalogo(db, Bota, "Bota");
+        for (var dia = 1; dia <= 3; dia++) Comprar(db, preco: 1m, quantidade: 1, dia: dia, fornecedor: Alfa);
+        Comprar(db, preco: 1000m, quantidade: 1, dia: 9, fornecedor: Beta);
+
+        var risco = Assert.Single(await svc.ConcentracaoAsync());
+        Assert.Equal(Beta, risco.Maior.SupplierId);       // 1000 de 1003
+        Assert.Equal(99.7m, risco.Maior.Pct);
+        Assert.Equal("CRITICO", risco.Nivel);
+        // e a contagem de compras do maior é a dele, não a do produto: Beta comprou 1 vez
+        Assert.Equal(1, risco.Maior.Compras);
+        Assert.Equal(4, risco.Compras);        // o produto foi comprado 4 vezes ao todo
+    }
+
+    [Fact]
+    public async Task Compra_bem_dividida_nao_aparece_na_lista()
+    {
+        // a lista é de risco, não de inventário: produto com fornecedores equilibrados
+        // não tem o que ser feito a respeito
+        var (db, svc) = Build();
+        Catalogo(db, Bota, "Bota");
+        Comprar(db, preco: 10m, quantidade: 1, dia: 1, fornecedor: Alfa);
+        Comprar(db, preco: 10m, quantidade: 1, dia: 2, fornecedor: Beta);
+        Comprar(db, preco: 10m, quantidade: 1, dia: 3, fornecedor: Alfa);
+        Comprar(db, preco: 10m, quantidade: 1, dia: 4, fornecedor: Beta);
+
+        Assert.Empty(await svc.ConcentracaoAsync());
+    }
+
+    [Fact]
+    public async Task Entre_setenta_e_noventa_por_cento_e_atencao_e_nao_critico()
+    {
+        var (db, svc) = Build();
+        Catalogo(db, Bota, "Bota");
+        // Alfa 80, Beta 20 → 80%
+        Comprar(db, preco: 80m, quantidade: 1, dia: 1, fornecedor: Alfa);
+        Comprar(db, preco: 10m, quantidade: 1, dia: 2, fornecedor: Beta);
+        Comprar(db, preco: 10m, quantidade: 1, dia: 3, fornecedor: Beta);
+
+        var risco = Assert.Single(await svc.ConcentracaoAsync());
+        Assert.Equal("ATENCAO", risco.Nivel);
+        Assert.Equal(80m, risco.Maior.Pct);
+    }
+
+    [Fact]
+    public async Task Pedido_cancelado_nao_conta_na_concentracao()
+    {
+        // mesma régua do preço: compra desfeita não cria dependência
+        var (db, svc) = Build();
+        Catalogo(db, Bota, "Bota");
+        Comprar(db, preco: 10m, quantidade: 1, dia: 1, fornecedor: Alfa);
+        Comprar(db, preco: 10m, quantidade: 1, dia: 2, fornecedor: Alfa);
+        Comprar(db, preco: 10m, quantidade: 1, dia: 3, fornecedor: Alfa);
+        Comprar(db, preco: 900m, quantidade: 1, dia: 4, fornecedor: Beta,
+            status: PurchaseOrderStatus.Cancelled);
+
+        var risco = Assert.Single(await svc.ConcentracaoAsync());
+        Assert.Equal(Alfa, risco.Maior.SupplierId);
+        Assert.Equal(1, risco.Fornecedores);
+    }
 }

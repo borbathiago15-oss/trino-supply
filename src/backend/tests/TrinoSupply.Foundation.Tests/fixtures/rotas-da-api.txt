@@ -8,6 +8,7 @@ GET /api/v1/analytics/insights
 GET /api/v1/analytics/report
 GET /api/v1/analytics/report/pdf
 GET /api/v1/analytics/stock
+GET /api/v1/analytics/supplier-concentration
 GET /api/v1/analytics/supplier-scorecard
 GET /api/v1/analytics/supply
 GET /api/v1/analytics/tco

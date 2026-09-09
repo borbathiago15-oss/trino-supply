@@ -152,6 +152,41 @@ export const relatorioDeInsights = async (meses: Janela, signal?: AbortSignal) =
   };
 };
 
+// ---- Risco de concentração por produto -------------------------------------
+
+export type NivelConcentracao = 'CRITICO' | 'ATENCAO';
+
+export const CONCENTRACAO: Record<NivelConcentracao, { rotulo: string; classe: string }> = {
+  CRITICO: { rotulo: 'Crítico', classe: 'bg-perigo-fundo text-perigo' },
+  ATENCAO: { rotulo: 'Atenção', classe: 'bg-aviso-fundo text-aviso' },
+};
+
+export interface LinhaConcentracao {
+  catalogItemId: string;
+  description: string;
+  total: number;
+  purchases: number;
+  suppliers: number;
+  level: NivelConcentracao;
+  /** O que fazer, já nomeando o fornecedor — número sozinho não vira providência. */
+  recommendation: string;
+  topSupplierId: string;
+  topSupplier: string;
+  topShare: number;
+  topValue: number;
+}
+
+export interface RelatorioConcentracao {
+  /** Piso de compras abaixo do qual o produto não entra na lista. */
+  minPurchases: number;
+  items: LinhaConcentracao[];
+}
+
+export const concentracaoDeFornecedor = async (signal?: AbortSignal) => {
+  const r = await api<RelatorioConcentracao>('/api/v1/analytics/supplier-concentration', { signal });
+  return { minPurchases: r.minPurchases, items: r.items ?? [] };
+};
+
 // ---- TCO por produto -------------------------------------------------------
 
 export interface LinhaTco {

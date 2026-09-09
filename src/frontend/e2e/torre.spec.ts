@@ -114,6 +114,25 @@ test.describe('Torre de Controle (React)', () => {
       .or(page.getByText('Nenhum item de compra neste recorte.'))).toBeVisible();
   });
 
+  /** A triagem passou a morar na Torre: a barra existe e a seleção é por SC. */
+  test('a triagem está na Torre, e marcar um item marca a solicitação inteira', async ({ page }) => {
+    await abrirAutenticado(page, '/torre');
+    await expect(page.getByTestId('tabela-torre')
+      .or(page.getByText('Nenhum item de compra neste recorte.'))).toBeVisible();
+
+    const barra = page.getByTestId('triagem-torre');
+    if (!(await barra.count())) return;          // ambiente sem item: nada a triar
+    await expect(barra).toContainText('A atribuição é da SC inteira');
+
+    const caixas = page.getByTestId('tabela-torre').locator('input[type="checkbox"]');
+    if (await caixas.count()) {
+      await caixas.first().check();
+      await expect(barra).toContainText('solicitação(ões) marcada(s)');
+      // sem responsável escolhido, o botão não deixa atribuir
+      await expect(page.getByRole('button', { name: /^Atribuir/ })).toBeDisabled();
+    }
+  });
+
   test('filtrar por centro de custo refaz a consulta e limpar desfaz', async ({ page }) => {
     await abrirAutenticado(page, '/torre');
     await expect(page.locator('#tc-cc')).toBeVisible();

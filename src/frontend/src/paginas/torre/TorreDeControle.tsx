@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CLASSE_DO_TOM, destinoDaAcao, ETAPAS, FILTROS_TORRE_VAZIOS, torreDeControle,
@@ -6,6 +6,10 @@ import {
 } from '@/api/torre';
 import { Aviso, Badge, Carregando, Erro, FaixaKpis, Kpi, Painel, Vazio } from '@/componentes/basicos';
 import { Campo } from '@/componentes/formulario';
+import { useToast } from '@/componentes/Toast';
+import { podeTriar } from '@/dominio/papeis';
+import { designar, designarEmLote, listarResponsaveis, rotuloDoResponsavel } from '@/api/triagem';
+import { useUsuario } from '@/sessao/SessaoProvider';
 import { data, moeda, quantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
 
@@ -24,9 +28,20 @@ function KpiFiltro({ rotulo, valor, detalhe, ativo, aoClicar }: {
   );
 }
 
-function Linha({ i }: { i: LinhaDaTorre }) {
+function Linha({ i, triando, marcada, aoMarcar, aoLiberar }: {
+  i: LinhaDaTorre; triando: boolean; marcada: boolean;
+  aoMarcar: (scId: string) => void; aoLiberar: (scId: string) => void;
+}) {
   return (
     <tr data-testid={`linha-${i.itemId}`} className={i.late ? 'bg-perigo-fundo/40' : undefined}>
+      {triando && (
+        <td className="whitespace-nowrap">
+          {/* a atribuição é da SC inteira, não do item: marcar um item marca a SC,
+              e é por isso que a caixa fica desligada nas outras linhas dela */}
+          <input type="checkbox" aria-label={`Selecionar ${i.prNumber}`}
+            checked={marcada} onChange={() => aoMarcar(i.requisitionId)} />
+        </td>
+      )}
       <td className="whitespace-nowrap">{i.prNumber}<div className="sub">item {i.sequence}</div></td>
       <td className="min-w-[200px]">
         {i.catalogCode ? `[${i.catalogCode}] ` : ''}{i.description}
@@ -37,7 +52,19 @@ function Linha({ i }: { i: LinhaDaTorre }) {
       <td className="whitespace-nowrap">{quantidade(i.quantity)} {i.unitOfMeasure}</td>
       <td className="whitespace-nowrap">{i.requesterLabel}<div className="sub">{i.company ?? '—'}</div></td>
       <td className="whitespace-nowrap">{i.costCenter}</td>
-      <td className="whitespace-nowrap">{i.buyerLabel ?? <span className="sub">sem responsável</span>}</td>
+      <td className="whitespace-nowrap">
+        {i.buyerLabel ? (
+          <>
+            {i.buyerLabel}
+            {triando && (
+              <button type="button" className="sub ml-1 underline"
+                title="Devolver à fila de triagem" onClick={() => aoLiberar(i.requisitionId)}>
+                liberar
+              </button>
+            )}
+          </>
+        ) : <span className="sub">sem responsável</span>}
+      </td>
       <td className="whitespace-nowrap">{i.supplierName ?? <span className="sub">—</span>}</td>
       <td className="whitespace-nowrap">{i.stageLabel}</td>
       <td className="whitespace-nowrap">
@@ -93,10 +120,59 @@ function Linha({ i }: { i: LinhaDaTorre }) {
  * é indicador, é contagem de tela.
  */
 export function TorreDeControle() {
+  const usuario = useUsuario();
+  const { avisar } = useToast();
+  const triando = podeTriar(usuario);
+
   const [rascunho, setRascunho] = useState<FiltrosDaTorre>(FILTROS_TORRE_VAZIOS);
   const [aplicados, setAplicados] = useState<FiltrosDaTorre>(FILTROS_TORRE_VAZIOS);
+  const [recarga, setRecarga] = useState(0);
   const { dados, erro, carregando } = useCarregar(
-    (signal) => torreDeControle(aplicados, signal), [aplicados]);
+    (signal) => torreDeControle(aplicados, signal), [aplicados, recarga]);
+
+  // ---- triagem, dentro da Torre --------------------------------------------
+  // A demanda que chega para o comprador é a etapa de Solicitação da própria Torre:
+  // manter as duas telas separadas obrigava a sair daqui para atribuir e voltar para
+  // acompanhar. As chamadas são as mesmas de `/api/v1/triage` — a regra de quem pode
+  // receber demanda continua num lugar só, no servidor.
+  const equipe = useCarregar(
+    async (signal) => (triando ? listarResponsaveis(signal).catch(() => []) : []), [triando]);
+  const [marcadas, setMarcadas] = useState<Record<string, boolean>>({});
+  const [paraQuem, setParaQuem] = useState('');
+  const [atribuindo, setAtribuindo] = useState(false);
+
+  // a atribuição é da SC, e a Torre mostra uma linha por item: sem deduplicar, uma SC
+  // de cinco itens contaria cinco vezes e o lote mandaria a mesma SC cinco vezes
+  const scsMarcadas = useMemo(
+    () => Object.entries(marcadas).filter(([, v]) => v).map(([id]) => id), [marcadas]);
+
+  const alternar = (scId: string) =>
+    setMarcadas((m) => ({ ...m, [scId]: !m[scId] }));
+
+  async function atribuir() {
+    if (!paraQuem || !scsMarcadas.length) return;
+    setAtribuindo(true);
+    try {
+      const r = await designarEmLote(scsMarcadas.map((id) => ({ kind: 'SC' as const, id })), paraQuem);
+      const falhas = r.failed?.length ?? 0;
+      avisar(falhas
+        ? `${r.assigned} solicitação(ões) atribuída(s); ${falhas} recusada(s): ${r.failed[0].message}`
+        : `${r.assigned} solicitação(ões) atribuída(s).`, falhas ? 'erro' : 'ok');
+      setMarcadas({});
+      setParaQuem('');
+      setRecarga((n) => n + 1);
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'Falha ao atribuir.', 'erro');
+    } finally { setAtribuindo(false); }
+  }
+
+  async function tirarResponsavel(scId: string) {
+    try {
+      await designar('SC', scId, null);
+      avisar('Responsável removido: a solicitação volta para a fila.');
+      setRecarga((n) => n + 1);
+    } catch (e) { avisar(e instanceof Error ? e.message : 'Falha ao liberar.', 'erro'); }
+  }
 
   const campo = (k: keyof FiltrosDaTorre) => ({
     value: String(rascunho[k] ?? ''),
@@ -257,6 +333,36 @@ export function TorreDeControle() {
             período ou o centro de custo para a contagem fechar.
           </Aviso>
         )}
+        {/* §5 — a triagem mora aqui: a demanda que chega para o comprador é a etapa
+            de Solicitação desta mesma tela, e sair daqui para atribuir e voltar para
+            acompanhar era o caminho longo para a mesma coisa */}
+        {triando && !!dados?.items.length && (
+          <div data-testid="triagem-torre"
+            className="mb-3 flex flex-wrap items-end gap-2 rounded-lg border border-borda bg-superficie-suave p-3">
+            <Campo id="tc-responsavel" rotulo="Atribuir as SCs marcadas a" className="min-w-[260px]">
+              <select id="tc-responsavel" value={paraQuem} onChange={(e) => setParaQuem(e.target.value)}>
+                <option value="">Escolha o responsável…</option>
+                {(equipe.dados ?? []).map((r) => (
+                  <option key={r.id} value={r.id}>{rotuloDoResponsavel(r)}</option>
+                ))}
+              </select>
+            </Campo>
+            <button type="button" className="botao" disabled={!paraQuem || !scsMarcadas.length || atribuindo}
+              onClick={atribuir}>
+              {atribuindo ? 'Atribuindo…' : `Atribuir ${scsMarcadas.length || ''}`.trim()}
+            </button>
+            {!!scsMarcadas.length && (
+              <button type="button" className="botao-secundario" onClick={() => setMarcadas({})}>
+                Limpar seleção
+              </button>
+            )}
+            <span className="sub">
+              {scsMarcadas.length
+                ? `${scsMarcadas.length} solicitação(ões) marcada(s) — a atribuição vale para todos os itens dela.`
+                : 'Marque as solicitações na tabela. A atribuição é da SC inteira, não do item.'}
+            </span>
+          </div>
+        )}
         {carregando && !dados && <Carregando texto="Montando a fila…" />}
         {dados && !dados.items.length && <Vazio>Nenhum item de compra neste recorte.</Vazio>}
         {!!dados?.items.length && (
@@ -265,12 +371,17 @@ export function TorreDeControle() {
               <table data-testid="tabela-torre" className="min-w-[1180px]">
                 <thead>
                   <tr>
+                    {triando && <th aria-label="Selecionar" />}
                     <th>SC</th><th>Produto</th><th>Qtd.</th><th>Solicitante</th><th>CC</th>
                     <th>Comprador</th><th>Fornecedor</th><th>Etapa</th><th>Situação</th>
                     <th>Previsão</th><th>Valor</th><th>Ação</th><th>Processo</th>
                   </tr>
                 </thead>
-                <tbody>{dados.items.map((i) => <Linha key={i.itemId} i={i} />)}</tbody>
+                <tbody>{dados.items.map((i) => (
+                  <Linha key={i.itemId} i={i} triando={triando}
+                    marcada={!!marcadas[i.requisitionId]} aoMarcar={alternar}
+                    aoLiberar={tirarResponsavel} />
+                ))}</tbody>
               </table>
             </div>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2">

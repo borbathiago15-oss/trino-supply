@@ -10,8 +10,17 @@ vi.mock('@/api/torre', async (importar) => ({
   ...(await importar<typeof import('@/api/torre')>()),
   torreDeControle: vi.fn(),
 }));
+vi.mock('@/api/triagem', async (importar) => ({
+  ...(await importar<typeof import('@/api/triagem')>()),
+  listarResponsaveis: vi.fn(async () => [{ id: 'u2', name: 'Carla', role: 'PurchasingOfficer' }]),
+  designar: vi.fn(async () => ({})),
+  designarEmLote: vi.fn(async () => ({ assigned: 1, failed: [] })),
+}));
+let usuarioAtual = { role: 'PurchasingOfficer', modules: ['COMPRAS'] };
+vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => usuarioAtual }));
 
 import { torreDeControle } from '@/api/torre';
+import { designar, designarEmLote, listarResponsaveis } from '@/api/triagem';
 
 const linha = (p: Partial<LinhaDaTorre> = {}): LinhaDaTorre => ({
   itemId: 'i1', requisitionId: 'r1', prNumber: 'PR-2026-000001', sequence: 1,
@@ -45,7 +54,16 @@ const pagina = (p: Partial<PaginaDaTorre> = {}): PaginaDaTorre => ({
 const abrir = () => render(<MemoryRouter><TorreDeControle /></MemoryRouter>);
 
 describe('Torre de Controle', () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => {
+    vi.resetAllMocks();
+    usuarioAtual = { role: 'PurchasingOfficer', modules: ['COMPRAS'] };
+    // `resetAllMocks` zera a implementação da fábrica: sem repor, o caminho feliz
+    // devolveria `undefined` e o teste passaria pelo `catch` sem ninguém notar
+    vi.mocked(listarResponsaveis).mockResolvedValue(
+      [{ id: 'u2', name: 'Carla', role: 'PurchasingOfficer' }]);
+    vi.mocked(designar).mockResolvedValue({});
+    vi.mocked(designarEmLote).mockResolvedValue({ assigned: 1, failed: [] });
+  });
 
   it('mostra uma linha por item, com etapa e situação', async () => {
     vi.mocked(torreDeControle).mockResolvedValue(pagina({
@@ -255,6 +273,52 @@ describe('Torre de Controle', () => {
     await waitFor(() => expect(torreDeControle).toHaveBeenLastCalledWith(
       expect.objectContaining({ minhaFila: true, etapa: '', atrasados: false, pagina: 1 }),
       expect.anything()));
+  });
+
+  it('a triagem mora na Torre: marcar SCs e atribuir em lote', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({
+      items: [
+        linha({ itemId: 'i1', requisitionId: 'r1', description: 'Martelete' }),
+        linha({ itemId: 'i2', requisitionId: 'r1', sequence: 2, description: 'Pé de cabra' }),
+        linha({ itemId: 'i3', requisitionId: 'r2', prNumber: 'PR-2026-000002', description: 'Luva' }),
+      ],
+    }));
+    abrir();
+    await screen.findByTestId('tabela-torre');
+
+    // dois itens da MESMA SC: marcar um marca a SC, e o lote manda uma só
+    await usuario.click(screen.getAllByLabelText(/Selecionar PR-2026-000001/)[0]);
+    await usuario.click(screen.getByLabelText(/Selecionar PR-2026-000002/));
+    await usuario.selectOptions(screen.getByLabelText(/Atribuir as SCs marcadas a/), 'u2');
+    await usuario.click(screen.getByRole('button', { name: /^Atribuir/ }));
+
+    await waitFor(() => expect(designarEmLote).toHaveBeenCalledWith(
+      [{ kind: 'SC', id: 'r1' }, { kind: 'SC', id: 'r2' }], 'u2'));
+  });
+
+  it('liberar devolve a SC para a fila, sem tocar nos outros itens dela', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({
+      items: [linha({ requisitionId: 'r9', buyerLabel: 'Carla' })],
+    }));
+    abrir();
+    await screen.findByTestId('tabela-torre');
+
+    await usuario.click(screen.getByRole('button', { name: 'liberar' }));
+    await waitFor(() => expect(designar).toHaveBeenCalledWith('SC', 'r9', null));
+  });
+
+  it('para quem não tria, a Torre continua só de leitura', async () => {
+    // auditor e compliance abrem a Torre para acompanhar, não para mexer na fila
+    usuarioAtual = { role: 'Auditor', modules: ['COMPRAS'] };
+    vi.mocked(torreDeControle).mockResolvedValue(pagina());
+    abrir();
+    await screen.findByTestId('tabela-torre');
+
+    expect(screen.queryByTestId('triagem-torre')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Selecionar PR-/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'liberar' })).not.toBeInTheDocument();
   });
 
   it('sem item no recorte, diz isso em vez de mostrar tabela vazia', async () => {

@@ -9,7 +9,7 @@ import {
 import { ToastProvider } from '@/componentes/Toast';
 import { ProcessoDetalhe } from './ProcessoDetalhe';
 import { textoDoConvite } from './PainelDeConvidados';
-import { candidatasDaFamilia, propostasDaFamilia } from './AcoesDoProcesso';
+import { candidatasDaFamilia, impedimentoDaProposta, propostasDaFamilia } from './AcoesDoProcesso';
 import { montarProposta } from './PainelPropostaManual';
 import { lote, oferta, processo, proposta } from '@/test/cotacoes';
 
@@ -212,6 +212,37 @@ describe('proposta lançada à mão', () => {
   });
   it('sem fornecedor também não', () => {
     expect(montarProposta('', {}, { i1: '12' }).erro).toBe('Escolha o fornecedor da proposta.');
+  });
+});
+
+describe('impedimento da proposta', () => {
+  // Foi o bug que a negociação expunha: registrar a negociação cria uma versão NOVA
+  // da proposta, o mapa de famílias continuava sendo o da versão anterior, e a tela
+  // dizia que o fornecedor recém-negociado "não cotou nenhum item desta compra" —
+  // travando o rádio de quem acabara de fechar o melhor preço.
+  const loteCom = (offers: Parameters<typeof oferta>[0][]) =>
+    lote({ offers: offers.map(oferta) });
+
+  it('sem mapa carregado nada é barrado: quem decide é a API', () => {
+    expect(impedimentoDaProposta(null, proposta({}))).toBeNull();
+  });
+
+  it('proposta mais nova que o mapa não é barrada por "não cotou nada"', () => {
+    // o mapa nem conhece este fornecedor: é mapa atrasado, não ausência de oferta
+    const mapa = loteCom([{ supplierId: 'outro', proposalId: 'p-outro' }]);
+    expect(impedimentoDaProposta(mapa, proposta({ id: 'p-nova', supplierId: 's1' }))).toBeNull();
+  });
+
+  it('fornecedor no mapa sem esta proposta continua sendo "não cotou nada"', () => {
+    const mapa = loteCom([{ supplierId: 's1', proposalId: 'p-antiga' }]);
+    expect(impedimentoDaProposta(mapa, proposta({ id: 'p1', supplierId: 's1' })))
+      .toBe('não cotou nenhum item desta compra');
+  });
+
+  it('a homologação pendente segue barrando, que é a regra de verdade (SUP-ERR-030)', () => {
+    const mapa = loteCom([{ supplierId: 's1', proposalId: 'p1', homologation: 'PROSPECT', canWin: false }]);
+    expect(impedimentoDaProposta(mapa, proposta({ id: 'p1', supplierId: 's1' })))
+      .toContain('SUP-ERR-030');
   });
 });
 

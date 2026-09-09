@@ -32,6 +32,18 @@ test.describe('Torre de Controle (React)', () => {
     expect((await comEtapa).status()).toBe(200);
   });
 
+  /** §5: os dois KPIs que faltavam existem e o de exceções filtra. */
+  test('em faturamento e exceções aparecem, e exceções vira filtro', async ({ page }) => {
+    await abrirAutenticado(page, '/torre');
+    await expect(page.getByRole('button', { name: /Em faturamento/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Aguardando recebimento/ })).toBeVisible();
+
+    const comExcecao = page.waitForResponse((r) =>
+      r.url().includes('/api/v1/control-tower') && r.url().includes('exception=true'));
+    await page.getByRole('button', { name: /Exceções/ }).click();
+    expect((await comExcecao).status()).toBe(200);
+  });
+
   test('a paginação é do servidor: a página pedida vai na consulta', async ({ page }) => {
     await abrirAutenticado(page, '/torre');
     // esperar o painel de filtros não basta: ele renderiza antes de os dados

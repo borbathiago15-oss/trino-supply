@@ -16,7 +16,9 @@ public record FiltroTorre(
     // situação; `From`/`To` continuam em SQL, sobre a data de criação da SC.
     string? Supplier = null, string? OrderNumber = null,
     DateOnly? DueFrom = null, DateOnly? DueTo = null,
-    decimal? MinValue = null, decimal? MaxValue = null);
+    decimal? MinValue = null, decimal? MaxValue = null,
+    /// <summary>Só o que virou exceção — ver <see cref="ExcecaoDe"/>.</summary>
+    bool? Exception = null);
 
 /// <summary>Uma linha da Torre: um item de compra, com o seu próprio andamento.</summary>
 public record LinhaDaTorre(
@@ -27,16 +29,25 @@ public record LinhaDaTorre(
     string StatusKey, string StatusLabel, string StatusTone,
     string Priority, DateOnly? NeededBy, DateOnly? PromisedDate, bool Late,
     decimal? Value, Guid? QuotationId, string? QuotationNumber,
-    Guid? PurchaseOrderId, string? PurchaseOrderNumber);
+    Guid? PurchaseOrderId, string? PurchaseOrderNumber,
+    /// <summary>Por que este item é exceção, ou nulo quando segue o caminho normal.</summary>
+    string? ExceptionReason = null);
 
 /// <summary>
-/// Os números do topo. Não há "em faturamento" separado de "aguardando recebimento":
-/// a situação `OC_FATURAMENTO` cobre as duas — a O.C. saiu e o material não chegou.
-/// Repetir o mesmo número com dois nomes daria a impressão de duas filas.
+/// Os números do topo (§5).
+///
+/// <para>
+/// <b>"Em faturamento" e "aguardando recebimento" são filas diferentes</b>, e o que as
+/// separa é a nota fiscal: com a O.C. emitida e nenhuma NF lançada, quem deve agir é o
+/// fornecedor (falta faturar); com a NF lançada e o material não recebido, quem age é o
+/// almoxarifado. Antes as duas viviam no mesmo número, e o comprador não sabia para
+/// quem cobrar.
+/// </para>
 /// </summary>
 public record KpisDaTorre(
     int Total, int Novos, int EmCotacao, int AguardandoAprovacao, int AguardandoOc,
-    int AguardandoRecebimento, int Atrasados, int Urgentes, decimal Valor);
+    int AguardandoRecebimento, int Atrasados, int Urgentes, decimal Valor,
+    int EmFaturamento = 0, int Excecoes = 0);
 
 public record OpcoesDaTorre(
     IReadOnlyList<string> Companies, IReadOnlyList<OpcaoCodigo> CostCenters,
@@ -112,6 +123,44 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
     public static string RotuloDaEtapa(string chave) =>
         Etapas.FirstOrDefault(e => e.Key == chave).Label ?? chave;
 
+    /// <summary>
+    /// Por que este item é exceção — ou nulo quando ele segue o caminho normal.
+    ///
+    /// <para>
+    /// O documento pede um KPI de "exceções" e prevê um fluxo próprio para registrá-las,
+    /// que ainda não existe. Em vez de inventar um registro vazio, o número sai do que o
+    /// sistema <b>já grava</b> como fora do padrão — e cada um destes tem regra e trilha
+    /// de auditoria atrás:
+    /// </para>
+    ///
+    /// <list type="bullet">
+    /// <item>compra fechada sem O.C. do ERP, com a justificativa do PO-BR-011;</item>
+    /// <item>pedido cancelado ou com saldo encerrado sem entrega completa;</item>
+    /// <item>material recebido e devolvido ao fornecedor.</item>
+    /// </list>
+    ///
+    /// A ordem importa: um pedido pode ser mais de uma coisa ao mesmo tempo, e o
+    /// comprador precisa ver primeiro o que o obriga a agir.
+    /// </summary>
+    public static string? ExcecaoDe(PurchaseOrder? pedido)
+    {
+        if (pedido is null) return null;
+        if (pedido.Status == PurchaseOrderStatus.Cancelled) return "Pedido cancelado";
+        if (pedido.Status == PurchaseOrderStatus.PartiallyReceived) return "Saldo encerrado sem entrega completa";
+        if (pedido.Items.Any(i => i.RejectedQuantity > 0)) return "Material devolvido ao fornecedor";
+        if (!string.IsNullOrWhiteSpace(pedido.NoErpReason)) return "Fechado sem O.C. do ERP";
+        return null;
+    }
+
+    /// <summary>
+    /// A O.C. saiu e ainda não há nota: quem deve agir é o fornecedor. Com NF lançada e
+    /// material não recebido, a bola passa ao almoxarifado — são filas diferentes.
+    /// </summary>
+    public static bool EmFaturamento(PurchaseOrder? pedido) =>
+        pedido is not null
+        && pedido.Status is not (PurchaseOrderStatus.Received or PurchaseOrderStatus.Cancelled)
+        && pedido.Invoices.Count == 0;
+
     public async Task<PaginaDaTorre> ConsultarAsync(FiltroTorre f, CancellationToken ct = default)
     {
         var hoje = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
@@ -161,7 +210,8 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
                        || f.Family is { Length: > 0 } || f.Late == true
                        || f.Supplier is { Length: > 0 } || f.OrderNumber is { Length: > 0 }
                        || f.DueFrom is not null || f.DueTo is not null
-                       || f.MinValue is not null || f.MaxValue is not null;
+                       || f.MinValue is not null || f.MaxValue is not null
+                       || f.Exception == true;
         var ordenada = consulta.OrderByDescending(x => x.sc.CreatedAt).ThenBy(x => x.item.Sequence);
 
         var total = derivado ? 0 : await consulta.CountAsync(ct);
@@ -178,7 +228,7 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
                         || q.Items.Any(i => i.SourcePrId != null && scIds.Contains(i.SourcePrId.Value)))
             .OrderByDescending(q => q.CreatedAt).ToListAsync(ct);
         var cotacaoIds = cotacoes.Select(q => q.Id).ToList();
-        var pedidos = await db.PurchaseOrders.Include(o => o.Items)
+        var pedidos = await db.PurchaseOrders.Include(o => o.Items).Include(o => o.Invoices)
             .Where(o => (o.SourcePrId != null && scIds.Contains(o.SourcePrId.Value))
                         || (o.QuotationId != null && cotacaoIds.Contains(o.QuotationId.Value)))
             .OrderByDescending(o => o.CreatedAt).ToListAsync(ct);
@@ -255,6 +305,9 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
             if (f.MinValue is { } minimo && (valor is null || valor < minimo)) continue;
             if (f.MaxValue is { } maximo && (valor is null || valor > maximo)) continue;
 
+            var excecao = ExcecaoDe(pedido);
+            if (f.Exception == true && excecao is null) continue;
+
             linhas.Add(new LinhaDaTorre(
                 x.item.Id, x.sc.Id, x.sc.Number, x.item.Sequence,
                 x.item.CatalogCode, x.item.Description, x.item.Quantity, x.item.UnitOfMeasure,
@@ -263,7 +316,7 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
                 pedido?.SupplierName, etapa, RotuloDaEtapa(etapa),
                 situacao.Key, situacao.Label, situacao.Tone,
                 x.sc.Priority, x.sc.NeededBy, pedido?.PromisedDate, atrasado,
-                valor, cotacao?.Id, cotacao?.Number, pedido?.Id, pedido?.Number));
+                valor, cotacao?.Id, cotacao?.Number, pedido?.Id, pedido?.Number, excecao));
         }
 
         if (derivado)
@@ -292,7 +345,7 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
                         || q.Items.Any(i => i.SourcePrId != null && ids.Contains(i.SourcePrId.Value)))
             .OrderByDescending(q => q.CreatedAt).ToListAsync(ct);
         var cotacaoIds = cotacoes.Select(q => q.Id).ToList();
-        var pedidos = await db.PurchaseOrders
+        var pedidos = await db.PurchaseOrders.Include(o => o.Items).Include(o => o.Invoices)
             .Where(o => (o.SourcePrId != null && ids.Contains(o.SourcePrId.Value))
                         || (o.QuotationId != null && cotacaoIds.Contains(o.QuotationId.Value)))
             .OrderByDescending(o => o.CreatedAt).ToListAsync(ct);
@@ -309,7 +362,7 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
         }
 
         int total = 0, novos = 0, cotando = 0, aprovando = 0, aguardandoOc = 0,
-            recebendo = 0, atrasados = 0, urgentes = 0;
+            recebendo = 0, atrasados = 0, urgentes = 0, faturando = 0, excecoes = 0;
         decimal valor = 0;
         foreach (var sc in abertas)
         {
@@ -321,6 +374,8 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
             var etapa = EtapaDe(situacao.Key);
             var previsao = pedido?.PromisedDate ?? sc.NeededBy;
             var atrasada = etapa != "ENCERRADO" && previsao is not null && previsao < hoje;
+            var aguardandoNf = EmFaturamento(pedido);
+            var excecao = ExcecaoDe(pedido) is not null;
 
             foreach (var _ in sc.Items)
             {
@@ -331,8 +386,11 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
                     case "COTACAO": cotando++; break;
                     case "APROVACAO": aprovando++; break;
                     case "ORDEM_DE_COMPRA": aguardandoOc++; break;
+                    // a etapa é a mesma; o que separa as duas filas é a nota fiscal
+                    case "RECEBIMENTO" when aguardandoNf: faturando++; break;
                     case "RECEBIMENTO": recebendo++; break;
                 }
+                if (excecao) excecoes++;
                 if (atrasada) atrasados++;
                 if (sc.Priority == "URGENT" && etapa != "ENCERRADO") urgentes++;
             }
@@ -340,7 +398,7 @@ public class TorreDeControleService(AppDbContext db, TimeProvider clock)
         }
 
         return new KpisDaTorre(total, novos, cotando, aprovando, aguardandoOc,
-            recebendo, atrasados, urgentes, valor);
+            recebendo, atrasados, urgentes, valor, faturando, excecoes);
     }
 
     /// <summary>

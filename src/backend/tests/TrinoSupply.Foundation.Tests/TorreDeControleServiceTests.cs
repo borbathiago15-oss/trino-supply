@@ -339,6 +339,91 @@ public class TorreDeControleServiceTests
         Assert.Equal(2, alfa.Pages);
     }
 
+    // ==== §5 — os KPIs que faltavam: em faturamento e exceções ==================
+
+    [Fact]
+    public async Task Em_faturamento_e_aguardando_recebimento_sao_filas_diferentes()
+    {
+        // o que as separa é a nota fiscal: sem NF quem deve agir é o fornecedor;
+        // com NF e sem entrega, o almoxarifado. Antes as duas viviam no mesmo número.
+        var w = Build();
+        var semNota = await ScAprovadaAsync(w, "Martelete");
+        var comNota = await ScAprovadaAsync(w, "Luva");
+        await ComPedidoAsync(w, semNota, "Alfa", "PO-1");
+        var pedidoComNf = await ComPedidoAsync(w, comNota, "Beta", "PO-2");
+        w.Db.PurchaseOrderInvoices.Add(new PurchaseOrderInvoice
+        {
+            OrderId = pedidoComNf.Id, Number = "4521",
+            IssuedOn = new DateOnly(2026, 9, 9), Value = 1000m, CreatedAt = Agora,
+        });
+        await w.Db.SaveChangesAsync();
+
+        var kpis = (await w.Torre.ConsultarAsync(new FiltroTorre())).Kpis;
+
+        Assert.Equal(1, kpis.EmFaturamento);          // O.C. emitida, nenhuma NF
+        Assert.Equal(1, kpis.AguardandoRecebimento);  // NF lançada, material não chegou
+    }
+
+    [Fact]
+    public async Task Excecao_sai_do_que_o_sistema_ja_grava_como_fora_do_padrao()
+    {
+        var w = Build();
+        var normal = await ScAprovadaAsync(w, "Martelete");
+        var semOc = await ScAprovadaAsync(w, "Luva");
+        var cancelado = await ScAprovadaAsync(w, "Pé de cabra");
+        await ComPedidoAsync(w, normal, "Alfa", "PO-1");
+        var pedidoSemOc = await ComPedidoAsync(w, semOc, "Beta", "PO-2");
+        pedidoSemOc.NoErpReason = "ERP indisponível na sexta-feira do fechamento";
+        var pedidoCancelado = await ComPedidoAsync(w, cancelado, "Gama", "PO-3");
+        pedidoCancelado.Status = PurchaseOrderStatus.Cancelled;
+        await w.Db.SaveChangesAsync();
+
+        var pagina = await w.Torre.ConsultarAsync(new FiltroTorre());
+        Assert.Equal(2, pagina.Kpis.Excecoes);
+
+        // a linha diz **por que** é exceção — número no topo sem o motivo na linha
+        // obriga o comprador a caçar o processo um a um
+        Assert.Null(pagina.Items.Single(i => i.Description == "Martelete").ExceptionReason);
+        Assert.Equal("Fechado sem O.C. do ERP",
+            pagina.Items.Single(i => i.Description == "Luva").ExceptionReason);
+        Assert.Equal("Pedido cancelado",
+            pagina.Items.Single(i => i.Description == "Pé de cabra").ExceptionReason);
+
+        // e o KPI filtra, como os outros
+        var so = await w.Torre.ConsultarAsync(new FiltroTorre(Exception: true));
+        Assert.Equal(2, so.Total);
+        Assert.All(so.Items, i => Assert.NotNull(i.ExceptionReason));
+        Assert.DoesNotContain(so.Items, i => i.Description == "Martelete");
+    }
+
+    [Fact]
+    public async Task Devolucao_ao_fornecedor_tambem_e_excecao()
+    {
+        var w = Build();
+        var pr = await ScAprovadaAsync(w, "Martelete");
+        var pedido = await ComPedidoAsync(w, pr, "Alfa", "PO-1");
+        pedido.Items[0].RejectedQuantity = 3;
+        await w.Db.SaveChangesAsync();
+
+        var pagina = await w.Torre.ConsultarAsync(new FiltroTorre(Exception: true));
+        Assert.Equal("Material devolvido ao fornecedor",
+            Assert.Single(pagina.Items).ExceptionReason);
+    }
+
+    [Fact]
+    public void Item_sem_pedido_nunca_e_excecao_nem_esta_em_faturamento()
+    {
+        // exceção e faturamento são estados do pedido: sem pedido, não há o que
+        // ser exceção — e contar item novo como exceção inflaria o número do topo
+        Assert.Null(TorreDeControleService.ExcecaoDe(null));
+        Assert.False(TorreDeControleService.EmFaturamento(null));
+
+        // pedido entregue também sai das duas: o ciclo terminou
+        var entregue = new PurchaseOrder { Status = PurchaseOrderStatus.Received };
+        Assert.Null(TorreDeControleService.ExcecaoDe(entregue));
+        Assert.False(TorreDeControleService.EmFaturamento(entregue));
+    }
+
     [Fact]
     public void A_torre_e_de_quem_trabalha_a_fila_de_compras()
     {

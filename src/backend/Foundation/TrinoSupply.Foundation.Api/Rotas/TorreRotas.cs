@@ -19,7 +19,7 @@ public static class TorreRotas
             string? family, Guid? requesterId, Guid? buyerId, string? priority,
             DateOnly? from, DateOnly? to, bool? late, int? page, int? pageSize,
             string? supplier, string? orderNumber, DateOnly? dueFrom, DateOnly? dueTo,
-            decimal? minValue, decimal? maxValue,
+            decimal? minValue, decimal? maxValue, bool? exception,
             CancellationToken ct) =>
         {
             if (!TorreDeControleService.CanView(RoleOf(p)))
@@ -32,7 +32,7 @@ public static class TorreRotas
                 Preenchido(search), Preenchido(stage), Preenchido(status), Preenchido(company),
                 Preenchido(costCenter), Preenchido(family), requesterId, buyerId, Preenchido(priority),
                 from, to, late, page ?? 1, pageSize ?? 50,
-                Preenchido(supplier), Preenchido(orderNumber), dueFrom, dueTo, minValue, maxValue);
+                Preenchido(supplier), Preenchido(orderNumber), dueFrom, dueTo, minValue, maxValue, exception);
             return Ok(await svc.ConsultarAsync(filtro, ct), ctx);
         }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole())
             .AddEndpointFilter(RequireModules(AppModules.Compras));

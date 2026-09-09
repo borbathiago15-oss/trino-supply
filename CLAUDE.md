@@ -111,6 +111,22 @@ pipeline justamente para uma rota nova não nascer sem elas.
 - **Dependência vulnerável trava o CI** no que vai para produção (`src/frontend` e o
   projeto .NET). O monorepo `platform/` não é implantado e fica fora do gate.
 
+## Torre de Controle: o que é derivado, e de onde
+
+A Torre não grava estado próprio — etapa, situação, atraso, faturamento e exceção
+saem do que solicitação, cotação e pedido já dizem. Duas derivações valem registro
+porque não são óbvias:
+
+- **"Em faturamento" e "aguardando recebimento" são filas diferentes**, e o que as
+  separa é a **nota fiscal**: O.C. emitida sem nenhuma NF significa que quem deve agir
+  é o fornecedor; NF lançada e material não recebido passa a bola ao almoxarifado.
+  Antes as duas viviam no mesmo número e o comprador não sabia para quem cobrar.
+- **"Exceção" sai do que o sistema já grava como fora do padrão** — pedido cancelado,
+  saldo encerrado sem entrega completa, material devolvido, e o fechamento sem O.C. do
+  ERP justificado (PO-BR-011). O fluxo de exceção genérico do documento não existe;
+  inventar um registro vazio daria um KPI que não conta nada. A regra vive em
+  `TorreDeControleService.ExcecaoDe`, e a linha mostra **o motivo**, não só a marca.
+
 ## Verificação antes de entregar
 
 ```bash

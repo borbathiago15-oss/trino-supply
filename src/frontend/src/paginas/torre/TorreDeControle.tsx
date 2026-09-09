@@ -46,6 +46,13 @@ function Linha({ i }: { i: LinhaDaTorre }) {
       <td className="whitespace-nowrap">
         {data(i.promisedDate ?? i.neededBy)}
         {i.late && <div className="text-[11.5px] font-bold text-perigo">atrasado</div>}
+        {/* número de exceção no topo sem o motivo na linha obriga o comprador a
+            caçar o processo um a um — a razão vem junto */}
+        {i.exceptionReason && (
+          <div className="text-[11.5px] font-bold text-aviso" title="Exceção registrada">
+            ⚠ {i.exceptionReason}
+          </div>
+        )}
       </td>
       <td className="whitespace-nowrap">{i.value != null ? moeda(i.value) : <span className="sub">—</span>}</td>
       {/* o link leva para onde a ação está: o pedido, se já existe; senão a cotação */}
@@ -113,14 +120,23 @@ export function TorreDeControle() {
           <KpiFiltro rotulo="Aguardando O.C." valor={quantidade(dados.kpis.aguardandoOc)}
             detalhe="aprovado, sem O.C. registrada"
             ativo={aplicados.etapa === 'ORDEM_DE_COMPRA'} aoClicar={() => porEtapa('ORDEM_DE_COMPRA')} />
+          {/* §5: duas filas, e o que as separa é a nota fiscal — sem NF a bola está
+              com o fornecedor; com NF e sem entrega, com o almoxarifado */}
+          <KpiFiltro rotulo="Em faturamento" valor={quantidade(dados.kpis.emFaturamento)}
+            detalhe="O.C. emitida, sem NF"
+            ativo={aplicados.etapa === 'RECEBIMENTO'} aoClicar={() => porEtapa('RECEBIMENTO')} />
           <KpiFiltro rotulo="Aguardando recebimento" valor={quantidade(dados.kpis.aguardandoRecebimento)}
-            detalhe="O.C. emitida, material a caminho"
+            detalhe="NF lançada, material a caminho"
             ativo={aplicados.etapa === 'RECEBIMENTO'} aoClicar={() => porEtapa('RECEBIMENTO')} />
           <KpiFiltro rotulo="Atrasados" valor={quantidade(dados.kpis.atrasados)} detalhe="passaram da previsão"
             ativo={aplicados.atrasados} aoClicar={() => aplicar({ atrasados: !aplicados.atrasados, etapa: '' })} />
           <KpiFiltro rotulo="Urgentes" valor={quantidade(dados.kpis.urgentes)} detalhe="prioridade URGENT"
             ativo={aplicados.prioridade === 'URGENT'}
             aoClicar={() => aplicar({ prioridade: aplicados.prioridade === 'URGENT' ? '' : 'URGENT' })} />
+          <KpiFiltro rotulo="Exceções" valor={quantidade(dados.kpis.excecoes)}
+            detalhe="sem O.C. do ERP, cancelado ou devolvido"
+            ativo={aplicados.excecoes}
+            aoClicar={() => aplicar({ excecoes: !aplicados.excecoes, etapa: '' })} />
         </FaixaKpis>
       )}
 

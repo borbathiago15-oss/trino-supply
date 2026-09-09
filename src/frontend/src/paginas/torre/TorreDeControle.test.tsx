@@ -22,7 +22,7 @@ const linha = (p: Partial<LinhaDaTorre> = {}): LinhaDaTorre => ({
   statusKey: 'PENDENTE', statusLabel: 'Pendente', statusTone: '',
   priority: 'NORMAL', neededBy: '2026-09-20', promisedDate: null, late: false,
   value: 200, quotationId: null, quotationNumber: null,
-  purchaseOrderId: null, purchaseOrderNumber: null,
+  purchaseOrderId: null, purchaseOrderNumber: null, exceptionReason: null,
   ...p,
 });
 
@@ -31,6 +31,7 @@ const pagina = (p: Partial<PaginaDaTorre> = {}): PaginaDaTorre => ({
   kpis: {
     total: 12, novos: 4, emCotacao: 3, aguardandoAprovacao: 2, aguardandoOc: 1,
     aguardandoRecebimento: 1, atrasados: 2, urgentes: 1, valor: 24000,
+    emFaturamento: 2, excecoes: 3,
   },
   filterOptions: {
     companies: ['Trino Nordeste'], costCenters: [{ code: 'CC-NE-01', name: 'Filial Recife' }],
@@ -182,6 +183,38 @@ describe('Torre de Controle', () => {
     const vazia = consultaDaTorre(FILTROS_TORRE_VAZIOS);
     for (const p of ['supplier', 'orderNumber', 'dueFrom', 'dueTo', 'minValue', 'maxValue', 'from=', 'to='])
       expect(vazia).not.toContain(p);
+  });
+
+  it('em faturamento e aguardando recebimento aparecem como dois números (§5)', async () => {
+    vi.mocked(torreDeControle).mockResolvedValue(pagina());
+    abrir();
+    await screen.findByTestId('tabela-torre');
+
+    // duas filas, dois donos: sem NF a bola está com o fornecedor
+    expect(screen.getByRole('button', { name: /Em faturamento/ })).toHaveTextContent('2');
+    expect(screen.getByRole('button', { name: /Aguardando recebimento/ })).toHaveTextContent('1');
+  });
+
+  it('o KPI de exceções filtra e a linha diz o motivo', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({
+      items: [linha({ exceptionReason: 'Fechado sem O.C. do ERP' })],
+    }));
+    abrir();
+
+    const tabela = within(await screen.findByTestId('tabela-torre'));
+    expect(tabela.getByText(/Fechado sem O\.C\. do ERP/)).toBeInTheDocument();
+
+    await usuario.click(screen.getByRole('button', { name: /Exceções/ }));
+    await waitFor(() => expect(torreDeControle).toHaveBeenLastCalledWith(
+      expect.objectContaining({ excecoes: true, etapa: '', pagina: 1 }), expect.anything()));
+  });
+
+  it('linha sem exceção não ganha marca nenhuma', async () => {
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({ items: [linha()] }));
+    abrir();
+    const tabela = within(await screen.findByTestId('tabela-torre'));
+    expect(tabela.queryByText(/⚠/)).not.toBeInTheDocument();
   });
 
   it('sem item no recorte, diz isso em vez de mostrar tabela vazia', async () => {

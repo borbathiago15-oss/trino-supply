@@ -119,7 +119,12 @@ export const MENU: GrupoMenu[] = [
     { id: 'score-weights', rotulo: 'Pesos do Score', rota: '/pesos-score', modulo: 'COMPRAS', mostrar: ehAdmin },
     // o prazo de cada etapa é a régua com que a Torre marca o estouro — cadastro, como os
     // pesos do score, e pelo mesmo motivo: vale para toda a operação, não para uma tela
-    { id: 'stage-sla', rotulo: 'Prazos por Etapa', rota: '/prazos-etapas', modulo: 'COMPRAS', mostrar: ehAdmin },
+    // os dois andam juntos: o tipo classifica o pedido, e o prazo é escolhido pelo tipo
+    { rotulo: 'Atendimento', filhos: [
+      { id: 'request-types', rotulo: 'Tipos de Solicitação', rota: '/tipos-solicitacao', modulo: 'COMPRAS',
+        mostrar: (u) => ehAdmin(u) || u.role === 'SupplyManager' },
+      { id: 'stage-sla', rotulo: 'Prazos por Etapa', rota: '/prazos-etapas', modulo: 'COMPRAS', mostrar: ehAdmin },
+    ]},
     { rotulo: 'Pagamento', filhos: [
       { id: 'payment-methods', rotulo: 'Formas de Pagamento', rota: '/formas-pagamento', modulo: 'COMPRAS', mostrar: podeComprar },
       { id: 'payment-terms', rotulo: 'Condições de Pagamento', rota: '/condicoes-pagamento', modulo: 'COMPRAS', mostrar: podeComprar },

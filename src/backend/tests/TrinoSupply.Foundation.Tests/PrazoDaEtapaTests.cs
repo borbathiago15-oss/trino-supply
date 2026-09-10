@@ -127,4 +127,97 @@ public class PrazoDaEtapaTests
         Assert.Null(semData.Status);
         Assert.Equal(5, semData.MaxDays);   // o prazo aparece mesmo sem veredito: a régua é pública
     }
+
+    // ---- prazo por tipo de solicitação ------------------------------------------
+
+    private static async Task<(PrazoDaEtapaService Prazos, TipoDeSolicitacaoService Tipos)> ComTipoAsync(string codigo)
+    {
+        var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+        var relogio = new RelogioFixo(new DateTimeOffset(2026, 9, 10, 12, 0, 0, TimeSpan.Zero));
+        var tipos = new TipoDeSolicitacaoService(db, relogio);
+        await tipos.CriarAsync(Admin, codigo, codigo, null);
+        return (new PrazoDaEtapaService(db, relogio), tipos);
+    }
+
+    [Fact]
+    public async Task O_tipo_define_so_a_etapa_que_muda_e_herda_o_resto()
+    {
+        // um tipo emergencial que só aperta a aprovação não deve ter de repetir os outros
+        // quatro números — repetidos, eles envelheceriam parados quando o padrão mudasse
+        var (prazos, _) = await ComTipoAsync("EMERGENCIAL");
+        await prazos.SalvarAsync(Admin, new Dictionary<string, int> { ["COTACAO"] = 20 });   // padrão
+        await prazos.SalvarAsync(Admin, new Dictionary<string, int> { ["APROVACAO"] = 1 }, "EMERGENCIAL");
+
+        var doTipo = await prazos.MapaAsync("EMERGENCIAL");
+
+        Assert.Equal(1, doTipo["APROVACAO"]);    // o que ele definiu
+        Assert.Equal(20, doTipo["COTACAO"]);     // herdado do padrão, não do código
+    }
+
+    [Fact]
+    public async Task Mudar_o_padrao_move_junto_quem_herdou()
+    {
+        // é o ponto de herdar em vez de copiar: a exceção fica, o resto acompanha
+        var (prazos, _) = await ComTipoAsync("EMERGENCIAL");
+        await prazos.SalvarAsync(Admin, new Dictionary<string, int> { ["APROVACAO"] = 1 }, "EMERGENCIAL");
+
+        await prazos.SalvarAsync(Admin, new Dictionary<string, int> { ["COTACAO"] = 30 });
+
+        var doTipo = await prazos.MapaAsync("EMERGENCIAL");
+        Assert.Equal(30, doTipo["COTACAO"]);
+        Assert.Equal(1, doTipo["APROVACAO"]);   // a exceção do tipo não foi arrastada junto
+    }
+
+    [Fact]
+    public async Task Voltar_a_herdar_apaga_a_excecao_em_vez_de_copiar_o_padrao()
+    {
+        var (prazos, _) = await ComTipoAsync("EMERGENCIAL");
+        await prazos.SalvarAsync(Admin, new Dictionary<string, int> { ["APROVACAO"] = 1 }, "EMERGENCIAL");
+
+        await prazos.SalvarAsync(Admin, new Dictionary<string, int>(), "EMERGENCIAL", ["APROVACAO"]);
+
+        Assert.Empty(await prazos.PropriosAsync("EMERGENCIAL"));
+        Assert.Equal(3, (await prazos.MapaAsync("EMERGENCIAL"))["APROVACAO"]);   // o padrão de fábrica
+    }
+
+    [Fact]
+    public async Task A_tela_sabe_o_que_e_do_tipo_e_o_que_veio_herdado()
+    {
+        var (prazos, _) = await ComTipoAsync("EMERGENCIAL");
+        await prazos.SalvarAsync(Admin, new Dictionary<string, int> { ["APROVACAO"] = 1 }, "EMERGENCIAL");
+
+        var proprios = await prazos.PropriosAsync("EMERGENCIAL");
+
+        Assert.Equal(["APROVACAO"], proprios);
+    }
+
+    [Fact]
+    public async Task Prazo_de_tipo_que_nao_existe_e_recusado()
+    {
+        // sem isso, um erro de digitação criaria um conjunto de prazos órfão que nenhuma
+        // SC jamais usaria — e ninguém descobriria por quê
+        var (prazos, _) = await ComTipoAsync("EMERGENCIAL");
+
+        var (_, erro) = await prazos.SalvarAsync(
+            Admin, new Dictionary<string, int> { ["COTACAO"] = 3 }, "EMERGENCAIL");
+
+        Assert.Equal("SLA-ERR-012", erro!.Code);
+    }
+
+    [Fact]
+    public async Task O_mapa_por_tipo_traz_o_padrao_e_cada_tipo_de_uma_vez()
+    {
+        // a Torre consulta uma vez e resolve por linha: uma ida ao banco por item seria
+        // uma consulta por linha na tela de muitas linhas
+        var (prazos, tipos) = await ComTipoAsync("EMERGENCIAL");
+        await tipos.CriarAsync(Admin, "PROJETO", "Projeto", null);
+        await prazos.SalvarAsync(Admin, new Dictionary<string, int> { ["APROVACAO"] = 1 }, "EMERGENCIAL");
+
+        var mapa = await prazos.MapaPorTipoAsync();
+
+        Assert.Equal(3, mapa[""]["APROVACAO"]);              // padrão de fábrica
+        Assert.Equal(1, mapa["EMERGENCIAL"]["APROVACAO"]);
+        Assert.False(mapa.ContainsKey("PROJETO"));           // sem exceção própria, cai no padrão
+    }
 }

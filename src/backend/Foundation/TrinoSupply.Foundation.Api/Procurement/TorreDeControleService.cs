@@ -355,7 +355,9 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
 
         var familiaPorProduto = await db.CatalogItems
             .Select(i => new { i.Id, i.Family }).ToDictionaryAsync(x => x.Id, x => x.Family, ct);
-        var prazos = await new PrazoDaEtapaService(db, clock).MapaAsync(ct);
+        // os prazos de todos os tipos de uma vez: consultar por linha faria uma ida ao
+        // banco por item, e a Torre é justamente a tela de muitas linhas
+        var prazosPorTipo = await new PrazoDaEtapaService(db, clock).MapaPorTipoAsync(ct);
 
         // os aprovadores dos centros desta página, de uma vez: perguntar por linha faria
         // uma consulta por item, e a Torre é justamente a tela com muitas linhas
@@ -441,9 +443,13 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
             var espera = EsperaDe(x.sc, cotacao, pedido,
                 alcadaPorCentro.GetValueOrDefault(x.sc.CostCenter.Trim().ToUpperInvariant(),
                     AlcadasDoCentro.Nenhuma), hoje, agora);
-            // o prazo é da etapa e o relógio é o da espera — o mesmo número que a linha
-            // mostra, para o veredito nunca discordar do que está escrito ao lado dele
-            var sla = PrazoDaEtapaService.Avaliar(etapa, espera?.Days, prazos);
+            // o relógio é o da espera — o mesmo número que a linha mostra, para o veredito
+            // nunca discordar do que está escrito ao lado dele —, e o prazo é o do tipo da
+            // SC; tipo em branco ou fora do cadastro cai no padrão,
+            // que é exatamente o que já valia para a solicitação antes de os tipos existirem
+            var doTipo = prazosPorTipo.GetValueOrDefault(
+                TipoDeSolicitacaoService.Normalizar(x.sc.NeedType), prazosPorTipo[""]);
+            var sla = PrazoDaEtapaService.Avaliar(etapa, espera?.Days, doTipo);
             if (f.SlaBreached == true && !sla.Breached) continue;
 
             linhas.Add(new LinhaDaTorre(
@@ -489,7 +495,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
             .Where(r => r.DeletedAt == null && r.Status != RequisitionStatus.Draft)
             .OrderByDescending(r => r.CreatedAt).Take(2000).ToListAsync(ct);
         var ids = abertas.Select(r => r.Id).ToList();
-        var prazos = await new PrazoDaEtapaService(db, clock).MapaAsync(ct);
+        var prazosPorTipo = await new PrazoDaEtapaService(db, clock).MapaPorTipoAsync(ct);
         var cotacoes = await db.Quotations.Include(q => q.Items)
             .Include(q => q.Suppliers).Include(q => q.Proposals)
             .Where(q => ids.Contains(q.SourcePrId)
@@ -536,7 +542,9 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
             // o KPI do prazo mede a mesma espera que a linha mostra, pelo mesmo prazo:
             // duas contas para "estourou?" dariam um card que não bate com a lista
             var espera = EsperaDe(sc, cotacao, pedido, AlcadasDoCentro.Nenhuma, hoje, agora);
-            var estourou = PrazoDaEtapaService.Avaliar(etapa, espera?.Days, prazos).Breached;
+            var estourou = PrazoDaEtapaService.Avaliar(etapa, espera?.Days,
+                prazosPorTipo.GetValueOrDefault(
+                    TipoDeSolicitacaoService.Normalizar(sc.NeedType), prazosPorTipo[""])).Breached;
 
             foreach (var _ in sc.Items)
             {

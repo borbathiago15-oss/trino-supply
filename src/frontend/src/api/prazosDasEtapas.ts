@@ -5,6 +5,8 @@ export interface PrazoDaEtapa {
   stage: string;
   label: string;
   maxDays: number;
+  /** O tipo não definiu esta etapa e segue o padrão — mudar o padrão move esta junto. */
+  inherited: boolean;
   updatedAt: string;
   updatedByLabel: string;
 }
@@ -13,18 +15,28 @@ export interface PrazosDasEtapas {
   /** A partir de que percentual do prazo a etapa entra em atenção. Quem define é o servidor. */
   warnAtPercent: number;
   canEdit: boolean;
+  /** De que tipo é este conjunto. Nulo é o padrão — o que vale para quem não tem tipo. */
+  requestType: string | null;
+  /** Os tipos cadastrados, para o seletor não precisar de uma segunda consulta. */
+  types: { code: string; name: string }[];
   items: PrazoDaEtapa[];
 }
 
-export const lerPrazosDasEtapas = async (signal?: AbortSignal) => {
-  const r = await api<PrazosDasEtapas>('/api/v1/stage-sla', { signal });
-  return { ...r, items: r.items ?? [] };
+export const lerPrazosDasEtapas = async (tipo?: string, signal?: AbortSignal) => {
+  const r = await api<PrazosDasEtapas>(
+    `/api/v1/stage-sla${tipo ? `?requestType=${encodeURIComponent(tipo)}` : ''}`, { signal });
+  return { ...r, items: r.items ?? [], types: r.types ?? [] };
 };
 
-export const salvarPrazosDasEtapas = (dias: Record<string, number>) =>
-  api<{ items: { stage: string; maxDays: number }[] }>('/api/v1/stage-sla', {
-    method: 'PUT', body: { days: dias },
-  });
+/**
+ * Grava os prazos de um tipo. `herdar` lista as etapas que voltam a seguir o padrão — é como
+ * se desfaz uma exceção sem copiar o número do padrão para cá, o que a congelaria.
+ */
+export const salvarPrazosDasEtapas = (
+  dias: Record<string, number>, tipo?: string, herdar: string[] = [],
+) => api<{ items: { stage: string; maxDays: number }[] }>('/api/v1/stage-sla', {
+  method: 'PUT', body: { days: dias, requestType: tipo || null, inherit: herdar },
+});
 
 /**
  * Como o prazo será lido na Torre. Zero é desligado, e a tela diz isso em vez de mostrar

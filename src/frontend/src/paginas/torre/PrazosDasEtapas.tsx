@@ -26,13 +26,18 @@ import { useCarregar } from '@/util/useCarregar';
  */
 export function PrazosDasEtapas() {
   const { avisar } = useToast();
-  const { dados, erro, carregando, recarregar } = useCarregar(lerPrazosDasEtapas, []);
+  const [tipo, setTipo] = useState('');
+  const { dados, erro, carregando, recarregar } = useCarregar(
+    (signal) => lerPrazosDasEtapas(tipo, signal), [tipo]);
   const [dias, setDias] = useState<Record<string, string>>({});
+  // as etapas que este tipo devolve ao padrão neste salvamento
+  const [herdar, setHerdar] = useState<string[]>([]);
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     if (!dados) return;
     setDias(Object.fromEntries(dados.items.map((i) => [i.stage, String(i.maxDays)])));
+    setHerdar([]);
   }, [dados]);
 
   const pode = dados?.canEdit ?? false;
@@ -45,8 +50,12 @@ export function PrazosDasEtapas() {
     ev.preventDefault();
     setSalvando(true);
     try {
-      await salvarPrazosDasEtapas(
-        Object.fromEntries(Object.entries(dias).map(([etapa, v]) => [etapa, Number(v)])));
+      // etapa marcada para herdar não vai como número: ela é apagada, e o tipo volta a
+      // seguir o padrão — mandar o valor a congelaria numa cópia
+      const valores = Object.entries(dias)
+        .filter(([etapa]) => !herdar.includes(etapa))
+        .map(([etapa, v]) => [etapa, Number(v)] as const);
+      await salvarPrazosDasEtapas(Object.fromEntries(valores), tipo, herdar);
       avisar('Prazos atualizados. A Torre já julga por eles.');
       recarregar();
     } catch (e) { avisar(e instanceof Error ? e.message : 'Falha ao salvar os prazos.', 'erro'); }
@@ -62,6 +71,20 @@ export function PrazosDasEtapas() {
         estourado — lá a contagem começa do zero, senão a cobrança cairia sobre quem não teve
         culpa. <strong>Zero desliga</strong> a cobrança de tempo naquela etapa.
       </Nota>
+
+      {dados && dados.types.length > 0 && (
+        <div className="mb-3 max-w-[320px]">
+          <Campo id="prazo-tipo" rotulo="Conjunto de prazos"
+            dica="cada tipo de solicitação tem o seu">
+            <select id="prazo-tipo" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+              <option value="">Padrão (vale para quem não tem tipo)</option>
+              {dados.types.map((t) => (
+                <option key={t.code} value={t.code}>{t.name}</option>
+              ))}
+            </select>
+          </Campo>
+        </div>
+      )}
 
       {erro && <Erro>{erro}</Erro>}
       {carregando && !dados && <Carregando />}
@@ -79,6 +102,25 @@ export function PrazosDasEtapas() {
                 <p className="sub mt-1" data-testid={`leitura-${i.stage}`}>
                   {leituraDoPrazo(Number(dias[i.stage] ?? 0), dados.warnAtPercent)}
                 </p>
+                {/* herdado acompanha o padrão; próprio é exceção deste tipo. Sem dizer qual
+                    é qual, o administrador não sabe se mexer aqui muda uma etapa ou todas */}
+                {tipo !== '' && (
+                  <p className="sub" data-testid={`origem-${i.stage}`}>
+                    {herdar.includes(i.stage) ? 'voltará a seguir o padrão'
+                      : i.inherited ? 'segue o padrão'
+                      : (
+                        <>
+                          prazo próprio deste tipo{' '}
+                          {pode && (
+                            <button type="button" className="underline"
+                              onClick={() => setHerdar((h) => [...h, i.stage])}>
+                              voltar ao padrão
+                            </button>
+                          )}
+                        </>
+                      )}
+                  </p>
+                )}
                 {i.updatedByLabel && (
                   <p className="sub">
                     alterado por <strong>{i.updatedByLabel}</strong> em {data(i.updatedAt)}

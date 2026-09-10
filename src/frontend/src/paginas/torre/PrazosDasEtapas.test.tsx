@@ -13,14 +13,17 @@ vi.mock('@/api/prazosDasEtapas', async (importar) => ({
 
 import { lerPrazosDasEtapas, salvarPrazosDasEtapas } from '@/api/prazosDasEtapas';
 
-const regua = (canEdit = true): Regua => ({
+const regua = (canEdit = true, p: Partial<Regua> = {}): Regua => ({
   warnAtPercent: 80,
   canEdit,
+  requestType: null,
+  types: [],
   items: [
-    { stage: 'SOLICITACAO', label: 'Solicitação', maxDays: 2, updatedAt: '', updatedByLabel: '' },
-    { stage: 'COTACAO', label: 'Cotação', maxDays: 7, updatedAt: '2026-09-01T12:00:00Z', updatedByLabel: 'Thiago' },
-    { stage: 'APROVACAO', label: 'Aprovação', maxDays: 3, updatedAt: '', updatedByLabel: '' },
+    { stage: 'SOLICITACAO', label: 'Solicitação', maxDays: 2, inherited: false, updatedAt: '', updatedByLabel: '' },
+    { stage: 'COTACAO', label: 'Cotação', maxDays: 7, inherited: false, updatedAt: '2026-09-01T12:00:00Z', updatedByLabel: 'Thiago' },
+    { stage: 'APROVACAO', label: 'Aprovação', maxDays: 3, inherited: false, updatedAt: '', updatedByLabel: '' },
   ],
+  ...p,
 });
 
 const abrir = () => render(<ToastProvider><PrazosDasEtapas /></ToastProvider>);
@@ -63,7 +66,7 @@ describe('tela dos prazos por etapa', () => {
     await userEvent.click(screen.getByRole('button', { name: /Salvar prazos/ }));
 
     await waitFor(() => expect(salvarPrazosDasEtapas).toHaveBeenCalledWith(
-      { SOLICITACAO: 2, COTACAO: 10, APROVACAO: 3 }));
+      { SOLICITACAO: 2, COTACAO: 10, APROVACAO: 3 }, '', []));
   });
 
   it('prazo vazio ou fora da faixa não sai da tela', async () => {

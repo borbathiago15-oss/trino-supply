@@ -21,7 +21,7 @@ import { atualizarFornecedor, buscarFornecedores, gerarChavePortal } from '@/api
 const fornecedor = (p: Partial<Fornecedor>): Fornecedor => ({
   id: 'id-' + (p.taxId ?? '1'), legalName: 'Alfa Equipamentos LTDA', tradeName: 'Alfa EPIs',
   taxId: '12345678000199', email: 'vendas@alfa.com.br', phone: '11 4000-0000', active: true,
-  homologationStatus: 'HOMOLOGADO', effectiveHomologation: 'HOMOLOGADO', documents: [],
+  homologationStatus: 'HOMOLOGADO', effectiveHomologation: 'HOMOLOGADO', documents: [], duplicateCount: 0,
   contract: { number: null, validFrom: null, validUntil: null, notes: null, valueLimit: null, consumed: null, balance: null, current: false, items: [] },
   ...p,
 });
@@ -37,7 +37,8 @@ const lista = [
 const comprador: Usuario = { id: 'u1', email: 'c@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['FORNECEDORES'] };
 const auditor: Usuario = { id: 'u2', email: 'a@t.com', name: 'Auditor', role: 'Auditor', modules: ['FORNECEDORES'] };
 
-const pagina = (itens: Fornecedor[], total = itens.length) => ({ itens, total });
+const pagina = (itens: Fornecedor[], total = itens.length, totalDuplicados = 0) =>
+  ({ itens, total, totalDuplicados });
 
 describe('situacaoDocumento', () => {
   it('distingue vencida, vencendo, válida e sem prazo', () => {
@@ -85,7 +86,7 @@ describe('<Fornecedores />', () => {
     vi.mocked(buscarFornecedores).mockResolvedValue({
       itens: [fornecedor({ taxId: null, legalName: 'Gama Distribuidora LTDA', tradeName: null,
         homologationStatus: 'PROSPECT', effectiveHomologation: 'PROSPECT' })],
-      total: 1,
+      total: 1, totalDuplicados: 0,
     });
     montar();
     await waitFor(() => expect(screen.getByTestId('tabela-fornecedores')).toBeInTheDocument());
@@ -139,6 +140,33 @@ describe('<Fornecedores />', () => {
     // auditor não mantém cadastro: a consulta não pede os inativos
     expect(vi.mocked(buscarFornecedores).mock.calls[0][0]).toMatchObject({ incluirInativos: false });
   });
+  it('a duplicata que já existe no banco aparece marcada, e o aviso abre a lista dela', async () => {
+    // o SUP-ERR-015 impede que nasçam novas; quem cadastrou antes dele já tem as suas, e
+    // achar sete entre trezentas linhas sem filtro é caçada
+    vi.mocked(buscarFornecedores).mockResolvedValue(pagina([
+      fornecedor({ taxId: null, legalName: 'Pontes Tour', tradeName: null, duplicateCount: 2 }),
+      fornecedor({ taxId: '98765432000155', legalName: 'Beta Química S.A.', tradeName: 'Beta' }),
+    ], 2, 2));
+    montar();
+    await waitFor(() => expect(screen.getByTestId('tabela-fornecedores')).toBeInTheDocument());
+
+    const tabela = within(screen.getByTestId('tabela-fornecedores'));
+    expect(tabela.getByText('2 cadastros')).toBeInTheDocument();
+    // a Beta não é duplicata: a marca é da linha, não da tela
+    expect(tabela.getAllByText(/cadastros$/)).toHaveLength(1);
+
+    await userEvent.click(screen.getByTestId('ver-duplicados'));
+    await waitFor(() => expect(buscarFornecedores).toHaveBeenCalledWith(
+      expect.objectContaining({ somenteDuplicados: true }), expect.anything()));
+  });
+
+  it('sem duplicata no cadastro, não há aviso nenhum', async () => {
+    // alarme que grita sempre para de ser lido
+    montar();
+    await waitFor(() => expect(screen.getByTestId('tabela-fornecedores')).toBeInTheDocument());
+    expect(screen.queryByTestId('fornecedores-duplicados')).not.toBeInTheDocument();
+  });
+
   it('trocar de fornecedor troca o painel: o homologado não aparece como prospect', async () => {
     // o painel nasce com o estado lido da prop uma vez só, e a lista continua na tela
     // acima dele. Sem `key`, abrir a homologação de outro fornecedor trocava a prop sem

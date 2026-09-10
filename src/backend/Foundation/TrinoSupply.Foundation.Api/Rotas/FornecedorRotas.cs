@@ -21,10 +21,13 @@ public static class FornecedorRotas
     public static void MapFornecedores(this WebApplication app)
     {
         // ---- SUP-001 — Fornecedores (MVP) --------------------------------------------
-        static object SupplierView(Supplier s) => new
+        static object SupplierView(Supplier s, int duplicados = 0) => new
         {
             id = s.Id, legalName = s.LegalName, tradeName = s.TradeName, taxId = s.TaxId,
             email = s.Email, phone = s.Phone, active = s.Active,
+            // quantos cadastros ativos dividem esta razão social; 2 ou mais é a duplicata que
+            // o SUP-ERR-015 passou a impedir e que o cadastro antigo deixou para trás
+            duplicateCount = duplicados,
             // homologação (V2-P2): PROSPECT participa; só HOMOLOGADO fecha processo (SUP-ERR-030)
             homologationStatus = s.HomologationStatus,
             effectiveHomologation = s.EffectiveHomologation(DateOnly.FromDateTime(DateTime.UtcNow)),
@@ -59,15 +62,22 @@ public static class FornecedorRotas
         sup.AddEndpointFilter(RequireModules(AppModules.Fornecedores, AppModules.Compras));
 
         sup.MapGet("/", async (SupplierService svc, ClaimsPrincipal p, HttpContext ctx,
-            bool? all, string? q, int? tamanho) =>
+            bool? all, string? q, int? tamanho, bool? duplicados) =>
         {
             var role = RoleOf(p);
             if (!SupplierService.CanView(role)) return Error(ctx, 403, "SUP-ERR-900", "Seu papel não acessa fornecedores.");
             var includeInactive = all == true && SupplierService.CanMaintain(role);
             // sem `tamanho` o teto continua o de antes: os seletores de fornecedor de
             // outras telas dependem de receber a lista inteira
-            var (itens, total) = await svc.BuscarAsync(includeInactive, q, tamanho ?? 500);
-            return Ok(new { items = itens.Select(SupplierView), total, tamanho = itens.Count }, ctx);
+            var pagina = await svc.BuscarAsync(includeInactive, q, tamanho ?? 500, duplicados == true);
+            return Ok(new
+            {
+                items = pagina.Itens.Select(s => SupplierView(s, pagina.Duplicados.GetValueOrDefault(s.Id))),
+                total = pagina.Total,
+                tamanho = pagina.Itens.Count,
+                // do cadastro inteiro, não da página: o aviso do topo promete um número
+                totalDuplicados = pagina.TotalDuplicados,
+            }, ctx);
         });
 
         sup.MapPost("/", async (CreateSupplierRequest body, SupplierService svc, ClaimsPrincipal p, HttpContext ctx) =>

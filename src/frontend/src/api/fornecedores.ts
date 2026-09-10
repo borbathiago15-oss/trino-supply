@@ -69,6 +69,11 @@ export interface Fornecedor {
   active: boolean;
   homologationStatus: SituacaoHomologacao;
   effectiveHomologation: SituacaoHomologacao;
+  /**
+   * Quantos cadastros **ativos** dividem esta razão social. 2 ou mais é a duplicata que o
+   * `SUP-ERR-015` passou a impedir e que o cadastro antigo deixou para trás.
+   */
+  duplicateCount: number;
   documents: DocumentoFornecedor[];
   contract: ContratoFornecedor;
 }
@@ -89,21 +94,28 @@ const base = '/api/v1/suppliers';
 export const listarFornecedores = async (incluirInativos = false, signal?: AbortSignal) =>
   (await api<{ items: Fornecedor[] }>(`${base}/${incluirInativos ? '?all=true' : ''}`, { signal })).items;
 
-export interface PaginaDeFornecedores { itens: Fornecedor[]; total: number }
+export interface PaginaDeFornecedores {
+  itens: Fornecedor[];
+  total: number;
+  /** Quantos fornecedores do cadastro inteiro estão em alguma duplicata — não só os da página. */
+  totalDuplicados: number;
+}
 
 /** Busca no servidor, para a tela de cadastro — que antes filtrava no navegador. */
 export async function buscarFornecedores(
-  { busca, incluirInativos, tamanho }: { busca?: string; incluirInativos?: boolean; tamanho?: number } = {},
+  { busca, incluirInativos, tamanho, somenteDuplicados }:
+    { busca?: string; incluirInativos?: boolean; tamanho?: number; somenteDuplicados?: boolean } = {},
   signal?: AbortSignal,
 ): Promise<PaginaDeFornecedores> {
   const params = new URLSearchParams();
   if (incluirInativos) params.set('all', 'true');
   if (busca?.trim()) params.set('q', busca.trim());
   if (tamanho) params.set('tamanho', String(tamanho));
+  if (somenteDuplicados) params.set('duplicados', 'true');
   const consulta = params.toString();
-  const r = await api<{ items: Fornecedor[]; total: number }>(
+  const r = await api<{ items: Fornecedor[]; total: number; totalDuplicados?: number }>(
     `${base}/${consulta ? `?${consulta}` : ''}`, { signal });
-  return { itens: r.items ?? [], total: r.total ?? 0 };
+  return { itens: r.items ?? [], total: r.total ?? 0, totalDuplicados: r.totalDuplicados ?? 0 };
 }
 
 /**

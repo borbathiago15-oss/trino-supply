@@ -3,7 +3,7 @@ import {
   atualizarFornecedor, buscarFornecedores, criarFornecedor, gerarChavePortal, ROTULO_HOMOLOGACAO,
   situacaoEfetiva, type Fornecedor,
 } from '@/api/fornecedores';
-import { Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
+import { Aviso, Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { Confirmacao, Dialogo } from '@/componentes/Dialogo';
 import { BadgeAtivo, Campo, Grade2, Nota } from '@/componentes/formulario';
 import { CelulaAcoes, MenuAcoes } from '@/componentes/MenuAcoes';
@@ -38,16 +38,19 @@ export function Fornecedores() {
   const [chave, setChave] = useState<string | null>(null);
 
   const [tamanho, setTamanho] = useState(POR_PAGINA);
+  const [soDuplicados, setSoDuplicados] = useState(false);
 
   // a busca é do servidor: filtrar no navegador esconderia quem não coube na lista
   const termo = useDebounce(busca);
   const { dados, erro, carregando, recarregar } = useCarregar(
-    (signal) => buscarFornecedores({ busca: termo, incluirInativos: mantem, tamanho }, signal),
-    [mantem, termo, tamanho],
+    (signal) => buscarFornecedores(
+      { busca: termo, incluirInativos: mantem, tamanho, somenteDuplicados: soDuplicados }, signal),
+    [mantem, termo, tamanho, soDuplicados],
   );
 
   const lista = dados?.itens ?? [];
   const total = dados?.total ?? 0;
+  const duplicados = dados?.totalDuplicados ?? 0;
   const aberto = (id: string | null) => (id ? lista.find((f) => f.id === id) ?? null : null);
   const emHomologacao = aberto(homologando);
   const emContrato = aberto(contratando);
@@ -113,8 +116,31 @@ export function Fornecedores() {
       }>
         {erro && <Erro>{erro}</Erro>}
         {carregando && !dados && <Carregando />}
+        {/*
+          A duplicata que o SUP-ERR-015 passou a impedir já existe no banco de quem cadastrou
+          antes dele — e é ela que faz a cotação ficar presa a um PROSPECT enquanto o
+          homologado é outra linha com o mesmo nome. O aviso abre a lista que contou: número
+          sem lista, entre trezentos fornecedores, é caçada.
+        */}
+        {mantem && duplicados > 0 && (
+          <Aviso testid="fornecedores-duplicados">
+            <span className="flex flex-wrap items-center justify-between gap-2">
+              <span>
+                {duplicados === 2
+                  ? 'Dois cadastros ativos dividem a mesma razão social.'
+                  : `${duplicados} cadastros ativos dividem a razão social de outro.`}
+                {' '}Inative o repetido: ele deixa de ser convidado e de vencer, e a marca some.
+              </span>
+              <button type="button" className="botao-secundario" data-testid="ver-duplicados"
+                onClick={() => { setTamanho(POR_PAGINA); setSoDuplicados((v) => !v); }}>
+                {soDuplicados ? 'Ver todos' : 'Ver só os duplicados'}
+              </button>
+            </span>
+          </Aviso>
+        )}
         {dados && !lista.length && (
-          <Vazio>{termo.trim() ? 'Nenhum fornecedor corresponde à busca.' : 'Nenhum fornecedor cadastrado ainda.'}</Vazio>
+          <Vazio>{soDuplicados ? 'Nenhum cadastro repetido — o que havia já foi resolvido.'
+            : termo.trim() ? 'Nenhum fornecedor corresponde à busca.' : 'Nenhum fornecedor cadastrado ainda.'}</Vazio>
         )}
         {lista.length > 0 && (
           <div className="overflow-x-auto">
@@ -134,6 +160,12 @@ export function Fornecedores() {
                     <tr key={f.id} data-fornecedor={f.taxId}>
                       <td className="min-w-[240px]">
                         <span className="font-semibold">{f.legalName}</span>
+                        {f.duplicateCount > 1 && (
+                          <Badge classe="ml-2 bg-aviso-fundo text-aviso"
+                            title="Outro cadastro ativo tem a mesma razão social">
+                            {f.duplicateCount} cadastros
+                          </Badge>
+                        )}
                         {f.tradeName && <div className="sub">{f.tradeName}</div>}
                         {/* contato junto da identificação: uma coluna a menos para a tabela caber */}
                         {(f.email || f.phone) && (

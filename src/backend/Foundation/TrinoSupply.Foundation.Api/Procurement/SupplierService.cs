@@ -16,18 +16,59 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
     public static bool CanView(string role) => CanMaintain(role) || role == Roles.Auditor;
 
     public async Task<List<Supplier>> ListAsync(bool includeInactive, CancellationToken ct = default) =>
-        (await BuscarAsync(includeInactive, null, 500, ct)).itens;
+        (await BuscarAsync(includeInactive, null, 500, ct: ct)).Itens;
 
     /// <summary>
-    /// Página de fornecedores, com a busca feita no banco. O `total` volta junto
-    /// para a tela distinguir "não existe" de "não veio nesta página" (PO-BR-012).
+    /// Uma página de fornecedores.
     /// </summary>
-    public async Task<(List<Supplier> itens, int total)> BuscarAsync(
-        bool includeInactive, string? busca = null, int tamanho = 100, CancellationToken ct = default)
+    /// <param name="Itens">Os fornecedores da página.</param>
+    /// <param name="Total">
+    /// Quantos existem no recorte inteiro — a tela usa para distinguir "não existe" de
+    /// "não veio nesta página" (PO-BR-012).
+    /// </param>
+    /// <param name="Duplicados">
+    /// Por fornecedor da página, quantos cadastros <b>ativos</b> dividem a razão social dele.
+    /// Dois ou mais é duplicata. Conta só os ativos de propósito: inativar o registro repetido
+    /// é o que resolve o caso (ele não é convidado nem vence), e contar o inativo deixaria a
+    /// marca acesa depois do trabalho feito — limpeza sem fim visível ninguém termina.
+    /// </param>
+    /// <param name="TotalDuplicados">
+    /// Quantos fornecedores ativos do cadastro <b>inteiro</b> estão em alguma duplicata. Vem
+    /// de fora da página porque o aviso do topo promete um número: contá-lo só do que coube
+    /// na página diria "2" onde há sete.
+    /// </param>
+    public record PaginaDeFornecedores(
+        List<Supplier> Itens, int Total, IReadOnlyDictionary<Guid, int> Duplicados, int TotalDuplicados);
+
+    /// <summary>
+    /// Página de fornecedores, com a busca feita no banco.
+    /// </summary>
+    /// <param name="somenteDuplicados">
+    /// Recorta a lista nos cadastros repetidos. Sem ele, achar sete duplicatas entre trezentas
+    /// linhas é caçada — e o aviso que não abre a lista dele é só um número.
+    /// </param>
+    public async Task<PaginaDeFornecedores> BuscarAsync(
+        bool includeInactive, string? busca = null, int tamanho = 100, bool somenteDuplicados = false,
+        CancellationToken ct = default)
     {
+        // a razão social repetida do cadastro que existia antes do SUP-ERR-015; a chave se
+        // compara em memória (acento e pontuação não se comparam em SQL sem extensão), e o
+        // custo é uma projeção de duas colunas sobre uma tabela de fornecedores
+        var ativos = await db.Suppliers.Where(s => s.Active)
+            .Select(s => new { s.Id, s.LegalName }).ToListAsync(ct);
+        var repetidos = ativos.GroupBy(s => ChaveDoNome(s.LegalName))
+            .Where(g => g.Key.Length > 0 && g.Count() > 1)
+            .SelectMany(g => g.Select(s => new { s.Id, Quantos = g.Count() }))
+            .ToDictionary(x => x.Id, x => x.Quantos);
+
         var termo = busca?.Trim();
         var q = db.Suppliers.Include(s => s.ContractItems).Include(s => s.Documents).AsQueryable();
         if (!includeInactive) q = q.Where(s => s.Active);
+        if (somenteDuplicados)
+        {
+            var ids = repetidos.Keys.ToList();
+            q = q.Where(s => ids.Contains(s.Id));
+        }
         if (!string.IsNullOrEmpty(termo))
         {
             // o CNPJ é gravado só com dígitos, então "12.345" tem que achar "12345"
@@ -62,7 +103,7 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
                     : 0m;
             }
         }
-        return (list, total);
+        return new(list, total, repetidos, repetidos.Count);
     }
 
     /// <summary>Só os dígitos de um documento/telefone — nulo quando não sobra nenhum.</summary>

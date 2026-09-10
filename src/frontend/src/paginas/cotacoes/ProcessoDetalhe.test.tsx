@@ -79,7 +79,7 @@ vi.mock('@/api/pedidos', async (importar) => ({
 }));
 vi.mock('@/api/fornecedores', async (importar) => ({
   ...(await importar<typeof import('@/api/fornecedores')>()),
-  listarFornecedores: vi.fn(), criarFornecedor: vi.fn(),
+  listarFornecedores: vi.fn(), criarFornecedor: vi.fn(), acharFornecedor: vi.fn(),
 }));
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => eu }));
 
@@ -88,7 +88,7 @@ import {
   convidarFornecedor, lerProcesso, mapaDeFamilias, registrarNegociacao, registrarOc, registrarProposta,
 } from '@/api/cotacoes';
 import { anexarOc } from '@/api/pedidos';
-import { criarFornecedor, listarFornecedores } from '@/api/fornecedores';
+import { acharFornecedor, criarFornecedor, listarFornecedores } from '@/api/fornecedores';
 
 let eu: Usuario = {
   id: 'u1', email: 'carla@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['COMPRAS'],
@@ -362,6 +362,8 @@ describe('tela do processo', () => {
     vi.resetAllMocks();
     eu = { id: 'u1', email: 'carla@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['COMPRAS'] };
     vi.mocked(listarFornecedores).mockResolvedValue([]);
+    // ninguém no cadastro com este nome: o pré-cadastro segue criando
+    vi.mocked(acharFornecedor).mockResolvedValue(null);
     vi.mocked(mapaDeFamilias).mockResolvedValue([lote({})]);
     // o resetAllMocks acima apaga a implementação vinda da fábrica do vi.mock:
     // sem repor aqui, o painel de proposta chamaria `.then` em undefined

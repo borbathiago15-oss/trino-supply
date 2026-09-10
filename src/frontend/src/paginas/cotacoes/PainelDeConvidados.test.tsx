@@ -16,10 +16,11 @@ vi.mock('@/api/fornecedores', async (importar) => ({
   ...(await importar<typeof import('@/api/fornecedores')>()),
   listarFornecedores: vi.fn(),
   criarFornecedor: vi.fn(),
+  acharFornecedor: vi.fn(),
 }));
 
 import { convidarFornecedor, dispensarConvite, prorrogarConvite } from '@/api/cotacoes';
-import { listarFornecedores } from '@/api/fornecedores';
+import { acharFornecedor, criarFornecedor, listarFornecedores, type Fornecedor } from '@/api/fornecedores';
 
 const abrir = (suppliers = [convidado({})], podeConvidar = true) => {
   const aoConvidar = vi.fn();
@@ -139,5 +140,66 @@ describe('painel de convidados', () => {
     await screen.findByTestId('fornecedores-convidados');
     expect(screen.queryByTestId('novo-prazo-s1')).not.toBeInTheDocument();
     expect(screen.getByTestId('convites-atrasados')).toBeInTheDocument();
+  });
+});
+
+/**
+ * O pré-cadastro que criava um segundo registro do mesmo fornecedor. O primeiro ficava
+ * PROSPECT e preso à cotação; o segundo era o homologado — e a tela dizia "não pode
+ * vencer" de um fornecedor que o comprador tinha acabado de homologar.
+ */
+describe('pré-cadastro na cotação', () => {
+  const jaCadastrado = (f: Partial<Fornecedor>): Fornecedor => ({
+    id: 'f-existente', legalName: 'Pontes Tour', tradeName: null, taxId: null, email: null,
+    phone: '81999990000', active: true, homologationStatus: 'HOMOLOGADO',
+    effectiveHomologation: 'HOMOLOGADO', documents: [],
+    contract: {
+      number: null, validFrom: null, validUntil: null, notes: null,
+      valueLimit: null, consumed: null, balance: null, current: false, items: [],
+    },
+    ...f,
+  });
+
+  const preencher = async () => {
+    abrir([]);
+    // sem ninguém convidado ainda não há tabela: a âncora é o botão que abre o pré-cadastro
+    await userEvent.click(await screen.findByRole('button', { name: 'Fornecedor fora do cadastro' }));
+    await userEvent.type(screen.getByLabelText('Razão social'), 'Pontes Tour');
+    await userEvent.type(screen.getByLabelText('Telefone'), '81999990000');
+    await userEvent.click(screen.getByRole('button', { name: 'Incluir na cotação' }));
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(listarFornecedores).mockResolvedValue([]);
+    vi.mocked(convidarFornecedor).mockResolvedValue(processo({}));
+    vi.mocked(acharFornecedor).mockResolvedValue(null);
+    vi.mocked(criarFornecedor).mockResolvedValue(jaCadastrado({ id: 'f-novo' }));
+  });
+
+  it('quem já está no cadastro é convidado, não cadastrado de novo', async () => {
+    vi.mocked(acharFornecedor).mockResolvedValue(jaCadastrado({}));
+    await preencher();
+
+    await waitFor(() => expect(convidarFornecedor).toHaveBeenCalled());
+    expect(criarFornecedor).not.toHaveBeenCalled();
+    expect(vi.mocked(convidarFornecedor).mock.calls[0][1]).toEqual(['f-existente']);
+  });
+
+  it('quem não existe continua entrando como pré-cadastro', async () => {
+    await preencher();
+
+    await waitFor(() => expect(criarFornecedor).toHaveBeenCalled());
+    expect(vi.mocked(criarFornecedor).mock.calls[0][0]).toMatchObject({ legalName: 'Pontes Tour' });
+    expect(vi.mocked(convidarFornecedor).mock.calls[0][1]).toEqual(['f-novo']);
+  });
+
+  it('fornecedor inativo não é convidado calado: reativar é decisão do cadastro', async () => {
+    vi.mocked(acharFornecedor).mockResolvedValue(jaCadastrado({ active: false }));
+    await preencher();
+
+    await waitFor(() => expect(acharFornecedor).toHaveBeenCalled());
+    expect(criarFornecedor).not.toHaveBeenCalled();
+    expect(convidarFornecedor).not.toHaveBeenCalled();
   });
 });

@@ -160,6 +160,20 @@ porque não são óbvias:
   inventar um registro vazio daria um KPI que não conta nada. A regra vive em
   `TorreDeControleService.ExcecaoDe`, e a linha mostra **o motivo**, não só a marca.
 
+**O prazo é por tipo de solicitação, e o tipo é cadastro.** `RequestType` dá identidade ao que
+era texto livre em `NeedType` ("Tipo SC") — um campo que a API aceitava e **nenhuma tela
+preenchia**, e que solto daria "EPI", "epi" e "E.P.I." como três tipos que nunca somam. O
+código é a identidade e **não muda** depois de gravado (SCs já criadas o carregam); o nome se
+corrige; tipo fora de uso se **inativa**, nunca se apaga. O `StageSla` ganhou `RequestType`
+nulo = padrão, e o fallback é **por etapa**: um tipo que só aperta a aprovação define aquela e
+**herda** o resto — mudar o padrão move junto quem herdou, e voltar a herdar **apaga a
+exceção** em vez de copiar o número, que a congelaria. SC sem tipo, ou com tipo fora do
+cadastro, cai no padrão — que é o que já valia antes de os tipos existirem.
+
+**Cuidado com a palavra "pedido" (D7).** "Tipo de pedido" no vocabulário do usuário é o tipo
+da **solicitação**; no do sistema, "pedido" é a O.C. O teste do menu pegou o rótulo errado — é
+para isso que ele existe.
+
 **O prazo é da etapa, e o relógio é o da espera.** `StageSla` guarda quanto tempo cada etapa
 pode levar (editável pelo administrador; `PrazoDaEtapaService.Padrao` é só o ponto de partida)
 e `Avaliar` julga contra o **mesmo número que a linha mostra** — medir contra a criação da SC

@@ -35,6 +35,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<PaymentMethod> PaymentMethods => Set<PaymentMethod>();
     public DbSet<ScoreWeights> ScoreWeights => Set<ScoreWeights>();
     public DbSet<StageSla> StageSlas => Set<StageSla>();
+    public DbSet<RequestType> RequestTypes => Set<RequestType>();
     public DbSet<PaymentTermOption> PaymentTermOptions => Set<PaymentTermOption>();
     public DbSet<ProcessEvent> ProcessEvents => Set<ProcessEvent>();
     public DbSet<StoredDocument> StoredDocuments => Set<StoredDocument>();
@@ -480,10 +481,28 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasKey(s => s.Id);
             e.Property(s => s.Id).HasColumnName("id");
             e.Property(s => s.Stage).HasColumnName("stage").HasMaxLength(40).IsRequired();
+            e.Property(s => s.RequestType).HasColumnName("request_type").HasMaxLength(60);
             e.Property(s => s.MaxDays).HasColumnName("max_days");
             e.Property(s => s.UpdatedAt).HasColumnName("updated_at");
             e.Property(s => s.UpdatedByLabel).HasColumnName("updated_by_label").HasMaxLength(200);
-            e.HasIndex(s => s.Stage).IsUnique();
+            // um prazo por (tipo, etapa); nulo no tipo é o conjunto padrão, e por isso os
+            // nulos precisam ser comparados entre si — senão haveria vários "padrão"
+            e.HasIndex(s => new { s.RequestType, s.Stage }).IsUnique().AreNullsDistinct(false);
+        });
+
+        modelBuilder.Entity<RequestType>(e =>
+        {
+            e.ToTable("request_type", "procurement");
+            e.HasKey(t => t.Id);
+            e.Property(t => t.Id).HasColumnName("id");
+            e.Property(t => t.Code).HasColumnName("code").HasMaxLength(60).IsRequired();
+            e.Property(t => t.Name).HasColumnName("name").HasMaxLength(120).IsRequired();
+            e.Property(t => t.Description).HasColumnName("description").HasMaxLength(400);
+            e.Property(t => t.Active).HasColumnName("active");
+            e.Property(t => t.CreatedAt).HasColumnName("created_at");
+            e.Property(t => t.UpdatedAt).HasColumnName("updated_at");
+            // o código é a identidade: é ele que fica gravado em `need_type` na solicitação
+            e.HasIndex(t => t.Code).IsUnique();
         });
 
         modelBuilder.Entity<PaymentTermOption>(e =>

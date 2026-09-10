@@ -4,6 +4,7 @@ import { familiasDoCatalogo, listarProdutos, type Produto } from '@/api/catalogo
 import { listarCentrosCusto, type CentroCusto } from '@/api/centrosCusto';
 import { listarEmpresas, perfilDaEmpresa } from '@/api/empresas';
 import { listarLocaisDeEntrega, rotuloDoLocal, type LocalEntrega } from '@/api/locais';
+import { listarTiposDeSolicitacao } from '@/api/tiposDeSolicitacao';
 import { anexarNaSolicitacao, criarSolicitacao, ROTULO_PRIORIDADE, type ItemNovo, type Prioridade } from '@/api/solicitacoes';
 import { Aviso, Painel } from '@/componentes/basicos';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
@@ -28,7 +29,7 @@ const novaLinha = (): LinhaItem => ({ chave: 'i' + ++sequencia, produto: '', uni
 const VAZIO = {
   justificativa: '', local: '', prioridade: 'NORMAL' as Prioridade, necessidade: '',
   urgenciaMotivo: '', urgenciaImpacto: '', centroCusto: '', empresa: '', observacao: '',
-  orcamento: '',
+  orcamento: '', tipo: '',
 };
 type Formulario = typeof VAZIO;
 
@@ -100,6 +101,8 @@ export function NovaSolicitacao() {
       locais: await listarLocaisDeEntrega(signal).catch(() => [] as LocalEntrega[]),
       centros: await listarCentrosCusto(false, signal).catch(() => [] as CentroCusto[]),
       empresas: nomes,
+      // o tipo escolhe o conjunto de prazos que a Torre vai cobrar desta SC
+      tipos: (await listarTiposDeSolicitacao(false, signal).catch(() => ({ items: [] }))).items,
     };
   }, []);
 
@@ -142,6 +145,7 @@ export function NovaSolicitacao() {
         items,
         kind: 'AVULSA',
         deliveryLocation: form.local || null,
+        needType: form.tipo || null,
         company: form.empresa || null,
         internalNotes: form.observacao || null,
         budget: Number(form.orcamento) > 0 ? Number(form.orcamento) : null,
@@ -238,6 +242,20 @@ export function NovaSolicitacao() {
             </select>
           </Campo>
           <Grade2>
+            {/* o tipo decide qual conjunto de prazos a Torre cobra desta SC. Em branco,
+                vale o padrão — que é o que valia antes de os tipos existirem */}
+            {!!dados?.tipos.length && (
+              <Campo id="sc-tipo" rotulo="Tipo da solicitação" dica="(define o prazo de atendimento)">
+                <select id="sc-tipo" {...campo('tipo')}>
+                  <option value="">Padrão</option>
+                  {dados.tipos.map((t) => (
+                    <option key={t.code} value={t.code} title={t.description ?? undefined}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </Campo>
+            )}
             <Campo id="sc-prioridade" rotulo="Prioridade">
               <select id="sc-prioridade" {...campo('prioridade')}>
                 <option value="NORMAL">{ROTULO_PRIORIDADE.NORMAL}</option>

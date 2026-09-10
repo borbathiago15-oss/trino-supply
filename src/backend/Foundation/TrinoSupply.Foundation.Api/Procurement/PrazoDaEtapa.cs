@@ -22,6 +22,19 @@ public class StageSla
     public string Stage { get; set; } = string.Empty;
 
     /// <summary>
+    /// De que tipo de solicitação é este prazo. <b>Nulo é o padrão</b> — o prazo que vale para
+    /// quem não tem tipo, e para o tipo que não definiu o seu naquela etapa.
+    ///
+    /// <para>
+    /// O fallback é <b>por etapa</b>, e não pelo conjunto inteiro: um tipo emergencial que só
+    /// precisa apertar a aprovação define aquela etapa e herda o resto. Copiar o conjunto todo
+    /// obrigaria a manter cinco números onde um mudou, e os quatro iguais envelheceriam
+    /// parados quando o padrão mudasse.
+    /// </para>
+    /// </summary>
+    public string? RequestType { get; set; }
+
+    /// <summary>
     /// Dias corridos que a etapa pode levar. <b>Zero desliga</b> o prazo daquela etapa — é o
     /// modo honesto de dizer "aqui não cobramos tempo", em vez de deixar um número que
     /// ninguém respeita e que só ensina o comprador a ignorar a cor.
@@ -80,40 +93,100 @@ public class PrazoDaEtapaService(AppDbContext db, TimeProvider clock)
     };
 
     /// <summary>
-    /// Os prazos vigentes, com o padrão preenchendo o que ninguém configurou. Etapas fora do
-    /// fluxo (<c>ENCERRADO</c>) não entram: não há prazo para o que já terminou.
+    /// Os prazos vigentes de um tipo, com o padrão preenchendo o que ele não definiu. Etapas
+    /// fora do fluxo (<c>ENCERRADO</c>) não entram: não há prazo para o que já terminou.
     /// </summary>
-    public async Task<IReadOnlyList<StageSla>> AtuaisAsync(CancellationToken ct = default)
+    /// <param name="tipo">O tipo de solicitação, ou nulo para o conjunto padrão.</param>
+    public async Task<IReadOnlyList<StageSla>> AtuaisAsync(
+        string? tipo = null, CancellationToken ct = default)
     {
-        var gravados = await db.StageSlas.AsNoTracking().ToDictionaryAsync(s => s.Stage, ct);
-        return Padrao.Select(p => gravados.TryGetValue(p.Key, out var s)
-                ? s
-                : new StageSla { Stage = p.Key, MaxDays = p.Value })
+        var alvo = TipoDeSolicitacaoService.Normalizar(tipo);
+        var gravados = await db.StageSlas.AsNoTracking().ToListAsync(ct);
+        var doPadrao = gravados.Where(s => s.RequestType is null).ToDictionary(s => s.Stage);
+        var doTipo = alvo.Length == 0
+            ? []
+            : gravados.Where(s => s.RequestType == alvo).ToDictionary(s => s.Stage);
+
+        return Padrao.Select(p =>
+            doTipo.TryGetValue(p.Key, out var t) ? t
+            : doPadrao.TryGetValue(p.Key, out var d)
+                // herdado do padrão: a linha é do padrão, mas responde pelo tipo pedido
+                ? new StageSla { Stage = p.Key, MaxDays = d.MaxDays, RequestType = alvo.Length == 0 ? null : alvo,
+                    UpdatedAt = d.UpdatedAt, UpdatedByLabel = d.UpdatedByLabel }
+            : new StageSla { Stage = p.Key, MaxDays = p.Value, RequestType = alvo.Length == 0 ? null : alvo })
             .ToList();
     }
 
-    /// <summary>Os prazos na forma que a Torre consulta por etapa.</summary>
-    public async Task<IReadOnlyDictionary<string, int>> MapaAsync(CancellationToken ct = default) =>
-        (await AtuaisAsync(ct)).ToDictionary(s => s.Stage, s => s.MaxDays);
+    /// <summary>Quais etapas este tipo definiu por conta própria (o resto é herdado).</summary>
+    public async Task<IReadOnlyList<string>> PropriosAsync(string tipo, CancellationToken ct = default)
+    {
+        var alvo = TipoDeSolicitacaoService.Normalizar(tipo);
+        return alvo.Length == 0 ? []
+            : await db.StageSlas.AsNoTracking().Where(s => s.RequestType == alvo)
+                .Select(s => s.Stage).ToListAsync(ct);
+    }
 
+    /// <summary>Os prazos de um tipo, na forma que a Torre consulta por etapa.</summary>
+    public async Task<IReadOnlyDictionary<string, int>> MapaAsync(
+        string? tipo = null, CancellationToken ct = default) =>
+        (await AtuaisAsync(tipo, ct)).ToDictionary(s => s.Stage, s => s.MaxDays);
+
+    /// <summary>
+    /// Os prazos de <b>todos</b> os tipos de uma vez, para a Torre não consultar por linha.
+    /// A chave vazia é o padrão.
+    /// </summary>
+    public async Task<IReadOnlyDictionary<string, IReadOnlyDictionary<string, int>>> MapaPorTipoAsync(
+        CancellationToken ct = default)
+    {
+        var gravados = await db.StageSlas.AsNoTracking().ToListAsync(ct);
+        var doPadrao = gravados.Where(s => s.RequestType is null).ToDictionary(s => s.Stage, s => s.MaxDays);
+        IReadOnlyDictionary<string, int> Resolver(IEnumerable<StageSla> linhas)
+        {
+            var proprios = linhas.ToDictionary(s => s.Stage, s => s.MaxDays);
+            return Padrao.ToDictionary(p => p.Key,
+                p => proprios.TryGetValue(p.Key, out var t) ? t
+                    : doPadrao.TryGetValue(p.Key, out var d) ? d : p.Value);
+        }
+
+        var saida = new Dictionary<string, IReadOnlyDictionary<string, int>> { [""] = Resolver([]) };
+        foreach (var grupo in gravados.Where(s => s.RequestType is not null).GroupBy(s => s.RequestType!))
+            saida[grupo.Key] = Resolver(grupo);
+        return saida;
+    }
+
+    /// <param name="tipo">
+    /// O tipo cujos prazos se está gravando, ou nulo para o conjunto padrão.
+    /// </param>
+    /// <param name="herdar">
+    /// Etapas em que este tipo volta a seguir o padrão. É como se desfaz uma exceção sem
+    /// precisar adivinhar o número do padrão e digitá-lo de novo — que congelaria a cópia.
+    /// </param>
     public async Task<(IReadOnlyList<StageSla>? prazos, UserError? error)> SalvarAsync(
-        Actor actor, IReadOnlyDictionary<string, int> pedido, CancellationToken ct = default)
+        Actor actor, IReadOnlyDictionary<string, int> pedido, string? tipo = null,
+        IReadOnlyCollection<string>? herdar = null, CancellationToken ct = default)
     {
         if (!CanEdit(actor.Role))
             return (null, new("SLA-ERR-900", "Seu papel não define os prazos das etapas."));
 
-        var desconhecida = pedido.Keys.FirstOrDefault(k => !Padrao.ContainsKey(k));
+        var alvo = TipoDeSolicitacaoService.Normalizar(tipo);
+        var chave = alvo.Length == 0 ? null : alvo;
+        if (chave is not null && !await db.RequestTypes.AnyAsync(t => t.Code == chave, ct))
+            return (null, new("SLA-ERR-012", $"Tipo de solicitação desconhecido: {chave}."));
+
+        var etapas = pedido.Keys.Concat(herdar ?? []).ToList();
+        var desconhecida = etapas.FirstOrDefault(k => !Padrao.ContainsKey(k));
         if (desconhecida is not null)
             return (null, new("SLA-ERR-011", $"Etapa desconhecida: {desconhecida}."));
         if (pedido.Values.Any(v => v < 0 || v > 365))
             return (null, new("SLA-ERR-010", "O prazo de uma etapa vai de 0 a 365 dias (0 desliga)."));
 
-        var gravados = await db.StageSlas.ToDictionaryAsync(s => s.Stage, ct);
+        var gravados = await db.StageSlas.Where(s => s.RequestType == chave).ToListAsync(ct);
         foreach (var (etapa, dias) in pedido)
         {
-            if (!gravados.TryGetValue(etapa, out var linha))
+            var linha = gravados.SingleOrDefault(s => s.Stage == etapa);
+            if (linha is null)
             {
-                linha = new StageSla { Stage = etapa };
+                linha = new StageSla { Stage = etapa, RequestType = chave };
                 db.StageSlas.Add(linha);
             }
             linha.MaxDays = dias;
@@ -121,8 +194,13 @@ public class PrazoDaEtapaService(AppDbContext db, TimeProvider clock)
             linha.UpdatedByLabel = actor.Label;
         }
 
+        // voltar a herdar é apagar a exceção, e não copiar o número do padrão para cá:
+        // a cópia pararia no tempo e o tipo deixaria de acompanhar a mudança do padrão
+        if (chave is not null && herdar is { Count: > 0 })
+            db.StageSlas.RemoveRange(gravados.Where(s => herdar.Contains(s.Stage)));
+
         await db.SaveChangesAsync(ct);
-        return (await AtuaisAsync(ct), null);
+        return (await AtuaisAsync(tipo, ct), null);
     }
 
     /// <summary>

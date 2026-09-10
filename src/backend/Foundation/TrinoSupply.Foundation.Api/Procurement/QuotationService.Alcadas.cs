@@ -152,7 +152,56 @@ public partial class QuotationService
             default:
                 return (null, new("RFQ-ERR-021", "Decisão inválida: use APROVAR, REJEITAR ou AJUSTES."));
         }
+        await AvisarDaEtapaAsync(q, ct);
         await TouchAndSaveAsync(q, ct);
         return (q, null);
+    }
+
+    /// <summary>
+    /// Avisa quem passou a ter a bola depois da decisão.
+    ///
+    /// <para>
+    /// O aviso sai do <b>estado em que o processo ficou</b>, e não do botão que foi apertado:
+    /// é a mesma fonte de que a Torre deriva "de quem estamos esperando", e duas regras para
+    /// a mesma pergunta discordariam no primeiro caso de canto.
+    /// </para>
+    ///
+    /// <para>
+    /// Aprovador sem usuário cadastrado no nível não recebe nada — e é por isso que a Torre
+    /// diz "sem aprovador cadastrado no centro" na linha: o buraco aparece lá, em vez de o
+    /// aviso sumir em silêncio.
+    /// </para>
+    /// </summary>
+    internal async Task AvisarDaEtapaAsync(Quotation q, CancellationToken ct)
+    {
+        var avisos = new AvisoDoUsuarioService(db, clock);
+        switch (q.Status)
+        {
+            // aviso 3 e 4: a bola foi para uma alçada
+            case QuotationStatus.AwaitingManager or QuotationStatus.AwaitingDirector:
+            {
+                var nivel = q.Status == QuotationStatus.AwaitingManager
+                    ? ApprovalLevels.Level1 : ApprovalLevels.Level2;
+                var tipo = nivel == ApprovalLevels.Level1
+                    ? AvisoKinds.AprovacaoNivel1 : AvisoKinds.AprovacaoNivel2;
+                var quem = (await ApprovalLevels.OfAsync(db, q.CostCenter, nivel, ct))
+                    .Select(a => a.UserId).ToList();
+                avisos.EnfileirarParaTodos(quem, tipo,
+                    $"{q.Number} aguarda sua aprovação (Nível {nivel})",
+                    $"O processo {q.Number} do centro {q.CostCenter} chegou ao Nível {nivel}.",
+                    // a chave inclui o nível: o mesmo processo passa pelos dois, e um aviso
+                    // só faria o Nível 2 nunca chegar depois de o Nível 1 já ter chegado
+                    $"{tipo}:{q.Id}:{nivel}", $"/cotacoes/{q.Id}");
+                break;
+            }
+            // aviso 5: aprovado — volta ao comprador para registrar a O.C. do ERP
+            case QuotationStatus.ApprovedForIssue:
+                avisos.Enfileirar(q.CreatedBy, AvisoKinds.LiberadoParaOc,
+                    $"{q.Number} aprovado — registre a O.C.",
+                    $"As duas alçadas aprovaram o processo {q.Number}. "
+                    + "Feche a O.C. no ERP SENIOR e registre o número aqui.",
+                    $"{AvisoKinds.LiberadoParaOc}:{q.Id}", $"/cotacoes/{q.Id}");
+                break;
+        }
     }
 }

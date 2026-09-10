@@ -34,6 +34,7 @@ GET /api/v1/items/summary
 GET /api/v1/items/{id:guid}/price-history
 GET /api/v1/material-requisitions/
 GET /api/v1/material-requisitions/panel
+GET /api/v1/notices/
 GET /api/v1/payment-methods/
 GET /api/v1/payment-terms/
 GET /api/v1/portal/quotations
@@ -96,6 +97,8 @@ POST /api/v1/material-requisitions/{id:guid}/approve
 POST /api/v1/material-requisitions/{id:guid}/cancel
 POST /api/v1/material-requisitions/{id:guid}/fulfill
 POST /api/v1/material-requisitions/{id:guid}/reject
+POST /api/v1/notices/read-all
+POST /api/v1/notices/{id:guid}/read
 POST /api/v1/payment-methods/
 POST /api/v1/payment-terms/
 POST /api/v1/portal/login

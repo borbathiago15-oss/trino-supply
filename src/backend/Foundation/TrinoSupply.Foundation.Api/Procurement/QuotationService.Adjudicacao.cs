@@ -174,6 +174,9 @@ public partial class QuotationService
                   string.Join("; ", novas.Select(a => $"{a.Family} → {a.SupplierName} ({a.TotalValue:0.00})")) +
                   $". Total {totalGeral:0.00}. Processo encaminhado à aprovação gerencial.",
             actor, from, q.Status, q.SelectionJustification);
+        // é aqui que a bola vai para o Nível 1 pela primeira vez — o mesmo aviso das
+        // decisões seguintes, saindo da mesma regra
+        await AvisarDaEtapaAsync(q, ct);
         await TouchAndSaveAsync(q, ct);
         return (q, null);
     }

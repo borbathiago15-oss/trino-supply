@@ -264,7 +264,9 @@ public class EsperaDaTorreTests
         var espera = TorreDeControleService.EsperaDe(
             sc, null, null, AlcadasDoCentro.Nenhuma, new DateOnly(2026, 9, 1), Dia1);
 
-        Assert.Equal("Aprovação da solicitação", espera!.Who);
+        // o rótulo é o da triagem porque neste fluxo a SC enviada aguarda comprador,
+        // não aprovação — o que este teste protege é a data, não o texto
+        Assert.Equal("Triagem — atribuir comprador", espera!.Who);
         Assert.Null(espera.Since);
         Assert.Null(espera.Days);
     }

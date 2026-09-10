@@ -3,6 +3,7 @@ import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { ModalDeComunicados } from '@/componentes/Comunicados';
 import { AvisosProvider } from '@/sessao/AvisosProvider';
+import { CaixaDeAvisos } from './CaixaDeAvisos';
 import { useSessao, useUsuario } from '@/sessao/SessaoProvider';
 import { ROTULO_PAPEL } from '@/dominio/papeis';
 import { tituloDaRota } from './titulos';
@@ -48,6 +49,8 @@ export function AppLayout() {
               <h1 className="truncate text-[17px] font-bold sm:text-[19px]" id="titulo-pagina">{titulo}</h1>
             </div>
             <div className="flex items-center gap-2.5 text-[13px] text-texto-suave">
+              {/* o sino vem antes do nome: é o que muda, e o nome é o que fica */}
+              <CaixaDeAvisos />
               {/* no celular o nome sozinho basta: o papel ocupa a linha inteira sem dizer muito */}
               <span className="hidden sm:inline">
                 Sessão de <strong className="text-texto">{usuario.name || usuario.email}</strong> ({ROTULO_PAPEL[usuario.role] ?? usuario.role})

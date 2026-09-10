@@ -58,6 +58,14 @@ public partial class QuotationService
         // exatamente um vencedor. Falar em "família adjudicada duas vezes" já não descreve o
         // que pode dar errado quando o grão é o item — dois pedidos podem cobrir o mesmo item
         // por caminhos diferentes (um pela família, outro pelo item) e isso é o mesmo furo.
+        // a forma do pedido vem antes das referências: "você mandou quantidade para uma
+        // família" é mais útil que "esta família não existe" quando os dois estão errados
+        if (pedidos.Any(a => a.Quantity is not null && a.QuotationItemId is null))
+            return (null, new("RFQ-ERR-025",
+                "Dividir por quantidade é sempre sobre um item — a família tem itens de unidades diferentes."));
+        if (pedidos.Any(a => a.Quantity is <= 0))
+            return (null, new("RFQ-ERR-025", "A quantidade adjudicada precisa ser maior que zero."));
+
         var porItem = pedidos.Any(a => a.QuotationItemId is not null);
         foreach (var pedido in pedidos)
         {
@@ -69,11 +77,30 @@ public partial class QuotationService
         }
 
         var cobertos = pedidos.SelectMany(a => EscopoDe(q, a)).ToList();
-        var repetido = cobertos.GroupBy(i => i).FirstOrDefault(g => g.Count() > 1);
+        // item repetido só é erro quando ninguém disse quanto vai com cada um: com
+        // quantidade, repetir é justamente o ponto — mil botas partidas entre dois
+        var comQuantidade = pedidos.Where(a => a.Quantity is not null)
+            .Select(a => a.QuotationItemId!.Value).ToHashSet();
+        var repetido = cobertos.GroupBy(i => i)
+            .FirstOrDefault(g => g.Count() > 1 && !comQuantidade.Contains(g.Key));
         if (repetido is not null)
             return (null, new("RFQ-ERR-023", porItem
                 ? $"O item {DescricaoDoItem(q, repetido.Key)} foi adjudicado mais de uma vez."
                 : "Cada família só pode ser adjudicada uma vez."));
+
+        // a soma tem de fechar a quantidade pedida: a menos, parte da solicitação ficaria
+        // sem comprar sem ninguém ter decidido isso; a mais, o processo compraria o que
+        // não foi pedido — e nos dois casos o rateio do frete distribuiria sobre o valor errado
+        foreach (var alvo in comQuantidade)
+        {
+            var item = q.Items.Single(i => i.Id == alvo);
+            var soma = pedidos.Where(a => a.QuotationItemId == alvo)
+                .Sum(a => a.Quantity ?? item.Quantity);
+            if (soma != item.Quantity)
+                return (null, new("RFQ-ERR-025",
+                    $"A divisão de {item.Description} soma {soma:0.##} {item.UnitOfMeasure}, "
+                    + $"e a solicitação pede {item.Quantity:0.##}."));
+        }
 
         var descobertos = q.Items.Where(i => !cobertos.Contains(i.Id)).ToList();
         if (descobertos.Count > 0)
@@ -127,10 +154,11 @@ public partial class QuotationService
                       + "Complete o cadastro em Cadastros → Fornecedores e peça a homologação ao gestor de suprimentos para seguir."
                     : $"O fornecedor {proposal.SupplierName} está {situacao} — conclua a homologação (ou regularize as certidões) antes de selecioná-lo."));
 
-            var (valorItens, total) = ShareOf(proposal, itens);
+            var (valorItens, total) = ShareOf(proposal, itens, QuantidadesDe(q, pedido));
             novas.Add(new QuotationAward
             {
                 QuotationId = q.Id, Family = familia, QuotationItemId = pedido.QuotationItemId,
+                Quantity = pedido.Quantity,
                 SupplierId = proposal.SupplierId, SupplierName = proposal.SupplierName,
                 ProposalId = proposal.Id, ProposalVersion = proposal.VersionNumber,
                 ItemsValue = valorItens, TotalValue = total,
@@ -274,16 +302,56 @@ public partial class QuotationService
     /// Fatia de uma proposta: os itens indicados pelo preço cotado mais o rateio proporcional de
     /// frete, impostos, outros custos e desconto. Fornecedor que leva tudo fica com o total cheio.
     /// </summary>
-    private static (decimal items, decimal total) ShareOf(Proposal p, IReadOnlyCollection<Guid> quotationItemIds)
+    /// <param name="quantidades">
+    /// Quanto de cada item entra nesta fatia. Ausente é a quantidade cotada inteira — o
+    /// caminho de sempre, e o que mantém idêntica toda conta anterior à divisão por
+    /// quantidade.
+    /// </param>
+    private static (decimal items, decimal total) ShareOf(
+        Proposal p, IReadOnlyCollection<Guid> quotationItemIds,
+        IReadOnlyDictionary<Guid, decimal>? quantidades = null)
     {
+        decimal Quanto(ProposalItem i) =>
+            quantidades is not null && quantidades.TryGetValue(i.QuotationItemId, out var q) ? q : i.Quantity;
+
         var cotado = p.Items.Sum(i => i.UnitPrice * i.Quantity);
         var fatia = p.Items.Where(i => quotationItemIds.Contains(i.QuotationItemId))
-            .Sum(i => i.UnitPrice * i.Quantity);
-        if (p.Items.All(i => quotationItemIds.Contains(i.QuotationItemId)))
-            return (fatia, p.TotalValue);          // levou a proposta inteira: sem rateio, sem arredondamento
+            .Sum(i => i.UnitPrice * Quanto(i));
+        // "levou a proposta inteira" exige levar todos os itens **e** a quantidade toda de
+        // cada um: com o item partido, o total da proposta pertence a dois fornecedores e
+        // dar o valor cheio a um deles cobraria duas vezes o mesmo frete
+        var levouTudo = p.Items.All(i => quotationItemIds.Contains(i.QuotationItemId) && Quanto(i) == i.Quantity);
+        if (levouTudo) return (fatia, p.TotalValue);   // sem rateio, sem arredondamento
         var extras = (p.FreightValue ?? 0) + (p.TaxValue ?? 0) + (p.OtherCosts ?? 0) - (p.DiscountValue ?? 0);
         var proporcao = cotado > 0 ? fatia / cotado : 0m;
         return (fatia, Math.Round(fatia + extras * proporcao, 2));
+    }
+
+    /// <summary>
+    /// Quanto de cada item este pedido de adjudicação leva. Vazio quando ele leva a
+    /// quantidade inteira, que é o caso de toda adjudicação por família.
+    /// </summary>
+    private static IReadOnlyDictionary<Guid, decimal>? QuantidadesDe(Quotation q, AwardInput pedido) =>
+        pedido is { Quantity: { } quanto, QuotationItemId: { } item }
+            ? new Dictionary<Guid, decimal> { [item] = quanto }
+            : null;
+
+    /// <summary>
+    /// Quanto de um item saiu com esta adjudicação. <see cref="QuotationAward.Quantity"/>
+    /// nulo é a quantidade inteira do item — o que toda adjudicação anterior significa.
+    /// </summary>
+    internal static decimal QuantidadeDe(Quotation q, QuotationAward award, Guid itemId) =>
+        award.Quantity ?? q.Items.SingleOrDefault(i => i.Id == itemId)?.Quantity ?? 0m;
+
+    /// <summary>Quanto de cada item saiu com este fornecedor, somando as adjudicações dele.</summary>
+    internal static IReadOnlyDictionary<Guid, decimal> QuantidadesDoFornecedor(
+        Quotation q, IEnumerable<QuotationAward> doFornecedor)
+    {
+        var saida = new Dictionary<Guid, decimal>();
+        foreach (var award in doFornecedor)
+            foreach (var item in ItemsCovered(q, award))
+                saida[item] = saida.GetValueOrDefault(item) + QuantidadeDe(q, award, item);
+        return saida;
     }
 
     /// <summary>

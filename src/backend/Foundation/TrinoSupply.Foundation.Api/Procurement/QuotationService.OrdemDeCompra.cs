@@ -89,6 +89,9 @@ public partial class QuotationService
         // famílias dele, o que passou a ser diferente quando a mesma família se divide
         // entre dois fornecedores: a O.C. de um levaria também o item que o outro venceu
         var itensDaOc = doFornecedor.SelectMany(a => ItemsCovered(q, a)).Distinct().ToHashSet();
+        // quanto de cada item saiu com ESTE fornecedor: com o item partido, a O.C. dele
+        // leva a fatia dele, e não a quantidade que ele cotou
+        var quantidades = QuantidadesDoFornecedor(q, doFornecedor);
         // sem O.C. do ERP o pedido usa a própria numeração de pedido, a mesma das
         // compras que não vêm de cotação — nada aqui se parece com número do SENIOR
         var referencia = semOc ? await PurchaseOrderService.NextOrderNumberAsync(db, now, ct) : numero!;
@@ -111,7 +114,7 @@ public partial class QuotationService
             Families = q.Families.Count > 1 ? string.Join(", ", familias) : null,
             PaymentTerms = proposal.PaymentTerms,
             DeliveryDays = proposal.DeliveryDays,
-            FreightValue = FreightShare(proposal, itensDaOc),
+            FreightValue = FreightShare(proposal, itensDaOc, quantidades),
             Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim(),
             IssuedBy = actor.Id,
             IssuedByLabel = actor.Label,
@@ -131,13 +134,16 @@ public partial class QuotationService
             var qi = q.Items.Single(x => x.Id == pi.QuotationItemId);
             var ultimo = qi.CatalogItemId is not null && historico.TryGetValue(qi.CatalogItemId.Value, out var h)
                 ? h.Ultimo : (decimal?)null;
+            // a quantidade da O.C. é a adjudicada, não a cotada: o fornecedor cota o lote
+            // inteiro para dar preço, e pode ter ganhado só parte dele
+            var quantidade = quantidades.GetValueOrDefault(pi.QuotationItemId, pi.Quantity);
             order.Items.Add(new PurchaseOrderItem
             {
                 Description = qi.Description, UnitOfMeasure = qi.UnitOfMeasure,
-                Quantity = pi.Quantity, UnitPrice = pi.UnitPrice,
+                Quantity = quantidade, UnitPrice = pi.UnitPrice,
                 CatalogItemId = qi.CatalogItemId, CatalogCode = qi.CatalogCode,
                 LastPaidUnitPrice = ultimo,
-                ReferenceSaving = ultimo is not null ? (ultimo.Value - pi.UnitPrice) * pi.Quantity : null,
+                ReferenceSaving = ultimo is not null ? (ultimo.Value - pi.UnitPrice) * quantidade : null,
                 SourcePrNumber = qi.SourcePrNumber ?? q.SourcePrNumber,
                 Family = QuotationAward.FamilyKey(qi.Family),
                 CreatedAt = now,
@@ -217,13 +223,20 @@ public partial class QuotationService
     }
 
     /// <summary>Frete da fatia: proporcional ao valor dos itens que entram nesta O.C.</summary>
-    private static decimal? FreightShare(Proposal p, IReadOnlyCollection<Guid> quotationItemIds)
+    private static decimal? FreightShare(
+        Proposal p, IReadOnlyCollection<Guid> quotationItemIds,
+        IReadOnlyDictionary<Guid, decimal>? quantidades = null)
     {
         if (p.FreightValue is not { } frete) return null;
-        if (p.Items.All(i => quotationItemIds.Contains(i.QuotationItemId))) return frete;
+        decimal Quanto(ProposalItem i) =>
+            quantidades is not null && quantidades.TryGetValue(i.QuotationItemId, out var q) ? q : i.Quantity;
+        // frete inteiro só para quem levou tudo — inclusive a quantidade toda de cada item.
+        // Com o item partido, dar o frete cheio aos dois cobraria o mesmo frete duas vezes
+        if (p.Items.All(i => quotationItemIds.Contains(i.QuotationItemId) && Quanto(i) == i.Quantity)) return frete;
         var cotado = p.Items.Sum(i => i.UnitPrice * i.Quantity);
         if (cotado <= 0) return frete;
-        var fatia = p.Items.Where(i => quotationItemIds.Contains(i.QuotationItemId)).Sum(i => i.UnitPrice * i.Quantity);
+        var fatia = p.Items.Where(i => quotationItemIds.Contains(i.QuotationItemId))
+            .Sum(i => i.UnitPrice * Quanto(i));
         return Math.Round(frete * (fatia / cotado), 2);
     }
 

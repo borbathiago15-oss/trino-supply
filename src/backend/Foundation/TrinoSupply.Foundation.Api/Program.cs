@@ -350,7 +350,7 @@ public record SelectWinnerRequest(Guid ProposalId, List<string>? Criteria, strin
 /// próprio item, no servidor.
 /// </summary>
 public record AwardRequest(string Family, Guid ProposalId, List<string>? Criteria, string? Justification,
-    Guid? QuotationItemId = null);
+    Guid? QuotationItemId = null, decimal? Quantity = null);
 public record QuotationDecisionRequest(string Decision, string? Reason);
 public record RegisterPoRequest(string? ErpNumber, DateOnly? IssuedOn, string? Notes,
     string? OverLimitJustification = null, Guid? SupplierId = null, string? NoErpReason = null);

@@ -74,6 +74,19 @@ o usuário descobrir no erro do servidor:
   saving) pergunta `ItemsCovered(award)` em vez de assumir a família — foi o que permitiu
   dividir sem refazer conta nenhuma. `RFQ-ERR-023` cobra um vencedor por **item**, e
   `RFQ-ERR-024` só exige que o fornecedor tenha cotado o que o escopo pede.
+- **E o escopo pode ser parte do item: a quantidade se divide.** `QuotationAward.Quantity`
+  nulo é a quantidade inteira — o que toda adjudicação anterior significa. Preenchido, é
+  quanto **daquele item** sai com aquele fornecedor: setecentas botas com um e trezentas com
+  outro, porque nenhum dos dois entrega mil. Três coisas seguram a conta: quantidade **só
+  junto de `QuotationItemId`** (dividir "a família" em quantidade não quer dizer nada — a
+  família tem itens de unidades diferentes), a **soma tem de fechar** a quantidade pedida
+  (`RFQ-ERR-025`, que diz quanto falta ou sobra em vez de só recusar), e **"levou a proposta
+  inteira" passa a exigir a quantidade toda** — sem isso os dois fornecedores receberiam o
+  frete cheio da própria proposta e a compra dividida sairia mais cara que a inteira. A
+  forma do pedido é conferida **antes** das referências: "você mandou quantidade para uma
+  família" é mais útil que "esta família não existe" quando os dois estão errados. O índice
+  único da adjudicação inclui o fornecedor — o mesmo item pode ir a dois deles; o que
+  continua proibido é o **mesmo** fornecedor levar o mesmo item duas vezes.
 - **Contrato de parceria preenche o preço da proposta, se estiver vigente.**
   `QuotationService.ContractPricesAsync` casa item do processo com `SupplierContractItem`
   **pelo produto do catálogo** (código como segundo caminho), nunca pela descrição — "BOTA

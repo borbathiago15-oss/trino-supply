@@ -711,6 +711,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(a => a.QuotationId).HasColumnName("quotation_id");
             e.Property(a => a.Family).HasColumnName("family").HasMaxLength(120).IsRequired();
             e.Property(a => a.QuotationItemId).HasColumnName("quotation_item_id");
+            e.Property(a => a.Quantity).HasColumnName("quantity").HasPrecision(18, 4);
             e.Property(a => a.SupplierId).HasColumnName("supplier_id");
             e.Property(a => a.SupplierName).HasColumnName("supplier_name").HasMaxLength(300);
             e.Property(a => a.ProposalId).HasColumnName("proposal_id");
@@ -730,7 +731,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // na comparação (`NULLS NOT DISTINCT`): sem isso o banco deixaria passar duas
             // adjudicações da mesma família inteira, que é exatamente o que este índice
             // impedia antes.
-            e.HasIndex(a => new { a.QuotationId, a.Family, a.QuotationItemId })
+            // o fornecedor entra na chave porque o mesmo item pode ir a dois deles quando a
+            // quantidade se divide. O que continua proibido é o MESMO fornecedor levar o
+            // mesmo item duas vezes: seriam duas linhas que deveriam ser uma
+            e.HasIndex(a => new { a.QuotationId, a.Family, a.QuotationItemId, a.SupplierId })
                 .IsUnique().AreNullsDistinct(false);
         });
 

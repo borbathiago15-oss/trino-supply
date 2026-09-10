@@ -3,8 +3,9 @@ import { escolherVencedor, type LoteDaFamilia, type Processo } from '@/api/cotac
 import { Campo, Nota } from '@/componentes/formulario';
 import { moeda, quantidade } from '@/util/formato';
 import {
-  colunasDaGrade, fornecedoresEscolhidos, itensSemVencedor, linhasDaGrade,
-  melhorPrecoPorItem, totaisPorColuna,
+  adjudicacoesDoFormulario, colunasDaGrade, erroDaDivisao, estaDividido,
+  fornecedoresEscolhidos, itensSemVencedor, linhasDaGrade,
+  melhorPrecoPorItem, quantoDivide, totaisPorColuna, type Divisoes,
 } from './gradeDeAdjudicacao';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
@@ -27,24 +28,30 @@ export function GradeDeAdjudicacao({ processo, lotes, aoConcluir, aoAvisar }: {
   const colunas = useMemo(() => colunasDaGrade(processo), [processo]);
   const linhas = useMemo(() => linhasDaGrade(processo, lotes), [processo, lotes]);
   const [escolhas, setEscolhas] = useState<Record<string, string>>({});
+  const [divisoes, setDivisoes] = useState<Divisoes>({});
   const [justificativa, setJustificativa] = useState('');
   const [salvando, setSalvando] = useState(false);
 
-  const totais = totaisPorColuna(linhas, escolhas);
-  const faltando = itensSemVencedor(linhas, escolhas);
-  const fornecedores = fornecedoresEscolhidos(linhas, escolhas);
+  const totais = totaisPorColuna(linhas, escolhas, divisoes);
+  const faltando = itensSemVencedor(linhas, escolhas, divisoes);
+  const fornecedores = fornecedoresEscolhidos(linhas, escolhas, divisoes);
+
+  const dividido = (itemId: string) => estaDividido(divisoes, itemId);
+
+  /** Liga e desliga a divisão de um item. Desligar apaga o que foi digitado nele. */
+  const alternarDivisao = (itemId: string) => setDivisoes((d) => {
+    const { [itemId]: atual, ...resto } = d;
+    return atual ? resto : { ...resto, [itemId]: {} };
+  });
   const totalDaCompra = Object.values(totais).reduce((s, t) => s + t.selecionado, 0);
   const podeConfirmar = faltando.length === 0 && justificativa.trim().length > 0 && !salvando;
 
   async function confirmar() {
     setSalvando(true);
     try {
-      const awards = linhas.map((l) => ({
-        // a família vem do item no servidor: mandá-la daqui seria repetir um dado
-        // que ele já tem, e que esta tela poderia errar
-        family: '', quotationItemId: l.item.id, proposalId: escolhas[l.item.id],
-        criteria: [], justification: justificativa.trim(),
-      }));
+      // item dividido vira uma linha por fornecedor com quantidade; item de vencedor
+      // único vira uma linha sem quantidade, que é como o servidor lê "o item inteiro"
+      const awards = adjudicacoesDoFormulario(linhas, escolhas, divisoes, justificativa.trim());
       await escolherVencedor(processo.id, {
         proposalId: awards[0].proposalId, criteria: [], justification: justificativa.trim(), awards,
       });
@@ -67,7 +74,9 @@ export function GradeDeAdjudicacao({ processo, lotes, aoConcluir, aoAvisar }: {
       </div>
       <Nota>
         Cada item vai para quem o vence — não é preciso dar a compra inteira a um fornecedor
-        só. Quem levar mais de um item recebe todos na mesma O.C.
+        só. Quem levar mais de um item recebe todos na mesma O.C. Precisa partir o
+        <strong> mesmo item</strong> entre dois? Use <strong>dividir</strong> na linha e diga
+        quanto vai com cada um — a soma tem de fechar a quantidade pedida.
       </Nota>
 
       <div className="mt-3 overflow-x-auto">
@@ -90,15 +99,47 @@ export function GradeDeAdjudicacao({ processo, lotes, aoConcluir, aoAvisar }: {
                   {l.item.description}
                   <div className="sub">{l.item.family}</div>
                 </td>
-                <td className="sub whitespace-nowrap">{quantidade(l.item.quantity)} {l.item.unitOfMeasure}</td>
+                <td className="sub whitespace-nowrap">
+                  {quantidade(l.item.quantity)} {l.item.unitOfMeasure}
+                  {/* dividir a quantidade do mesmo item: o caso do lote grande que dois
+                      fornecedores atendem juntos, e que a escolha por item não cobria */}
+                  <div>
+                    <button type="button" className="underline"
+                      data-testid={`dividir-${l.item.id}`}
+                      onClick={() => alternarDivisao(l.item.id)}>
+                      {dividido(l.item.id) ? 'não dividir' : 'dividir'}
+                    </button>
+                  </div>
+                  {erroDaDivisao(l, divisoes) && (
+                    <div className="font-bold text-perigo" data-testid={`erro-divisao-${l.item.id}`}>
+                      {erroDaDivisao(l, divisoes)}
+                    </div>
+                  )}
+                </td>
                 {l.celulas.map((c) => {
                   const escolhida = escolhas[l.item.id] === c.proposalId;
                   const indisponivel = c.total == null || !!c.impedimento;
+                  const parte = quantoDivide(divisoes, l.item.id, c.proposalId);
                   return (
-                    <td key={c.proposalId} className={'text-center ' + (escolhida ? 'bg-ok-fundo font-semibold' : '')}>
+                    <td key={c.proposalId}
+                      className={'text-center ' + (escolhida && !dividido(l.item.id) ? 'bg-ok-fundo font-semibold' : '')}>
                       {c.total == null ? (
                         // vazio é informação: este fornecedor não cotou este item
                         <span className="sub">—</span>
+                      ) : dividido(l.item.id) ? (
+                        <>
+                          <input type="number" min={0} step="any" className="!w-[92px] text-center"
+                            disabled={indisponivel}
+                            aria-label={`Quantidade de ${l.item.description} com ${c.supplierName}`}
+                            value={divisoes[l.item.id]?.[c.proposalId] ?? ''}
+                            onChange={(e) => setDivisoes((d) => ({
+                              ...d,
+                              [l.item.id]: { ...(d[l.item.id] ?? {}), [c.proposalId]: e.target.value },
+                            }))} />
+                          <div className="sub">
+                            {parte > 0 ? moeda((c.unitPrice ?? 0) * parte) : `${moeda(c.unitPrice ?? 0)}/${l.item.unitOfMeasure}`}
+                          </div>
+                        </>
                       ) : (
                         <label className="flex items-center justify-center gap-1.5 font-normal">
                           <input type="radio" className="w-auto" name={`vencedor-${l.item.id}`}

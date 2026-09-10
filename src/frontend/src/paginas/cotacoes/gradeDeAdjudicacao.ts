@@ -89,21 +89,92 @@ export function melhorPrecoPorItem(linhas: LinhaDaGrade[]): Record<string, strin
 }
 
 /**
+ * A divisão de um item entre fornecedores: quanto vai com cada proposta, como o comprador
+ * digitou. Item sem entrada aqui vai inteiro para o vencedor único de `escolhas`.
+ *
+ * O texto fica cru de propósito: enquanto se digita, "7" e "70" e "700" são estados
+ * legítimos do mesmo campo, e converter cedo faria o total pular a cada tecla.
+ */
+export type Divisoes = Record<string, Record<string, string>>;
+
+/** Quanto foi digitado para esta proposta neste item — zero para o que não é número. */
+export const quantoDivide = (divisoes: Divisoes, itemId: string, proposalId: string): number => {
+  const v = Number((divisoes[itemId]?.[proposalId] ?? '').replace(',', '.'));
+  return Number.isFinite(v) && v > 0 ? v : 0;
+};
+
+/**
+ * O item está em divisão? É a <b>presença da chave</b>, e não o que já foi digitado: ligar o
+ * modo e ainda não ter digitado nada é um item <b>sem escolha feita</b>, e não um item com
+ * vencedor único. Fosse o contrário, uma divisão vazia passaria por resolvida.
+ */
+export const estaDividido = (divisoes: Divisoes, itemId: string): boolean =>
+  divisoes[itemId] !== undefined;
+
+/**
+ * O que falta (ou sobra) para a divisão de um item fechar a quantidade pedida — nulo quando
+ * fecha. É a mesma régua do `RFQ-ERR-025` do servidor, dita aqui antes de o comprador
+ * apertar o botão: descobrir no erro da API que a conta não fecha é o caminho longo para
+ * somar dois números.
+ */
+export function erroDaDivisao(linha: LinhaDaGrade, divisoes: Divisoes): string | null {
+  if (!estaDividido(divisoes, linha.item.id)) return null;
+  const soma = linha.celulas.reduce(
+    (t, c) => t + quantoDivide(divisoes, linha.item.id, c.proposalId), 0);
+  if (soma === linha.item.quantity) return null;
+  const dif = Math.abs(Math.round((linha.item.quantity - soma) * 1000) / 1000);
+  return soma < linha.item.quantity
+    ? `faltam ${dif} ${linha.item.unitOfMeasure} para fechar ${linha.item.quantity}`
+    : `sobram ${dif} ${linha.item.unitOfMeasure} além dos ${linha.item.quantity} pedidos`;
+}
+
+/**
+ * As adjudicações que vão para o servidor. Item dividido vira uma linha por fornecedor com
+ * quantidade; item de vencedor único vira uma linha sem quantidade — que é como o servidor
+ * lê "a quantidade inteira", e é o que mantém idêntico o caminho de sempre.
+ */
+export function adjudicacoesDoFormulario(
+  linhas: LinhaDaGrade[], escolhas: Record<string, string>, divisoes: Divisoes,
+  justificativa: string,
+) {
+  return linhas.flatMap((l) => estaDividido(divisoes, l.item.id)
+    ? l.celulas
+      .filter((c) => quantoDivide(divisoes, l.item.id, c.proposalId) > 0)
+      .map((c) => ({
+        family: '', quotationItemId: l.item.id, proposalId: c.proposalId,
+        criteria: [] as string[], justification: justificativa,
+        quantity: quantoDivide(divisoes, l.item.id, c.proposalId),
+      }))
+    : [{
+      family: '', quotationItemId: l.item.id, proposalId: escolhas[l.item.id],
+      criteria: [] as string[], justification: justificativa,
+      quantity: undefined as number | undefined,
+    }]);
+}
+
+/**
  * Totais do rodapé de cada coluna, como o comprador espera lê-los:
  * <b>cotado</b> é tudo que aquele fornecedor ofereceu; <b>selecionado</b> é só o que ele
  * está levando na escolha atual. Os dois juntos respondem "quanto ele pediu" e "quanto
  * ele leva" sem precisar de calculadora.
  */
 export function totaisPorColuna(
-  linhas: LinhaDaGrade[], escolhas: Record<string, string>,
+  linhas: LinhaDaGrade[], escolhas: Record<string, string>, divisoes: Divisoes = {},
 ): Record<string, { cotado: number; selecionado: number }> {
   const totais: Record<string, { cotado: number; selecionado: number }> = {};
   for (const linha of linhas) {
+    const dividido = estaDividido(divisoes, linha.item.id);
     for (const c of linha.celulas) {
       const atual = totais[c.proposalId] ?? { cotado: 0, selecionado: 0 };
       if (c.total != null) {
         atual.cotado += c.total;
-        if (escolhas[linha.item.id] === c.proposalId) atual.selecionado += c.total;
+        // no item dividido o fornecedor leva o que ele leva, e não o item inteiro:
+        // somar o total cheio dos dois faria o rodapé anunciar o dobro da compra
+        if (dividido) {
+          atual.selecionado += (c.unitPrice ?? 0) * quantoDivide(divisoes, linha.item.id, c.proposalId);
+        } else if (escolhas[linha.item.id] === c.proposalId) {
+          atual.selecionado += c.total;
+        }
       }
       totais[c.proposalId] = atual;
     }
@@ -111,15 +182,25 @@ export function totaisPorColuna(
   return totais;
 }
 
-/** Itens ainda sem vencedor — o que falta para poder confirmar. */
-export const itensSemVencedor = (linhas: LinhaDaGrade[], escolhas: Record<string, string>) =>
-  linhas.filter((l) => !escolhas[l.item.id]).map((l) => l.item);
+/**
+ * Itens ainda sem vencedor — o que falta para poder confirmar. Item dividido conta como
+ * resolvido só quando a soma fecha: divisão pela metade não é escolha feita.
+ */
+export const itensSemVencedor = (
+  linhas: LinhaDaGrade[], escolhas: Record<string, string>, divisoes: Divisoes = {},
+) => linhas.filter((l) => estaDividido(divisoes, l.item.id)
+  ? erroDaDivisao(l, divisoes) !== null
+  : !escolhas[l.item.id]).map((l) => l.item);
 
 /**
  * Quantos fornecedores a escolha atual envolve. Um só quer dizer que a grade chegou no
  * mesmo lugar da escolha simples — e é isso que a tela diz, em vez de anunciar uma
  * "compra dividida" que não se dividiu.
  */
-export const fornecedoresEscolhidos = (linhas: LinhaDaGrade[], escolhas: Record<string, string>) =>
-  [...new Set(linhas.flatMap((l) => l.celulas
-    .filter((c) => escolhas[l.item.id] === c.proposalId).map((c) => c.supplierId)))];
+export const fornecedoresEscolhidos = (
+  linhas: LinhaDaGrade[], escolhas: Record<string, string>, divisoes: Divisoes = {},
+) => [...new Set(linhas.flatMap((l) => l.celulas
+  .filter((c) => estaDividido(divisoes, l.item.id)
+    ? quantoDivide(divisoes, l.item.id, c.proposalId) > 0
+    : escolhas[l.item.id] === c.proposalId)
+  .map((c) => c.supplierId)))];

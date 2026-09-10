@@ -178,6 +178,26 @@ public class QuotationAward
     /// </para>
     /// </summary>
     public Guid? QuotationItemId { get; set; }
+
+    /// <summary>
+    /// Quanto <b>deste item</b> sai com este fornecedor, quando a compra do item se divide —
+    /// o caso de mil botas em que setecentas vão com um e trezentas com outro.
+    ///
+    /// <para>
+    /// <b>Nulo é a quantidade inteira</b> do escopo, que é o que toda adjudicação anterior
+    /// significa e continua significando. Preenchido, só faz sentido junto de
+    /// <see cref="QuotationItemId"/>: dividir "a família" em quantidade não quer dizer nada,
+    /// porque a família tem itens de unidades diferentes.
+    /// </para>
+    ///
+    /// <para>
+    /// A soma do que se adjudica de um item tem de fechar a quantidade pedida
+    /// (<c>RFQ-ERR-025</c>): a menos, parte da solicitação ficaria sem comprar sem ninguém
+    /// decidir isso; a mais, o processo compraria o que não foi pedido.
+    /// </para>
+    /// </summary>
+    public decimal? Quantity { get; set; }
+
     public Guid SupplierId { get; set; }
     public string SupplierName { get; set; } = string.Empty;    // snapshot
     public Guid ProposalId { get; set; }

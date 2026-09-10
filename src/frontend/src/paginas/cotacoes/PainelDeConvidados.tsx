@@ -3,7 +3,7 @@ import {
   convidarFornecedor, dispensarConvite, prorrogarConvite, situacaoDoConvite,
   type FornecedorConvidado, type Processo,
 } from '@/api/cotacoes';
-import { criarFornecedor, listarFornecedores } from '@/api/fornecedores';
+import { acharFornecedor, criarFornecedor, listarFornecedores } from '@/api/fornecedores';
 import { Aviso, Badge, Painel, Vazio } from '@/componentes/basicos';
 import { DialogoMotivo } from '@/componentes/DialogoMotivo';
 import { Campo, Nota } from '@/componentes/formulario';
@@ -64,6 +64,12 @@ export function PainelDeConvidados({ processo: q, podeConvidar, aoConvidar, aoAv
    * Existe porque a cotação vem antes do cadastro — o comprador pede preço por telefone
    * ou WhatsApp e, nessa hora, o CNPJ ele não tem. O fornecedor nasce PROSPECT: concorre
    * em pé de igualdade, e o cadastro completo é cobrado de quem ganhar o BID.
+   *
+   * **Quem já está no cadastro é reaproveitado, não recriado.** O pedido aqui é "coloque
+   * este fornecedor na cotação", e não "crie um registro": cadastrar de novo deixava a
+   * cotação presa a um PROSPECT sem CNPJ enquanto o homologado era outra linha com o
+   * mesmo nome — e o comprador via "não pode vencer" num fornecedor que ele mesmo tinha
+   * homologado. Inativo não se convida calado: reativar é decisão do cadastro.
    */
   async function criarEConvidar() {
     const razaoSocial = novo.razaoSocial.trim();
@@ -77,12 +83,20 @@ export function PainelDeConvidados({ processo: q, podeConvidar, aoConvidar, aoAv
     }
     setCriando(true);
     try {
-      const f = await criarFornecedor({
+      const existente = await acharFornecedor(razaoSocial, cnpj);
+      if (existente && !existente.active) {
+        aoAvisar(`${existente.legalName} já está no cadastro, mas inativo. `
+          + 'Reative-o em Fornecedores para convidá-lo.', 'erro');
+        return;
+      }
+      const id = existente?.id ?? (await criarFornecedor({
         legalName: razaoSocial, tradeName: null, taxId: cnpj || null,
         email: null, phone: novo.telefone.trim(),
-      });
-      await convidarFornecedor(q.id, [f.id], prazo || null);
-      aoAvisar(`${razaoSocial} entrou na cotação como pré-cadastro.`);
+      })).id;
+      await convidarFornecedor(q.id, [id], prazo || null);
+      aoAvisar(existente
+        ? `${existente.legalName} já estava no cadastro e entrou na cotação.`
+        : `${razaoSocial} entrou na cotação como pré-cadastro.`);
       setNovo({ aberto: false, razaoSocial: '', telefone: '', cnpj: '' });
       catalogo.recarregar();
       aoConvidar();

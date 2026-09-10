@@ -139,6 +139,48 @@ describe('<Fornecedores />', () => {
     // auditor não mantém cadastro: a consulta não pede os inativos
     expect(vi.mocked(buscarFornecedores).mock.calls[0][0]).toMatchObject({ incluirInativos: false });
   });
+  it('trocar de fornecedor troca o painel: o homologado não aparece como prospect', async () => {
+    // o painel nasce com o estado lido da prop uma vez só, e a lista continua na tela
+    // acima dele. Sem `key`, abrir a homologação de outro fornecedor trocava a prop sem
+    // desmontar o painel: o select seguia na situação do anterior, e "Salvar situação"
+    // gravava isso no fornecedor errado
+    vi.mocked(buscarFornecedores).mockResolvedValue(pagina([
+      fornecedor({ taxId: null, legalName: 'Pontes Tour', tradeName: null,
+        homologationStatus: 'PROSPECT', effectiveHomologation: 'PROSPECT' }),
+      fornecedor({ taxId: '98765432000155', legalName: 'Beta Química S.A.', tradeName: 'Beta' }),
+    ]));
+    montar();
+    await waitFor(() => expect(screen.getByTestId('tabela-fornecedores')).toBeInTheDocument());
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Homologação' })[0]);
+    expect(screen.getByLabelText(/Situação da homologação/)).toHaveValue('PROSPECT');
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Homologação' })[1]);
+    expect(screen.getByText(/Homologação — Beta Química S\.A\./)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Situação da homologação/)).toHaveValue('HOMOLOGADO');
+  });
+
+  it('trocar de fornecedor não carrega o contrato do anterior', async () => {
+    // aqui a consequência era pior que um rótulo errado: salvar copiava número, teto,
+    // vigência e itens de um fornecedor para outro
+    const comContrato = fornecedor({ taxId: '11111111000111', legalName: 'Alfa Equipamentos LTDA' });
+    comContrato.contract = { ...comContrato.contract, number: 'CT-2026-001', valueLimit: 50000 };
+    vi.mocked(buscarFornecedores).mockResolvedValue(pagina([
+      comContrato,
+      fornecedor({ taxId: '98765432000155', legalName: 'Beta Química S.A.', tradeName: 'Beta' }),
+    ]));
+    montar();
+    await waitFor(() => expect(screen.getByTestId('tabela-fornecedores')).toBeInTheDocument());
+
+    await userEvent.click(screen.getAllByRole('button', { name: /Mais ações de/ })[0]);
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Contrato de parceria' }));
+    expect(screen.getByLabelText(/Número do contrato/)).toHaveValue('CT-2026-001');
+
+    await userEvent.click(screen.getAllByRole('button', { name: /Mais ações de/ })[1]);
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Contrato de parceria' }));
+    expect(screen.getByLabelText(/Número do contrato/)).toHaveValue('');
+  });
+
   it('a vigência do contrato não aceita fim antes do início (SUP-ERR-020)', async () => {
     // o servidor recusa; o campo já não deixa escolher, em vez de avisar no salvar
     usuarioAtual = comprador;

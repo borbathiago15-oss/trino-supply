@@ -104,6 +104,19 @@ o usuário descobrir no erro do servidor:
   tem. O fornecedor nasce `PROSPECT` e concorre em pé de igualdade; o documento é
   exigido para **homologar** (`SUP-ERR-013`), e a homologação é o que permite vencer
   o BID (`SUP-ERR-030`). Gravado uma vez, o CNPJ é identidade e a edição não o troca.
+- **Porque o CNPJ é opcional, ele não pode ser o único guarda contra cadastro repetido.**
+  `SUP-ERR-010` (documento igual) deixava passar o caso que de fato acontece: pré-cadastrar
+  na cotação e cadastrar "de verdade" depois criava **dois** fornecedores com o mesmo nome —
+  o primeiro `PROSPECT` e preso ao convite, o segundo homologado. A tela então dizia "não
+  pode vencer" de um fornecedor que o comprador tinha acabado de homologar. A razão social
+  fecha essa porta (`SUP-ERR-015`), comparada por `SupplierService.ChaveDoNome`: maiúsculas,
+  sem acento, só letras e dígitos — a mesma regra existe em `chaveDoNome` no navegador, e
+  divergir faria a tela reaproveitar um e o servidor recusar outro. Ela **não** normaliza
+  "LTDA"/"ME"/"EIRELI": recusar "Alfa Ltda" porque existe "Alfa ME" barraria cadastro
+  legítimo, e bloqueio que atrapalha o trabalho certo acaba contornado por fora. E o
+  pré-cadastro da cotação **reaproveita** quem já existe em vez de recriar: o pedido ali é
+  "coloque este fornecedor na cotação", não "crie um registro". Inativo não entra calado —
+  reativar é decisão do cadastro.
 - O *saving* tem **três réguas**, que convivem porque respondem perguntas diferentes,
   e cada uma é nula quando não se aplica:
   - **negociação** — contra a **primeira** proposta do fornecedor vencedor;

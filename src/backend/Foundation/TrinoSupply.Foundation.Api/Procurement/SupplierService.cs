@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Infrastructure;
@@ -71,9 +73,52 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
     }
 
     /// <summary>
+    /// Chave de comparação da razão social: maiúsculas, sem acento, só letras e dígitos.
+    /// "Pontes Tour", "PONTES  TOUR." e "Pontes Tóur" viram a mesma coisa — que é o que
+    /// se quer, porque são a mesma empresa digitada por pessoas diferentes em dias
+    /// diferentes. O que ela <b>não</b> faz é remover "LTDA", "ME" ou "EIRELI": recusar
+    /// "Alfa Ltda" porque existe "Alfa ME" barraria cadastro legítimo, e um bloqueio que
+    /// atrapalha o trabalho certo acaba contornado por fora.
+    /// </summary>
+    public static string ChaveDoNome(string? nome)
+    {
+        var texto = (nome ?? "").Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder(texto.Length);
+        foreach (var c in texto)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark) continue;
+            if (char.IsLetterOrDigit(c)) sb.Append(char.ToUpperInvariant(c));
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// O fornecedor que já ocupa esta razão social, ou nulo. A comparação é da chave, e
+    /// por isso é feita em memória: acentuação e pontuação não se comparam em SQL sem
+    /// extensão, e a alternativa — guardar uma coluna normalizada — não caberia num
+    /// índice único enquanto as duplicatas de hoje existirem. Cadastrar fornecedor é
+    /// operação rara e a projeção são três colunas, então o custo é honesto.
+    /// </summary>
+    public async Task<Supplier?> PorRazaoSocialAsync(string? legalName, CancellationToken ct = default)
+    {
+        var chave = ChaveDoNome(legalName);
+        if (chave.Length == 0) return null;
+        var candidatos = await db.Suppliers.Select(s => new { s.Id, s.LegalName }).ToListAsync(ct);
+        var achado = candidatos.FirstOrDefault(s => ChaveDoNome(s.LegalName) == chave);
+        return achado is null ? null : await db.Suppliers.SingleOrDefaultAsync(s => s.Id == achado.Id, ct);
+    }
+
+    /// <summary>
     /// Cadastro de fornecedor. O mínimo é **razão social + telefone**: é com isso
     /// que o comprador pede preço antes de existir cadastro nenhum (§7). O CPF/CNPJ
     /// é opcional aqui e obrigatório para homologar — cotar sem ele pode, vencer não.
+    ///
+    /// <para>Por ser opcional, o CNPJ não pode ser o único guarda contra duplicata
+    /// (<c>SUP-ERR-010</c>): o pré-cadastro nasce sem ele, e cadastrar de novo o mesmo
+    /// fornecedor "agora com CNPJ" criava um segundo registro — o primeiro seguia
+    /// PROSPECT, preso à cotação que o convidou, enquanto o segundo era homologado.
+    /// A razão social passa a fechar essa porta (<c>SUP-ERR-015</c>), e o erro diz qual
+    /// cadastro já existe para o caminho ser completar aquele, não criar outro.</para>
     /// </summary>
     public async Task<(Supplier? supplier, UserError? error)> CreateAsync(
         Guid actorId, string legalName, string? tradeName, string? taxId, string? email, string? phone,
@@ -92,6 +137,17 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
             if (await db.Suppliers.AnyAsync(s => s.TaxId == digits, ct))
                 return (null, new("SUP-ERR-010", "Já existe um fornecedor com este CPF/CNPJ."));
         }
+
+        // o CNPJ já foi conferido acima; sobrou o cadastro repetido pelo nome, que é o
+        // que o pré-cadastro sem documento deixava passar
+        var homonimo = await PorRazaoSocialAsync(legalName, ct);
+        if (homonimo is not null)
+            return (null, new("SUP-ERR-015", $"Já existe um fornecedor com esta razão social: {homonimo.LegalName}"
+                + (!homonimo.Active
+                    ? ", hoje inativo. Reative o cadastro existente em vez de criar outro."
+                    : homonimo.TaxId is null
+                        ? ", ainda como pré-cadastro. Edite-o para informar o CPF/CNPJ em vez de criar outro."
+                        : ". Edite o cadastro existente em vez de criar outro.")));
 
         var now = clock.GetUtcNow();
         var supplier = new Supplier

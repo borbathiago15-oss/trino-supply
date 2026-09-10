@@ -106,6 +106,35 @@ export async function buscarFornecedores(
   return { itens: r.items ?? [], total: r.total ?? 0 };
 }
 
+/**
+ * Chave de comparação da razão social — o mesmo `SupplierService.ChaveDoNome` do servidor:
+ * maiúsculas, sem acento, só letras e dígitos. "Pontes Tour", "PONTES  TOUR." e
+ * "Pontes Tóur" são a mesma empresa digitada por pessoas diferentes.
+ */
+export const chaveDoNome = (nome: string) =>
+  nome.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^0-9a-zA-Z]/g, '').toUpperCase();
+
+/**
+ * O fornecedor que já ocupa esta razão social ou este CPF/CNPJ, ou nulo.
+ *
+ * Existe para o pré-cadastro da cotação **reaproveitar** o cadastro em vez de criar um
+ * segundo — era assim que a cotação ficava presa a um PROSPECT sem CNPJ enquanto o
+ * homologado era outro registro com o mesmo nome. O guarda de verdade é o `SUP-ERR-015`
+ * do servidor; isto aqui é a conveniência que evita o erro. A busca é a do servidor, então
+ * uma diferença de espaçamento pode escapar daqui — e aí é o servidor que recusa e explica.
+ */
+export async function acharFornecedor(razaoSocial: string, documento?: string | null) {
+  const chave = chaveDoNome(razaoSocial);
+  const { itens } = await buscarFornecedores({ busca: razaoSocial, incluirInativos: true });
+  const porNome = itens.find((f) => chaveDoNome(f.legalName) === chave);
+  if (porNome) return porNome;
+
+  const digitos = (documento ?? '').replace(/\D/g, '');
+  if (!digitos) return null;
+  const { itens: porDocumento } = await buscarFornecedores({ busca: digitos, incluirInativos: true });
+  return porDocumento.find((f) => f.taxId === digitos) ?? null;
+}
+
 export interface DadosFornecedor {
   legalName: string;
   tradeName: string | null;

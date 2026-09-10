@@ -244,11 +244,22 @@ export function Fornecedores() {
         </Painel>
       )}
 
+      {/*
+        A `key` é o fornecedor, e não é detalhe: os dois painéis nascem com o estado lido
+        da prop uma única vez (`useState(fornecedor.…)`). Como a lista continua na tela
+        acima deles, abrir a homologação de outro fornecedor trocava a prop **sem
+        desmontar** o painel — e o select seguia mostrando a situação do anterior. Um
+        homologado aparecia como Prospect, e "Salvar situação" gravava isso nele. No
+        contrato era pior: dava para copiar número, teto, vigência e itens de um
+        fornecedor para outro sem perceber.
+      */}
       {emContrato && (
-        <PainelContrato fornecedor={emContrato} aoSalvar={recarregar} aoFechar={() => setContratando(null)} />
+        <PainelContrato key={emContrato.id} fornecedor={emContrato}
+          aoSalvar={recarregar} aoFechar={() => setContratando(null)} />
       )}
       {emHomologacao && (
-        <PainelHomologacao fornecedor={emHomologacao} aoSalvar={recarregar} aoFechar={() => setHomologando(null)} />
+        <PainelHomologacao key={emHomologacao.id} fornecedor={emHomologacao}
+          aoSalvar={recarregar} aoFechar={() => setHomologando(null)} />
       )}
 
       {chaveDe && (

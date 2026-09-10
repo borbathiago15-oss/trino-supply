@@ -273,6 +273,16 @@ public class TriageService(AppDbContext db, TimeProvider clock)
                 pr.AssignedAt = responsible is null ? null : now;
                 pr.UpdatedAt = now;
                 pr.Version += 1;
+                // aviso 2: a demanda passou a ser de alguém, e essa pessoa precisa saber —
+                // um contador de "minhas demandas" muda sozinho e não conta o que mudou
+                if (responsible is not null)
+                    new AvisoDoUsuarioService(db, clock).Enfileirar(
+                        responsible.Id, AvisoKinds.DemandaAtribuida,
+                        $"{pr.Number} é sua",
+                        $"{actor.Label} atribuiu a você a solicitação {pr.Number} "
+                        + $"({pr.CostCenter}, {pr.RequesterLabel}).",
+                        $"{AvisoKinds.DemandaAtribuida}:{pr.Id}:{responsible.Id}",
+                        "/torre");
                 await db.SaveChangesAsync(ct);
                 return (new TriageTicket("SC", pr.Id, pr.Number, pr.CostCenter, pr.RequesterLabel,
                     string.Join(" · ", pr.Items.OrderBy(i => i.Sequence).Take(3).Select(i => $"{i.Quantity:0.##}× {i.Description}")),

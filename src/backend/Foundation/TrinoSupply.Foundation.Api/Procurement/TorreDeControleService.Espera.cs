@@ -83,13 +83,19 @@ public partial class TorreDeControleService
             }
         }
 
+        // Enviada e aprovada esperam a mesma coisa: neste fluxo a SC vai direto para
+        // Suprimentos, e a alçada decide uma vez só, com os preços do mapa. Separá-las diria
+        // "aguardando aprovação" para uma SC que na verdade aguarda comprador — e a Torre
+        // ao lado diz "Atribuir comprador", que é o certo. Duas respostas para a mesma
+        // pergunta é o defeito que a regra única existe para evitar.
         return sc.Status switch
         {
-            RequisitionStatus.Approved when sc.AssignedToId is null =>
+            RequisitionStatus.Submitted or RequisitionStatus.Approved when sc.AssignedToId is null =>
                 ("Triagem — atribuir comprador", sc.DecidedAt ?? sc.SubmittedAt, null),
-            RequisitionStatus.Approved =>
+            RequisitionStatus.Submitted or RequisitionStatus.Approved =>
                 ($"Abertura da cotação — {sc.AssignedToLabel ?? "comprador"}", sc.DecidedAt ?? sc.SubmittedAt, null),
-            RequisitionStatus.Submitted or RequisitionStatus.InApproval =>
+            // acervo do fluxo anterior, em que a SC passava por aprovação antes de cotar
+            RequisitionStatus.InApproval =>
                 ("Aprovação da solicitação", sc.SubmittedAt, null),
             RequisitionStatus.Returned =>
                 ($"Ajuste do solicitante — {sc.RequesterLabel}", sc.DecidedAt, null),

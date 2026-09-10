@@ -323,6 +323,19 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         pr.DecidedById = null;
         pr.DecidedByLabel = null;
         if (isResubmission) pr.Cycle += 1;
+
+        // aviso 1: chegou demanda para o gestor atribuir. Vai a todos os gestores porque
+        // qualquer um deles resolve — e cada um recebe o seu, senão marcar como lido
+        // apagaria o recado da caixa dos outros
+        var avisos = new AvisoDoUsuarioService(db, clock);
+        if (pr.AssignedToId is null)
+            avisos.EnfileirarParaTodos(await avisos.GestoresAsync(ct), AvisoKinds.DemandaParaTriar,
+                $"{pr.Number} aguarda comprador",
+                $"{pr.RequesterLabel} enviou a solicitação {pr.Number} ({pr.CostCenter}) "
+                + $"e ela ainda não tem responsável.",
+                $"{AvisoKinds.DemandaParaTriar}:{pr.Id}:{pr.Cycle}",
+                "/torre");
+
         await TouchAndSaveAsync(pr, ct);
         return (pr, null); // EVT-002 Submitted + ApprovalStarted
     }

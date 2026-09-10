@@ -220,6 +220,7 @@ app.MapCadastros();
 app.MapPagamentos();
 app.MapPesosDoScore();
 app.MapPrazosDasEtapas();
+app.MapAvisosDoUsuario();
 
 // ---- Dashboards analíticos ---------------------------------------------------
 app.MapAnalytics();

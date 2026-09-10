@@ -36,6 +36,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ScoreWeights> ScoreWeights => Set<ScoreWeights>();
     public DbSet<StageSla> StageSlas => Set<StageSla>();
     public DbSet<RequestType> RequestTypes => Set<RequestType>();
+    public DbSet<UserNotice> UserNotices => Set<UserNotice>();
     public DbSet<PaymentTermOption> PaymentTermOptions => Set<PaymentTermOption>();
     public DbSet<ProcessEvent> ProcessEvents => Set<ProcessEvent>();
     public DbSet<StoredDocument> StoredDocuments => Set<StoredDocument>();
@@ -488,6 +489,25 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // um prazo por (tipo, etapa); nulo no tipo é o conjunto padrão, e por isso os
             // nulos precisam ser comparados entre si — senão haveria vários "padrão"
             e.HasIndex(s => new { s.RequestType, s.Stage }).IsUnique().AreNullsDistinct(false);
+        });
+
+        modelBuilder.Entity<UserNotice>(e =>
+        {
+            e.ToTable("user_notice", "foundation");   // é do usuário, não da compra
+            e.HasKey(n => n.Id);
+            e.Property(n => n.Id).HasColumnName("id");
+            e.Property(n => n.UserId).HasColumnName("user_id");
+            e.Property(n => n.Kind).HasColumnName("kind").HasMaxLength(40).IsRequired();
+            e.Property(n => n.Title).HasColumnName("title").HasMaxLength(200).IsRequired();
+            e.Property(n => n.Body).HasColumnName("body").HasMaxLength(600).IsRequired();
+            e.Property(n => n.Link).HasColumnName("link").HasMaxLength(300);
+            e.Property(n => n.DedupeKey).HasColumnName("dedupe_key").HasMaxLength(200).IsRequired();
+            e.Property(n => n.CreatedAt).HasColumnName("created_at");
+            e.Property(n => n.ReadAt).HasColumnName("read_at");
+            // o mesmo aviso não nasce duas vezes para a mesma pessoa
+            e.HasIndex(n => new { n.UserId, n.DedupeKey }).IsUnique();
+            // a caixa é sempre lida por dono e por data
+            e.HasIndex(n => new { n.UserId, n.CreatedAt });
         });
 
         modelBuilder.Entity<RequestType>(e =>

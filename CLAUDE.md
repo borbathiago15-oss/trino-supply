@@ -160,6 +160,19 @@ porque não são óbvias:
   inventar um registro vazio daria um KPI que não conta nada. A regra vive em
   `TorreDeControleService.ExcecaoDe`, e a linha mostra **o motivo**, não só a marca.
 
+**Aviso e contagem são coisas diferentes, e as duas ficam.** A Central de Avisos é
+**derivada**: conta o que está aberto e o número muda sozinho quando o trabalho anda — serve
+para "o que há para eu fazer agora". `UserNotice` é o outro lado: **fato datado, com dono e
+com lido**, porque um contador não avisa que a SC *passou* a ser sua (quando você olha, ele
+já é outro número). Cinco pontos emitem — SC enviada → gestores; atribuída → comprador;
+Nível 1; Nível 2; aprovado → comprador. Regras que não se afrouxam: **um aviso tem um dono
+só** (cada aprovador recebe o seu, senão marcar como lido apagaria o recado dos outros); a
+`DedupeKey` impede o mesmo aviso de nascer duas vezes; e **nada aqui interrompe o fluxo** —
+aviso não gravado nunca pode impedir uma aprovação, então a emissão entra na transação de
+quem a chama e nunca lança. O **escalonamento** ao gestor é avaliado quando ele abre a caixa:
+o projeto não tem agendador, e um relógio de servidor entregaria o mesmo recado com uma peça
+a mais que pode falhar em silêncio.
+
 **O prazo é por tipo de solicitação, e o tipo é cadastro.** `RequestType` dá identidade ao que
 era texto livre em `NeedType` ("Tipo SC") — um campo que a API aceitava e **nenhuma tela
 preenchia**, e que solto daria "EPI", "epi" e "E.P.I." como três tipos que nunca somam. O

@@ -53,8 +53,12 @@ public record FamilyLot(string Family, int ItemCount, decimal Quantity, IReadOnl
 /// <b>família inteira</b>; preenchido, adjudica <b>aquele item</b> — é o que permite o
 /// papel ir para um fornecedor e a caneta para outro, dentro da mesma família.
 /// </summary>
+/// <param name="Quantity">
+/// Quanto do item vai com este fornecedor. Nulo é a quantidade inteira — o que toda
+/// adjudicação anterior significa. Preenchido, só faz sentido com <paramref name="QuotationItemId"/>.
+/// </param>
 public record AwardInput(string Family, Guid ProposalId, string? Criteria, string Justification,
-    Guid? QuotationItemId = null);
+    Guid? QuotationItemId = null, decimal? Quantity = null);
 
 /// <summary>
 /// Processo fechado de compras (RFQ-001): PR aprovada → cotação → propostas →

@@ -87,6 +87,8 @@ public static class CotacaoRotas
             awards = q.AwardList.Select(a => new
             {
                 id = a.Id, family = a.Family, quotationItemId = a.QuotationItemId,
+                // nulo é a quantidade inteira do escopo — a tela mostra o número do item
+                quantity = a.Quantity,
                 supplierId = a.SupplierId, supplierName = a.SupplierName,
                 proposalId = a.ProposalId, proposalVersion = a.ProposalVersion,
                 itemsValue = a.ItemsValue, totalValue = a.TotalValue,
@@ -422,7 +424,7 @@ public static class CotacaoRotas
                         a.Family, a.ProposalId,
                         a.Criteria is { Count: > 0 } ? string.Join(", ", a.Criteria) : criteria,
                         string.IsNullOrWhiteSpace(a.Justification) ? body.Justification : a.Justification,
-                        a.QuotationItemId)).ToList())
+                        a.QuotationItemId, a.Quantity)).ToList())
                 : await svc.SelectWinnerAsync(actor, id, body.ProposalId, criteria, body.Justification);
             return error is not null ? Error(ctx, error.Code == "RFQ-ERR-020" ? 409 : 422, error.Code, error.Message) : Ok(QuotationView(q!), ctx);
         });

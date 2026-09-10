@@ -504,10 +504,16 @@ export interface EscolhaDoVencedor {
    * Compra dividida. Cada entrada adjudica um escopo: a família (`family`), ou um item
    * dentro dela (`quotationItemId`) — o papel com um fornecedor e a caneta com outro.
    * Com o item apontado, a família vem dele no servidor e não precisa ser repetida aqui.
+   *
+   * `quantity` divide o próprio item: setecentas botas com um fornecedor e trezentas com
+   * outro. Só faz sentido junto de `quotationItemId` (dividir "a família" em quantidade
+   * não quer dizer nada, porque a família tem itens de unidades diferentes), e a soma do
+   * que se adjudica precisa fechar a quantidade pedida — `RFQ-ERR-025`. Ausente é o
+   * escopo inteiro, que é o que toda adjudicação de antes significa.
    */
   awards?: {
     family: string; proposalId: string; criteria: string[]; justification: string | null;
-    quotationItemId?: string;
+    quotationItemId?: string; quantity?: number;
   }[];
 }
 

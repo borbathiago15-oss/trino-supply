@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { ItemDoProcesso, LoteDaFamilia } from '@/api/cotacoes';
 import { lote, oferta, processo, proposta } from '@/test/cotacoes';
 import {
-  colunasDaGrade, fornecedoresEscolhidos, itensSemVencedor, linhasDaGrade,
-  melhorPrecoPorItem, totaisPorColuna,
+  adjudicacoesDoFormulario, colunasDaGrade, erroDaDivisao, estaDividido,
+  fornecedoresEscolhidos, itensSemVencedor, linhasDaGrade,
+  melhorPrecoPorItem, quantoDivide, totaisPorColuna,
 } from './gradeDeAdjudicacao';
 
 /**
@@ -121,5 +122,88 @@ describe('grade de adjudicação', () => {
     const linhas = linhasDaGrade(escritorio(), null);
     expect(fornecedoresEscolhidos(linhas, { [papel.id]: 'p-alfa', [caneta.id]: 'p-alfa' }))
       .toEqual(['s-alfa']);
+  });
+});
+
+describe('dividir a quantidade do mesmo item', () => {
+  const linhas = () => linhasDaGrade(escritorio(), null);
+
+  it('o modo é a presença da chave, e não o que já foi digitado', () => {
+    // ligar a divisão e ainda não ter digitado nada é um item SEM escolha feita —
+    // fosse pelo digitado, a divisão vazia passaria por resolvida
+    expect(estaDividido({}, papel.id)).toBe(false);
+    expect(estaDividido({ [papel.id]: {} }, papel.id)).toBe(true);
+  });
+
+  it('só conta quantidade que é número positivo', () => {
+    const d = { [papel.id]: { 'p-alfa': '7', 'p-beta': 'abc', 'p-gama': '-3', 'p-delta': '' } };
+    expect(quantoDivide(d, papel.id, 'p-alfa')).toBe(7);
+    expect(quantoDivide(d, papel.id, 'p-beta')).toBe(0);
+    expect(quantoDivide(d, papel.id, 'p-gama')).toBe(0);
+    expect(quantoDivide(d, papel.id, 'p-delta')).toBe(0);
+  });
+
+  it('vírgula funciona: o comprador digita como fala', () => {
+    expect(quantoDivide({ [papel.id]: { 'p-alfa': '2,5' } }, papel.id, 'p-alfa')).toBe(2.5);
+  });
+
+  it('a soma que não fecha diz quanto falta ou quanto sobra', () => {
+    const l = linhas()[0];   // papel, 10 UN
+    expect(erroDaDivisao(l, { [papel.id]: { 'p-alfa': '7', 'p-beta': '3' } })).toBeNull();
+    expect(erroDaDivisao(l, { [papel.id]: { 'p-alfa': '7' } })).toContain('faltam 3');
+    expect(erroDaDivisao(l, { [papel.id]: { 'p-alfa': '7', 'p-beta': '5' } })).toContain('sobram 2');
+    expect(erroDaDivisao(l, { [papel.id]: {} })).toContain('faltam 10');
+  });
+
+  it('divisão pela metade não é escolha feita', () => {
+    const ls = linhas();
+    const escolhas = { [caneta.id]: 'p-beta' };
+    expect(itensSemVencedor(ls, escolhas, { [papel.id]: { 'p-alfa': '7' } })
+      .map((i) => i.description)).toEqual(['Papel ofício A4']);
+    expect(itensSemVencedor(ls, escolhas, { [papel.id]: { 'p-alfa': '7', 'p-beta': '3' } })).toEqual([]);
+  });
+
+  it('no rodapé cada fornecedor leva o que leva, e não o item inteiro', () => {
+    // papel a 5 na Alfa e 7 na Beta; 7 com uma e 3 com a outra
+    const totais = totaisPorColuna(linhas(), { [caneta.id]: 'p-beta' },
+      { [papel.id]: { 'p-alfa': '7', 'p-beta': '3' } });
+
+    expect(totais['p-alfa'].selecionado).toBe(35);        // 7 × 5
+    expect(totais['p-beta'].selecionado).toBe(21 + 30);   // 3 × 7 do papel + a caneta inteira
+    // somar o item inteiro dos dois anunciaria 50 + 70 = 120 só no papel
+    expect(totais['p-alfa'].selecionado + totais['p-beta'].selecionado).toBe(86);
+  });
+
+  it('item dividido conta os dois como fornecedores da compra', () => {
+    const fornecedores = fornecedoresEscolhidos(linhas(), { [caneta.id]: 'p-alfa' },
+      { [papel.id]: { 'p-alfa': '7', 'p-beta': '3' } });
+    expect(fornecedores.sort()).toEqual(['s-alfa', 's-beta']);
+  });
+
+  it('quem ficou com zero na divisão não vira fornecedor da compra', () => {
+    const fornecedores = fornecedoresEscolhidos(linhas(), { [caneta.id]: 'p-alfa' },
+      { [papel.id]: { 'p-alfa': '10', 'p-beta': '' } });
+    expect(fornecedores).toEqual(['s-alfa']);
+  });
+
+  it('o envio manda quantidade no item dividido e nada no de vencedor único', () => {
+    // nulo é como o servidor lê "a quantidade inteira" — é o que mantém idêntico
+    // o caminho de sempre
+    const awards = adjudicacoesDoFormulario(linhas(), { [caneta.id]: 'p-beta' },
+      { [papel.id]: { 'p-alfa': '7', 'p-beta': '3' } }, 'Melhor preço no volume');
+
+    expect(awards).toHaveLength(3);
+    expect(awards.filter((a) => a.quotationItemId === papel.id).map((a) => a.quantity))
+      .toEqual([7, 3]);
+    expect(awards.find((a) => a.quotationItemId === caneta.id)!.quantity).toBeUndefined();
+    expect(awards.every((a) => a.justification === 'Melhor preço no volume')).toBe(true);
+  });
+
+  it('sem divisão nenhuma, o envio é exatamente o de antes', () => {
+    const awards = adjudicacoesDoFormulario(linhas(),
+      { [papel.id]: 'p-alfa', [caneta.id]: 'p-beta' }, {}, 'Menor preço');
+
+    expect(awards.map((a) => a.proposalId)).toEqual(['p-alfa', 'p-beta']);
+    expect(awards.every((a) => a.quantity === undefined)).toBe(true);
   });
 });

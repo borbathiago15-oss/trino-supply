@@ -297,17 +297,58 @@ para investigar.
 
 ## Ambiente local
 
+**Não dependa de Docker.** No ambiente de desenvolvimento deste projeto o daemon não
+sobe, e o Postgres e o Redis já estão instalados nativamente — foi assumir o contrário
+que fez sessões inteiras declararem o E2E e os testes da plataforma "impossíveis de
+rodar aqui". Se `docker` falhar, o caminho não é desistir: é este.
+
 ```bash
-docker run -d --name ts-pg -e POSTGRES_PASSWORD=devpass \
-  -p 127.0.0.1:55432:5432 postgres:16
-docker exec ts-pg psql -U postgres -c "CREATE DATABASE trino_supply"
+# Postgres — os binários do servidor ficam fora do PATH, e o initdb recusa rodar
+# como root: o cluster nasce sob o usuário `postgres`, que já existe.
+PGBIN=/usr/lib/postgresql/16/bin
+mkdir -p /var/lib/postgresql/tsdata && chown -R postgres:postgres /var/lib/postgresql
+su postgres -c "$PGBIN/initdb -D /var/lib/postgresql/tsdata -U postgres --auth=trust -E UTF8"
+su postgres -c "$PGBIN/pg_ctl -D /var/lib/postgresql/tsdata \
+  -o '-p 55432 -c listen_addresses=127.0.0.1' -l /tmp/pg.log start"
+psql -h 127.0.0.1 -p 55432 -U postgres -c "CREATE DATABASE trino_supply"
 
 cd src/backend/Foundation/TrinoSupply.Foundation.Api
-DATABASE_URL=postgresql://postgres:devpass@localhost:55432/trino_supply \
+DATABASE_URL=postgresql://postgres@localhost:55432/trino_supply \
 JWT_SECRET=um-segredo-local-de-32-caracteres-ou-mais \
 ADMIN_EMAIL=admin@trinosupply.com.br ADMIN_PASSWORD='TrinoSupply@2026!' \
-ASPNETCORE_URLS=http://127.0.0.1:5099 dotnet run
+dotnet run -c Release --no-launch-profile --urls http://127.0.0.1:5099
 ```
 
 `JWT_SECRET` é obrigatório fora de Development e precisa de 32 caracteres ou
 mais — sem ele a aplicação aborta na inicialização, de propósito.
+
+**`--no-launch-profile` não é enfeite.** O `Properties/launchSettings.json` vence o
+`ASPNETCORE_URLS` do ambiente e sobe a API na porta dele; o Playwright então bate em
+`127.0.0.1:5099` e não acha ninguém. Passar `--urls` sem desligar o perfil não resolve —
+é o perfil que precisa sair da frente.
+
+Com a API no ar, `npx playwright test` em `src/frontend` roda os E2E inteiros.
+
+Para os testes da **plataforma** (`platform/`), que precisam de Redis e de um banco
+próprio:
+
+```bash
+redis-server --port 6379 --daemonize yes --save ''
+psql -h 127.0.0.1 -p 55432 -U postgres -c "CREATE DATABASE trino_ci"
+```
+
+O `--save ''` evita o `dump.rdb` aparecendo como arquivo não rastreado no diretório de
+onde o Redis foi iniciado.
+
+### Rodar o CI inteiro sem o GitHub Actions
+
+Os cinco jobs do `ci.yml` são reproduzíveis aqui, e vale saber disso quando o Actions
+estiver indisponível — o deploy do Railway sai do `main` por conta própria e **não**
+passa pelo Actions, então o que falta nessa hora é a verificação, não a entrega. Além
+dos comandos de "Verificação antes de entregar", o job de dependências é:
+
+```bash
+cd src/frontend && npm audit --omit=dev --audit-level=moderate
+dotnet list src/backend/Foundation/TrinoSupply.Foundation.Api package \
+  --vulnerable --include-transitive
+```

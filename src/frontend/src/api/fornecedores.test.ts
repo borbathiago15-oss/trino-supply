@@ -10,7 +10,7 @@ vi.mock('./cliente', async (importar) => ({
 const fornecedor = (f: Partial<Fornecedor>): Fornecedor => ({
   id: 'f1', legalName: 'Pontes Tour', tradeName: null, taxId: null, email: null,
   phone: '81999990000', active: true, homologationStatus: 'PROSPECT',
-  effectiveHomologation: 'PROSPECT', documents: [],
+  effectiveHomologation: 'PROSPECT', documents: [], duplicateCount: 0,
   contract: {
     number: null, validFrom: null, validUntil: null, notes: null,
     valueLimit: null, consumed: null, balance: null, current: false, items: [],

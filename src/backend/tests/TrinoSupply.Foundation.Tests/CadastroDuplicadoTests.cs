@@ -22,10 +22,29 @@ public class CadastroDuplicadoTests
 
     private static readonly Guid Comprador = Guid.NewGuid();
 
-    private static SupplierService Build() => new(
-        new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options),
-        new RelogioFixo(new DateTimeOffset(2026, 9, 10, 12, 0, 0, TimeSpan.Zero)));
+    private static SupplierService Build() => Montar().svc;
+
+    /// <summary>
+    /// O serviço e o contexto por trás dele. O contexto vem junto porque a duplicata que
+    /// existe em produção nasceu antes do <c>SUP-ERR-015</c> — e hoje o <c>CreateAsync</c>
+    /// recusa criá-la, então gravá-la direto é o único jeito de reproduzir o banco de lá.
+    /// </summary>
+    private static (SupplierService svc, AppDbContext db) Montar()
+    {
+        var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+        return (new SupplierService(db, new RelogioFixo(
+            new DateTimeOffset(2026, 9, 10, 12, 0, 0, TimeSpan.Zero))), db);
+    }
+
+    /// <summary>A segunda linha do mesmo nome, gravada por fora do <c>CreateAsync</c>.</summary>
+    private static async Task<Supplier> DuplicarAsync(AppDbContext db, string legalName)
+    {
+        var s = new Supplier { LegalName = legalName, Phone = "1133334444", CreatedBy = Comprador };
+        db.Suppliers.Add(s);
+        await db.SaveChangesAsync();
+        return s;
+    }
 
     [Theory]
     [InlineData("Pontes Tour", "PONTES TOUR")]
@@ -110,6 +129,59 @@ public class CadastroDuplicadoTests
         Assert.Equal("PONTESTOUR", SupplierService.ChaveDoNome("  Pontes  Tóur. "));
         Assert.Equal("ACOSDOBRASIL2", SupplierService.ChaveDoNome("Aços do Brasil 2"));
         Assert.Equal("", SupplierService.ChaveDoNome("   "));
+    }
+
+    [Fact]
+    public async Task A_lista_marca_as_duplicatas_que_o_cadastro_antigo_deixou_para_tras()
+    {
+        // o SUP-ERR-015 impede que nasçam novas; as que já existem precisam aparecer para
+        // alguém poder resolvê-las
+        var (svc, db) = Montar();
+        await svc.CreateAsync(Comprador, "Pontes Tour", null, null, null, "11999998888");
+        await svc.CreateAsync(Comprador, "Beta Química", null, null, null, "1133334444");
+        // a segunda linha do mesmo nome é a que o pré-cadastro criava antes da regra
+        await DuplicarAsync(db, "PONTES  TOUR.");
+
+        var pagina = await svc.BuscarAsync(includeInactive: true);
+
+        Assert.Equal(2, pagina.TotalDuplicados);
+        var pontes = pagina.Itens.Where(s => SupplierService.ChaveDoNome(s.LegalName) == "PONTESTOUR").ToList();
+        Assert.Equal(2, pontes.Count);
+        Assert.All(pontes, s => Assert.Equal(2, pagina.Duplicados[s.Id]));
+        var beta = pagina.Itens.Single(s => s.LegalName == "Beta Química");
+        Assert.False(pagina.Duplicados.ContainsKey(beta.Id));
+    }
+
+    [Fact]
+    public async Task Inativar_o_repetido_apaga_a_marca_do_que_ficou()
+    {
+        // contar o inativo deixaria a marca acesa depois do trabalho feito, e limpeza sem
+        // fim visível ninguém termina
+        var (svc, db) = Montar();
+        await svc.CreateAsync(Comprador, "Pontes Tour", null, null, null, "11999998888");
+        var repetido = await DuplicarAsync(db, "PONTES TOUR");
+
+        await svc.UpdateAsync(repetido.Id, null, null, null, active: false);
+        var pagina = await svc.BuscarAsync(includeInactive: true);
+
+        Assert.Equal(0, pagina.TotalDuplicados);
+        Assert.Empty(pagina.Duplicados);
+    }
+
+    [Fact]
+    public async Task O_filtro_de_duplicados_recorta_a_lista_nos_repetidos()
+    {
+        var (svc, db) = Montar();
+        await svc.CreateAsync(Comprador, "Pontes Tour", null, null, null, "11999998888");
+        await svc.CreateAsync(Comprador, "Beta Química", null, null, null, "1133334444");
+        await DuplicarAsync(db, "PONTES TOUR");
+
+        var pagina = await svc.BuscarAsync(includeInactive: true, somenteDuplicados: true);
+
+        Assert.Equal(2, pagina.Itens.Count);
+        Assert.DoesNotContain(pagina.Itens, s => s.LegalName == "Beta Química");
+        // e o número do aviso continua sendo o do cadastro inteiro, não o da página
+        Assert.Equal(2, pagina.TotalDuplicados);
     }
 
     [Fact]

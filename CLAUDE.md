@@ -116,7 +116,13 @@ o usuário descobrir no erro do servidor:
   legítimo, e bloqueio que atrapalha o trabalho certo acaba contornado por fora. E o
   pré-cadastro da cotação **reaproveita** quem já existe em vez de recriar: o pedido ali é
   "coloque este fornecedor na cotação", não "crie um registro". Inativo não entra calado —
-  reativar é decisão do cadastro.
+  reativar é decisão do cadastro. A duplicata que **já existe** no banco não some sozinha: a
+  lista marca a linha e o aviso do topo abre o recorte dela (`duplicados=true`), porque número
+  sem lista, entre trezentos fornecedores, é caçada. A contagem é só dos **ativos** — inativar
+  o repetido é o que resolve o caso, e contar o inativo deixaria a marca acesa depois do
+  trabalho feito. O `totalDuplicados` vem do cadastro inteiro, não da página: contá-lo do que
+  coube na tela diria "2" onde há sete. **Fundir dois cadastros não existe** — repontar
+  cotação, O.C. e contrato é decisão que precisa de dono, não de um botão.
 - O *saving* tem **três réguas**, que convivem porque respondem perguntas diferentes,
   e cada uma é nula quando não se aplica:
   - **negociação** — contra a **primeira** proposta do fornecedor vencedor;

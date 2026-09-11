@@ -15,7 +15,7 @@ import { historicoDeReajustes, listarContratos, registrarReajuste } from '@/api/
 
 const fornecedor = (nome: string, c: Partial<Fornecedor['contract']>): Fornecedor => ({
   id: 's-' + nome, legalName: nome, tradeName: null, taxId: '00000000000191', email: null, phone: null,
-  active: true, homologationStatus: 'HOMOLOGADO', effectiveHomologation: 'HOMOLOGADO', documents: [],
+  active: true, homologationStatus: 'HOMOLOGADO', effectiveHomologation: 'HOMOLOGADO', documents: [], duplicateCount: 0,
   contract: {
     number: 'CT-01', validFrom: '2026-01-01', validUntil: '2026-12-31', notes: null,
     valueLimit: 100000, consumed: 20000, balance: 80000, current: true,

@@ -152,7 +152,7 @@ describe('pré-cadastro na cotação', () => {
   const jaCadastrado = (f: Partial<Fornecedor>): Fornecedor => ({
     id: 'f-existente', legalName: 'Pontes Tour', tradeName: null, taxId: null, email: null,
     phone: '81999990000', active: true, homologationStatus: 'HOMOLOGADO',
-    effectiveHomologation: 'HOMOLOGADO', documents: [],
+    effectiveHomologation: 'HOMOLOGADO', documents: [], duplicateCount: 0,
     contract: {
       number: null, validFrom: null, validUntil: null, notes: null,
       valueLimit: null, consumed: null, balance: null, current: false, items: [],

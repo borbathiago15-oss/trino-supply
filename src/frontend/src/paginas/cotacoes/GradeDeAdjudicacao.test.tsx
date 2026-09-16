@@ -95,6 +95,46 @@ describe('grade: dividir a quantidade de um item', () => {
     expect(screen.getByTestId('resumo-grade')).toHaveTextContent('10.600');
   });
 
+  it('o menor preço aparece sozinho, sem apertar nada e sem escolher por você', async () => {
+    // a regra pedida por escrito: o sistema pode indicar, mas a decisão é do comprador.
+    // Antes, ver o menor preço exigia apertar um botão que substituía todas as escolhas
+    abrir();
+
+    expect(screen.getByTestId('menor-p-alfa')).toHaveTextContent('menor preço');
+    // a Beta cobra 12 contra 10: vinte por cento acima
+    expect(screen.getByTestId('acima-p-beta')).toHaveTextContent('+20%');
+    // e nada foi escolhido: o vencedor continua sendo decisão de quem olha
+    expect(screen.getByLabelText('Alfa para Bota de segurança')).not.toBeChecked();
+    expect(screen.getByLabelText('Beta para Bota de segurança')).not.toBeChecked();
+    expect(screen.getByRole('button', { name: /Confirmar escolha/ })).toBeDisabled();
+  });
+
+  it('a célula mostra o unitário junto do total, que é o que se negocia', async () => {
+    abrir();
+    const alfa = screen.getByLabelText('Alfa para Bota de segurança').closest('label')!;
+    expect(alfa).toHaveTextContent('10.000,00');      // 1000 × R$ 10
+    expect(alfa).toHaveTextContent('R$ 10,00/PAR');
+  });
+
+  it('levar tudo concentra a compra no fornecedor, e diz de quantos itens ele dá conta', async () => {
+    abrir();
+    const botao = screen.getByTestId('levar-tudo-p-beta');
+    expect(botao).toHaveTextContent('levar tudo (1)');
+
+    await userEvent.click(botao);
+    expect(screen.getByLabelText('Beta para Bota de segurança')).toBeChecked();
+  });
+
+  it('a linha dividida não é levada pelo atalho: ela tem decisão própria', async () => {
+    // apagar a quantidade digitada seria destruir trabalho sem pedir licença
+    abrir();
+    await userEvent.click(screen.getByTestId('dividir-i-bota'));
+    await userEvent.type(screen.getByLabelText(/com Alfa/), '700');
+
+    expect(screen.getByTestId('levar-tudo-p-beta')).toBeDisabled();
+    expect(screen.getByLabelText(/com Alfa/)).toHaveValue(700);
+  });
+
   it('desistir da divisão devolve a linha à escolha simples', async () => {
     abrir();
     await userEvent.click(screen.getByTestId('dividir-i-bota'));

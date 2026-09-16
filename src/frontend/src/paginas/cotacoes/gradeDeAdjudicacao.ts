@@ -13,6 +13,20 @@ export interface CelulaDaGrade {
   total: number | null;
   /** Motivo pelo qual esta proposta não pode vencer, ou null. */
   impedimento: string | null;
+  /**
+   * Esta é a oferta mais barata do item, entre as que podem vencer. Empate marca as duas:
+   * desempatar por ordem de coluna elegeria um vencedor que o preço não elegeu.
+   */
+  menorPreco: boolean;
+  /**
+   * Quanto esta oferta está acima da mais barata, em por cento. Nulo na própria mais barata,
+   * em quem não cotou e em quem não pode vencer.
+   *
+   * É percentual, e não uma seta, porque a pergunta do comprador não é "é mais caro?" — isso
+   * a coluna do preço já responde — e sim "mais caro o suficiente para eu abrir mão do prazo
+   * de entrega deste aqui?". Dois por cento e oitenta por cento pedem decisões diferentes.
+   */
+  acimaDoMenor: number | null;
 }
 
 export interface LinhaDaGrade {
@@ -47,7 +61,7 @@ export function linhasDaGrade(
   const vigentes = propostasVigentes(processo);
   return [...processo.items].sort((a, b) => a.sequence - b.sequence).map((item) => ({
     item,
-    celulas: vigentes.map((p) => celula(p, item, impedimentoNaGrade(lotes, p))),
+    celulas: comparadas(vigentes.map((p) => celula(p, item, impedimentoNaGrade(lotes, p)))),
   }));
 }
 
@@ -58,8 +72,75 @@ function celula(p: Proposta, item: ItemDoProcesso, impedimento: string | null): 
     unitPrice,
     total: unitPrice == null ? null : unitPrice * item.quantity,
     impedimento,
+    menorPreco: false,
+    acimaDoMenor: null,
   };
 }
+
+/**
+ * Marca, na própria linha, qual oferta é a mais barata e quanto as outras estão acima dela.
+ *
+ * A comparação é **dado da célula**, não efeito de um botão. Antes o menor preço só aparecia
+ * quando o comprador apertava "Melhor preço por item" — e apertar <b>substituía todas</b> as
+ * escolhas já feitas. Ou seja: para ver a informação ele tinha de perder a decisão. O sistema
+ * indica o tempo todo e não decide nunca; quem decide é o comprador.
+ *
+ * Só entra na comparação quem pode vencer: destacar como "menor preço" uma oferta que a
+ * adjudicação vai recusar seria apontar para uma porta fechada.
+ */
+function comparadas(celulas: CelulaDaGrade[]): CelulaDaGrade[] {
+  const elegiveis = celulas.filter((c) => c.total != null && !c.impedimento);
+  if (elegiveis.length === 0) return celulas;
+  const menor = Math.min(...elegiveis.map((c) => c.total!));
+  return celulas.map((c) => {
+    if (c.total == null || c.impedimento) return c;
+    return {
+      ...c,
+      menorPreco: c.total === menor,
+      // menor > 0 evita divisão por zero no item cotado a custo zero (brinde, bonificação)
+      acimaDoMenor: c.total === menor || menor <= 0 ? null
+        : Math.round(((c.total - menor) / menor) * 1000) / 10,
+    };
+  });
+}
+
+/**
+ * "Levar tudo deste fornecedor": o atalho oposto ao do melhor preço. Um concentra a compra,
+ * o outro a espalha, e os dois são pontos de partida — a linha continua editável depois.
+ *
+ * Ele leva **só o que aquele fornecedor pode levar**: item que ele não cotou, ou em que está
+ * impedido, fica como estava. Arrastar o item para uma coluna que não o cotou daria uma
+ * escolha que a confirmação recusaria, e o comprador descobriria no erro.
+ *
+ * O que já estava escolhido em outros itens permanece: o atalho preenche, não zera a mesa.
+ * A linha em <b>divisão</b> também fica intacta — ela tem decisão própria, com quantidade
+ * digitada, e um atalho que a apagasse destruiria trabalho sem pedir licença.
+ */
+export function levarTudoDe(
+  linhas: LinhaDaGrade[], proposalId: string, escolhas: Record<string, string>,
+  divisoes: Divisoes = {},
+): Record<string, string> {
+  const nova = { ...escolhas };
+  for (const linha of linhas) {
+    if (podeLevar(linha, proposalId, divisoes)) nova[linha.item.id] = proposalId;
+  }
+  return nova;
+}
+
+/**
+ * Quantos itens o "levar tudo" deste fornecedor pegaria. O número vai no botão porque ele
+ * conta a história antes do clique: "levar tudo (8)" numa grade de doze itens diz, sem abrir
+ * nada, que este fornecedor não cotou quatro.
+ */
+export const quantosLevaria = (
+  linhas: LinhaDaGrade[], proposalId: string, divisoes: Divisoes = {},
+) => linhas.filter((l) => podeLevar(l, proposalId, divisoes)).length;
+
+const podeLevar = (linha: LinhaDaGrade, proposalId: string, divisoes: Divisoes) => {
+  if (estaDividido(divisoes, linha.item.id)) return false;
+  const c = linha.celulas.find((x) => x.proposalId === proposalId);
+  return !!c && c.total != null && !c.impedimento;
+};
 
 /**
  * Impedimento do fornecedor na grade. Só o que é do <em>fornecedor</em> conta aqui —

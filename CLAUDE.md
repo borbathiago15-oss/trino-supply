@@ -87,6 +87,21 @@ o usuário descobrir no erro do servidor:
   família" é mais útil que "esta família não existe" quando os dois estão errados. O índice
   único da adjudicação inclui o fornecedor — o mesmo item pode ir a dois deles; o que
   continua proibido é o **mesmo** fornecedor levar o mesmo item duas vezes.
+- **O sistema indica; quem decide é o comprador.** A grade marca, em toda célula, qual oferta
+  é a mais barata do item e quanto as outras estão acima dela — e **não escolhe nada**: a grade
+  nasce sem vencedor. A comparação é **dado da célula** (`menorPreco`, `acimaDoMenor` em
+  `linhasDaGrade`), não efeito de apertar um botão: antes o menor preço só aparecia ao clicar
+  em "melhor preço por item", e clicar **substituía todas** as escolhas já feitas — ver a
+  informação custava a decisão. O desvio é **percentual e não seta**, porque a pergunta não é
+  "é mais caro?" (a coluna do preço já responde) e sim "caro o suficiente para eu abrir mão do
+  prazo deste aqui?" — 2% e 80% pedem decisões diferentes. Só entra na comparação quem **pode
+  vencer**: destacar como menor preço uma oferta que a adjudicação vai recusar é apontar para
+  porta fechada. Os dois atalhos são pontos de partida e nunca decisões — **preencher com o
+  melhor preço** espalha a compra, **levar tudo** a concentra num fornecedor —, e `levarTudoDe`
+  leva só o que aquele fornecedor **pode** levar (item não cotado ou impedido fica como estava)
+  e **não toca na linha em divisão**, que tem decisão própria com quantidade digitada. O número
+  no botão (`levar tudo (8)`) conta a história antes do clique: em doze itens, ele diz que este
+  fornecedor não cotou quatro.
 - **Contrato de parceria preenche o preço da proposta, se estiver vigente.**
   `QuotationService.ContractPricesAsync` casa item do processo com `SupplierContractItem`
   **pelo produto do catálogo** (código como segundo caminho), nunca pela descrição — "BOTA

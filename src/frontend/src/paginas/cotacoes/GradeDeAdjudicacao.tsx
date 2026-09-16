@@ -4,8 +4,8 @@ import { Campo, Nota } from '@/componentes/formulario';
 import { moeda, quantidade } from '@/util/formato';
 import {
   adjudicacoesDoFormulario, colunasDaGrade, erroDaDivisao, estaDividido,
-  fornecedoresEscolhidos, itensSemVencedor, linhasDaGrade,
-  melhorPrecoPorItem, quantoDivide, totaisPorColuna, type Divisoes,
+  fornecedoresEscolhidos, itensSemVencedor, levarTudoDe, linhasDaGrade,
+  melhorPrecoPorItem, quantoDivide, quantosLevaria, totaisPorColuna, type Divisoes,
 } from './gradeDeAdjudicacao';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
@@ -69,14 +69,18 @@ export function GradeDeAdjudicacao({ processo, lotes, aoConcluir, aoAvisar }: {
         <h3 className="text-[14px] font-bold">Escolher o vencedor de cada item</h3>
         <button type="button" className="botao-secundario !py-1.5"
           onClick={() => setEscolhas(melhorPrecoPorItem(linhas))}>
-          Melhor preço por item
+          Preencher com o melhor preço
         </button>
       </div>
       <Nota>
-        Cada item vai para quem o vence — não é preciso dar a compra inteira a um fornecedor
-        só. Quem levar mais de um item recebe todos na mesma O.C. Precisa partir o
-        <strong> mesmo item</strong> entre dois? Use <strong>dividir</strong> na linha e diga
-        quanto vai com cada um — a soma tem de fechar a quantidade pedida.
+        <strong>A escolha é sua.</strong> A grade marca o menor preço de cada item e quanto as
+        outras ofertas estão acima dele, mas não decide nada: marcar é informação, e o vencedor
+        é quem você apontar. Cada item pode ir para um fornecedor diferente, e quem levar mais
+        de um recebe todos na mesma O.C. Os dois atalhos são pontos de partida —
+        <strong> preencher com o melhor preço</strong> espalha a compra,
+        <strong> levar tudo</strong> no topo da coluna a concentra num fornecedor —, e depois de
+        qualquer um deles a linha continua editável. Precisa partir o <strong>mesmo item</strong>
+        {' '}entre dois? Use <strong>dividir</strong> na linha e diga quanto vai com cada um.
       </Nota>
 
       <div className="mt-3 overflow-x-auto">
@@ -85,11 +89,24 @@ export function GradeDeAdjudicacao({ processo, lotes, aoConcluir, aoAvisar }: {
             <tr>
               <th>Produto</th>
               <th className="whitespace-nowrap">Qtde</th>
-              {colunas.map((c) => (
-                <th key={c.proposalId} className="text-center">
-                  {c.supplierName} <span className="sub">v{c.version}</span>
-                </th>
-              ))}
+              {colunas.map((c) => {
+                const leva = quantosLevaria(linhas, c.proposalId, divisoes);
+                return (
+                  <th key={c.proposalId} className="text-center">
+                    {c.supplierName} <span className="sub">v{c.version}</span>
+                    {/* o atalho que concentra a compra, e o número que diz de quantos itens
+                        ele dá conta — "levar tudo (8)" em doze itens conta, sem abrir nada,
+                        que este fornecedor não cotou quatro */}
+                    <div>
+                      <button type="button" className="font-normal underline disabled:no-underline disabled:opacity-40"
+                        data-testid={`levar-tudo-${c.proposalId}`} disabled={leva === 0}
+                        onClick={() => setEscolhas((x) => levarTudoDe(linhas, c.proposalId, x, divisoes))}>
+                        levar tudo ({leva})
+                      </button>
+                    </div>
+                  </th>
+                );
+              })}
             </tr>
           </thead>
           <tbody>
@@ -146,8 +163,27 @@ export function GradeDeAdjudicacao({ processo, lotes, aoConcluir, aoAvisar }: {
                             disabled={indisponivel} checked={escolhida}
                             aria-label={`${c.supplierName} para ${l.item.description}`}
                             onChange={() => setEscolhas((x) => ({ ...x, [l.item.id]: c.proposalId }))} />
-                          <span>{moeda(c.total)}</span>
+                          <span className="text-left">
+                            <span className="block">{moeda(c.total)}</span>
+                            {/* o unitário é o que o comprador negocia; deixá-lo fora obrigava
+                                a dividir o total pela quantidade de cabeça */}
+                            <span className="sub block whitespace-nowrap">
+                              {moeda(c.unitPrice ?? 0)}/{l.item.unitOfMeasure}
+                            </span>
+                          </span>
                         </label>
+                      )}
+                      {/* a comparação é informação permanente, não resultado de apertar um
+                          botão: ver o menor preço não pode custar a escolha já feita */}
+                      {c.menorPreco && (
+                        <div className="sub font-semibold text-ok" data-testid={`menor-${c.proposalId}`}>
+                          menor preço
+                        </div>
+                      )}
+                      {c.acimaDoMenor != null && (
+                        <div className="sub text-aviso" data-testid={`acima-${c.proposalId}`}>
+                          +{quantidade(c.acimaDoMenor)}%
+                        </div>
                       )}
                       {c.impedimento && c.total != null && (
                         <div className="sub text-perigo" data-impedimento>{c.impedimento}</div>

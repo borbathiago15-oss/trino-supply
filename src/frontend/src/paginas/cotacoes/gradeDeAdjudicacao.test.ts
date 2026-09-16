@@ -3,8 +3,8 @@ import type { ItemDoProcesso, LoteDaFamilia } from '@/api/cotacoes';
 import { lote, oferta, processo, proposta } from '@/test/cotacoes';
 import {
   adjudicacoesDoFormulario, colunasDaGrade, erroDaDivisao, estaDividido,
-  fornecedoresEscolhidos, itensSemVencedor, linhasDaGrade,
-  melhorPrecoPorItem, quantoDivide, totaisPorColuna,
+  fornecedoresEscolhidos, itensSemVencedor, levarTudoDe, linhasDaGrade,
+  melhorPrecoPorItem, quantoDivide, quantosLevaria, totaisPorColuna,
 } from './gradeDeAdjudicacao';
 
 /**
@@ -205,5 +205,95 @@ describe('dividir a quantidade do mesmo item', () => {
 
     expect(awards.map((a) => a.proposalId)).toEqual(['p-alfa', 'p-beta']);
     expect(awards.every((a) => a.quantity === undefined)).toBe(true);
+  });
+});
+
+/**
+ * O sistema indica; o comprador decide.
+ *
+ * Antes, o menor preço só aparecia quando se apertava "melhor preço por item" — e apertar
+ * SUBSTITUÍA todas as escolhas já feitas. Ver a informação custava a decisão. A comparação
+ * virou dado da célula: está sempre lá, e não mexe em escolha nenhuma.
+ */
+describe('a grade indica o menor preço sem decidir nada', () => {
+  const linhas = () => linhasDaGrade(escritorio(), null);
+  const celula = (itemId: string, proposalId: string) =>
+    linhas().find((l) => l.item.id === itemId)!.celulas.find((c) => c.proposalId === proposalId)!;
+
+  it('marca a oferta mais barata de cada item, e cada item tem a sua', () => {
+    // no papel a Alfa é melhor (5 × 10 = 50 contra 70); na caneta, a Beta (30 contra 40)
+    expect(celula(papel.id, 'p-alfa').menorPreco).toBe(true);
+    expect(celula(papel.id, 'p-beta').menorPreco).toBe(false);
+    expect(celula(caneta.id, 'p-beta').menorPreco).toBe(true);
+    expect(celula(caneta.id, 'p-alfa').menorPreco).toBe(false);
+  });
+
+  it('diz quanto a outra oferta está acima, em vez de só apontar para cima', () => {
+    // 70 contra 50 são 40% — número que decide se vale trocar preço por prazo
+    expect(celula(papel.id, 'p-beta').acimaDoMenor).toBe(40);
+    expect(celula(papel.id, 'p-alfa').acimaDoMenor).toBeNull();
+    // 40 contra 30 são 33,3%
+    expect(celula(caneta.id, 'p-alfa').acimaDoMenor).toBeCloseTo(33.3, 1);
+  });
+
+  it('marcar não escolhe: a grade nasce sem vencedor nenhum', () => {
+    // é a regra que o cliente pediu por escrito — o sistema pode indicar, a decisão é do
+    // comprador. Se a marca escolhesse, não haveria o que decidir
+    expect(itensSemVencedor(linhas(), {})).toHaveLength(2);
+  });
+
+  it('quem não pode vencer fica fora da comparação', () => {
+    // destacar como "menor preço" uma oferta que a adjudicação vai recusar é apontar para
+    // uma porta fechada
+    const lotes: LoteDaFamilia[] = [lote({
+      family: 'MATERIAL DE ESCRITORIO',
+      offers: [
+        oferta({ proposalId: 'p-alfa', supplierId: 's-alfa', supplierName: 'Alfa',
+          homologation: 'PROSPECT', canWin: false }),
+        oferta({ proposalId: 'p-beta', supplierId: 's-beta', supplierName: 'Beta' }),
+      ],
+    })];
+    const comImpedimento = linhasDaGrade(escritorio(), lotes)
+      .find((l) => l.item.id === papel.id)!;
+
+    const alfa = comImpedimento.celulas.find((c) => c.proposalId === 'p-alfa')!;
+    const beta = comImpedimento.celulas.find((c) => c.proposalId === 'p-beta')!;
+    expect(alfa.menorPreco).toBe(false);          // é a mais barata, mas não pode vencer
+    expect(alfa.acimaDoMenor).toBeNull();
+    expect(beta.menorPreco).toBe(true);           // a mais barata ENTRE AS QUE PODEM
+  });
+});
+
+describe('levar tudo de um fornecedor', () => {
+  const linhas = () => linhasDaGrade(escritorio(), null);
+
+  it('concentra a compra num fornecedor, sem apagar o que já estava em outros itens', () => {
+    const nova = levarTudoDe(linhas(), 'p-alfa', {});
+    expect(nova).toEqual({ [papel.id]: 'p-alfa', [caneta.id]: 'p-alfa' });
+  });
+
+  it('não leva o item que o fornecedor não cotou', () => {
+    // arrastar o item para uma coluna vazia daria uma escolha que a confirmação recusaria,
+    // e o comprador descobriria no erro
+    const q = processo({
+      families: ['MATERIAL DE ESCRITORIO'],
+      items: [papel, caneta],
+      proposals: [
+        proposta({ id: 'p-so-papel', supplierId: 's-x', supplierName: 'Só Papel', totalValue: 50,
+          items: [{ quotationItemId: papel.id, unitPrice: 5, quantity: 10 }] }),
+      ],
+    });
+    const ls = linhasDaGrade(q, null);
+
+    expect(quantosLevaria(ls, 'p-so-papel')).toBe(1);
+    expect(levarTudoDe(ls, 'p-so-papel', {})).toEqual({ [papel.id]: 'p-so-papel' });
+  });
+
+  it('a linha em divisão fica intacta: ela tem decisão própria', () => {
+    // um atalho que apagasse a quantidade digitada destruiria trabalho sem pedir licença
+    const divisoes = { [papel.id]: { 'p-alfa': '7', 'p-beta': '3' } };
+
+    expect(quantosLevaria(linhas(), 'p-alfa', divisoes)).toBe(1);
+    expect(levarTudoDe(linhas(), 'p-alfa', {}, divisoes)).toEqual({ [caneta.id]: 'p-alfa' });
   });
 });

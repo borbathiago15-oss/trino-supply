@@ -567,6 +567,25 @@ dotnet ef database update \
   foto do dia da compra; (2) a regra "fora do menor preço sem justificativa" **não dispara pelo
   fluxo normal**, porque a cotação já exige a justificativa na adjudicação — fica como rede de
   segurança para dado importado ou anterior a essa exigência.
+- ✅ **Fase 04 — Torre de Controlo por item (validado):** visão unificada com granularidade de
+  **item da solicitação**, cruzando solicitação → cotação → OC → recebimento → NF-e. Sem tabela
+  própria: é uma leitura viva dos registros, então nunca diverge do que aconteceu. Regras puras em
+  `ControlTower`: **etapa** (rascunho, em aprovação, aprovado sem OC, em cotação, OC emitida,
+  recebido parcial, recebido, atendido pelo estoque, reprovado), **saldo pendente** (sem OC deve a
+  quantidade inteira) e **farol de SLA** — o prazo que vale é o **prometido na OC**; sem OC, a data
+  de necessidade da solicitação; sem prazo nenhum não há como atrasar. Vermelho = venceu e nada
+  chegou; amarelo = vence em 3 dias; item encerrado não tem farol. Colunas: item, centro de custo
+  (nome legível), solicitante, comprador, etapa, OC/fornecedor, prazo, recebido, pendente, notas
+  fiscais com o pior veredito da conciliação. Cards: itens em aberto, atrasados, **lead time real**
+  (criação → última entrega, nos concluídos) e **backlog em OC** (emitido e ainda não chegou).
+  Chips *Apenas atrasados* / *Apenas urgentes* / *Sem OC*, filtro por etapa, janela (30–365 dias)
+  e busca textual. A fila vem ordenada como se trabalha: vermelho, amarelo, depois o mais antigo.
+  `GET /purchases/control-tower` + índice `(company_id, created_at)` na requisição para a janela.
+  **Domínio 127/127** (+5) e **integração 59/59** (+1: item emergencial com necessidade vencida e
+  sem OC fica vermelho, sem OC e com pendência inteira; item entregue encerra sem farol e com
+  lead time medido; cards batem; chip de atrasados e busca filtram) e build web ok.
+  Fora desta fatia: **família do item** como coluna/filtro — mora em Materiais (outro BC) e entra
+  por orquestração no host, como o saldo do Almox.
 - ✅ **v3 — Compra dividida: várias OCs por requisição (validado):** removida a trava que permitia
   **uma única OC por requisição** (índice único parcial `(company, requisition_id) WHERE status=1`).
   Agora a OC cobre **exatamente os itens precificados naquela emissão**, então a mesma requisição

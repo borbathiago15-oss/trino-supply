@@ -577,3 +577,42 @@ export interface ComplianceView {
   awardJustified: boolean;
   penalties: CompliancePenaltyView[];
 }
+export interface ControlTowerRow {
+  requisitionId: string;
+  lineId: string;
+  createdAt: string;
+  requester: string;
+  costCenterCode: string;
+  costCenterName: string;
+  itemCode: string;
+  quantity: number;
+  unit: string;
+  priority: string;
+  neededBy?: string | null;
+  stage: string;
+  isOpen: boolean;
+  light: string;
+  orderId?: string | null;
+  orderNumber?: number | null;
+  supplierCode?: string | null;
+  supplierName?: string | null;
+  buyer?: string | null;
+  promisedDate?: string | null;
+  quantityReceived: number;
+  pendingQuantity: number;
+  orderedValue?: number | null;
+  invoiceNumbers?: string | null;
+  invoiceMatch?: string | null;
+}
+export interface ControlTowerSummary {
+  openItems: number;
+  lateItems: number;
+  urgentItems: number;
+  withoutOrder: number;
+  avgLeadTimeDays: number | null;
+  backlogValue: number;
+}
+export interface ControlTowerView {
+  summary: ControlTowerSummary;
+  rows: ControlTowerRow[];
+}

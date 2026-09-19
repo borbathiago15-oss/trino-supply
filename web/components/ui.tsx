@@ -73,6 +73,9 @@ const STATUS_STYLES: Record<string, string> = {
   PartiallyReceived: "bg-amber-100 text-amber-700",
   Received: "bg-indigo-100 text-indigo-700",
   Cancelled: "bg-rose-100 text-rose-700",
+  // Torre de Controlo (etapa do item)
+  Awaiting: "bg-amber-100 text-amber-700",
+  Quoting: "bg-sky-100 text-sky-700",
   // Conciliação fiscal (3-way match)
   Pending: "bg-slate-100 text-slate-600",
   Matched: "bg-emerald-100 text-emerald-700",
@@ -109,6 +112,8 @@ const STATUS_LABELS: Record<string, string> = {
   PartiallyReceived: "Recebida parcial",
   Received: "Recebida",
   Cancelled: "Cancelada",
+  Awaiting: "Em aprovação",
+  Quoting: "Em cotação",
   Pending: "Aguardando conciliação",
   Matched: "Conciliada",
   Divergent: "Divergente",

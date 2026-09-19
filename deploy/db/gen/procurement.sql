@@ -1203,5 +1203,20 @@ BEGIN
     VALUES ('20260919211805_RequisitionNeededBy', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919212756_RequisitionCreatedAtIndex') THEN
+    CREATE INDEX "IX_purchase_requisition_company_id_created_at" ON procurement.purchase_requisition (company_id, created_at);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919212756_RequisitionCreatedAtIndex') THEN
+    INSERT INTO procurement.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260919212756_RequisitionCreatedAtIndex', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

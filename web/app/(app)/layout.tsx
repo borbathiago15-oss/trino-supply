@@ -16,6 +16,7 @@ const NAV = [
   { href: "/aprovacao", label: "Central de Aprovação", perms: [Perm.PurchasesApprove, Perm.WarehouseApprove] },
   { href: "/compras", label: "Pedido", perm: Perm.PurchasesRead },
   { href: "/cotacoes", label: "Cotações", perm: Perm.PurchasesRead },
+  { href: "/torre", label: "Torre de Controlo", perm: Perm.PurchasesRead },
   { href: "/materiais", label: "Estoque (Almox)", perm: Perm.MaterialsRead },
   { href: "/almoxarifado", label: "Entregas (EPI)", perm: Perm.MaterialsRead },
   { href: "/cadastros", label: "Cadastros", perm: Perm.PurchasesRead },

@@ -611,6 +611,18 @@ public static class ProcurementEndpoints
             return r.IsSuccess ? Results.Ok(r.Value) : Results.NotFound(new { code = r.Error.Code, message = r.Error.Message });
         }).RequireAuthorization();
 
+        // ---- Torre de Controlo (Fase 04) -----------------------------------------------------
+        // Visao por ITEM: solicitacao -> cotacao -> OC -> recebimento -> nota, com farol de SLA.
+        p.MapGet("/control-tower", async (int? days, string? costCenter, string? supplier, string? stage,
+            bool? late, bool? urgent, bool? withoutOrder, string? q,
+            IPermissionChecker perm, IControlTowerService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
+            return Results.Ok(await svc.ListAsync(new ControlTowerFilter(
+                days ?? 90, costCenter, supplier, stage,
+                late ?? false, urgent ?? false, withoutOrder ?? false, q), ct));
+        }).RequireAuthorization();
+
         return app;
     }
 

@@ -1191,3 +1191,63 @@ public class ComplianceScoreTests
         Assert.Equal("Critico", r.Band);
     }
 }
+
+/// <summary>Torre de Controlo: etapa, pendência e farol de SLA por item, a partir dos fatos.</summary>
+public class ControlTowerTests
+{
+    private static readonly DateOnly Hoje = new(2026, 9, 19);
+
+    private static ItemTimeline T(
+        RequisitionStatus status = RequisitionStatus.Approved, bool oc = false, bool cotando = false,
+        decimal pedida = 10m, decimal recebida = 0m, DateOnly? necessidade = null, DateOnly? prometida = null) =>
+        new(status, oc, cotando, pedida, recebida, necessidade, prometida);
+
+    [Fact]
+    public void Etapas_seguem_o_ciclo_do_item()
+    {
+        Assert.Equal(ItemStage.Draft, ControlTower.Stage(T(RequisitionStatus.Draft)));
+        Assert.Equal(ItemStage.Awaiting, ControlTower.Stage(T(RequisitionStatus.Submitted)));
+        Assert.Equal(ItemStage.Awaiting, ControlTower.Stage(T(RequisitionStatus.ApprovedLevel1)));
+        Assert.Equal(ItemStage.Approved, ControlTower.Stage(T()));
+        Assert.Equal(ItemStage.Quoting, ControlTower.Stage(T(cotando: true)));
+        Assert.Equal(ItemStage.Ordered, ControlTower.Stage(T(RequisitionStatus.PartiallyOrdered, oc: true)));
+        Assert.Equal(ItemStage.PartiallyReceived, ControlTower.Stage(T(RequisitionStatus.Ordered, oc: true, recebida: 4m)));
+        Assert.Equal(ItemStage.Received, ControlTower.Stage(T(RequisitionStatus.Ordered, oc: true, recebida: 10m)));
+        Assert.Equal(ItemStage.FulfilledFromStock, ControlTower.Stage(T(RequisitionStatus.FulfilledFromStock)));
+        Assert.Equal(ItemStage.Rejected, ControlTower.Stage(T(RequisitionStatus.Rejected)));
+    }
+
+    [Fact]
+    public void Pendencia_e_o_que_ainda_nao_chegou_e_zera_quando_encerra()
+    {
+        Assert.Equal(10m, ControlTower.Pending(T()));                                                      // sem OC deve tudo
+        Assert.Equal(6m, ControlTower.Pending(T(RequisitionStatus.Ordered, oc: true, recebida: 4m)));
+        Assert.Equal(0m, ControlTower.Pending(T(RequisitionStatus.Ordered, oc: true, recebida: 10m)));
+        Assert.Equal(0m, ControlTower.Pending(T(RequisitionStatus.Rejected)));
+    }
+
+    [Fact]
+    public void Farol_vermelho_quando_o_prazo_passou_e_nada_chegou()
+    {
+        Assert.Equal(SlaLight.Red, ControlTower.Light(T(necessidade: Hoje.AddDays(-1)), Hoje));
+        Assert.Equal(SlaLight.Yellow, ControlTower.Light(T(necessidade: Hoje.AddDays(2)), Hoje));
+        Assert.Equal(SlaLight.Green, ControlTower.Light(T(necessidade: Hoje.AddDays(10)), Hoje));
+        Assert.Equal(SlaLight.Green, ControlTower.Light(T(), Hoje));   // sem prazo, sem como atrasar
+    }
+
+    [Fact]
+    public void Prazo_prometido_na_OC_prevalece_sobre_a_necessidade()
+    {
+        // Necessidade já vencida, mas a OC prometeu para daqui a 10 dias: o combinado com o
+        // fornecedor é o que se vigia.
+        var t = T(RequisitionStatus.Ordered, oc: true, necessidade: Hoje.AddDays(-5), prometida: Hoje.AddDays(10));
+        Assert.Equal(SlaLight.Green, ControlTower.Light(t, Hoje));
+    }
+
+    [Fact]
+    public void Item_encerrado_nao_tem_farol()
+    {
+        Assert.Equal(SlaLight.None, ControlTower.Light(T(RequisitionStatus.Ordered, oc: true, recebida: 10m, necessidade: Hoje.AddDays(-30)), Hoje));
+        Assert.Equal(SlaLight.None, ControlTower.Light(T(RequisitionStatus.Rejected, necessidade: Hoje.AddDays(-30)), Hoje));
+    }
+}

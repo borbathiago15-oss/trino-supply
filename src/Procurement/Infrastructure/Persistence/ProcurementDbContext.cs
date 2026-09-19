@@ -51,6 +51,7 @@ public sealed class ProcurementDbContext(DbContextOptions<ProcurementDbContext> 
             e.Property(x => x.DecisionNote).HasColumnName("decision_note").HasMaxLength(500);
             e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
             e.HasIndex(x => new { x.CompanyId, x.Status });
+            e.HasIndex(x => new { x.CompanyId, x.CreatedAt });   // janela da Torre / ciclo
             e.Ignore(x => x.DomainEvents);
 
             e.HasMany(x => x.Lines).WithOne().HasForeignKey(l => l.RequisitionId);

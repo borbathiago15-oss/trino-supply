@@ -30,6 +30,7 @@ public static class DependencyInjection
         services.AddScoped<IQuotationService, QuotationService>();
         services.AddScoped<IInvoiceMatchService, InvoiceMatchService>();
         services.AddScoped<IComplianceService, ComplianceService>();
+        services.AddScoped<IControlTowerService, ControlTowerService>();
         return services;
     }
 }

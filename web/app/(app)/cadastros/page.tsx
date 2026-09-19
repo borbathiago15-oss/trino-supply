@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, CostCenterView, PayingCompanyView, RoleView, SupplierFullView, SupplierStatsView, UserView } from "@/lib/api";
 import { Button, Card, Empty, Input, Select, StatusPill, Table } from "@/components/ui";
+import { OtifBadge, useScorecards } from "@/components/otif";
 import { useToast } from "@/lib/toast";
 import { Perm, useHas } from "@/lib/me";
 
@@ -48,6 +49,8 @@ export default function CadastrosPage() {
   // ---- Fornecedores (com dados fiscais) ----
   const suppliers = useQuery({ queryKey: ["suppliers"], queryFn: () => api<SupplierFullView[]>("/purchases/suppliers") });
   const stats = useQuery({ queryKey: ["supplier-stats"], queryFn: () => api<SupplierStatsView[]>("/purchases/suppliers/stats") });
+  // Fase 03: desempenho de entrega (OTIF) calculado das OCs × recebimentos dos últimos 12 meses.
+  const otif = useScorecards();
   const money = (v: number) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const [sup, setSup] = useState(emptySupplier);
   const createSupplier = useMutation({
@@ -150,13 +153,14 @@ export default function CadastrosPage() {
           </form>
         )}
         {suppliers.data && suppliers.data.length > 0 ? (
-          <Table head={["Código", "Nome", "CNPJ", "Cond. Pgto", "Situação"]}>
+          <Table head={["Código", "Nome", "CNPJ", "Cond. Pgto", "Entrega (OTIF)", "Situação"]}>
             {suppliers.data.map((s) => (
               <tr key={s.id}>
                 <td className="px-3 py-2 font-mono text-xs">{s.code}</td>
                 <td className="px-3 py-2">{s.name}</td>
                 <td className="px-3 py-2 text-slate-500">{s.taxId}</td>
                 <td className="px-3 py-2 text-slate-500">{s.paymentTerms}</td>
+                <td className="px-3 py-2"><OtifBadge score={otif.porCodigo(s.code)} /></td>
                 <td className="px-3 py-2"><StatusPill status={s.status} /></td>
               </tr>
             ))}
@@ -183,6 +187,36 @@ export default function CadastrosPage() {
           </Table>
         ) : (
           <Empty>Sem histórico ainda — emita uma OC para começar a compor as estatísticas.</Empty>
+        )}
+      </Card>
+
+      <Card title="Desempenho de entrega (OTIF · 12 meses)">
+        <p className="mb-3 text-xs text-slate-500">
+          Calculado linha a linha das OCs: prazo prometido no pedido × data da conferência na doca, e
+          quantidade líquida (recebida menos avariada) × quantidade pedida. Linha sem prazo na OC entra
+          na integralidade, mas não na pontualidade.
+        </p>
+        {otif.ranking.length > 0 ? (
+          <Table head={["Fornecedor", "Entregas", "No prazo", "Completo", "OTIF", "Avaria", "Ocorrências", "Faixa"]}>
+            {otif.ranking.map((s) => (
+              <tr key={s.supplierId}>
+                <td className="px-3 py-2">{s.supplierCode} — {s.supplierName}</td>
+                <td className="px-3 py-2 tabular-nums">{s.linesEvaluated}</td>
+                <td className="px-3 py-2 text-right tabular-nums">
+                  {s.linesWithDeadline > 0 ? `${s.onTimeRate}%` : "—"}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">{s.inFullRate}%</td>
+                <td className="px-3 py-2 text-right font-medium tabular-nums">
+                  {s.linesWithDeadline > 0 ? `${s.otifIndex}%` : "—"}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">{s.damageRate}%</td>
+                <td className="px-3 py-2 tabular-nums">{s.occurrences}</td>
+                <td className="px-3 py-2"><OtifBadge score={s} /></td>
+              </tr>
+            ))}
+          </Table>
+        ) : (
+          <Empty>Sem entregas conferidas nos últimos 12 meses — o OTIF nasce do recebimento da OC.</Empty>
         )}
       </Card>
     </>

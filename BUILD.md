@@ -480,6 +480,24 @@ dotnet ef database update \
   (+8) e **integração 49/49** (+2: cenário de aceite — 50 pedidas, 50 recebidas com 2 avariadas →
   estoque **+48**, avaria no histórico, OC "Recebida"; e entregas parciais 4+6 fechando a OC) e
   build web ok.
+- ✅ **Fase 03 — Scorecard OTIF do fornecedor (validado):** o recebimento (MMS-005) tornou o
+  desempenho de entrega **mensurável**, e agora ele é medido. Novos
+  `GET /purchases/suppliers/scorecard` (ranking) e `GET /purchases/suppliers/{id}/scorecard`
+  (consolidado + série por mês), ambos sob `purchases.read`. A unidade de medida é a **linha da
+  OC** — cada item pedido é um compromisso: **no prazo** = data da conferência ≤ `deliveryDate`
+  da linha; **completo** = líquido (recebido − avariado) ≥ pedido; **OTIF** = as duas coisas.
+  Entregas parciais da mesma linha **consolidam** (vale o total e a data da última remessa), OC
+  cancelada não conta, e linha **sem prazo prometido** entra na integralidade mas não na
+  pontualidade (`linesWithoutDeadline` é explícito — não se inventa nota). Faixas por OTIF:
+  **Ouro** ≥95%, **Prata** ≥85%, **Bronze** ≥70%, **Crítico** abaixo, **SemDados** sem linha com
+  prazo. Cálculo **na hora, a partir das OCs e dos recebimentos** — sem tabela consolidada, então
+  a nota nunca diverge do que aconteceu (se o volume crescer, vira projeção sem mudar o contrato).
+  UI: coluna **Entrega (OTIF)** no cadastro de fornecedores, card de ranking com no prazo /
+  completo / avaria / ocorrências, e — onde a nota muda a decisão — a nota **no rótulo de cada
+  fornecedor ao emitir a OC**, com o detalhe do selecionado logo abaixo: a escolha deixa de ser
+  só o menor preço. **Domínio 84/84** (+8) e **integração 51/51** (+1: atraso de 1 dia com 10% de
+  avaria derruba pontualidade E integralidade → Crítico, enquanto o pontual e completo fica Ouro
+  e à frente no ranking) e build web ok.
 - ✅ **v3 — Compra dividida: várias OCs por requisição (validado):** removida a trava que permitia
   **uma única OC por requisição** (índice único parcial `(company, requisition_id) WHERE status=1`).
   Agora a OC cobre **exatamente os itens precificados naquela emissão**, então a mesma requisição

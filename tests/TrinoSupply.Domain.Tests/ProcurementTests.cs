@@ -516,3 +516,123 @@ public class GoodsReceiptTests
         Assert.Equal(Now, receipt.StockPostedAt);   // não sobrescreve o primeiro registro
     }
 }
+
+/// <summary>
+/// Fase 03 — OTIF do fornecedor. Mede o que foi combinado: pontualidade só conta onde a OC trouxe
+/// prazo; integralidade compara o LÍQUIDO aproveitável com o pedido (avaria derruba o In-Full).
+/// </summary>
+public class SupplierScorecardTests
+{
+    private static readonly Guid Fornecedor = Guid.NewGuid();
+    private static readonly DateOnly Prazo = new(2026, 9, 10);
+
+    private static DeliveryFact Entrega(
+        decimal pedida, decimal recebida, decimal avariada, DateOnly entregueEm,
+        bool ocorrencia = false, string periodo = "2026-09") =>
+        new(Fornecedor, periodo, pedida, recebida, avariada, ocorrencia, Prazo, entregueEm);
+
+    /// <summary>OC que saiu sem data prometida — não há prazo contra o que medir.</summary>
+    private static DeliveryFact EntregaSemPrazo(
+        decimal pedida, decimal recebida, DateOnly entregueEm, string periodo = "2026-09") =>
+        new(Fornecedor, periodo, pedida, recebida, 0m, false, null, entregueEm);
+
+    private static SupplierScore Score(params DeliveryFact[] fatos) =>
+        SupplierScorecard.Overall(Fornecedor, "12m", fatos);
+
+    [Fact]
+    public void Entrega_no_prazo_e_completa_e_OTIF_cheio()
+    {
+        var s = Score(Entrega(100m, 100m, 0m, entregueEm: Prazo));
+
+        Assert.Equal(100m, s.OnTimeRate);
+        Assert.Equal(100m, s.InFullRate);
+        Assert.Equal(100m, s.OtifIndex);
+        Assert.Equal(0m, s.DamageRate);
+        Assert.Equal(SupplierTier.Ouro, s.Tier);
+    }
+
+    [Fact]
+    public void Um_dia_de_atraso_com_10_por_cento_avariado_penaliza_os_dois_indices()
+    {
+        // Critério de aceite da Fase 03: atraso de 1 dia + 10% de avaria.
+        var s = Score(Entrega(100m, 100m, 10m, entregueEm: Prazo.AddDays(1)));
+
+        Assert.Equal(0m, s.OnTimeRate);    // chegou depois do prazo
+        Assert.Equal(0m, s.InFullRate);    // líquido 90 < 100 pedidas
+        Assert.Equal(0m, s.OtifIndex);
+        Assert.Equal(10m, s.DamageRate);   // 10 de 100 recebidas
+        Assert.Equal(SupplierTier.Critico, s.Tier);
+    }
+
+    [Fact]
+    public void Entrega_no_ultimo_dia_do_prazo_ainda_e_pontual()
+    {
+        var s = Score(Entrega(10m, 10m, 0m, entregueEm: Prazo));
+        Assert.Equal(100m, s.OnTimeRate);
+    }
+
+    [Fact]
+    public void Linha_sem_prazo_na_OC_nao_infla_a_pontualidade()
+    {
+        // Sem data prometida não há o que medir: fica de fora do On-Time e do OTIF, mas conta no In-Full.
+        var s = Score(
+            EntregaSemPrazo(10m, 10m, entregueEm: Prazo),
+            Entrega(10m, 10m, 0m, entregueEm: Prazo.AddDays(5)));   // esta tem prazo e atrasou
+
+        Assert.Equal(2, s.LinesEvaluated);
+        Assert.Equal(1, s.LinesWithDeadline);
+        Assert.Equal(1, s.LinesWithoutDeadline);
+        Assert.Equal(0m, s.OnTimeRate);     // a única linha mensurável atrasou
+        Assert.Equal(100m, s.InFullRate);   // ambas vieram completas
+    }
+
+    [Fact]
+    public void Sem_nenhuma_linha_com_prazo_nao_ha_classificacao()
+    {
+        var s = Score(EntregaSemPrazo(10m, 10m, entregueEm: Prazo));
+
+        Assert.Equal(SupplierTier.SemDados, s.Tier);
+        Assert.Equal(0m, s.OtifIndex);
+    }
+
+    [Fact]
+    public void Faixas_de_desempenho_seguem_o_OTIF()
+    {
+        DeliveryFact ok = Entrega(1m, 1m, 0m, entregueEm: Prazo);
+        DeliveryFact ruim = Entrega(1m, 1m, 0m, entregueEm: Prazo.AddDays(2));
+
+        // 19 de 20 no prazo = 95% → Ouro
+        Assert.Equal(SupplierTier.Ouro, Score([.. Enumerable.Repeat(ok, 19), ruim]).Tier);
+        // 9 de 10 = 90% → Prata
+        Assert.Equal(SupplierTier.Prata, Score([.. Enumerable.Repeat(ok, 9), ruim]).Tier);
+        // 3 de 4 = 75% → Bronze
+        Assert.Equal(SupplierTier.Bronze, Score([.. Enumerable.Repeat(ok, 3), ruim]).Tier);
+        // 1 de 2 = 50% → Crítico
+        Assert.Equal(SupplierTier.Critico, Score(ok, ruim).Tier);
+    }
+
+    [Fact]
+    public void Score_por_periodo_separa_os_meses()
+    {
+        var porPeriodo = SupplierScorecard.ByPeriod([
+            Entrega(10m, 10m, 0m, entregueEm: Prazo, periodo: "2026-09"),
+            Entrega(10m, 10m, 0m, entregueEm: Prazo.AddDays(40), periodo: "2026-10"),
+        ]);
+
+        Assert.Equal(2, porPeriodo.Count);
+        Assert.Equal("2026-10", porPeriodo[0].Period);   // mais recente primeiro
+        Assert.Equal(100m, porPeriodo.Single(p => p.Period == "2026-09").OnTimeRate);
+        Assert.Equal(0m, porPeriodo.Single(p => p.Period == "2026-10").OnTimeRate);
+    }
+
+    [Fact]
+    public void Ocorrencias_sao_contadas_para_o_indice_de_qualidade()
+    {
+        var s = Score(
+            Entrega(10m, 10m, 2m, entregueEm: Prazo, ocorrencia: true),
+            Entrega(10m, 10m, 0m, entregueEm: Prazo));
+
+        Assert.Equal(1, s.Occurrences);
+        Assert.Equal(10m, s.DamageRate);   // 2 avariadas de 20 recebidas
+    }
+}

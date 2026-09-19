@@ -12,6 +12,7 @@ import { downloadCsv } from "@/lib/csv";
 import { ReqHeader, RequisitionHeaderFields, emptyHeader, headerError, useRequisitionRefData } from "@/components/requisitionHeader";
 import { ConferenciaRecebimento } from "@/components/recebimento";
 import { SaldoBadge, useSaldoAlmox } from "@/components/saldoAlmox";
+import { OtifBadge, useScorecards } from "@/components/otif";
 
 const money = (v: number) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -460,6 +461,9 @@ function EmitirOc({ req, onSuccess, onErr }: { req: RequisitionView; onSuccess: 
 
   const paying = useQuery({ queryKey: ["paying-companies"], queryFn: () => api<PayingCompanyView[]>("/purchases/paying-companies"), enabled: open });
   const suppliers = useQuery({ queryKey: ["suppliers"], queryFn: () => api<SupplierFullView[]>("/purchases/suppliers"), enabled: open });
+  // Fase 03: a escolha do fornecedor não é só o menor preço — o histórico de entrega (OTIF) entra
+  // no rótulo da lista e o detalhe aparece embaixo do selecionado.
+  const otif = useScorecards();
 
   const preco = (code: string) => Number((prices[code] ?? "").replace(",", ".")) || 0;
   const total = escolhidos.reduce((acc, l) => acc + Number(l.quantity) * preco(l.itemCode), 0);
@@ -499,10 +503,22 @@ function EmitirOc({ req, onSuccess, onErr }: { req: RequisitionView; onSuccess: 
           <option value="">Selecione…</option>
           {(paying.data ?? []).map((p) => <option key={p.id} value={p.code}>{p.code} — {p.legalName}</option>)}
         </Select>
-        <Select label="Fornecedor vencedor" value={supplierCode} onChange={(e) => setSupplierCode(e.target.value)}>
-          <option value="">Selecione…</option>
-          {(suppliers.data ?? []).map((s) => <option key={s.id} value={s.code}>{s.code} — {s.name}</option>)}
-        </Select>
+        <div>
+          <Select label="Fornecedor vencedor" value={supplierCode} onChange={(e) => setSupplierCode(e.target.value)}>
+            <option value="">Selecione…</option>
+            {(suppliers.data ?? []).map((s) => {
+              const nota = otif.porCodigo(s.code);
+              const sufixo = nota && nota.linesEvaluated > 0 ? ` · OTIF ${nota.otifIndex}%` : "";
+              return <option key={s.id} value={s.code}>{s.code} — {s.name}{sufixo}</option>;
+            })}
+          </Select>
+          {supplierCode && (
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-xs text-slate-400">Entrega:</span>
+              <OtifBadge score={otif.porCodigo(supplierCode)} detalhado />
+            </div>
+          )}
+        </div>
       </div>
 
       <Table head={["Nesta OC", "Item", "Qtd", "Valor unitário (R$)", "Valor serviço (R$)"]}>

@@ -389,3 +389,26 @@ export interface StockCheckRow {
   inCatalog: boolean;
   balance: number;
 }
+export interface SupplierScoreView {
+  supplierId: string;
+  supplierCode: string;
+  supplierName: string;
+  period: string;
+  linesEvaluated: number;
+  linesWithDeadline: number;
+  linesWithoutDeadline: number;
+  onTimeRate: number;
+  inFullRate: number;
+  otifIndex: number;
+  damageRate: number;
+  occurrences: number;
+  tier: string;
+}
+export interface SupplierScorecardView {
+  supplierId: string;
+  supplierCode: string;
+  supplierName: string;
+  months: number;
+  overall: SupplierScoreView;
+  periods: SupplierScoreView[];
+}

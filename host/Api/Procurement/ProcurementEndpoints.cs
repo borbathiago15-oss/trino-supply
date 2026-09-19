@@ -238,6 +238,25 @@ public static class ProcurementEndpoints
         }).RequireAuthorization();
 
         // Projeção de histórico por fornecedor (read model assíncrono, alimentado por eventos).
+        // Scorecard OTIF (Fase 03): desempenho de ENTREGA, calculado do prazo da OC × conferência na
+        // doca. Complementa /suppliers/stats, que mede volume comprado, não qualidade de entrega.
+        p.MapGet("/suppliers/scorecard", async (int? months, IPermissionChecker perm,
+            ISupplierScorecardService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
+            return Results.Ok(await svc.ListAsync(months ?? 12, ct));
+        }).RequireAuthorization();
+
+        p.MapGet("/suppliers/{id:guid}/scorecard", async (Guid id, int? months, IPermissionChecker perm,
+            ISupplierScorecardService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
+            var r = await svc.GetAsync(id, months ?? 12, ct);
+            return r.IsSuccess
+                ? Results.Ok(r.Value)
+                : Results.NotFound(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization();
+
         p.MapGet("/suppliers/stats", async (IPermissionChecker perm, ISupplierService svc, CancellationToken ct) =>
         {
             if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();

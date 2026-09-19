@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import type { EtapaDoCaminho } from '@/api/cotacoes';
 import { dataHora } from '@/util/formato';
 
@@ -33,8 +34,10 @@ export function legenda(e: EtapaDoCaminho): string {
  * já sabia (os aprovadores estão no centro de custo, o solicitante na SC), só
  * não dizia nesta tela.
  */
-export function CaminhoDoProcesso({ etapas }: { etapas: EtapaDoCaminho[] }) {
+export function CaminhoDoProcesso({ etapas, centro }: { etapas: EtapaDoCaminho[]; centro?: string }) {
   if (etapas.length === 0) return null;
+  // um link só, mesmo que os dois níveis estejam vazios: o conserto é o mesmo cadastro
+  const semAprovador = etapas.some((e) => e.semAprovador);
 
   return (
     <div data-testid="caminho-do-processo" className="mt-3 rounded-lg border border-marca/25 px-4 py-3">
@@ -52,6 +55,14 @@ export function CaminhoDoProcesso({ etapas }: { etapas: EtapaDoCaminho[] }) {
           </li>
         ))}
       </ol>
+      {semAprovador && (
+        <p className="mt-2 text-[12.5px]">
+          Este processo não anda enquanto o centro não tiver aprovador.{' '}
+          <Link to="/centros-custo" className="font-semibold underline">
+            Cadastrar aprovadores{centro ? ` do ${centro}` : ''} →
+          </Link>
+        </p>
+      )}
     </div>
   );
 }

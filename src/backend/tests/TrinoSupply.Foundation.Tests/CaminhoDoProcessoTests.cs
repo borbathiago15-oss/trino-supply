@@ -64,6 +64,18 @@ public class CaminhoDoProcessoTests
         var caminho = CaminhoDoProcesso.De(Processo(QuotationStatus.AwaitingManager), ["Ana"], Dia1, AlcadasDoCentro.Nenhuma);
 
         Assert.Equal("sem aprovador cadastrado no centro", Etapa(caminho, "nivel1").Quem);
+        // a marca é o que a tela usa para oferecer o link do cadastro — texto não é contrato
+        Assert.True(Etapa(caminho, "nivel1").SemAprovador);
+        Assert.True(Etapa(caminho, "nivel2").SemAprovador);
+    }
+
+    [Fact]
+    public void Com_aprovador_cadastrado_a_marca_fica_desligada_mesmo_na_etapa_ja_feita()
+    {
+        var caminho = CaminhoDoProcesso.De(Processo(QuotationStatus.AwaitingDirector), ["Ana"], Dia1, Alcadas);
+
+        Assert.False(Etapa(caminho, "nivel1").SemAprovador);
+        Assert.False(Etapa(caminho, "nivel2").SemAprovador);
     }
 
     [Fact]

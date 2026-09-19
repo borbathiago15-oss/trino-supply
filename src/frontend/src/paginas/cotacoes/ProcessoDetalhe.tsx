@@ -95,7 +95,7 @@ export function ProcessoDetalhe() {
 
   return (
     <>
-      <CabecalhoDoProcesso processo={q} />
+      <CabecalhoDoProcesso processo={q} usuarioId={usuario?.id} />
 
       <PainelDeConvidados processo={q} podeConvidar={pode.convidar}
         aoConvidar={recarregar} aoAvisar={aviso} />

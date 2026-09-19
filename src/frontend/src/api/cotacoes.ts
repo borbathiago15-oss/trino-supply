@@ -271,6 +271,8 @@ export interface EtapaDoCaminho {
   quem: string | null;
   /** Quando foi feita, ou desde quando se espera. */
   em: string | null;
+  /** O centro não tem ninguém cadastrado neste nível — a tela aponta onde consertar. */
+  semAprovador?: boolean;
 }
 
 export interface Processo {

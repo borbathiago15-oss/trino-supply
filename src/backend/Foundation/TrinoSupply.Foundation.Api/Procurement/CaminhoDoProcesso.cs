@@ -7,7 +7,9 @@ namespace TrinoSupply.Foundation.Api.Procurement;
 /// <param name="Situacao"><c>feita</c>, <c>atual</c>, <c>pendente</c> ou <c>encerrada</c>.</param>
 /// <param name="Quem">Quem fez (etapa feita) ou de quem se espera (atual e pendente).</param>
 /// <param name="Em">Quando foi feita, ou desde quando se espera. Nulo quando não há marca honesta.</param>
-public record EtapaDoCaminho(string Chave, string Titulo, string Situacao, string? Quem, DateTimeOffset? Em);
+/// <param name="SemAprovador">O centro não tem ninguém cadastrado neste nível — a tela aponta onde consertar.</param>
+public record EtapaDoCaminho(
+    string Chave, string Titulo, string Situacao, string? Quem, DateTimeOffset? Em, bool SemAprovador = false);
 
 /// <summary>
 /// O caminho do processo: quem pediu, o que já aconteceu, de quem se espera agora e o que
@@ -81,8 +83,9 @@ public static class CaminhoDoProcesso
         bool atual, DateTimeOffset? desde, IReadOnlyList<string> aprovadores)
     {
         if (feitaEm is not null) return new(chave, titulo, Feita, feitaPor, feitaEm);
-        var quem = aprovadores.Count == 0 ? "sem aprovador cadastrado no centro" : string.Join(", ", aprovadores);
-        return new(chave, titulo, atual ? Atual : Pendente, quem, atual ? desde : null);
+        var ninguem = aprovadores.Count == 0;
+        var quem = ninguem ? "sem aprovador cadastrado no centro" : string.Join(", ", aprovadores);
+        return new(chave, titulo, atual ? Atual : Pendente, quem, atual ? desde : null, SemAprovador: ninguem);
     }
 
     private static string? Nomes(IReadOnlyList<string> nomes)

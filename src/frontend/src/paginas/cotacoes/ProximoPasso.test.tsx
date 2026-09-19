@@ -18,6 +18,25 @@ const montar = (p: Partial<Processo>) => render(
 );
 
 describe('proximoPasso', () => {
+  it('quem escolheu o fornecedor lê que a aprovação é de outra pessoa, sem link para a Central', () => {
+    // é o caso do administrador que faz o processo inteiro sozinho e não entende por que travou
+    const q = processo({
+      status: 'AGUARDANDO_GERENTE',
+      selection: { winnerSupplierId: 's1', winnerProposalId: 'p1', criteria: null, justification: 'x', by: 'eu', byLabel: 'Eu' },
+    });
+    const passo = proximoPasso(q, 'eu')!;
+    expect(passo.titulo).toBe('Aprovação de Nível 1');
+    expect(passo.detalhe).toMatch(/Você escolheu o fornecedor/);
+    expect(passo.rota).toBeUndefined();
+    // outra pessoa continua vendo o caminho normal
+    expect(proximoPasso(q, 'outro')!.rota).toBe('/aprovacoes');
+  });
+
+  it('quem deu o Nível 1 lê que o Nível 2 é de outra pessoa', () => {
+    const q = processo({ status: 'AGUARDANDO_DIRETOR', managerApproval: { by: 'eu', byLabel: 'Eu', at: '2026-09-02T10:00:00Z' } });
+    expect(proximoPasso(q, 'eu')!.detalhe).toMatch(/Nível 2 é de outra pessoa/);
+  });
+
   it('a aprovação sai desta tela: manda para a Central de Aprovação', () => {
     // é o salto que confundia — a aprovação não fica no grupo Compras
     for (const status of ['AGUARDANDO_GERENTE', 'AGUARDANDO_DIRETOR']) {

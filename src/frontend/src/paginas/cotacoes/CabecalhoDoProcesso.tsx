@@ -14,7 +14,7 @@ import { CaminhoDoProcesso } from './CaminhoDoProcesso';
  * poder abrir o arquivo do cabeçalho sem passar pelas ações, pela negociação e
  * pelo mapa.
  */
-export function CabecalhoDoProcesso({ processo: q }: { processo: Processo }) {
+export function CabecalhoDoProcesso({ processo: q, usuarioId }: { processo: Processo; usuarioId?: string }) {
   const marca = ROTULO_RFQ[q.status] ?? { rotulo: q.status, classe: 'bg-slate-100 text-slate-600' };
   const origem = q.sourcePrNumbers.length ? q.sourcePrNumbers : (q.sourcePrNumber ? [q.sourcePrNumber] : []);
 
@@ -31,8 +31,8 @@ export function CabecalhoDoProcesso({ processo: q }: { processo: Processo }) {
         <Dado rotulo="Prazo">{data(q.deadline)}</Dado>
       </div>
       <Nota>Aberta por {q.createdByLabel ?? '—'} em {dataHora(q.createdAt)}.</Nota>
-      <ProximoPasso processo={q} />
-      <CaminhoDoProcesso etapas={q.caminho ?? []} />
+      <ProximoPasso processo={q} usuarioId={usuarioId} />
+      <CaminhoDoProcesso etapas={q.caminho ?? []} centro={q.costCenter} />
       {q.decisionReason && (
         <p className="mt-2 rounded-lg bg-aviso-fundo px-3 py-2 text-[13px] text-aviso">
           Último motivo registrado: <strong>{q.decisionReason}</strong>

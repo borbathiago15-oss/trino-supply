@@ -20,6 +20,7 @@ public sealed class ProcurementDbContext(DbContextOptions<ProcurementDbContext> 
     public DbSet<CostCenter> CostCenters => Set<CostCenter>();
     public DbSet<GoodsReceipt> GoodsReceipts => Set<GoodsReceipt>();
     public DbSet<Quotation> Quotations => Set<Quotation>();
+    public DbSet<PurchaseInvoice> Invoices => Set<PurchaseInvoice>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -317,6 +318,57 @@ public sealed class ProcurementDbContext(DbContextOptions<ProcurementDbContext> 
             // Uma oferta por participante e item (recotar substitui a anterior).
             e.HasIndex(x => new { x.ParticipantId, x.LineId }).IsUnique();
             e.HasIndex(x => x.LineId);
+        });
+
+        b.Entity<PurchaseInvoice>(e =>
+        {
+            e.ToTable("purchase_invoice");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").HasConversion(id => id.Value, v => PurchaseInvoiceId.From(v));
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.PurchaseOrderId).HasColumnName("purchase_order_id").HasConversion(id => id.Value, v => PurchaseOrderId.From(v));
+            e.Property(x => x.AccessKey).HasColumnName("access_key").HasMaxLength(44).IsRequired();
+            e.Property(x => x.Number).HasColumnName("number");
+            e.Property(x => x.Series).HasColumnName("series").HasMaxLength(10).IsRequired();
+            e.Property(x => x.IssuedAt).HasColumnName("issued_at");
+            e.Property(x => x.EmitterTaxId).HasColumnName("emitter_tax_id").HasMaxLength(20).IsRequired();
+            e.Property(x => x.EmitterName).HasColumnName("emitter_name").HasMaxLength(200).IsRequired();
+            e.Property(x => x.TotalValue).HasColumnName("total_value").HasColumnType("numeric(18,2)");
+            e.Property(x => x.ImportedBySubject).HasColumnName("imported_by").HasMaxLength(200).IsRequired();
+            e.Property(x => x.ImportedAt).HasColumnName("imported_at");
+            e.Property(x => x.Status).HasColumnName("status").HasConversion<short>();
+            e.Property(x => x.MatchedAt).HasColumnName("matched_at");
+            e.Property(x => x.MatchSummary).HasColumnName("match_summary").HasMaxLength(2000);
+            e.Property(x => x.ReleasedToFinance).HasColumnName("released_to_finance");
+            e.Property(x => x.ReleasedBySubject).HasColumnName("released_by").HasMaxLength(200);
+            e.Property(x => x.ReleasedAt).HasColumnName("released_at");
+            e.Property(x => x.ReleaseNote).HasColumnName("release_note").HasMaxLength(1000);
+            e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
+            e.HasMany(x => x.Lines).WithOne().HasForeignKey(l => l.InvoiceId);
+            // A chave de acesso é a identidade fiscal da nota: a mesma não entra duas vezes.
+            e.HasIndex(x => new { x.CompanyId, x.AccessKey }).IsUnique();
+            e.HasIndex(x => new { x.CompanyId, x.PurchaseOrderId });
+            e.Ignore(x => x.DomainEvents);
+        });
+
+        b.Entity<PurchaseInvoiceLine>(e =>
+        {
+            e.ToTable("purchase_invoice_line");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.InvoiceId).HasColumnName("invoice_id").HasConversion(id => id.Value, v => PurchaseInvoiceId.From(v));
+            e.Property(x => x.ItemNumber).HasColumnName("item_number");
+            e.Property(x => x.ProductCode).HasColumnName("product_code").HasMaxLength(60).IsRequired();
+            e.Property(x => x.Description).HasColumnName("description").HasMaxLength(255).IsRequired();
+            e.Property(x => x.Ncm).HasColumnName("ncm").HasMaxLength(10);
+            e.Property(x => x.Cfop).HasColumnName("cfop").HasMaxLength(10);
+            e.Property(x => x.Unit).HasColumnName("unit").HasMaxLength(30).IsRequired();
+            e.Property(x => x.Quantity).HasColumnName("quantity").HasColumnType("numeric(18,6)");
+            e.Property(x => x.UnitPrice).HasColumnName("unit_price").HasColumnType("numeric(18,6)");
+            e.Property(x => x.TotalValue).HasColumnName("total_value").HasColumnType("numeric(18,2)");
+            e.HasIndex(x => x.InvoiceId);
+            e.HasIndex(x => new { x.InvoiceId, x.ItemNumber }).IsUnique();
         });
 
         b.Entity<SupplierStats>(e =>

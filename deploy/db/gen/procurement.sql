@@ -1070,5 +1070,123 @@ BEGIN
     VALUES ('20260919201514_Quotation', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919210402_PurchaseInvoice') THEN
+    CREATE TABLE procurement.purchase_invoice (
+        id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        purchase_order_id uuid NOT NULL,
+        access_key character varying(44) NOT NULL,
+        number bigint NOT NULL,
+        series character varying(10) NOT NULL,
+        issued_at timestamp with time zone NOT NULL,
+        emitter_tax_id character varying(20) NOT NULL,
+        emitter_name character varying(200) NOT NULL,
+        total_value numeric(18,2) NOT NULL,
+        imported_by character varying(200) NOT NULL,
+        imported_at timestamp with time zone NOT NULL,
+        status smallint NOT NULL,
+        matched_at timestamp with time zone,
+        match_summary character varying(2000),
+        released_to_finance boolean NOT NULL,
+        released_by character varying(200),
+        released_at timestamp with time zone,
+        release_note character varying(1000),
+        version integer NOT NULL,
+        CONSTRAINT "PK_purchase_invoice" PRIMARY KEY (id)
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919210402_PurchaseInvoice') THEN
+    CREATE TABLE procurement.purchase_invoice_line (
+        id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        invoice_id uuid NOT NULL,
+        item_number integer NOT NULL,
+        product_code character varying(60) NOT NULL,
+        description character varying(255) NOT NULL,
+        ncm character varying(10),
+        cfop character varying(10),
+        unit character varying(30) NOT NULL,
+        quantity numeric(18,6) NOT NULL,
+        unit_price numeric(18,6) NOT NULL,
+        total_value numeric(18,2) NOT NULL,
+        CONSTRAINT "PK_purchase_invoice_line" PRIMARY KEY (id),
+        CONSTRAINT "FK_purchase_invoice_line_purchase_invoice_invoice_id" FOREIGN KEY (invoice_id) REFERENCES procurement.purchase_invoice (id) ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919210402_PurchaseInvoice') THEN
+    CREATE UNIQUE INDEX "IX_purchase_invoice_company_id_access_key" ON procurement.purchase_invoice (company_id, access_key);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919210402_PurchaseInvoice') THEN
+    CREATE INDEX "IX_purchase_invoice_company_id_purchase_order_id" ON procurement.purchase_invoice (company_id, purchase_order_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919210402_PurchaseInvoice') THEN
+    CREATE INDEX "IX_purchase_invoice_line_invoice_id" ON procurement.purchase_invoice_line (invoice_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919210402_PurchaseInvoice') THEN
+    CREATE UNIQUE INDEX "IX_purchase_invoice_line_invoice_id_item_number" ON procurement.purchase_invoice_line (invoice_id, item_number);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919210402_PurchaseInvoice') THEN
+
+    ALTER TABLE procurement.purchase_invoice      ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE procurement.purchase_invoice      FORCE  ROW LEVEL SECURITY;
+    ALTER TABLE procurement.purchase_invoice_line ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE procurement.purchase_invoice_line FORCE  ROW LEVEL SECURITY;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919210402_PurchaseInvoice') THEN
+
+    CREATE POLICY tenant_isolation ON procurement.purchase_invoice
+        USING      (company_id = foundation.current_company())
+        WITH CHECK (company_id = foundation.current_company());
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919210402_PurchaseInvoice') THEN
+
+    CREATE POLICY tenant_isolation ON procurement.purchase_invoice_line
+        USING      (company_id = foundation.current_company())
+        WITH CHECK (company_id = foundation.current_company());
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919210402_PurchaseInvoice') THEN
+    INSERT INTO procurement.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260919210402_PurchaseInvoice', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

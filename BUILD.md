@@ -522,6 +522,31 @@ dotnet ef database update \
   anterior a R$ 10, proposta a R$ 12,50 acende o alerta, a R$ 10,50 não) e build web ok.
   Nota de infra: filhos criados num agregado **já rastreado** chegam com PK preenchida e o EF os
   trataria como UPDATE de linha inexistente — as ofertas novas são marcadas explicitamente.
+- ✅ **Fase 05 — Conciliação fiscal de três pontas (3-Way Match) com ingestão de NF-e (validado):**
+  a conferência fiscal deixou de ser manual. O **XML da NF-e entra por upload** (arrastar o arquivo)
+  e nada é digitado: chave de acesso, emitente, itens, NCM/CFOP e valores saem do próprio arquivo.
+  A chave de 44 dígitos é validada pelo **verificador módulo 11** — pega arquivo truncado ou trocado
+  antes de virar vínculo errado nota↔pedido — e só **modelo 55** entra como nota de compra.
+  O motor `ThreeWayMatch` (cálculo puro) cruza **OC × NF-e × conferência da doca** e resume a regra
+  do financeiro numa frase: *não se paga o que não foi pedido, nem o que não chegou bom*. Bloqueia
+  preço fora da tolerância (padrão **0,5%**, configurável em `Procurement:Match:*`), quantidade
+  faturada acima do pedido **ou** acima do líquido recebido (padrão **0%** de folga), e item que
+  está na nota mas não na OC. **Avaria só trava se a nota não a tiver descontado** — se o fornecedor
+  já faturou só o que chegou bom, a ocorrência segue viva na tratativa mas não segura o pagamento.
+  Faturamento e entrega **parciais são normais** e não acusam erro: as remessas somam antes de
+  comparar. Divergência acima da tolerância **trava o envio ao financeiro**; a liberação da exceção
+  existe, mas exige **justificativa registrada** e vai para a auditoria com nome e motivo. A mesma
+  chave não entra duas vezes. Endpoints `GET/POST /purchases/orders/{id}/invoices`,
+  `POST /purchases/invoices/{id}/{rematch,release}`; 2 tabelas novas com **RLS fail-closed**.
+  UI: área de arrastar-e-soltar no detalhe da OC + tabela das **quatro colunas** (pedido · faturado ·
+  físico · 🟢/🔴) com o código da divergência (`DIV-ERR-PRECO`) e o desvio.
+  **Domínio 114/114** (+15) e **integração 57/57** (+4: os dois cenários de aceite — match perfeito
+  libera, +15% de preço trava com `DIV-ERR-PRECO` e só passa com justificativa — além de nota de
+  outro CNPJ recusada e XML corrompido virando 400) e build web ok.
+  **Bug real pego pelo teste:** a NF-e emite `dhEmi` no fuso local (−03:00) e o Postgres só aceita
+  offset zero em `timestamptz` — toda nota real quebraria na gravação. O parser normaliza para UTC.
+  Fora do escopo desta fatia (Fase 05): Compliance Score, conector Senior Sapiens, e o match de NCM
+  (a OC ainda não guarda NCM, então não há contra o que cruzar).
 - ✅ **v3 — Compra dividida: várias OCs por requisição (validado):** removida a trava que permitia
   **uma única OC por requisição** (índice único parcial `(company, requisition_id) WHERE status=1`).
   Agora a OC cobre **exatamente os itens precificados naquela emissão**, então a mesma requisição

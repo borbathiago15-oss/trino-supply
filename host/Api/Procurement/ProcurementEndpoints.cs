@@ -27,6 +27,7 @@ public sealed record SubmitProposalRequest(
 public sealed record AwardLineRequest(Guid LineId, string SupplierCode, string? Note);
 public sealed record AwardQuotationRequest(IReadOnlyList<AwardLineRequest> Awards);
 public sealed record CancelQuotationRequest(string Reason);
+public sealed record ReleaseInvoiceRequest(string? Note);
 
 /// <summary>Endpoints de Compras (PR-001). Requisitar e aprovar são permissões distintas (SoD).</summary>
 public static class ProcurementEndpoints
@@ -530,8 +531,80 @@ public static class ProcurementEndpoints
             return r.IsSuccess ? Results.NoContent() : MapQuotationError(r.Error);
         }).RequireAuthorization();
 
+        // ---- Conciliação fiscal de tres pontas (Fase 05) -------------------------------------
+        // OC x NF-e x conferencia da doca. Divergencia acima da tolerancia trava o financeiro.
+        p.MapGet("/orders/{id:guid}/invoices", async (Guid id, IPermissionChecker perm,
+            IInvoiceMatchService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
+            var r = await svc.GetByOrderAsync(id, ct);
+            return r.IsSuccess ? Results.Ok(r.Value) : Results.NotFound(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization();
+
+        // Ingestão do XML da NF-e (multipart, campo 'file'): nada é digitado.
+        p.MapPost("/orders/{id:guid}/invoices", async (Guid id, HttpRequest http, IPermissionChecker perm,
+            IInvoiceMatchService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesOrder, ct)
+                && !await perm.HasAsync(PermissionCatalog.MaterialsManage, ct)) return Results.Forbid();
+
+            string xml;
+            if (http.HasFormContentType)
+            {
+                var form = await http.ReadFormAsync(ct);
+                var file = form.Files["file"] ?? form.Files.FirstOrDefault();
+                if (file is null || file.Length == 0)
+                    return Results.BadRequest(new { code = "purchases.invoice.no_file", message = "Envie o XML da NF-e no campo 'file'." });
+                await using var stream = file.OpenReadStream();
+                using var reader = new StreamReader(stream);
+                xml = await reader.ReadToEndAsync(ct);
+            }
+            else
+            {
+                // Aceita o XML cru no corpo — é assim que uma automação de caixa de entrada manda.
+                using var reader = new StreamReader(http.Body);
+                xml = await reader.ReadToEndAsync(ct);
+            }
+
+            var r = await svc.ImportAsync(id, xml, ct);
+            return r.IsSuccess
+                ? Results.Created($"/api/v1/purchases/invoices/{r.Value.InvoiceId}", r.Value)
+                : MapInvoiceError(r.Error);
+        }).RequireAuthorization();
+
+        // Reprocessa a conciliação (ex.: depois de corrigir o recebimento na doca).
+        p.MapPost("/invoices/{id:guid}/rematch", async (Guid id, IPermissionChecker perm,
+            IInvoiceMatchService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesOrder, ct)) return Results.Forbid();
+            var r = await svc.RematchAsync(id, ct);
+            return r.IsSuccess ? Results.Ok(r.Value) : MapInvoiceError(r.Error);
+        }).RequireAuthorization();
+
+        // Liberação da exceção: nota divergente só passa com justificativa, e ela vai para a auditoria.
+        p.MapPost("/invoices/{id:guid}/release", async (Guid id, ReleaseInvoiceRequest req,
+            IPermissionChecker perm, IInvoiceMatchService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesOrder, ct)) return Results.Forbid();
+            var r = await svc.ReleaseAsync(id, req.Note, ct);
+            return r.IsSuccess ? Results.NoContent() : MapInvoiceError(r.Error);
+        }).RequireAuthorization();
+
         return app;
     }
+
+    /// <summary>
+    /// Erros da conciliação fiscal: nota repetida e concorrência viram 409; o resto é 400/404. O XML
+    /// malformado é 400 de propósito — o problema está no arquivo enviado, não no servidor.
+    /// </summary>
+    private static IResult MapInvoiceError(TrinoSupply.BuildingBlocks.Error error) => error.Code switch
+    {
+        "purchases.order.not_found" or "purchases.invoice.not_found"
+            => Results.NotFound(new { code = error.Code, message = error.Message }),
+        "purchases.invoice.duplicate_key" or "purchases.conflict" or "purchases.invoice.already_released"
+            => Results.Conflict(new { code = error.Code, message = error.Message }),
+        _ => Results.BadRequest(new { code = error.Code, message = error.Message })
+    };
 
     /// <summary>
     /// Erros da cotação: o que é disputa de estado (item já adjudicado, já em outra cotação) vira

@@ -11,6 +11,7 @@ import { Perm, useHas } from "@/lib/me";
 import { downloadCsv } from "@/lib/csv";
 import { ReqHeader, RequisitionHeaderFields, emptyHeader, headerError, useRequisitionRefData } from "@/components/requisitionHeader";
 import { ConferenciaRecebimento } from "@/components/recebimento";
+import { ConciliacaoFiscal } from "@/components/conciliacao";
 import { SaldoBadge, useSaldoAlmox } from "@/components/saldoAlmox";
 import { OtifBadge, useScorecards } from "@/components/otif";
 import { AbrirCotacao } from "@/components/cotacao";
@@ -179,6 +180,9 @@ export default function ComprasPage() {
 
 /** Detalhe da OC na própria tela: cabeçalho, itens com impostos, totais e — se cancelada — o motivo. */
 function OcDetalhe({ o }: { o: OrderView }) {
+  const toast = useToast();
+  const onErr = (e: unknown) => toast.push("error", e instanceof ApiError ? e.message : "Erro");
+  const onOk = (m: string) => toast.push("success", m);
   const dt = (s?: string | null) => (s ? new Date(s).toLocaleDateString("pt-BR") : "—");
   return (
     <div className="space-y-3 text-sm">
@@ -234,6 +238,14 @@ function OcDetalhe({ o }: { o: OrderView }) {
 
       {/* Conferência física da entrega — some quando a OC foi cancelada. */}
       {o.status !== "Cancelled" && <ConferenciaRecebimento orderId={o.id} />}
+
+      {/* Conciliação fiscal (Fase 05): OC × NF-e × doca, a partir do XML da nota. */}
+      {o.status !== "Cancelled" && (
+        <div className="border-t border-slate-100 pt-3">
+          <h4 className="mb-2 text-sm font-semibold text-slate-700">Conciliação fiscal (3 pontas)</h4>
+          <ConciliacaoFiscal orderId={o.id} onErr={onErr} onOk={onOk} />
+        </div>
+      )}
     </div>
   );
 }

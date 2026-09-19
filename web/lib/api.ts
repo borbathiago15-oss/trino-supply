@@ -485,3 +485,68 @@ export interface QuotationSummaryView {
   respondedCount: number;
   awardedCount: number;
 }
+export interface MatchDivergenceView {
+  itemCode: string;
+  kind: string;
+  code: string;
+  expected: number;
+  found: number;
+  deviationPercent: number;
+  withinTolerance: boolean;
+  message: string;
+}
+export interface MatchLineView {
+  itemCode: string;
+  quantityOrdered: number;
+  unitPriceOrdered: number;
+  quantityInvoiced: number | null;
+  unitPriceInvoiced: number | null;
+  quantityReceived: number;
+  quantityDamaged: number;
+  matched: boolean;
+  notInvoiced: boolean;
+  divergences: MatchDivergenceView[];
+}
+export interface InvoiceLineView {
+  itemNumber: number;
+  productCode: string;
+  description: string;
+  ncm?: string | null;
+  cfop?: string | null;
+  unit: string;
+  quantity: number;
+  unitPrice: number;
+  totalValue: number;
+}
+export interface PurchaseInvoiceView {
+  id: string;
+  purchaseOrderId: string;
+  accessKey: string;
+  number: number;
+  series: string;
+  issuedAt: string;
+  emitterTaxId: string;
+  emitterName: string;
+  totalValue: number;
+  importedBy: string;
+  importedAt: string;
+  status: string;
+  matchedAt?: string | null;
+  matchSummary?: string | null;
+  releasedToFinance: boolean;
+  releasedBy?: string | null;
+  releasedAt?: string | null;
+  releaseNote?: string | null;
+  lines: InvoiceLineView[];
+  match: MatchLineView[];
+}
+export interface OrderMatchView {
+  orderId: string;
+  number: number;
+  supplierCode: string;
+  supplierName: string;
+  status: string;
+  priceTolerancePercent: number;
+  quantityTolerancePercent: number;
+  invoices: PurchaseInvoiceView[];
+}

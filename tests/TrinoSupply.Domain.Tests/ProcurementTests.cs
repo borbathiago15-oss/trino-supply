@@ -863,3 +863,235 @@ public class QuotationTests
             q.Award([new AwardInput(LinhaDe(q, "LUVA"), FornA, null)], "comprador", Agora).Error.Code);
     }
 }
+
+/// <summary>
+/// Chave de acesso da NF-e: 44 dígitos com verificador módulo 11. Validar aqui pega o erro mais
+/// comum da ingestão (arquivo truncado ou trocado) antes de virar vínculo errado nota↔pedido.
+/// </summary>
+public class NfeAccessKeyTests
+{
+    /// <summary>Monta uma chave válida a partir dos 43 primeiros dígitos, calculando o DV.</summary>
+    private static string ComDv(string prefixo43)
+    {
+        var soma = 0;
+        var peso = 2;
+        for (var i = 42; i >= 0; i--)
+        {
+            soma += (prefixo43[i] - '0') * peso;
+            peso = peso == 9 ? 2 : peso + 1;
+        }
+        var resto = soma % 11;
+        return prefixo43 + (resto is 0 or 1 ? 0 : 11 - resto);
+    }
+
+    /// <summary>cUF 35 · AAMM 2609 · CNPJ · mod 55 · série 001 · nNF · tpEmis 1 · cNF.</summary>
+    private const string Prefixo = "35260912345678000199" + "55" + "001" + "000000123" + "1" + "12345678";
+
+    [Fact]
+    public void Chave_valida_e_aceita_e_expoe_emitente_e_modelo()
+    {
+        var chave = ComDv(Prefixo);
+
+        var r = NfeAccessKey.Parse(chave);
+
+        Assert.True(r.IsSuccess);
+        Assert.Equal("12345678000199", NfeAccessKey.EmitterTaxId(chave));
+        Assert.Equal("55", NfeAccessKey.Model(chave));
+    }
+
+    [Fact]
+    public void Chave_com_digito_verificador_errado_e_recusada()
+    {
+        var chave = ComDv(Prefixo);
+        var adulterada = chave[..43] + (chave[43] == '0' ? '1' : '0');
+
+        var r = NfeAccessKey.Parse(adulterada);
+
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.nfe.key_invalid", r.Error.Code);
+    }
+
+    [Fact]
+    public void Chave_truncada_e_recusada_pelo_tamanho()
+    {
+        var r = NfeAccessKey.Parse(Prefixo[..40]);
+
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.nfe.key_length", r.Error.Code);
+    }
+
+    [Fact]
+    public void Mascara_e_prefixo_NFe_nao_atrapalham()
+    {
+        var chave = ComDv(Prefixo);
+
+        // É assim que a chave costuma chegar: com "NFe" na frente (atributo Id) ou espaçada.
+        Assert.Equal(chave, NfeAccessKey.Parse("NFe" + chave).Value);
+        Assert.Equal(chave, NfeAccessKey.Parse(string.Join(" ", chave.Chunk(4).Select(c => new string(c)))).Value);
+    }
+}
+
+/// <summary>
+/// Conciliação de três pontas. A regra que estes testes protegem cabe numa frase: não se paga o que
+/// não foi pedido, nem o que não chegou bom.
+/// </summary>
+public class ThreeWayMatchTests
+{
+    private static MatchResult Run(
+        (string Item, decimal Qtd, decimal Preco)[] pedido,
+        (string Item, decimal Qtd, decimal Preco)[] nota,
+        (string Item, decimal Liquido, decimal Avariado)[] doca,
+        MatchTolerance? tol = null) =>
+        ThreeWayMatch.Run(
+            pedido.Select(p => new OrderedFact(p.Item, p.Qtd, p.Preco)),
+            nota.Select(n => new InvoicedFact(n.Item, n.Qtd, n.Preco)),
+            doca.Select(d => new ReceivedFact(d.Item, d.Liquido, d.Avariado)),
+            tol);
+
+    [Fact]
+    public void Match_perfeito_concilia()
+    {
+        var r = Run(
+            [("CABO", 100m, 15m)],
+            [("CABO", 100m, 15m)],
+            [("CABO", 100m, 0m)]);
+
+        Assert.True(r.Matched);
+        Assert.Empty(r.Divergences);
+        Assert.Equal("Conciliado", r.Summary);
+    }
+
+    [Fact]
+    public void Preco_faturado_acima_da_tolerancia_bloqueia()
+    {
+        var r = Run(
+            [("CABO", 100m, 10m)],
+            [("CABO", 100m, 11.50m)],   // +15%
+            [("CABO", 100m, 0m)]);
+
+        Assert.False(r.Matched);
+        var d = Assert.Single(r.Divergences);
+        Assert.Equal(DivergenceKind.Preco, d.Kind);
+        Assert.Equal("DIV-ERR-PRECO", d.Code);
+        Assert.Equal(10m, d.Expected);
+        Assert.Equal(11.50m, d.Found);
+        Assert.Equal(15m, d.DeviationPercent);
+    }
+
+    [Fact]
+    public void Centavo_de_arredondamento_passa_dentro_da_tolerancia()
+    {
+        // 10,02 sobre 10,00 é 0,2% — abaixo do padrão de 0,5%: nota com 4 casas arredondando.
+        var r = Run(
+            [("CABO", 100m, 10m)],
+            [("CABO", 100m, 10.02m)],
+            [("CABO", 100m, 0m)]);
+
+        Assert.True(r.Matched);
+    }
+
+    [Fact]
+    public void Faturar_mais_do_que_chegou_bloqueia()
+    {
+        // Pediu 100, chegaram 100 mas 10 avariadas (líquido 90), e a nota cobra as 100.
+        var r = Run(
+            [("CABO", 100m, 10m)],
+            [("CABO", 100m, 10m)],
+            [("CABO", 90m, 10m)]);
+
+        Assert.False(r.Matched);
+        Assert.Contains(r.Divergences, d => d.Kind == DivergenceKind.Quantidade && d.Expected == 90m);
+        Assert.Contains(r.Divergences, d => d.Kind == DivergenceKind.Avaria);
+    }
+
+    [Fact]
+    public void Avaria_ja_descontada_pela_nota_nao_trava_o_pagamento()
+    {
+        // Mesma avaria, mas o fornecedor faturou só o que chegou bom: o financeiro pode pagar.
+        var r = Run(
+            [("CABO", 100m, 10m)],
+            [("CABO", 90m, 10m)],
+            [("CABO", 90m, 10m)]);
+
+        Assert.True(r.Matched);
+        var linha = Assert.Single(r.Lines);
+        // A ocorrência continua registrada na linha — ela vive para a tratativa com o fornecedor.
+        Assert.Contains(linha.Divergences, d => d.Kind == DivergenceKind.Avaria && d.WithinTolerance);
+    }
+
+    [Fact]
+    public void Faturar_mais_do_que_foi_pedido_bloqueia()
+    {
+        var r = Run(
+            [("CABO", 100m, 10m)],
+            [("CABO", 120m, 10m)],
+            [("CABO", 120m, 0m)]);   // chegou tudo, mas não era isso que se pediu
+
+        Assert.False(r.Matched);
+        var d = Assert.Single(r.Divergences);
+        Assert.Equal(DivergenceKind.Quantidade, d.Kind);
+        Assert.Equal(100m, d.Expected);
+    }
+
+    [Fact]
+    public void Item_na_nota_que_nao_esta_na_OC_bloqueia()
+    {
+        var r = Run(
+            [("CABO", 100m, 10m)],
+            [("CABO", 100m, 10m), ("BRINDE", 5m, 50m)],
+            [("CABO", 100m, 0m)]);
+
+        Assert.False(r.Matched);
+        var d = Assert.Single(r.Divergences);
+        Assert.Equal(DivergenceKind.ItemNaoEncontrado, d.Kind);
+        Assert.Equal("BRINDE", d.ItemCode);
+    }
+
+    [Fact]
+    public void Faturamento_parcial_e_normal_e_nao_e_divergencia()
+    {
+        // Pediu 2 itens, o fornecedor faturou só um — a outra nota vem depois.
+        var r = Run(
+            [("CABO", 100m, 10m), ("LUVA", 50m, 4m)],
+            [("CABO", 100m, 10m)],
+            [("CABO", 100m, 0m)]);
+
+        Assert.True(r.Matched);
+        Assert.True(r.Lines.Single(l => l.ItemCode == "LUVA").NotInvoiced);
+    }
+
+    [Fact]
+    public void Entregas_parciais_somam_antes_de_comparar()
+    {
+        // Duas remessas de 50 fecham as 100 faturadas: comparar remessa a remessa acusaria falso erro.
+        var r = Run(
+            [("CABO", 100m, 10m)],
+            [("CABO", 100m, 10m)],
+            [("CABO", 50m, 0m), ("CABO", 50m, 0m)]);
+
+        Assert.True(r.Matched);
+        Assert.Equal(100m, r.Lines.Single().QuantityReceived);
+    }
+
+    [Fact]
+    public void Tolerancia_de_quantidade_configurada_afrouxa_a_regra()
+    {
+        var pedido = new[] { ("CABO", 100m, 10m) };
+        var nota = new[] { ("CABO", 101m, 10m) };
+        var doca = new[] { ("CABO", 101m, 0m) };
+
+        Assert.False(Run(pedido, nota, doca).Matched);                                   // padrão: 0%
+        Assert.True(Run(pedido, nota, doca, new MatchTolerance(0.5m, 2m)).Matched);      // 1% cabe em 2%
+    }
+
+    [Fact]
+    public void Codigo_do_item_casa_sem_diferenciar_caixa_nem_espaco()
+    {
+        var r = Run(
+            [("CABO", 100m, 10m)],
+            [(" cabo ", 100m, 10m)],
+            [("Cabo", 100m, 0m)]);
+
+        Assert.True(r.Matched);
+    }
+}

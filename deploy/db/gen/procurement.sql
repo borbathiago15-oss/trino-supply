@@ -767,5 +767,106 @@ BEGIN
     VALUES ('20260919161857_SplitPurchaseOrders', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919172619_GoodsReceipt') THEN
+    CREATE TABLE procurement.goods_receipt (
+        id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        purchase_order_id uuid NOT NULL,
+        invoice_number character varying(60) NOT NULL,
+        invoice_date date,
+        received_by character varying(200) NOT NULL,
+        received_at timestamp with time zone NOT NULL,
+        notes character varying(1000),
+        stock_posted boolean NOT NULL,
+        stock_posted_at timestamp with time zone,
+        version integer NOT NULL,
+        CONSTRAINT "PK_goods_receipt" PRIMARY KEY (id)
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919172619_GoodsReceipt') THEN
+    CREATE TABLE procurement.goods_receipt_line (
+        id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        receipt_id uuid NOT NULL,
+        order_line_id uuid NOT NULL,
+        item_code character varying(60) NOT NULL,
+        unit character varying(30) NOT NULL,
+        quantity_ordered numeric(18,6) NOT NULL,
+        quantity_received numeric(18,6) NOT NULL,
+        quantity_damaged numeric(18,6) NOT NULL,
+        occurrence smallint NOT NULL,
+        occurrence_note character varying(1000),
+        CONSTRAINT "PK_goods_receipt_line" PRIMARY KEY (id),
+        CONSTRAINT "FK_goods_receipt_line_goods_receipt_receipt_id" FOREIGN KEY (receipt_id) REFERENCES procurement.goods_receipt (id) ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919172619_GoodsReceipt') THEN
+    CREATE INDEX "IX_goods_receipt_company_id_purchase_order_id" ON procurement.goods_receipt (company_id, purchase_order_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919172619_GoodsReceipt') THEN
+    CREATE INDEX "IX_goods_receipt_line_order_line_id" ON procurement.goods_receipt_line (order_line_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919172619_GoodsReceipt') THEN
+    CREATE INDEX "IX_goods_receipt_line_receipt_id" ON procurement.goods_receipt_line (receipt_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919172619_GoodsReceipt') THEN
+
+    ALTER TABLE procurement.goods_receipt      ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE procurement.goods_receipt      FORCE  ROW LEVEL SECURITY;
+    ALTER TABLE procurement.goods_receipt_line ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE procurement.goods_receipt_line FORCE  ROW LEVEL SECURITY;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919172619_GoodsReceipt') THEN
+
+    CREATE POLICY tenant_isolation ON procurement.goods_receipt
+        USING      (company_id = foundation.current_company())
+        WITH CHECK (company_id = foundation.current_company());
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919172619_GoodsReceipt') THEN
+
+    CREATE POLICY tenant_isolation ON procurement.goods_receipt_line
+        USING      (company_id = foundation.current_company())
+        WITH CHECK (company_id = foundation.current_company());
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919172619_GoodsReceipt') THEN
+    INSERT INTO procurement.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260919172619_GoodsReceipt', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

@@ -15,6 +15,8 @@ public sealed record AddLinesRequest(IReadOnlyList<RequisitionLineInput> Lines);
 public sealed record RejectRequest(string? Note);
 public sealed record CreateCostCenterRequest(string Code, string Name, string? PayingCompanyCode);
 public sealed record CancelOrderRequest(string Reason);
+public sealed record RegisterReceiptRequest(
+    string? InvoiceNumber, DateOnly? InvoiceDate, string? Notes, IReadOnlyList<ReceiptLineRequest> Lines);
 
 /// <summary>Endpoints de Compras (PR-001). Requisitar e aprovar são permissões distintas (SoD).</summary>
 public static class ProcurementEndpoints
@@ -279,6 +281,64 @@ public static class ProcurementEndpoints
         }).RequireAuthorization();
 
         // Cancelamento de OC (com motivo). Libera a requisição para nova emissão.
+        // ---- Recebimento de mercadoria (MMS-005) --------------------------------------------
+        // Conferência da doca: pedido × entregue × avariado. A quantidade líquida entra no estoque.
+        p.MapGet("/orders/{id:guid}/receipts", async (Guid id, IPermissionChecker perm,
+            IGoodsReceiptService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)
+                && !await perm.HasAsync(PermissionCatalog.MaterialsRead, ct)) return Results.Forbid();
+            var r = await svc.GetOrderReceiptsAsync(id, ct);
+            return r.IsSuccess
+                ? Results.Ok(r.Value)
+                : Results.NotFound(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization();
+
+        // Quem confere é o almoxarifado ou o comprador — qualquer um dos dois papéis serve.
+        p.MapPost("/orders/{id:guid}/receipts", async (Guid id, RegisterReceiptRequest req,
+            IPermissionChecker perm, IGoodsReceiptService svc,
+            TrinoSupply.Api.Procurement.ReceiptStockEntry entrada, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesOrder, ct)
+                && !await perm.HasAsync(PermissionCatalog.MaterialsManage, ct)) return Results.Forbid();
+
+            var r = await svc.RegisterAsync(id, new RegisterReceiptInput(
+                req.InvoiceNumber, req.InvoiceDate, req.Notes, req.Lines ?? []), ct);
+            if (r.IsFailure)
+                return r.Error.Code switch
+                {
+                    "purchases.order.not_found" => Results.NotFound(new { code = r.Error.Code, message = r.Error.Message }),
+                    "purchases.conflict" => Results.Conflict(new { code = r.Error.Code, message = r.Error.Message }),
+                    _ => Results.BadRequest(new { code = r.Error.Code, message = r.Error.Message }),
+                };
+
+            // Entrada no estoque do líquido recebido (orquestrada — Materiais é outro BC).
+            var posted = await entrada.PostAsync(r.Value.ReceiptId, ct);
+            return Results.Created($"/api/v1/purchases/receipts/{r.Value.ReceiptId}", new
+            {
+                receiptId = r.Value.ReceiptId,
+                orderComplete = r.Value.OrderComplete,
+                hasOccurrence = r.Value.HasOccurrence,
+                stockPosted = posted.Posted,
+                creditedItems = posted.Credited,
+                itemsNotInCatalog = posted.NotInCatalog,
+                stockError = posted.Error,
+            });
+        }).RequireAuthorization();
+
+        // Reprocessa a entrada de um recebimento que ficou pendente (item cadastrado depois, p.ex.).
+        p.MapPost("/receipts/{id:guid}/post-stock", async (Guid id, IPermissionChecker perm,
+            TrinoSupply.Api.Procurement.ReceiptStockEntry entrada, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.MaterialsManage, ct)) return Results.Forbid();
+            var posted = await entrada.PostAsync(id, ct);
+            return Results.Ok(new
+            {
+                stockPosted = posted.Posted, creditedItems = posted.Credited,
+                itemsNotInCatalog = posted.NotInCatalog, stockError = posted.Error,
+            });
+        }).RequireAuthorization();
+
         p.MapPost("/orders/{id:guid}/cancel", async (Guid id, CancelOrderRequest req,
             IPermissionChecker perm, IPurchaseOrderService svc, CancellationToken ct) =>
         {

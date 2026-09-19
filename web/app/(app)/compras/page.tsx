@@ -10,6 +10,7 @@ import { useToast } from "@/lib/toast";
 import { Perm, useHas } from "@/lib/me";
 import { downloadCsv } from "@/lib/csv";
 import { ReqHeader, RequisitionHeaderFields, emptyHeader, headerError, useRequisitionRefData } from "@/components/requisitionHeader";
+import { ConferenciaRecebimento } from "@/components/recebimento";
 
 const money = (v: number) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -116,6 +117,8 @@ export default function ComprasPage() {
               className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-sm">
               <option value="">Todas</option>
               <option value="Issued">Emitidas</option>
+              <option value="PartiallyReceived">Recebidas parcial</option>
+              <option value="Received">Recebidas</option>
               <option value="Cancelled">Canceladas</option>
             </select>
             <Button variant="ghost" onClick={() => {
@@ -218,6 +221,9 @@ function OcDetalhe({ o }: { o: OrderView }) {
         </div>
         <div className="text-xs text-slate-400">Frete: {o.freightTerms || "—"}</div>
       </div>
+
+      {/* Conferência física da entrega — some quando a OC foi cancelada. */}
+      {o.status !== "Cancelled" && <ConferenciaRecebimento orderId={o.id} />}
     </div>
   );
 }

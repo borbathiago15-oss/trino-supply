@@ -18,6 +18,7 @@ public sealed class ProcurementDbContext(DbContextOptions<ProcurementDbContext> 
     public DbSet<SupplierStats> SupplierStats => Set<SupplierStats>();
     public DbSet<ProcessedEvent> ProcessedEvents => Set<ProcessedEvent>();
     public DbSet<CostCenter> CostCenters => Set<CostCenter>();
+    public DbSet<GoodsReceipt> GoodsReceipts => Set<GoodsReceipt>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -190,6 +191,48 @@ public sealed class ProcurementDbContext(DbContextOptions<ProcurementDbContext> 
         });
 
         // Projeção de histórico por fornecedor (read model), atualizada pelo consumidor de eventos.
+        // ---- Recebimento de mercadoria (MMS-005) ----
+        b.Entity<GoodsReceipt>(e =>
+        {
+            e.ToTable("goods_receipt");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").HasConversion(id => id.Value, v => GoodsReceiptId.From(v));
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.PurchaseOrderId).HasColumnName("purchase_order_id").HasConversion(id => id.Value, v => PurchaseOrderId.From(v));
+            e.Property(x => x.InvoiceNumber).HasColumnName("invoice_number").HasMaxLength(60).IsRequired();
+            e.Property(x => x.InvoiceDate).HasColumnName("invoice_date");
+            e.Property(x => x.ReceivedBySubject).HasColumnName("received_by").HasMaxLength(200).IsRequired();
+            e.Property(x => x.ReceivedAt).HasColumnName("received_at");
+            e.Property(x => x.Notes).HasColumnName("notes").HasMaxLength(1000);
+            e.Property(x => x.StockPosted).HasColumnName("stock_posted");
+            e.Property(x => x.StockPostedAt).HasColumnName("stock_posted_at");
+            e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
+            e.HasMany(x => x.Lines).WithOne().HasForeignKey(l => l.ReceiptId);
+            e.HasIndex(x => new { x.CompanyId, x.PurchaseOrderId });
+            e.Ignore(x => x.HasOccurrence);
+            e.Ignore(x => x.DomainEvents);
+        });
+
+        b.Entity<GoodsReceiptLine>(e =>
+        {
+            e.ToTable("goods_receipt_line");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.ReceiptId).HasColumnName("receipt_id").HasConversion(id => id.Value, v => GoodsReceiptId.From(v));
+            e.Property(x => x.OrderLineId).HasColumnName("order_line_id");
+            e.Property(x => x.ItemCode).HasColumnName("item_code").HasMaxLength(60).IsRequired();
+            e.Property(x => x.Unit).HasColumnName("unit").HasMaxLength(30).IsRequired();
+            e.Property(x => x.QuantityOrdered).HasColumnName("quantity_ordered").HasColumnType("numeric(18,6)");
+            e.Property(x => x.QuantityReceived).HasColumnName("quantity_received").HasColumnType("numeric(18,6)");
+            e.Property(x => x.QuantityDamaged).HasColumnName("quantity_damaged").HasColumnType("numeric(18,6)");
+            e.Property(x => x.Occurrence).HasColumnName("occurrence").HasConversion<short>();
+            e.Property(x => x.OccurrenceNote).HasColumnName("occurrence_note").HasMaxLength(1000);
+            e.Ignore(x => x.NetQuantity);
+            e.HasIndex(x => x.ReceiptId);
+            e.HasIndex(x => x.OrderLineId);
+        });
+
         b.Entity<SupplierStats>(e =>
         {
             e.ToTable("supplier_stats");

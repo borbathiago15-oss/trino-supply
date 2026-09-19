@@ -1,3 +1,4 @@
+using TrinoSupply.BuildingBlocks;
 using TrinoSupply.BuildingBlocks.Multitenancy;
 using TrinoSupply.Procurement.Domain;
 using Xunit;
@@ -406,5 +407,112 @@ public class RequisitionSplitOrderTests
 
         Assert.True(r.IsFailure);
         Assert.Equal("purchases.order.line_not_found", r.Error.Code);
+    }
+}
+
+/// <summary>
+/// MMS-005 — conferência física na doca: o que entra no estoque é o LÍQUIDO (recebido − avariado),
+/// e toda não-conformidade exige classificação + descrição (gatilho da tratativa com o fornecedor).
+/// </summary>
+public class GoodsReceiptTests
+{
+    private static readonly CompanyId Company = CompanyId.New();
+    private static readonly PurchaseOrderId Order = PurchaseOrderId.New();
+    private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
+
+    private static ReceiptLineInput Linha(
+        decimal pedida, decimal recebida, decimal avariada,
+        ReceiptOccurrence ocorrencia = ReceiptOccurrence.None, string? nota = null, decimal jaRecebida = 0m) =>
+        new(Guid.NewGuid(), "BOTINA", "par", pedida, jaRecebida, recebida, avariada, ocorrencia, nota);
+
+    private static Result<GoodsReceipt> Registrar(params ReceiptLineInput[] linhas) =>
+        GoodsReceipt.Register(Company, Order, "NF-1234", new DateOnly(2026, 9, 19), "conferente", Now, null, linhas);
+
+    [Fact]
+    public void Entrada_no_estoque_e_o_liquido_recebido_menos_avariado()
+    {
+        // Cenário de aceite: 50 pedidas, 50 chegaram, 2 avariadas → 48 entram no estoque.
+        var r = Registrar(Linha(50m, 50m, 2m, ReceiptOccurrence.Avaria, "2 caixas amassadas no transporte"));
+
+        Assert.True(r.IsSuccess);
+        var linha = Assert.Single(r.Value.Lines);
+        Assert.Equal(48m, linha.NetQuantity);
+        Assert.True(r.Value.HasOccurrence);
+    }
+
+    [Fact]
+    public void Avaria_sem_classificacao_e_recusada()
+    {
+        var r = Registrar(Linha(50m, 50m, 2m));
+
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.receipt.occurrence_required", r.Error.Code);
+    }
+
+    [Fact]
+    public void Ocorrencia_sem_descricao_e_recusada()
+    {
+        var r = Registrar(Linha(50m, 50m, 2m, ReceiptOccurrence.Avaria, nota: "   "));
+
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.receipt.occurrence_note_required", r.Error.Code);
+    }
+
+    [Fact]
+    public void Avariado_nao_pode_passar_do_recebido()
+    {
+        var r = Registrar(Linha(50m, 10m, 11m, ReceiptOccurrence.Avaria, "erro de digitação"));
+
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.receipt.damaged_exceeds_received", r.Error.Code);
+    }
+
+    [Fact]
+    public void Receber_mais_que_o_pedido_exige_ocorrencia_de_excesso()
+    {
+        var semOcorrencia = Registrar(Linha(50m, 60m, 0m));
+        Assert.True(semOcorrencia.IsFailure);
+        Assert.Equal("purchases.receipt.exceeds_ordered", semOcorrencia.Error.Code);
+
+        var declarado = Registrar(Linha(50m, 60m, 0m, ReceiptOccurrence.Excesso, "fornecedor enviou a mais"));
+        Assert.True(declarado.IsSuccess);
+    }
+
+    [Fact]
+    public void Entrega_parcial_considera_o_que_ja_entrou_antes()
+    {
+        // 50 pedidas, 30 já recebidas: cabem 20. Pedir 25 estoura o pendente.
+        var estoura = Registrar(Linha(50m, 25m, 0m, jaRecebida: 30m));
+        Assert.True(estoura.IsFailure);
+        Assert.Equal("purchases.receipt.exceeds_ordered", estoura.Error.Code);
+
+        var cabe = Registrar(Linha(50m, 20m, 0m, jaRecebida: 30m));
+        Assert.True(cabe.IsSuccess);
+    }
+
+    [Fact]
+    public void Nota_fiscal_e_quantidade_sao_obrigatorias()
+    {
+        var semNota = GoodsReceipt.Register(Company, Order, "  ", null, "conferente", Now, null, [Linha(10m, 10m, 0m)]);
+        Assert.True(semNota.IsFailure);
+        Assert.Equal("purchases.receipt.invoice_required", semNota.Error.Code);
+
+        var semQuantidade = Registrar(Linha(10m, 0m, 0m));
+        Assert.True(semQuantidade.IsFailure);
+        Assert.Equal("purchases.receipt.lines_required", semQuantidade.Error.Code);
+    }
+
+    [Fact]
+    public void Marcar_entrada_no_estoque_e_idempotente()
+    {
+        var receipt = Registrar(Linha(10m, 10m, 0m)).Value;
+        Assert.False(receipt.StockPosted);
+
+        Assert.True(receipt.MarkStockPosted(Now).IsSuccess);
+        Assert.True(receipt.StockPosted);
+        Assert.Equal(Now, receipt.StockPostedAt);
+
+        Assert.True(receipt.MarkStockPosted(Now.AddHours(1)).IsSuccess);
+        Assert.Equal(Now, receipt.StockPostedAt);   // não sobrescreve o primeiro registro
     }
 }

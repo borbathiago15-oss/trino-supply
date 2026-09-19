@@ -16,7 +16,9 @@ public readonly record struct PurchaseOrderId(Guid Value)
 public enum PurchaseOrderStatus
 {
     Issued = 1,
-    Cancelled = 2
+    Cancelled = 2,
+    PartiallyReceived = 3,  // parte da mercadoria já foi conferida na doca (MMS-005)
+    Received = 4,           // tudo o que foi pedido já chegou
 }
 
 /// <summary>Evento: uma OC foi emitida para um fornecedor (alimenta a projeção de histórico do fornecedor).</summary>
@@ -188,6 +190,22 @@ public sealed class PurchaseOrder : AggregateRoot<PurchaseOrderId>, IBelongsToTe
     /// trilha. Após cancelar, a requisição volta a poder gerar uma nova OC (índice único parcial só
     /// conta pedidos emitidos).
     /// </summary>
+    /// <summary>
+    /// Progresso da conferência física (MMS-005). Chamado após cada recebimento: parcial enquanto
+    /// faltar quantidade, recebido quando tudo o que foi pedido chegou. A partir daqui a OC não é
+    /// mais cancelável (<see cref="Cancel"/> exige <see cref="PurchaseOrderStatus.Issued"/>) — material
+    /// que já entrou no armazém se resolve por devolução, não por cancelamento do documento.
+    /// </summary>
+    public Result MarkReceiptProgress(bool complete)
+    {
+        if (Status == PurchaseOrderStatus.Cancelled)
+            return Result.Failure(new Error("purchases.order.cancelled", "OC cancelada não recebe mercadoria."));
+
+        Status = complete ? PurchaseOrderStatus.Received : PurchaseOrderStatus.PartiallyReceived;
+        Version++;
+        return Result.Success();
+    }
+
     public Result Cancel(string cancelledBySubject, string reason, DateTimeOffset now)
     {
         if (Status != PurchaseOrderStatus.Issued)

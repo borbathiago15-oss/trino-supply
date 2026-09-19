@@ -70,6 +70,8 @@ const STATUS_STYLES: Record<string, string> = {
   Ordered: "bg-indigo-100 text-indigo-700",          // todos os itens pedidos
   Rejected: "bg-rose-100 text-rose-700",
   Issued: "bg-emerald-100 text-emerald-700",
+  PartiallyReceived: "bg-amber-100 text-amber-700",
+  Received: "bg-indigo-100 text-indigo-700",
   Cancelled: "bg-rose-100 text-rose-700",
   Active: "bg-emerald-100 text-emerald-700",
   Inactive: "bg-slate-100 text-slate-600",
@@ -96,6 +98,8 @@ const STATUS_LABELS: Record<string, string> = {
   Ordered: "Pedido gerado",
   Rejected: "Reprovado",
   Issued: "Emitida",
+  PartiallyReceived: "Recebida parcial",
+  Received: "Recebida",
   Cancelled: "Cancelada",
   Active: "Ativo",
   Inactive: "Bloqueado",

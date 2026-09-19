@@ -454,6 +454,22 @@ dotnet ef database update \
   `GET /purchases/analytics/cycle` (com `?days=`). Corrigido teste do outbox que dependia do
   tamanho do backlog (alvo agora é a mensagem mais antiga do lote). **Domínio 62/62**,
   **integração 45/45** (2 novos) e build web ok.
+- ✅ **MMS-005 — Recebimento de mercadoria com entrada automática no estoque (validado):** a OC
+  agora tem **conferência física na doca**. Novo agregado `GoodsReceipt` (nota fiscal + linhas com
+  **pedido × entregue × avariado**), com as regras de negócio no domínio: avaria **exige** ocorrência
+  classificada (`Avaria`/`Falta`/`Excesso`/`Divergência`) **e descrição** — é o gatilho da devolução;
+  avariado não passa do recebido; receber acima do pendente só declarando **Excesso**. **Entregas
+  parciais acumulam** até fechar a OC (`PartiallyReceived` → `Received`), e OC que já recebeu
+  mercadoria **não é mais cancelável** (resolve-se por devolução). A quantidade **líquida**
+  (recebido − avariado) entra no estoque automaticamente, orquestrada no host (`ReceiptStockEntry`)
+  porque Materiais é outro BC; item fora do catálogo do Almox **não derruba o recebimento** — fica
+  listado e o crédito pode ser refeito em `POST /receipts/{id}/post-stock`. Endpoints
+  `GET/POST /purchases/orders/{id}/receipts`. Tabelas novas com **RLS fail-closed**. UI: tela de
+  conferência no detalhe da OC (o que falta receber sempre à vista, campos grandes para a doca,
+  ocorrência destacada em vermelho quando obrigatória) + histórico das entregas. **Domínio 76/76**
+  (+8) e **integração 49/49** (+2: cenário de aceite — 50 pedidas, 50 recebidas com 2 avariadas →
+  estoque **+48**, avaria no histórico, OC "Recebida"; e entregas parciais 4+6 fechando a OC) e
+  build web ok.
 - ✅ **v3 — Compra dividida: várias OCs por requisição (validado):** removida a trava que permitia
   **uma única OC por requisição** (índice único parcial `(company, requisition_id) WHERE status=1`).
   Agora a OC cobre **exatamente os itens precificados naquela emissão**, então a mesma requisição

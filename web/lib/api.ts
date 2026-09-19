@@ -344,3 +344,43 @@ export interface CycleStats {
   avgHoursToLevel1: number | null;
   avgHoursToLevel2: number | null;
 }
+export interface ReceiptLineView {
+  orderLineId: string;
+  itemCode: string;
+  unit: string;
+  quantityOrdered: number;
+  quantityReceived: number;
+  quantityDamaged: number;
+  netQuantity: number;
+  occurrence: string;
+  occurrenceNote?: string | null;
+}
+export interface ReceiptView {
+  id: string;
+  purchaseOrderId: string;
+  invoiceNumber: string;
+  invoiceDate?: string | null;
+  receivedBy: string;
+  receivedAt: string;
+  notes?: string | null;
+  stockPosted: boolean;
+  lines: ReceiptLineView[];
+}
+export interface PendingReceiptLine {
+  orderLineId: string;
+  itemCode: string;
+  description: string;
+  unit: string;
+  quantityOrdered: number;
+  quantityAlreadyReceived: number;
+  quantityPending: number;
+}
+export interface OrderReceiptSummary {
+  orderId: string;
+  number: number;
+  status: string;
+  supplierCode: string;
+  supplierName: string;
+  lines: PendingReceiptLine[];
+  receipts: ReceiptView[];
+}

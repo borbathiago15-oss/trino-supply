@@ -154,7 +154,9 @@ public sealed class PurchaseRequisitionService(
 
         return new CycleStatsView(
             Total: reqs.Count,
-            Approved: reqs.Count(r => r.Status == RequisitionStatus.Approved),
+            // Aprovado = passou pelos 2 níveis, tenha virado OC ou não (v3: Partially/Ordered).
+            Approved: reqs.Count(r => r.Status is RequisitionStatus.Approved
+                or RequisitionStatus.PartiallyOrdered or RequisitionStatus.Ordered),
             Rejected: reqs.Count(r => r.Status == RequisitionStatus.Rejected),
             FulfilledFromStock: reqs.Count(r => r.Status == RequisitionStatus.FulfilledFromStock),
             Pending: reqs.Count(r => r.Status is RequisitionStatus.Submitted or RequisitionStatus.ApprovedLevel1),
@@ -210,5 +212,5 @@ public sealed class PurchaseRequisitionService(
         cc?.Code ?? string.Empty, cc?.Name ?? string.Empty,
         r.Priority.ToString(), r.Justification, r.ApproverLevel1Subject, r.ApproverLevel2Subject,
         r.Level1DecidedBySubject, r.Level2DecidedBySubject, r.RejectedBySubject, r.DecisionNote,
-        r.Lines.Select(l => new RequisitionLineView(l.ItemCode, l.Quantity, l.Unit)).ToList());
+        r.Lines.Select(l => new RequisitionLineView(l.ItemCode, l.Quantity, l.Unit, l.PurchaseOrderId)).ToList());
 }

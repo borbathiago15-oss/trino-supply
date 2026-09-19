@@ -454,6 +454,20 @@ dotnet ef database update \
   `GET /purchases/analytics/cycle` (com `?days=`). Corrigido teste do outbox que dependia do
   tamanho do backlog (alvo agora é a mensagem mais antiga do lote). **Domínio 62/62**,
   **integração 45/45** (2 novos) e build web ok.
+- ✅ **v3 — Compra dividida: várias OCs por requisição (validado):** removida a trava que permitia
+  **uma única OC por requisição** (índice único parcial `(company, requisition_id) WHERE status=1`).
+  Agora a OC cobre **exatamente os itens precificados naquela emissão**, então a mesma requisição
+  rende **uma OC por fornecedor** (EPI com o fornecedor A, limpeza com o B). O que impede pedido em
+  duplicidade passou a ser o **vínculo por linha** (`requisition_line.purchase_order_id`), que também
+  dá a **rastreabilidade item→OC**. Novos status: **`PartiallyOrdered`** ("Atendida parcialmente",
+  ainda há item a pedir) e **`Ordered`** ("Pedido gerado", tudo coberto); cancelar uma OC **devolve
+  os itens dela à fila de compra**. OC + vínculo são gravados na **mesma transação**. Erros novos:
+  `purchases.order.line_already_ordered` e `purchases.order.already_ordered` (409).
+  Migration com **backfill**: OCs anteriores (que cobriam a requisição inteira) passam a marcar todas
+  as linhas e a requisição vira `Ordered` — sem isso, itens já comprados voltariam a ser pedíveis.
+  UI: o comprador **escolhe por checkbox** quais itens entram na OC, vê os já pedidos marcados e pode
+  emitir novamente enquanto sobrar item. **Domínio 68/68** (+6) e **integração 47/47** (+1: cenário
+  multi-família de ponta a ponta — 2 OCs, trava por linha, cancelamento e recompra) e build web ok.
 - ✅ **v3 — Ponte solicitação→pedido (validado):** solicitação do almoxarifado que cai em
   **"Solicitado Compra"** (separação sem saldo) agora gera o pedido no módulo Pedido com um
   clique: **`POST /materials/requests/{id}/generate-purchase`** (orquestração no host — BCs não

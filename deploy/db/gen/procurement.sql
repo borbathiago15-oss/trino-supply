@@ -704,5 +704,68 @@ BEGIN
     VALUES ('20260811113319_CostCenterPayingLink', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919161857_SplitPurchaseOrders') THEN
+    DROP INDEX procurement."IX_purchase_order_company_id_requisition_id";
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919161857_SplitPurchaseOrders') THEN
+    ALTER TABLE procurement.requisition_line ADD purchase_order_id uuid;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919161857_SplitPurchaseOrders') THEN
+    CREATE INDEX "IX_requisition_line_purchase_order_id" ON procurement.requisition_line (purchase_order_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919161857_SplitPurchaseOrders') THEN
+    CREATE INDEX "IX_purchase_order_company_id_requisition_id" ON procurement.purchase_order (company_id, requisition_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919161857_SplitPurchaseOrders') THEN
+
+    UPDATE procurement.requisition_line rl
+       SET purchase_order_id = po.id
+      FROM procurement.purchase_order po
+     WHERE po.requisition_id = rl.requisition_id
+       AND po.company_id    = rl.company_id
+       AND po.status        = 1            -- Issued (OC cancelada não prende a linha)
+       AND rl.purchase_order_id IS NULL;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919161857_SplitPurchaseOrders') THEN
+
+    UPDATE procurement.purchase_requisition r
+       SET status = 8
+     WHERE r.status = 4
+       AND EXISTS     (SELECT 1 FROM procurement.requisition_line l WHERE l.requisition_id = r.id)
+       AND NOT EXISTS (SELECT 1 FROM procurement.requisition_line l
+                        WHERE l.requisition_id = r.id AND l.purchase_order_id IS NULL);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919161857_SplitPurchaseOrders') THEN
+    INSERT INTO procurement.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260919161857_SplitPurchaseOrders', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

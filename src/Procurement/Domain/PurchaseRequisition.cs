@@ -22,6 +22,8 @@ public enum RequisitionStatus
     Approved = 4,           // aprovado (nível 2) — segue para compra (OC)
     Rejected = 5,
     FulfilledFromStock = 6, // aprovado e atendido pelo ESTOQUE INTERNO (baixa no Almox) — v2, sem OC
+    PartiallyOrdered = 7,   // parte das linhas já virou OC; ainda há itens sem pedido — v3 (multi-OC)
+    Ordered = 8,            // todas as linhas cobertas por OCs emitidas — v3 (multi-OC)
 }
 
 /// <summary>Tipo de demanda / prioridade da solicitação.</summary>
@@ -48,6 +50,20 @@ public sealed class RequisitionLine : IBelongsToTenant
     public string ItemCode { get; private set; } = string.Empty;
     public decimal Quantity { get; private set; }
     public string Unit { get; private set; } = string.Empty;
+
+    /// <summary>
+    /// OC que cobre esta linha (v3 — compra dividida entre fornecedores). Nula enquanto o item não foi
+    /// pedido. É a rastreabilidade item→OC e a trava que impede a mesma linha entrar em duas OCs.
+    /// </summary>
+    public Guid? PurchaseOrderId { get; private set; }
+
+    /// <summary>Linha ainda sem pedido emitido — elegível para entrar numa próxima OC.</summary>
+    public bool IsPending => PurchaseOrderId is null;
+
+    internal void AssignOrder(Guid orderId) => PurchaseOrderId = orderId;
+
+    /// <summary>Devolve a linha para "a pedir" quando a OC que a cobria é cancelada.</summary>
+    internal void ReleaseOrder() => PurchaseOrderId = null;
 
     public static RequisitionLine Create(CompanyId companyId, RequisitionId requisitionId, string itemCode, decimal quantity, string unit) =>
         new(Guid.NewGuid(), companyId, requisitionId, itemCode.Trim().ToUpperInvariant(), quantity, unit.Trim().ToLowerInvariant());
@@ -204,6 +220,54 @@ public sealed class PurchaseRequisition : AggregateRoot<RequisitionId>, IBelongs
         if (Status != RequisitionStatus.Approved)
             return Result.Failure(new Error("purchases.not_approved", "Só um pedido aprovado pode ser atendido pelo estoque."));
         Status = RequisitionStatus.FulfilledFromStock;
+        Version++;
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Vincula as linhas informadas à OC recém-emitida (v3 — compra dividida por fornecedor). Uma
+    /// requisição pode gerar VÁRIAS OCs, cada uma cobrindo um subconjunto de itens; a linha que já
+    /// está em uma OC não entra em outra. O status passa a <see cref="RequisitionStatus.PartiallyOrdered"/>
+    /// enquanto sobrar item a pedir, e a <see cref="RequisitionStatus.Ordered"/> quando todos forem cobertos.
+    /// </summary>
+    public Result MarkLinesOrdered(IReadOnlyCollection<Guid> lineIds, Guid orderId)
+    {
+        if (Status is not (RequisitionStatus.Approved or RequisitionStatus.PartiallyOrdered))
+            return Result.Failure(new Error("purchases.order.not_approved",
+                "Só requisições aprovadas (ou parcialmente atendidas) geram pedido."));
+        if (lineIds.Count == 0)
+            return Result.Failure(new Error("purchases.order.lines_required", "Informe ao menos um item para a OC."));
+
+        var alvo = new List<RequisitionLine>(lineIds.Count);
+        foreach (var lineId in lineIds)
+        {
+            var line = _lines.FirstOrDefault(l => l.Id == lineId);
+            if (line is null)
+                return Result.Failure(new Error("purchases.order.line_not_found", "Item informado não pertence a esta requisição."));
+            if (!line.IsPending)
+                return Result.Failure(new Error("purchases.order.line_already_ordered",
+                    $"O item '{line.ItemCode}' já está em outra OC desta requisição."));
+            alvo.Add(line);
+        }
+
+        foreach (var line in alvo) line.AssignOrder(orderId);
+        Status = _lines.All(l => !l.IsPending) ? RequisitionStatus.Ordered : RequisitionStatus.PartiallyOrdered;
+        Version++;
+        return Result.Success();
+    }
+
+    /// <summary>
+    /// Devolve à fila de compra as linhas cobertas por uma OC cancelada (v3). A requisição volta a
+    /// <see cref="RequisitionStatus.PartiallyOrdered"/> — ou a <see cref="RequisitionStatus.Approved"/>
+    /// se nenhuma linha restar pedida.
+    /// </summary>
+    public Result ReleaseOrderLines(Guid orderId)
+    {
+        var afetadas = _lines.Where(l => l.PurchaseOrderId == orderId).ToList();
+        if (afetadas.Count == 0) return Result.Success(); // idempotente: OC sem linhas vinculadas
+
+        foreach (var line in afetadas) line.ReleaseOrder();
+        Status = _lines.All(l => l.IsPending) ? RequisitionStatus.Approved : RequisitionStatus.PartiallyOrdered;
         Version++;
         return Result.Success();
     }

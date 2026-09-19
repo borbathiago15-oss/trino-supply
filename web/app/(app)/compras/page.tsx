@@ -80,7 +80,7 @@ export default function ComprasPage() {
                         .filter(Boolean).join(" · ")}
                     </div>
                     <div className="mt-0.5 text-xs text-slate-500">
-                      {r.lines.map((l) => `${l.itemCode}×${Number(l.quantity)} ${l.unit}`).join(", ")}
+                      {r.lines.map((l) => `${l.itemCode}×${Number(l.quantity)} ${l.unit}${l.purchaseOrderId ? " ✓" : ""}`).join(", ")}
                     </div>
                     <div className="mt-0.5 text-xs text-slate-400">
                       Aprovação: N1 {r.approverLevel1}{r.level1DecidedBy ? " ✓" : ""} → N2 {r.approverLevel2}{r.level2DecidedBy ? " ✓" : ""}
@@ -97,7 +97,7 @@ export default function ComprasPage() {
                     )}
                   </div>
                 </div>
-                {r.status === "Approved" && has(Perm.PurchasesOrder) && (
+                {(r.status === "Approved" || r.status === "PartiallyOrdered") && has(Perm.PurchasesOrder) && (
                   <EmitirOc req={r} onSuccess={() => ok("OC emitida.")} onErr={onErr} />
                 )}
               </div>
@@ -431,11 +431,19 @@ function EmitirOc({ req, onSuccess, onErr }: { req: RequisitionView; onSuccess: 
   const [payingCode, setPayingCode] = useState("");
   const [supplierCode, setSupplierCode] = useState("");
   const [prices, setPrices] = useState<Record<string, string>>({});
+  // Compra dividida: o comprador escolhe QUAIS itens entram nesta OC (os demais ficam para outro
+  // fornecedor). Por padrão vêm todos os que ainda não foram pedidos.
+  const pendentes = req.lines.filter((l) => !l.purchaseOrderId);
+  const jaPedidos = req.lines.filter((l) => l.purchaseOrderId);
+  const [selecionados, setSelecionados] = useState<Record<string, boolean>>({});
+  const incluido = (code: string) => selecionados[code] ?? true;
+  const escolhidos = pendentes.filter((l) => incluido(l.itemCode));
 
   const paying = useQuery({ queryKey: ["paying-companies"], queryFn: () => api<PayingCompanyView[]>("/purchases/paying-companies"), enabled: open });
   const suppliers = useQuery({ queryKey: ["suppliers"], queryFn: () => api<SupplierFullView[]>("/purchases/suppliers"), enabled: open });
 
-  const total = req.lines.reduce((acc, l) => acc + Number(l.quantity) * (Number((prices[l.itemCode] ?? "").replace(",", ".")) || 0), 0);
+  const preco = (code: string) => Number((prices[code] ?? "").replace(",", ".")) || 0;
+  const total = escolhidos.reduce((acc, l) => acc + Number(l.quantity) * preco(l.itemCode), 0);
 
   const emitir = useMutation({
     mutationFn: () => api<{ orderId: string }>(`/purchases/requisitions/${req.id}/order`, {
@@ -443,15 +451,26 @@ function EmitirOc({ req, onSuccess, onErr }: { req: RequisitionView; onSuccess: 
       body: JSON.stringify({
         payingCompanyCode: payingCode,
         supplierCode,
-        lines: req.lines.map((l) => ({ itemCode: l.itemCode, unitPrice: Number((prices[l.itemCode] ?? "").replace(",", ".")) || 0 })),
+        lines: escolhidos.map((l) => ({ itemCode: l.itemCode, unitPrice: preco(l.itemCode) })),
       }),
     }),
-    onSuccess: () => { setOpen(false); onSuccess(); },
+    onSuccess: () => { setOpen(false); setPrices({}); setSelecionados({}); onSuccess(); },
     onError: onErr,
   });
 
   if (!open) {
-    return <div className="mt-3 border-t border-slate-100 pt-3"><Button onClick={() => setOpen(true)}>Emitir OC</Button></div>;
+    return (
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <Button onClick={() => setOpen(true)}>
+          {jaPedidos.length > 0 ? `Emitir OC dos itens restantes (${pendentes.length})` : "Emitir OC"}
+        </Button>
+        {jaPedidos.length > 0 && (
+          <p className="mt-1 text-xs text-slate-500">
+            {jaPedidos.length} item(ns) já em OC. Os demais podem ir para outro fornecedor.
+          </p>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -467,29 +486,43 @@ function EmitirOc({ req, onSuccess, onErr }: { req: RequisitionView; onSuccess: 
         </Select>
       </div>
 
-      <Table head={["Item", "Qtd", "Valor unitário (R$)", "Valor serviço (R$)"]}>
-        {req.lines.map((l) => {
-          const price = Number((prices[l.itemCode] ?? "").replace(",", ".")) || 0;
-          return (
-            <tr key={l.itemCode}>
-              <td className="px-3 py-2 font-mono text-xs">{l.itemCode}</td>
-              <td className="px-3 py-2">{Number(l.quantity)} {l.unit}</td>
-              <td className="px-3 py-2">
-                <input inputMode="decimal" value={prices[l.itemCode] ?? ""} placeholder="0,00"
-                  onChange={(e) => setPrices({ ...prices, [l.itemCode]: e.target.value })}
-                  className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-sm" />
-              </td>
-              <td className="px-3 py-2 text-right tabular-nums">{money(Number(l.quantity) * price)}</td>
-            </tr>
-          );
-        })}
+      <Table head={["Nesta OC", "Item", "Qtd", "Valor unitário (R$)", "Valor serviço (R$)"]}>
+        {pendentes.map((l) => (
+          <tr key={l.itemCode} className={incluido(l.itemCode) ? "" : "opacity-40"}>
+            <td className="px-3 py-2">
+              <input type="checkbox" checked={incluido(l.itemCode)} aria-label={`Incluir ${l.itemCode}`}
+                onChange={(e) => setSelecionados({ ...selecionados, [l.itemCode]: e.target.checked })}
+                className="h-4 w-4 rounded border-slate-300" />
+            </td>
+            <td className="px-3 py-2 font-mono text-xs">{l.itemCode}</td>
+            <td className="px-3 py-2">{Number(l.quantity)} {l.unit}</td>
+            <td className="px-3 py-2">
+              <input inputMode="decimal" value={prices[l.itemCode] ?? ""} placeholder="0,00"
+                disabled={!incluido(l.itemCode)}
+                onChange={(e) => setPrices({ ...prices, [l.itemCode]: e.target.value })}
+                className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50" />
+            </td>
+            <td className="px-3 py-2 text-right tabular-nums">{money(Number(l.quantity) * preco(l.itemCode))}</td>
+          </tr>
+        ))}
+        {jaPedidos.map((l) => (
+          <tr key={l.itemCode} className="text-slate-400">
+            <td className="px-3 py-2 text-xs">✓</td>
+            <td className="px-3 py-2 font-mono text-xs">{l.itemCode}</td>
+            <td className="px-3 py-2">{Number(l.quantity)} {l.unit}</td>
+            <td className="px-3 py-2 text-xs" colSpan={2}>já pedido em outra OC</td>
+          </tr>
+        ))}
       </Table>
 
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium text-slate-700">Total dos produtos: R$ {money(total)}</span>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-sm font-medium text-slate-700">
+          Total desta OC ({escolhidos.length} item{escolhidos.length === 1 ? "" : "ns"}): R$ {money(total)}
+        </span>
         <div className="flex gap-2">
           <Button variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
-          <Button onClick={() => emitir.mutate()} disabled={emitir.isPending || !payingCode || !supplierCode}>
+          <Button onClick={() => emitir.mutate()}
+            disabled={emitir.isPending || !payingCode || !supplierCode || escolhidos.length === 0}>
             {emitir.isPending ? "Emitindo…" : "Emitir OC"}
           </Button>
         </div>

@@ -3,7 +3,8 @@ using TrinoSupply.BuildingBlocks;
 namespace TrinoSupply.Procurement.Application;
 
 public sealed record RequisitionLineInput(string ItemCode, decimal Quantity, string Unit);
-public sealed record RequisitionLineView(string ItemCode, decimal Quantity, string Unit);
+/// <summary>Linha da requisição. <c>PurchaseOrderId</c> nulo = item ainda a pedir (v3: compra dividida).</summary>
+public sealed record RequisitionLineView(string ItemCode, decimal Quantity, string Unit, Guid? PurchaseOrderId);
 
 /// <summary>
 /// Dados da nova solicitação (spec Sistema de Compras): empresa do custo (pagadora), centro de custo,

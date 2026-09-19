@@ -25,12 +25,18 @@ public sealed class PurchaseOrderService(
         if (!tenant.HasTenant || string.IsNullOrWhiteSpace(currentUser.Subject))
             return Result.Failure<Guid>(new Error("purchases.no_context", "Requisição sem tenant/usuário."));
 
-        var req = await db.Requisitions.AsNoTracking().Include(r => r.Lines)
+        // Rastreada (não AsNoTracking): a emissão vincula as linhas cobertas a esta OC.
+        var req = await db.Requisitions.Include(r => r.Lines)
             .FirstOrDefaultAsync(r => r.Id == RequisitionId.From(requisitionId), ct);
         if (req is null)
             return Result.Failure<Guid>(new Error("purchases.not_found", "Requisição não encontrada."));
-        if (req.Status != RequisitionStatus.Approved)
-            return Result.Failure<Guid>(new Error("purchases.order.not_approved", "Só requisições aprovadas geram pedido."));
+        // v3: aprovada OU parcialmente atendida (ainda há itens a pedir para outro fornecedor).
+        if (req.Status == RequisitionStatus.Ordered)
+            return Result.Failure<Guid>(new Error("purchases.order.already_ordered",
+                "Todos os itens desta requisição já foram pedidos."));
+        if (req.Status is not (RequisitionStatus.Approved or RequisitionStatus.PartiallyOrdered))
+            return Result.Failure<Guid>(new Error("purchases.order.not_approved",
+                "Só requisições aprovadas (ou parcialmente atendidas) geram pedido."));
 
         var payingCode = (input.PayingCompanyCode ?? string.Empty).Trim().ToUpperInvariant();
         var paying = await db.PayingCompanies.AsNoTracking().FirstOrDefaultAsync(pc => pc.Code == payingCode, ct);
@@ -47,14 +53,31 @@ public sealed class PurchaseOrderService(
             .GroupBy(l => l.ItemCode.Trim().ToUpperInvariant())
             .ToDictionary(g => g.Key, g => g.Last());
 
+        // v3 — COMPRA DIVIDIDA: a OC cobre exatamente os itens precificados nesta emissão, e não mais
+        // a requisição inteira. Assim a mesma requisição rende uma OC por fornecedor (EPI com A,
+        // químicos com B). Item já coberto por outra OC é recusado em alto e bom som (documento fiscal
+        // não se emite em duplicidade por engano).
+        var selecionadas = req.Lines
+            .Where(l => prices.ContainsKey(l.ItemCode.Trim().ToUpperInvariant()))
+            .ToList();
+        if (selecionadas.Count == 0)
+            return Result.Failure<Guid>(new Error("purchases.order.lines_required",
+                "Informe o preço de ao menos um item desta requisição para emitir a OC."));
+
+        var jaPedida = selecionadas.FirstOrDefault(l => !l.IsPending);
+        if (jaPedida is not null)
+            return Result.Failure<Guid>(new Error("purchases.order.line_already_ordered",
+                $"O item '{jaPedida.ItemCode}' já está em outra OC desta requisição."));
+
         var lineInputs = new List<OrderLineInput>();
-        foreach (var l in req.Lines)
+        foreach (var l in selecionadas)
         {
             prices.TryGetValue(l.ItemCode.Trim().ToUpperInvariant(), out var price);
             lineInputs.Add(new OrderLineInput(
                 l.ItemCode, l.ItemCode, l.Quantity, l.Unit,
                 price?.UnitPrice ?? 0m, price?.IrrfPercent ?? 0m, price?.IssPercent ?? 0m, price?.DeliveryDate));
         }
+        var idsSelecionados = selecionadas.Select(l => l.Id).ToList();
 
         var totals = new OrderTotalsInput(
             input.IpiValue, input.IcmsValue, input.DiscountValue, input.OtherExpenses, input.FreightTerms);
@@ -71,24 +94,39 @@ public sealed class PurchaseOrderService(
                 supplier.PaymentTerms, supplier.PaymentMethod, totals, currentUser.Subject!, clock.UtcNow, lineInputs);
             if (order.IsFailure) return Result.Failure<Guid>(order.Error);
 
+            // OC + vínculo das linhas na MESMA transação: nunca existe pedido emitido cujas linhas
+            // continuem "a pedir" (o que permitiria pedir o mesmo item duas vezes).
+            await using var tx = await db.Database.BeginTransactionAsync(ct);
             db.Orders.Add(order.Value);
             try
             {
                 await db.SaveChangesAsync(ct);
+
+                var mark = req.MarkLinesOrdered(idsSelecionados, order.Value.Id.Value);
+                if (mark.IsFailure)
+                {
+                    await tx.RollbackAsync(ct);
+                    return Result.Failure<Guid>(mark.Error);
+                }
+                await db.SaveChangesAsync(ct);
+                await tx.CommitAsync(ct);
+
                 metrics.Record("purchases.order.issued", tenant.CompanyId.Value.ToString());
                 await audit.RecordAsync("purchases.order.issued", "PurchaseOrder", order.Value.Id.Value.ToString(),
-                    new { number = order.Value.Number, netValue = order.Value.NetValue, requisitionId }, ct);
+                    new
+                    {
+                        number = order.Value.Number, netValue = order.Value.NetValue, requisitionId,
+                        supplier = supplier.Code, itens = selecionadas.Count,
+                        requisicao = req.Status.ToString(), // Ordered ou PartiallyOrdered
+                    }, ct);
                 return Result.Success(order.Value.Id.Value);
             }
-            catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" } pg)
+            catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: "23505" })
             {
+                // Corrida no sequencial do número da OC (índice único company+number): tenta o próximo.
+                await tx.RollbackAsync(ct);
                 db.Entry(order.Value).State = EntityState.Detached;
                 foreach (var ln in order.Value.Lines) db.Entry(ln).State = EntityState.Detached;
-
-                // Índice (company, requisition_id): já existe pedido para esta requisição — não adianta repetir.
-                if (pg.ConstraintName?.Contains("requisition_id") == true)
-                    return Result.Failure<Guid>(new Error("purchases.order.already_exists", "Esta requisição já gerou um pedido."));
-                // Índice (company, number): corrida no sequencial — tenta o próximo número.
             }
         }
 
@@ -106,6 +144,12 @@ public sealed class PurchaseOrderService(
 
         var result = order.Cancel(currentUser.Subject!, reason, clock.UtcNow);
         if (result.IsFailure) return result;
+
+        // v3: cancelar a OC devolve os itens dela para "a pedir" — a requisição volta a Parcialmente
+        // atendida (ou Aprovada, se nenhuma linha restar pedida) e aceita uma nova OC para esses itens.
+        var req = await db.Requisitions.Include(r => r.Lines)
+            .FirstOrDefaultAsync(r => r.Id == order.RequisitionId, ct);
+        req?.ReleaseOrderLines(id);
 
         try
         {

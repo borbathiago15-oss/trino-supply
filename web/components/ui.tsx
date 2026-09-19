@@ -66,6 +66,8 @@ const STATUS_STYLES: Record<string, string> = {
   ApprovedLevel1: "bg-sky-100 text-sky-700",
   Approved: "bg-emerald-100 text-emerald-700",
   FulfilledFromStock: "bg-teal-100 text-teal-700",
+  PartiallyOrdered: "bg-amber-100 text-amber-700",   // ainda há item a pedir
+  Ordered: "bg-indigo-100 text-indigo-700",          // todos os itens pedidos
   Rejected: "bg-rose-100 text-rose-700",
   Issued: "bg-emerald-100 text-emerald-700",
   Cancelled: "bg-rose-100 text-rose-700",
@@ -90,6 +92,8 @@ const STATUS_LABELS: Record<string, string> = {
   ApprovedLevel1: "Aguardando nível 2",
   Approved: "Aprovado",
   FulfilledFromStock: "Atendido pelo estoque",
+  PartiallyOrdered: "Atendida parcialmente",
+  Ordered: "Pedido gerado",
   Rejected: "Reprovado",
   Issued: "Emitida",
   Cancelled: "Cancelada",

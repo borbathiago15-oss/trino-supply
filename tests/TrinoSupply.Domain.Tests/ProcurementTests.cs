@@ -298,3 +298,113 @@ public class RequisitionFulfillmentTests
         Assert.True(req.MarkFulfilledFromStock(Now).IsFailure);
     }
 }
+
+/// <summary>
+/// v3 — compra dividida: uma requisição aprovada pode render VÁRIAS OCs, cada uma cobrindo um
+/// subconjunto de itens (um fornecedor por família, por exemplo). A linha já pedida não entra em
+/// outra OC, e cancelar a OC devolve os itens dela para a fila de compra.
+/// </summary>
+public class RequisitionSplitOrderTests
+{
+    private static readonly CompanyId Company = CompanyId.New();
+    private static readonly DateTimeOffset Now = DateTimeOffset.UtcNow;
+
+    /// <summary>Requisição aprovada com 2 EPIs e 2 itens de limpeza (cenário multi-família).</summary>
+    private static PurchaseRequisition Aprovada()
+    {
+        var req = PurchaseRequisition.Create(Company, "sol", PayingCompanyId.New(), CostCenterId.New(),
+            RequisitionPriority.Normal, "multi-família", "a1", "a2",
+            [("BOTINA", 2m, "par"), ("LUVA", 5m, "par"), ("DETERGENTE", 10m, "un"), ("ALVEJANTE", 4m, "un")],
+            Now).Value;
+        req.Submit();
+        req.ApproveLevel1("a1", Now);
+        req.ApproveLevel2("a2", Now);
+        return req;
+    }
+
+    private static Guid[] Ids(PurchaseRequisition req, params string[] itemCodes) =>
+        req.Lines.Where(l => itemCodes.Contains(l.ItemCode)).Select(l => l.Id).ToArray();
+
+    [Fact]
+    public void Primeira_OC_parcial_deixa_requisicao_atendida_parcialmente()
+    {
+        var req = Aprovada();
+        var oc1 = Guid.NewGuid();
+
+        Assert.True(req.MarkLinesOrdered(Ids(req, "BOTINA", "LUVA"), oc1).IsSuccess);
+
+        Assert.Equal(RequisitionStatus.PartiallyOrdered, req.Status);
+        Assert.Equal(2, req.Lines.Count(l => l.PurchaseOrderId == oc1));
+        Assert.Equal(2, req.Lines.Count(l => l.IsPending));
+    }
+
+    [Fact]
+    public void Segunda_OC_com_o_restante_fecha_a_requisicao()
+    {
+        var req = Aprovada();
+        var (oc1, oc2) = (Guid.NewGuid(), Guid.NewGuid());
+
+        req.MarkLinesOrdered(Ids(req, "BOTINA", "LUVA"), oc1);
+        Assert.True(req.MarkLinesOrdered(Ids(req, "DETERGENTE", "ALVEJANTE"), oc2).IsSuccess);
+
+        Assert.Equal(RequisitionStatus.Ordered, req.Status);
+        // Rastreabilidade: cada item aponta para a OC que o comprou.
+        Assert.Equal(oc1, req.Lines.Single(l => l.ItemCode == "BOTINA").PurchaseOrderId);
+        Assert.Equal(oc2, req.Lines.Single(l => l.ItemCode == "ALVEJANTE").PurchaseOrderId);
+    }
+
+    [Fact]
+    public void Item_ja_pedido_nao_entra_em_outra_OC()
+    {
+        var req = Aprovada();
+        req.MarkLinesOrdered(Ids(req, "BOTINA"), Guid.NewGuid());
+
+        var r = req.MarkLinesOrdered(Ids(req, "BOTINA"), Guid.NewGuid());
+
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.order.line_already_ordered", r.Error.Code);
+    }
+
+    [Fact]
+    public void Cancelar_a_OC_devolve_os_itens_para_a_fila_de_compra()
+    {
+        var req = Aprovada();
+        var (oc1, oc2) = (Guid.NewGuid(), Guid.NewGuid());
+        req.MarkLinesOrdered(Ids(req, "BOTINA", "LUVA"), oc1);
+        req.MarkLinesOrdered(Ids(req, "DETERGENTE", "ALVEJANTE"), oc2);
+        Assert.Equal(RequisitionStatus.Ordered, req.Status);
+
+        req.ReleaseOrderLines(oc2);
+
+        Assert.Equal(RequisitionStatus.PartiallyOrdered, req.Status);
+        Assert.Equal(2, req.Lines.Count(l => l.IsPending));
+
+        // Cancelando também a primeira, a requisição volta a Aprovada (nada pedido).
+        req.ReleaseOrderLines(oc1);
+        Assert.Equal(RequisitionStatus.Approved, req.Status);
+        Assert.All(req.Lines, l => Assert.True(l.IsPending));
+    }
+
+    [Fact]
+    public void Requisicao_nao_aprovada_nao_gera_OC()
+    {
+        var req = PurchaseRequisition.Create(Company, "sol", PayingCompanyId.New(), CostCenterId.New(),
+            RequisitionPriority.Normal, "j", "a1", "a2", [("BOTINA", 1m, "par")], Now).Value;
+        req.Submit();
+
+        var r = req.MarkLinesOrdered([req.Lines[0].Id], Guid.NewGuid());
+
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.order.not_approved", r.Error.Code);
+    }
+
+    [Fact]
+    public void Linha_de_outra_requisicao_e_recusada()
+    {
+        var req = Aprovada();
+        var r = req.MarkLinesOrdered([Guid.NewGuid()], Guid.NewGuid());
+
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.order.line_not_found", r.Error.Code);
+    }
+}

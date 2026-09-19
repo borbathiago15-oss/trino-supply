@@ -43,7 +43,7 @@ export default function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Pedidos pendentes" value={pending} href="/aprovacao" accent />
         <Stat label="Em rascunho" value={byStatus("Draft")} href="/compras" />
-        <Stat label="Aprovados" value={byStatus("Approved")} href="/compras" accent />
+        <Stat label="Aprovados (a comprar)" value={byStatus("Approved") + byStatus("PartiallyOrdered")} href="/compras" accent />
         <Stat label="Reprovados" value={byStatus("Rejected")} href="/compras" />
       </div>
 

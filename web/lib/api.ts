@@ -230,7 +230,7 @@ export interface RequisitionView {
   level2DecidedBy?: string | null;
   rejectedBy?: string | null;
   decisionNote?: string | null;
-  lines: { itemCode: string; quantity: number; unit: string }[];
+  lines: { itemCode: string; quantity: number; unit: string; purchaseOrderId?: string | null }[];
 }
 export interface OrderLineView {
   itemCode: string;

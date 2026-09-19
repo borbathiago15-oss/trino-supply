@@ -78,7 +78,11 @@ public sealed class ProcurementDbContext(DbContextOptions<ProcurementDbContext> 
             e.Property(x => x.ItemCode).HasColumnName("item_code").HasMaxLength(60).IsRequired();
             e.Property(x => x.Quantity).HasColumnName("quantity").HasColumnType("numeric(18,6)");
             e.Property(x => x.Unit).HasColumnName("unit").HasMaxLength(30).IsRequired();
+            // v3: OC que cobre a linha (nula = a pedir). Rastreabilidade item→OC na compra dividida.
+            e.Property(x => x.PurchaseOrderId).HasColumnName("purchase_order_id");
+            e.Ignore(x => x.IsPending);
             e.HasIndex(x => x.RequisitionId);
+            e.HasIndex(x => x.PurchaseOrderId);
         });
 
         b.Entity<Supplier>(e =>
@@ -153,8 +157,10 @@ public sealed class ProcurementDbContext(DbContextOptions<ProcurementDbContext> 
             e.Property(x => x.CancelledAt).HasColumnName("cancelled_at");
             e.Property(x => x.CancelReason).HasColumnName("cancel_reason").HasMaxLength(500);
             e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
-            // Um pedido EMITIDO por requisição (parcial): cancelar libera a requisição para nova OC.
-            e.HasIndex(x => new { x.CompanyId, x.RequisitionId }).IsUnique().HasFilter("status = 1");
+            // v3 (compra dividida): uma requisição pode gerar VÁRIAS OCs — uma por fornecedor. O que
+            // impede pedido em duplicidade agora é o vínculo por LINHA (requisition_line.purchase_order_id),
+            // não um índice único por requisição. Índice não-único só para consulta.
+            e.HasIndex(x => new { x.CompanyId, x.RequisitionId });
             e.HasIndex(x => new { x.CompanyId, x.Number }).IsUnique();        // nº da OC único por tenant
             e.Ignore(x => x.ProductsValue);
             e.Ignore(x => x.NetValue);

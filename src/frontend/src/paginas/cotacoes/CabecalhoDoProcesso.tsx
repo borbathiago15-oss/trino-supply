@@ -4,6 +4,7 @@ import { Badge, Dado, Painel } from '@/componentes/basicos';
 import { Nota } from '@/componentes/formulario';
 import { data, dataHora, quantidade } from '@/util/formato';
 import { ProximoPasso } from './ProximoPasso';
+import { CaminhoDoProcesso } from './CaminhoDoProcesso';
 
 /**
  * A identificação do processo e os itens que ele cota — a parte da tela que só
@@ -31,6 +32,7 @@ export function CabecalhoDoProcesso({ processo: q }: { processo: Processo }) {
       </div>
       <Nota>Aberta por {q.createdByLabel ?? '—'} em {dataHora(q.createdAt)}.</Nota>
       <ProximoPasso processo={q} />
+      <CaminhoDoProcesso etapas={q.caminho ?? []} />
       {q.decisionReason && (
         <p className="mt-2 rounded-lg bg-aviso-fundo px-3 py-2 text-[13px] text-aviso">
           Último motivo registrado: <strong>{q.decisionReason}</strong>

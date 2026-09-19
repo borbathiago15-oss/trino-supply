@@ -15,6 +15,7 @@ import { ConciliacaoFiscal } from "@/components/conciliacao";
 import { SaldoBadge, useSaldoAlmox } from "@/components/saldoAlmox";
 import { OtifBadge, useScorecards } from "@/components/otif";
 import { AbrirCotacao } from "@/components/cotacao";
+import { ComplianceBadge, ComplianceDetalhe, useCompliance } from "@/components/compliance";
 
 const money = (v: number) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -24,6 +25,9 @@ export default function ComprasPage() {
   const has = useHas();
   const [openOc, setOpenOc] = useState<string | null>(null);
   const [ocStatus, setOcStatus] = useState<string>("");
+  // Fase 05: varredura de compliance das OCs — o filtro "score < 70" é a lista da auditoria.
+  const [soBaixo, setSoBaixo] = useState(false);
+  const compliance = useCompliance();
 
   const reqs = useQuery({ queryKey: ["requisitions"], queryFn: () => api<RequisitionView[]>("/purchases/requisitions") });
   const orders = useQuery({ queryKey: ["orders"], queryFn: () => api<OrderView[]>("/purchases/orders") });
@@ -132,6 +136,11 @@ export default function ComprasPage() {
               <option value="Received">Recebidas</option>
               <option value="Cancelled">Canceladas</option>
             </select>
+            <label className="flex items-center gap-1 text-xs text-slate-600">
+              <input type="checkbox" className="h-4 w-4 rounded border-slate-300" checked={soBaixo}
+                onChange={(e) => setSoBaixo(e.target.checked)} />
+              só compliance &lt; 70
+            </label>
             <Button variant="ghost" onClick={() => {
               const rows = (orders.data ?? []).filter((o) => !ocStatus || o.status === ocStatus)
                 .map((o) => [o.number, o.payingCompanyName, o.supplierCode, o.supplierName, o.netValue.toFixed(2), o.status, o.issuedAt?.slice(0, 10)]);
@@ -140,8 +149,8 @@ export default function ComprasPage() {
           </div>
         }
       >
-        {(() => { const list = (orders.data ?? []).filter((o) => !ocStatus || o.status === ocStatus); return list.length > 0 ? (
-          <Table head={["OC nº", "Empresa pagadora", "Fornecedor", "Valor líquido", "Situação", "OC"]}>
+        {(() => { const list = (orders.data ?? []).filter((o) => (!ocStatus || o.status === ocStatus) && (!soBaixo || (compliance.porOc(o.id)?.score ?? 100) < 70)); return list.length > 0 ? (
+          <Table head={["OC nº", "Empresa pagadora", "Fornecedor", "Valor líquido", "Situação", "Compliance", "OC"]}>
             {list.map((o) => (
               <Fragment key={o.id}>
                 <tr>
@@ -150,6 +159,7 @@ export default function ComprasPage() {
                   <td className="px-3 py-2 text-slate-600">{o.supplierCode} — {o.supplierName}</td>
                   <td className="px-3 py-2 text-right tabular-nums">R$ {money(o.netValue)}</td>
                   <td className="px-3 py-2"><StatusPill status={o.status} /></td>
+                  <td className="px-3 py-2"><ComplianceBadge c={compliance.porOc(o.id)} /></td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
                       <Button variant="ghost" onClick={() => setOpenOc(openOc === o.id ? null : o.id)}>
@@ -164,7 +174,7 @@ export default function ComprasPage() {
                 </tr>
                 {openOc === o.id && (
                   <tr>
-                    <td colSpan={6} className="bg-slate-50 px-3 py-4"><OcDetalhe o={o} /></td>
+                    <td colSpan={7} className="bg-slate-50 px-3 py-4"><OcDetalhe o={o} /></td>
                   </tr>
                 )}
               </Fragment>
@@ -239,6 +249,12 @@ function OcDetalhe({ o }: { o: OrderView }) {
       {/* Conferência física da entrega — some quando a OC foi cancelada. */}
       {o.status !== "Cancelled" && <ConferenciaRecebimento orderId={o.id} />}
 
+      {/* Compliance Score (Fase 05): a governança do processo, com as evidências. */}
+      <div className="border-t border-slate-100 pt-3">
+        <h4 className="mb-2 text-sm font-semibold text-slate-700">Compliance do processo</h4>
+        <ComplianceDetalhe orderId={o.id} />
+      </div>
+
       {/* Conciliação fiscal (Fase 05): OC × NF-e × doca, a partir do XML da nota. */}
       {o.status !== "Cancelled" && (
         <div className="border-t border-slate-100 pt-3">
@@ -281,6 +297,7 @@ function NovaRequisicao({ onDone, onErr }: { onDone: () => void; onErr: (e: unkn
 
   const payload = (lines: Linha[]) => ({
     ...header,
+    neededBy: header.neededBy || null,   // "" não é data — a API espera null quando não informada
     lines: lines.map((l) => ({ itemCode: l.itemCode, quantity: Number(l.quantity), unit: l.unit })),
   });
 
@@ -309,6 +326,7 @@ function NovaRequisicao({ onDone, onErr }: { onDone: () => void; onErr: (e: unkn
         payingCompanyCode: header.payingCompanyCode, costCenterCode: header.costCenterCode,
         priority: header.priority, justification: header.justification,
         approverLevel1Subject: header.approverLevel1Subject, approverLevel2Subject: header.approverLevel2Subject,
+        ...(header.neededBy ? { neededBy: header.neededBy } : {}),
       }),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["requisitions"] });

@@ -1188,5 +1188,20 @@ BEGIN
     VALUES ('20260919210402_PurchaseInvoice', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919211805_RequisitionNeededBy') THEN
+    ALTER TABLE procurement.purchase_requisition ADD needed_by date;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919211805_RequisitionNeededBy') THEN
+    INSERT INTO procurement.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260919211805_RequisitionNeededBy', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

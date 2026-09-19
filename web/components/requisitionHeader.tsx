@@ -12,11 +12,13 @@ export interface ReqHeader {
   justification: string;
   approverLevel1Subject: string;
   approverLevel2Subject: string;
+  /** Quando o material é necessário (opcional). Anterior à criação vira desvio de compliance. */
+  neededBy: string;
 }
 
 export const emptyHeader: ReqHeader = {
   payingCompanyCode: "", costCenterCode: "", priority: "Normal",
-  justification: "", approverLevel1Subject: "", approverLevel2Subject: "",
+  justification: "", approverLevel1Subject: "", approverLevel2Subject: "", neededBy: "",
 };
 
 export interface Approver { subject: string; displayName: string; email: string }
@@ -76,6 +78,8 @@ export function RequisitionHeaderFields({
         <option value="Emergencial">Emergencial</option>
       </Select>
       <Input label="Motivo / justificativa" value={value.justification} onChange={(e) => set({ justification: e.target.value })} />
+      <Input label="Data de necessidade (opcional)" type="date" value={value.neededBy}
+        onChange={(e) => set({ neededBy: e.target.value })} />
       <Select label="Aprovador — nível 1" value={value.approverLevel1Subject} onChange={(e) => set({ approverLevel1Subject: e.target.value })}>
         <option value="">Selecione…</option>
         {(approvers ?? []).map((a) => <option key={a.subject} value={a.subject}>{a.displayName || a.subject}</option>)}

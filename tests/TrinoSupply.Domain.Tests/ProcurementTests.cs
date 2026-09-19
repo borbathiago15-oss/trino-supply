@@ -1095,3 +1095,99 @@ public class ThreeWayMatchTests
         Assert.True(r.Matched);
     }
 }
+
+/// <summary>
+/// Compliance Score: parte de 100 e desconta desvios de governança, cada um com evidência. O que
+/// se protege aqui é a aritmética ser previsível — e o caso de aceite da Fase 05 dar exatamente 55.
+/// </summary>
+public class ComplianceScoreTests
+{
+    private static readonly DateOnly Hoje = new(2026, 9, 19);
+
+    private static ComplianceFacts Limpo() => new(
+        Emergencial: false, NeededBy: Hoje.AddDays(10), CreatedOn: Hoje,
+        SupplierHomologated: true, QuotationResponses: 3,
+        AwardedOutsideLowest: false, AwardJustified: true);
+
+    [Fact]
+    public void Processo_sem_desvio_vale_100()
+    {
+        var r = ComplianceScore.Evaluate(Limpo());
+
+        Assert.Equal(100, r.Score);
+        Assert.Empty(r.Penalties);
+        Assert.Equal("Exemplar", r.Band);
+        Assert.Equal("Sem desvios", r.Summary);
+    }
+
+    [Fact]
+    public void Aceite_da_fase_05_urgencia_mais_fornecedor_unico_da_exatamente_55()
+    {
+        var r = ComplianceScore.Evaluate(Limpo() with { Emergencial = true, QuotationResponses = 1 });
+
+        Assert.Equal(55, r.Score);
+        Assert.Equal(2, r.Penalties.Count);
+        Assert.Contains(r.Penalties, p => p.Rule == ComplianceDeduction.CompraEmergencial && p.Points == 20);
+        Assert.Contains(r.Penalties, p => p.Rule == ComplianceDeduction.SemConcorrencia && p.Points == 25);
+        Assert.Equal("Atencao", r.Band);
+    }
+
+    [Fact]
+    public void Compra_direta_sem_cotacao_e_sem_concorrencia()
+    {
+        var r = ComplianceScore.Evaluate(Limpo() with { QuotationResponses = -1 });
+
+        var p = Assert.Single(r.Penalties);
+        Assert.Equal(ComplianceDeduction.SemConcorrencia, p.Rule);
+        Assert.Contains("sem passar por cotação", p.Evidence);
+    }
+
+    [Fact]
+    public void Duas_respostas_ja_configuram_concorrencia()
+    {
+        Assert.Empty(ComplianceScore.Evaluate(Limpo() with { QuotationResponses = 2 }).Penalties);
+    }
+
+    [Fact]
+    public void Fornecedor_nao_homologado_pesa_30()
+    {
+        var r = ComplianceScore.Evaluate(Limpo() with { SupplierHomologated = false });
+
+        Assert.Equal(70, r.Score);
+        Assert.Equal(ComplianceDeduction.FornecedorNaoHomologado, Assert.Single(r.Penalties).Rule);
+    }
+
+    [Fact]
+    public void Necessidade_anterior_a_criacao_e_retroativa_e_no_mesmo_dia_nao_e()
+    {
+        var retro = ComplianceScore.Evaluate(Limpo() with { NeededBy = Hoje.AddDays(-1) });
+        Assert.Equal(80, retro.Score);
+        Assert.Contains(retro.Penalties, p => p.Rule == ComplianceDeduction.NecessidadeRetroativa);
+
+        Assert.Empty(ComplianceScore.Evaluate(Limpo() with { NeededBy = Hoje }).Penalties);
+        Assert.Empty(ComplianceScore.Evaluate(Limpo() with { NeededBy = null }).Penalties);   // opcional
+    }
+
+    [Fact]
+    public void Escolha_fora_do_menor_preco_so_pesa_quando_nao_justificada()
+    {
+        var semMotivo = ComplianceScore.Evaluate(Limpo() with { AwardedOutsideLowest = true, AwardJustified = false });
+        Assert.Equal(85, semMotivo.Score);
+
+        var comMotivo = ComplianceScore.Evaluate(Limpo() with { AwardedOutsideLowest = true, AwardJustified = true });
+        Assert.Equal(100, comMotivo.Score);
+    }
+
+    [Fact]
+    public void Score_nunca_fica_negativo()
+    {
+        var r = ComplianceScore.Evaluate(new ComplianceFacts(
+            Emergencial: true, NeededBy: Hoje.AddDays(-5), CreatedOn: Hoje,
+            SupplierHomologated: false, QuotationResponses: -1,
+            AwardedOutsideLowest: true, AwardJustified: false));
+
+        Assert.Equal(0, r.Score);           // 100 − 110, travado em zero
+        Assert.Equal(5, r.Penalties.Count); // mas todas as evidências ficam
+        Assert.Equal("Critico", r.Band);
+    }
+}

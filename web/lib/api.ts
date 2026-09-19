@@ -230,6 +230,7 @@ export interface RequisitionView {
   level2DecidedBy?: string | null;
   rejectedBy?: string | null;
   decisionNote?: string | null;
+  neededBy?: string | null;
   lines: { itemCode: string; quantity: number; unit: string; purchaseOrderId?: string | null }[];
 }
 export interface OrderLineView {
@@ -549,4 +550,30 @@ export interface OrderMatchView {
   priceTolerancePercent: number;
   quantityTolerancePercent: number;
   invoices: PurchaseInvoiceView[];
+}
+export interface CompliancePenaltyView {
+  rule: string;
+  points: number;
+  title: string;
+  evidence: string;
+}
+export interface ComplianceView {
+  orderId: string;
+  orderNumber: number;
+  requisitionId: string;
+  supplierCode: string;
+  supplierName: string;
+  issuedAt: string;
+  netValue: number;
+  score: number;
+  band: string;
+  summary: string;
+  emergencial: boolean;
+  neededBy?: string | null;
+  createdOn: string;
+  supplierHomologated: boolean;
+  quotationResponses: number;
+  awardedOutsideLowest: boolean;
+  awardJustified: boolean;
+  penalties: CompliancePenaltyView[];
 }

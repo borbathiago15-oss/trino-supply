@@ -12,7 +12,9 @@ public sealed record RequisitionLineView(string ItemCode, decimal Quantity, stri
 /// </summary>
 public sealed record CreateRequisitionInput(
     string PayingCompanyCode, string CostCenterCode, string Priority, string Justification,
-    string ApproverLevel1Subject, string ApproverLevel2Subject, IReadOnlyList<RequisitionLineInput> Lines);
+    string ApproverLevel1Subject, string ApproverLevel2Subject, IReadOnlyList<RequisitionLineInput> Lines,
+    // Quando o material é necessário. Opcional — mas anterior à criação vira desvio de compliance.
+    DateOnly? NeededBy = null);
 
 /// <summary>Tempo de ciclo dos pedidos na janela: médias em horas (criação → decisão de cada nível).</summary>
 public sealed record CycleStatsView(
@@ -24,7 +26,7 @@ public sealed record RequisitionView(
     string PayingCompanyCode, string PayingCompanyName, string CostCenterCode, string CostCenterName,
     string Priority, string Justification, string ApproverLevel1, string ApproverLevel2,
     string? Level1DecidedBy, string? Level2DecidedBy, string? RejectedBy, string? DecisionNote,
-    IReadOnlyList<RequisitionLineView> Lines);
+    DateOnly? NeededBy, IReadOnlyList<RequisitionLineView> Lines);
 
 /// <summary>
 /// Casos de uso da solicitação de compra (PR-001). Requisitante vem do JWT; a aprovação é em

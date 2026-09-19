@@ -547,6 +547,26 @@ dotnet ef database update \
   offset zero em `timestamptz` — toda nota real quebraria na gravação. O parser normaliza para UTC.
   Fora do escopo desta fatia (Fase 05): Compliance Score, conector Senior Sapiens, e o match de NCM
   (a OC ainda não guarda NCM, então não há contra o que cruzar).
+- ✅ **Fase 05 — Compliance Score do processo de compra (validado):** auditoria contínua. Cada OC
+  recebe um índice de **0 a 100** que parte de 100 e desconta os desvios de governança observados,
+  cada um com a **evidência** que o sustenta — o auditor não refaz a conta. As cinco regras:
+  **sem concorrência** −25 (compra direta ou só uma proposta recebida), **fornecedor não
+  homologado** −30, **compra emergencial** −20, **necessidade retroativa** −20 (data de necessidade
+  anterior à criação da solicitação — o sintoma da compra já feita sendo formalizada depois) e
+  **vencedor fora do menor preço sem justificativa** −15. Para a quarta regra existir de verdade,
+  a requisição ganhou o campo **`neededBy`** (opcional, na tela e na API). Faixas: Exemplar ≥90,
+  Aceitável ≥70, Atenção ≥50, Crítico. **O índice não bloqueia nada** — aponta onde olhar.
+  Calculado na hora, dos registros do próprio sistema (solicitação, cotação, cadastro), sem tabela
+  consolidada. Endpoints `GET /purchases/orders/{id}/compliance` e a varredura
+  `GET /purchases/compliance?maxScore=70` (auditoria ou compras). UI: badge por OC na lista, filtro
+  **"só compliance < 70"** e o detalhe com as penalidades no pedido. **Domínio 122/122** (+8) e
+  **integração 58/58** (+1: o aceite — emergencial com um só respondente dá **exatamente 55**, o
+  processo limpo dá 100, e a varredura com `maxScore=70` traz só o primeiro) e build web ok.
+  Duas ressalvas honestas: (1) a homologação do fornecedor é lida **como está hoje** — desomologar
+  alguém piora retroativamente as compras antigas com ele, útil para varredura de risco mas não é a
+  foto do dia da compra; (2) a regra "fora do menor preço sem justificativa" **não dispara pelo
+  fluxo normal**, porque a cotação já exige a justificativa na adjudicação — fica como rede de
+  segurança para dado importado ou anterior a essa exigência.
 - ✅ **v3 — Compra dividida: várias OCs por requisição (validado):** removida a trava que permitia
   **uma única OC por requisição** (índice único parcial `(company, requisition_id) WHERE status=1`).
   Agora a OC cobre **exatamente os itens precificados naquela emissão**, então a mesma requisição

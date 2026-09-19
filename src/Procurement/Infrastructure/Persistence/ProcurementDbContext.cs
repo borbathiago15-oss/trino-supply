@@ -41,6 +41,7 @@ public sealed class ProcurementDbContext(DbContextOptions<ProcurementDbContext> 
             e.Property(x => x.ApproverLevel2Subject).HasColumnName("approver_l2_subject").HasMaxLength(200).IsRequired();
             e.Property(x => x.Status).HasColumnName("status").HasConversion<short>();
             e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.NeededBy).HasColumnName("needed_by");
             e.Property(x => x.Level1DecidedBySubject).HasColumnName("l1_decided_by").HasMaxLength(200);
             e.Property(x => x.Level1DecidedAt).HasColumnName("l1_decided_at");
             e.Property(x => x.Level2DecidedBySubject).HasColumnName("l2_decided_by").HasMaxLength(200);

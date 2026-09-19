@@ -83,7 +83,8 @@ public sealed class PurchaseRequisition : AggregateRoot<RequisitionId>, IBelongs
     private PurchaseRequisition(
         RequisitionId id, CompanyId companyId, string requesterSubject, PayingCompanyId payingCompanyId,
         CostCenterId costCenterId, RequisitionPriority priority, string justification,
-        string approverLevel1Subject, string approverLevel2Subject, DateTimeOffset createdAt) : base(id)
+        string approverLevel1Subject, string approverLevel2Subject, DateTimeOffset createdAt,
+        DateOnly? neededBy) : base(id)
     {
         CompanyId = companyId;
         RequesterSubject = requesterSubject;
@@ -94,6 +95,7 @@ public sealed class PurchaseRequisition : AggregateRoot<RequisitionId>, IBelongs
         ApproverLevel1Subject = approverLevel1Subject;
         ApproverLevel2Subject = approverLevel2Subject;
         CreatedAt = createdAt;
+        NeededBy = neededBy;
         Status = RequisitionStatus.Draft;
     }
 
@@ -109,6 +111,13 @@ public sealed class PurchaseRequisition : AggregateRoot<RequisitionId>, IBelongs
     public string ApproverLevel2Subject { get; private set; } = string.Empty;
     public RequisitionStatus Status { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
+
+    /// <summary>
+    /// Data em que o material é necessário. Opcional, mas quando vem anterior à própria criação da
+    /// solicitação denuncia compra já consumada sendo formalizada depois — é o que a auditoria
+    /// chama de necessidade retroativa (Fase 05).
+    /// </summary>
+    public DateOnly? NeededBy { get; private set; }
     public string? Level1DecidedBySubject { get; private set; }
     public DateTimeOffset? Level1DecidedAt { get; private set; }
     public string? Level2DecidedBySubject { get; private set; }
@@ -121,7 +130,8 @@ public sealed class PurchaseRequisition : AggregateRoot<RequisitionId>, IBelongs
     public static Result<PurchaseRequisition> Create(
         CompanyId companyId, string requesterSubject, PayingCompanyId payingCompanyId, CostCenterId costCenterId,
         RequisitionPriority priority, string justification, string approverLevel1Subject, string approverLevel2Subject,
-        IEnumerable<(string ItemCode, decimal Quantity, string Unit)> lines, DateTimeOffset createdAt)
+        IEnumerable<(string ItemCode, decimal Quantity, string Unit)> lines, DateTimeOffset createdAt,
+        DateOnly? neededBy = null)
     {
         if (string.IsNullOrWhiteSpace(requesterSubject))
             return Result.Failure<PurchaseRequisition>(new Error("purchases.requester_required", "Requisitante obrigatório."));
@@ -146,7 +156,7 @@ public sealed class PurchaseRequisition : AggregateRoot<RequisitionId>, IBelongs
 
         var req = new PurchaseRequisition(
             RequisitionId.New(), companyId, requesterSubject, payingCompanyId, costCenterId, priority,
-            justification.Trim(), l1, l2, createdAt);
+            justification.Trim(), l1, l2, createdAt, neededBy);
         foreach (var l in materialized)
             req._lines.Add(RequisitionLine.Create(companyId, req.Id, l.ItemCode, l.Quantity, l.Unit));
         return Result.Success(req);

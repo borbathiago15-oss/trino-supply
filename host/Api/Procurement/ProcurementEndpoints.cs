@@ -7,7 +7,8 @@ namespace TrinoSupply.Api.Procurement;
 
 public sealed record CreateRequisitionRequest(
     string PayingCompanyCode, string CostCenterCode, string? Priority, string Justification,
-    string ApproverLevel1Subject, string ApproverLevel2Subject, IReadOnlyList<RequisitionLineInput> Lines);
+    string ApproverLevel1Subject, string ApproverLevel2Subject, IReadOnlyList<RequisitionLineInput> Lines,
+    DateOnly? NeededBy = null);
 public sealed record FromSuggestionsRequest(
     string PayingCompanyCode, string CostCenterCode, string? Priority, string Justification,
     string ApproverLevel1Subject, string ApproverLevel2Subject);
@@ -53,7 +54,7 @@ public static class ProcurementEndpoints
         {
             if (!await perm.HasAsync(PermissionCatalog.PurchasesRequest, ct)) return Results.Forbid();
             var input = new CreateRequisitionInput(req.PayingCompanyCode, req.CostCenterCode, req.Priority ?? "Normal",
-                req.Justification, req.ApproverLevel1Subject, req.ApproverLevel2Subject, req.Lines);
+                req.Justification, req.ApproverLevel1Subject, req.ApproverLevel2Subject, req.Lines, req.NeededBy);
             var r = await svc.CreateAsync(input, ct);
             return r.IsSuccess
                 ? Results.Created($"/api/v1/purchases/requisitions/{r.Value}", new { requisitionId = r.Value })
@@ -588,6 +589,26 @@ public static class ProcurementEndpoints
             if (!await perm.HasAsync(PermissionCatalog.PurchasesOrder, ct)) return Results.Forbid();
             var r = await svc.ReleaseAsync(id, req.Note, ct);
             return r.IsSuccess ? Results.NoContent() : MapInvoiceError(r.Error);
+        }).RequireAuthorization();
+
+        // ---- Compliance Score (Fase 05) ------------------------------------------------------
+        // Auditoria continua: o indice aponta onde olhar, nao bloqueia nada.
+        p.MapGet("/compliance", async (int? maxScore, int? limit, IPermissionChecker perm,
+            IComplianceService svc, CancellationToken ct) =>
+        {
+            // Varredura de governanca e material de auditoria: exige a permissao de auditoria OU a
+            // de compras (quem compra tem de poder ver a propria nota).
+            if (!await perm.HasAsync(PermissionCatalog.AuditRead, ct)
+                && !await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
+            return Results.Ok(await svc.ListAsync(maxScore, limit ?? 200, ct));
+        }).RequireAuthorization();
+
+        p.MapGet("/orders/{id:guid}/compliance", async (Guid id, IPermissionChecker perm,
+            IComplianceService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
+            var r = await svc.GetAsync(id, ct);
+            return r.IsSuccess ? Results.Ok(r.Value) : Results.NotFound(new { code = r.Error.Code, message = r.Error.Message });
         }).RequireAuthorization();
 
         return app;

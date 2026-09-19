@@ -51,7 +51,8 @@ public sealed class PurchaseRequisitionService(
         var result = PurchaseRequisition.Create(
             tenant.CompanyId, currentUser.Subject!, paying.Id, costCenter.Id, priority, input.Justification ?? string.Empty,
             input.ApproverLevel1Subject ?? string.Empty, input.ApproverLevel2Subject ?? string.Empty,
-            (input.Lines ?? Array.Empty<RequisitionLineInput>()).Select(l => (l.ItemCode, l.Quantity, l.Unit)), clock.UtcNow);
+            (input.Lines ?? Array.Empty<RequisitionLineInput>()).Select(l => (l.ItemCode, l.Quantity, l.Unit)), clock.UtcNow,
+            input.NeededBy);
         if (result.IsFailure) return Result.Failure<Guid>(result.Error);
 
         db.Requisitions.Add(result.Value);
@@ -211,6 +212,6 @@ public sealed class PurchaseRequisitionService(
         paying?.Code ?? string.Empty, paying?.LegalName ?? string.Empty,
         cc?.Code ?? string.Empty, cc?.Name ?? string.Empty,
         r.Priority.ToString(), r.Justification, r.ApproverLevel1Subject, r.ApproverLevel2Subject,
-        r.Level1DecidedBySubject, r.Level2DecidedBySubject, r.RejectedBySubject, r.DecisionNote,
+        r.Level1DecidedBySubject, r.Level2DecidedBySubject, r.RejectedBySubject, r.DecisionNote, r.NeededBy,
         r.Lines.Select(l => new RequisitionLineView(l.ItemCode, l.Quantity, l.Unit, l.PurchaseOrderId)).ToList());
 }

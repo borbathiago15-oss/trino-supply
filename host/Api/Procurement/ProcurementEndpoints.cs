@@ -81,6 +81,35 @@ public static class ProcurementEndpoints
             return Results.Ok(users.Select(u => new { subject = u.Subject, displayName = u.DisplayName, email = u.Email }));
         }).RequireAuthorization();
 
+        // Saldo do Almox para os itens de um pedido (MMS-004 — evitar compra desnecessária).
+        // Vive em Compras de propósito: quem REQUISITA ou APROVA precisa ver o saldo antes de decidir,
+        // e normalmente não tem permissão de estoque. Orquestrado (Materiais é outro BC).
+        // Item fora do catálogo do Almox volta como inCatalog=false — não é erro, é compra externa.
+        p.MapGet("/stock-check", async (string? items, IPermissionChecker perm,
+            TrinoSupply.Materials.Application.IStockService stock, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRequest, ct)
+                && !await perm.HasAsync(PermissionCatalog.PurchasesApprove, ct)
+                && !await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
+
+            var codigos = (items ?? string.Empty)
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(c => c.ToUpperInvariant())
+                .Distinct(StringComparer.Ordinal)
+                .Take(100)
+                .ToList();
+
+            var saldos = new List<object>(codigos.Count);
+            foreach (var codigo in codigos)
+            {
+                var r = await stock.GetBalanceAsync(codigo, ct);
+                saldos.Add(r.IsSuccess
+                    ? new { itemCode = codigo, inCatalog = true, balance = r.Value.Quantity }
+                    : new { itemCode = codigo, inCatalog = false, balance = 0m });
+            }
+            return Results.Ok(saldos);
+        }).RequireAuthorization();
+
         // ---- Centros de custo (spec Sistema de Compras) ----
         p.MapGet("/cost-centers", async (IPermissionChecker perm, ICostCenterService svc, CancellationToken ct) =>
         {

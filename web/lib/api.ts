@@ -384,3 +384,8 @@ export interface OrderReceiptSummary {
   lines: PendingReceiptLine[];
   receipts: ReceiptView[];
 }
+export interface StockCheckRow {
+  itemCode: string;
+  inCatalog: boolean;
+  balance: number;
+}

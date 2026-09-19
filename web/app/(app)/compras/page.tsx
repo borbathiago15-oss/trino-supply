@@ -11,6 +11,7 @@ import { Perm, useHas } from "@/lib/me";
 import { downloadCsv } from "@/lib/csv";
 import { ReqHeader, RequisitionHeaderFields, emptyHeader, headerError, useRequisitionRefData } from "@/components/requisitionHeader";
 import { ConferenciaRecebimento } from "@/components/recebimento";
+import { SaldoBadge, useSaldoAlmox } from "@/components/saldoAlmox";
 
 const money = (v: number) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -298,6 +299,9 @@ function NovaRequisicao({ onDone, onErr }: { onDone: () => void; onErr: (e: unkn
     onError: (e) => { onErr(e); if (fileRef.current) fileRef.current.value = ""; },
   });
 
+  // MMS-004: saldo do Almox dos itens em tela — evita comprar o que já existe no armazém.
+  const saldoDe = useSaldoAlmox([...linhas.map((l) => l.itemCode), item.itemCode]);
+
   const onImport = (f: File) => {
     const err = headerError(header);
     if (err) { toast.push("error", err); if (fileRef.current) fileRef.current.value = ""; return; }
@@ -328,7 +332,13 @@ function NovaRequisicao({ onDone, onErr }: { onDone: () => void; onErr: (e: unkn
           </div>
 
           <form className="grid grid-cols-1 gap-2 sm:grid-cols-4" onSubmit={(e: FormEvent) => { e.preventDefault(); addItem(); }}>
-            <Input label="Código do item" value={item.itemCode} onChange={(e) => setItem({ ...item, itemCode: e.target.value })} />
+            <div>
+              <Input label="Código do item" value={item.itemCode} onChange={(e) => setItem({ ...item, itemCode: e.target.value })} />
+              <div className="mt-1 min-h-[1.25rem]">
+                <SaldoBadge saldo={saldoDe(item.itemCode)}
+                  quantidade={Number((item.quantity ?? "").replace(",", ".")) || undefined} />
+              </div>
+            </div>
             <Input label="Quantidade" inputMode="decimal" value={item.quantity} onChange={(e) => setItem({ ...item, quantity: e.target.value })} />
             <Input label="Unidade" value={item.unit} onChange={(e) => setItem({ ...item, unit: e.target.value })} />
             <div className="flex items-end"><Button type="submit" variant="ghost">Adicionar item</Button></div>
@@ -336,12 +346,15 @@ function NovaRequisicao({ onDone, onErr }: { onDone: () => void; onErr: (e: unkn
 
           {linhas.length > 0 && (
             <div className="mt-4">
-              <Table head={["Código", "Qtd", "Unidade", ""]}>
+              <Table head={["Código", "Qtd", "Unidade", "No Almox", ""]}>
                 {linhas.map((l, i) => (
                   <tr key={i}>
                     <td className="px-3 py-2 font-mono text-xs">{l.itemCode}</td>
                     <td className="px-3 py-2">{Number(l.quantity)}</td>
                     <td className="px-3 py-2">{l.unit}</td>
+                    <td className="px-3 py-2">
+                      <SaldoBadge saldo={saldoDe(l.itemCode)} quantidade={Number(l.quantity)} />
+                    </td>
                     <td className="px-3 py-2 text-right">
                       <button className="text-xs text-rose-600 hover:underline" onClick={() => setLinhas(linhas.filter((_, j) => j !== i))}>remover</button>
                     </td>

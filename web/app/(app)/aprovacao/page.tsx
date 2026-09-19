@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, ApprovalsView } from "@/lib/api";
 import { Button, Card, Empty, StatusPill } from "@/components/ui";
 import { useToast } from "@/lib/toast";
+import { SaldoBadge, useSaldoAlmox } from "@/components/saldoAlmox";
 
 /**
  * Central de Aprovação (v2): a fila do aprovador — só o que aguarda a decisão DELE (pedidos de compra
@@ -39,6 +40,10 @@ export default function AprovacaoPage() {
   };
 
   const reqs = approvals.data?.requisitions ?? [];
+
+  // MMS-004: o aprovador vê o saldo do Almox antes de autorizar a compra.
+
+  const saldoDe = useSaldoAlmox(reqs.flatMap((r) => r.lines.map((l) => l.itemCode)));
   const stock = approvals.data?.stockRequests ?? [];
   const total = reqs.length + stock.length;
 
@@ -69,8 +74,13 @@ export default function AprovacaoPage() {
                     <div className="mt-1 text-xs text-slate-500">
                       {r.payingCompanyName} · {r.costCenterCode} — {r.costCenterName}
                     </div>
-                    <div className="mt-0.5 text-xs text-slate-500">
-                      {r.lines.map((l) => `${l.itemCode}×${Number(l.quantity)} ${l.unit}`).join(", ")}
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                      {r.lines.map((l) => (
+                        <span key={l.itemCode} className="inline-flex items-center gap-1">
+                          {l.itemCode}×{Number(l.quantity)} {l.unit}
+                          <SaldoBadge saldo={saldoDe(l.itemCode)} quantidade={Number(l.quantity)} />
+                        </span>
+                      ))}
                     </div>
                     {r.justification && <div className="mt-0.5 text-xs text-slate-400">Motivo: {r.justification}</div>}
                   </div>

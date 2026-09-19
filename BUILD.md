@@ -454,6 +454,16 @@ dotnet ef database update \
   `GET /purchases/analytics/cycle` (com `?days=`). Corrigido teste do outbox que dependia do
   tamanho do backlog (alvo agora é a mensagem mais antiga do lote). **Domínio 62/62**,
   **integração 45/45** (2 novos) e build web ok.
+- ✅ **MMS-004 — Saldo do Almox à vista ao pedir e ao aprovar (validado):** o combate à compra
+  desnecessária passou a acontecer **antes** da decisão, e não só depois da aprovação. Novo
+  `GET /purchases/stock-check?items=A,B,C` (orquestrado — Materiais é outro BC) que devolve, por
+  item, se existe no catálogo e o saldo. Vive em **Compras de propósito**: quem requisita ou aprova
+  quase nunca tem permissão de estoque — comprovado em teste (usuário só com `purchases.request`
+  leva 403 em `/materials/items` e mesmo assim enxerga o saldo). Item fora do catálogo volta como
+  `inCatalog=false` — não é erro, é compra externa. UI: **farol** 🟢 tem saldo que cobre / 🟡 tem
+  parcial / ⚪ sem saldo ou fora do Almox, no campo do item e na lista do **novo pedido**, e **por
+  linha na Central de Aprovação** — quem autoriza o gasto vê o que já existe no armazém. Uma única
+  consulta por tela. **Domínio 76/76** e **integração 50/50** (+1) e build web ok.
 - ✅ **MMS-005 — Recebimento de mercadoria com entrada automática no estoque (validado):** a OC
   agora tem **conferência física na doca**. Novo agregado `GoodsReceipt` (nota fiscal + linhas com
   **pedido × entregue × avariado**), com as regras de negócio no domínio: avaria **exige** ocorrência

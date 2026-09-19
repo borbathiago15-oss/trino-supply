@@ -262,6 +262,17 @@ export interface GanhoNegociado {
   at: string;
 }
 
+/** Uma etapa do caminho do processo: o que já aconteceu, de quem se espera, o que falta. */
+export interface EtapaDoCaminho {
+  chave: string;
+  titulo: string;
+  situacao: 'feita' | 'atual' | 'pendente' | 'encerrada';
+  /** Quem fez (feita) ou de quem se espera (atual e pendente). */
+  quem: string | null;
+  /** Quando foi feita, ou desde quando se espera. */
+  em: string | null;
+}
+
 export interface Processo {
   id: string;
   number: string;
@@ -294,6 +305,8 @@ export interface Processo {
   purchaseOrderId: string | null;
   purchaseOrderNumber: string | null;
   saving: GanhoNegociado | null;
+  /** Só vem no detalhe; a lista não o carrega. */
+  caminho?: EtapaDoCaminho[];
 }
 
 /** Critérios oferecidos na escolha do vencedor — os mesmos do sistema clássico. */
@@ -310,6 +323,7 @@ const normalizar = (q: Processo): Processo => ({
   proposals: (q.proposals ?? []).map((p) => ({ ...p, items: p.items ?? [] })),
   awards: q.awards ?? [], pendingPoSuppliers: q.pendingPoSuppliers ?? [],
   purchaseOrders: q.purchaseOrders ?? [], sourcePrNumbers: q.sourcePrNumbers ?? [],
+  caminho: q.caminho ?? [],
 });
 
 export interface PaginaDeProcessos { itens: Processo[]; total: number }

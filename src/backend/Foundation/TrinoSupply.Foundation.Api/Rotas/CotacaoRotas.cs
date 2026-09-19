@@ -41,9 +41,12 @@ public static class CotacaoRotas
             items = p.Items.Select(i => new { quotationItemId = i.QuotationItemId, unitPrice = i.UnitPrice, quantity = i.Quantity }),
         };
 
-        static object QuotationView(Quotation q) => new
+        // o caminho (quem pediu, quem aprova, o que falta) só vai no detalhe: a lista não paga
+        // as duas consultas a mais por linha
+        static object QuotationView(Quotation q, IReadOnlyList<EtapaDoCaminho>? caminho = null) => new
         {
             id = q.Id, number = q.Number, kind = QKindLabel(q.Kind), status = QStatusLabel(q.Status),
+            caminho,
             sourcePrId = q.SourcePrId, sourcePrNumber = q.SourcePrNumber, costCenter = q.CostCenter,
             sourcePrNumbers = q.SourcePrNumbers,
             justification = q.Justification, deadline = q.Deadline, notes = q.Notes,
@@ -139,14 +142,14 @@ public static class CotacaoRotas
             if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");
             QuotationStatus? situacao = Enum.TryParse<QuotationStatus>(status, true, out var st) ? st : null;
             var (itens, total) = await svc.ListAsync(q, situacao, tamanho ?? 100);
-            return Ok(new { items = itens.Select(QuotationView), total, tamanho = itens.Count }, ctx);
+            return Ok(new { items = itens.Select(x => QuotationView(x)), total, tamanho = itens.Count }, ctx);
         });
 
         // Central de Aprovação: processos de compra aguardando a MINHA alçada, já com preços
         rfq.MapGet("/my-approvals", async (QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
         {
             var fila = await svc.PendingApprovalsAsync(RoleOf(p), ActorId(p));
-            return Ok(new { items = fila.Select(QuotationView) }, ctx);
+            return Ok(new { items = fila.Select(x => QuotationView(x)) }, ctx);
         });
 
         // fila de Suprimentos: PRs aprovadas aguardando cotação
@@ -182,7 +185,8 @@ public static class CotacaoRotas
         {
             if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");
             var q = await svc.GetAsync(id);
-            return q is null ? Error(ctx, 404, "RFQ-ERR-404", "Cotação não encontrada.") : Ok(QuotationView(q), ctx);
+            if (q is null) return Error(ctx, 404, "RFQ-ERR-404", "Cotação não encontrada.");
+            return Ok(QuotationView(q, await svc.CaminhoAsync(q)), ctx);
         });
 
         // score multicritério da escolha (V2-P4, decisão C5): INFORMATIVO — nunca decide nem bloqueia

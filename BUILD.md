@@ -498,6 +498,30 @@ dotnet ef database update \
   só o menor preço. **Domínio 84/84** (+8) e **integração 51/51** (+1: atraso de 1 dia com 10% de
   avaria derruba pontualidade E integralidade → Crítico, enquanto o pontual e completo fica Ouro
   e à frente no ranking) e build web ok.
+- ✅ **Fase 03 — Cotação (RFQ), equalização e adjudicação por item (validado):** a requisição
+  aprovada agora tem dois caminhos legítimos — comprar direto (preço já conhecido) ou **disputar**.
+  Novo agregado `Quotation`: itens pendentes da requisição levados a **no mínimo dois fornecedores**
+  (com um só é compra direta, não concorrência), prazo de resposta, propostas por item (preço +
+  prazo de entrega) e **adjudicação por item**, que é exatamente o que a compra dividida sabe
+  executar. Regras no domínio: **recotar substitui a proposta anterior inteira** (nunca se mistura
+  preço velho com novo); item sem preço é o fornecedor **declinando** aquele item; proposta depois
+  do prazo entra **marcada como atrasada** (o comprador vê, o sistema não descarta); e o controle
+  que dá sentido ao processo — **escolher fora do menor preço exige justificativa registrada**,
+  que fica na linha e na auditoria. Um item só participa de **uma concorrência viva por vez**.
+  Endpoints `GET/POST /purchases/quotations…`, `POST /requisitions/{id}/quotation`, `…/proposals`,
+  `…/award`, `…/orders`, `…/cancel`. 4 tabelas novas com **RLS fail-closed**.
+  **O ciclo fecha**: `POST /quotations/{id}/orders` emite **uma OC por fornecedor vencedor**, com o
+  preço congelado na adjudicação e o **prazo prometido virando a data de entrega da OC** — que é
+  justamente o que o scorecard OTIF vai cobrar dele no recebimento (cotação → OC → recebimento →
+  OTIF → próxima cotação). **Alerta de sobrepreço** no mapa: cada proposta é comparada ao **último
+  preço efetivamente pago** pelo item (OC não cancelada) e passa de +15% acende ⚠️ — informa, não
+  bloqueia. UI: nova tela **Cotações** (lista, lançamento de proposta, mapa de equalização com
+  menor preço destacado, prazo, % vs. menor, % vs. último pago e OTIF de cada participante) e o
+  botão *Levar a cotação* na tela de Pedido. **Domínio 99/99** (+15) e **integração 53/53** (+2:
+  ciclo completo com recotação, adjudicação mista e duas OCs; e o cenário de sobrepreço — compra
+  anterior a R$ 10, proposta a R$ 12,50 acende o alerta, a R$ 10,50 não) e build web ok.
+  Nota de infra: filhos criados num agregado **já rastreado** chegam com PK preenchida e o EF os
+  trataria como UPDATE de linha inexistente — as ofertas novas são marcadas explicitamente.
 - ✅ **v3 — Compra dividida: várias OCs por requisição (validado):** removida a trava que permitia
   **uma única OC por requisição** (índice único parcial `(company, requisition_id) WHERE status=1`).
   Agora a OC cobre **exatamente os itens precificados naquela emissão**, então a mesma requisição

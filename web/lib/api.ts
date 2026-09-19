@@ -412,3 +412,76 @@ export interface SupplierScorecardView {
   overall: SupplierScoreView;
   periods: SupplierScoreView[];
 }
+export interface QuotationBidView {
+  supplierId: string;
+  supplierCode: string;
+  supplierName: string;
+  unitPrice: number;
+  totalPrice: number;
+  deliveryDays: number | null;
+  notes?: string | null;
+  isLowest: boolean;
+  isLate: boolean;
+  percentAboveLowest: number;
+  percentAboveLastPaid: number | null;
+  overpriceAlert: boolean;
+}
+export interface QuotationLineView {
+  id: string;
+  requisitionLineId: string;
+  itemCode: string;
+  quantity: number;
+  unit: string;
+  awardedSupplierId?: string | null;
+  awardedSupplierCode?: string | null;
+  awardedUnitPrice?: number | null;
+  awardNote?: string | null;
+  lastPaidPrice?: number | null;
+  lastPaidAt?: string | null;
+  bids: QuotationBidView[];
+}
+export interface QuotationParticipantView {
+  supplierId: string;
+  supplierCode: string;
+  supplierName: string;
+  hasResponded: boolean;
+  isLate: boolean;
+  respondedAt?: string | null;
+  paymentTerms?: string | null;
+  freightTerms?: string | null;
+  validUntil?: string | null;
+  notes?: string | null;
+  itemsQuoted: number;
+  total: number;
+  otifTier?: string | null;
+  otifIndex?: number | null;
+}
+export interface QuotationView {
+  id: string;
+  number: number;
+  requisitionId: string;
+  status: string;
+  createdBy: string;
+  createdAt: string;
+  closesAt: string;
+  isClosed: boolean;
+  notes?: string | null;
+  cancelledBy?: string | null;
+  cancelledAt?: string | null;
+  cancelReason?: string | null;
+  lines: QuotationLineView[];
+  participants: QuotationParticipantView[];
+}
+export interface QuotationSummaryView {
+  id: string;
+  number: number;
+  requisitionId: string;
+  status: string;
+  createdAt: string;
+  closesAt: string;
+  isClosed: boolean;
+  linesCount: number;
+  invitedCount: number;
+  respondedCount: number;
+  awardedCount: number;
+}

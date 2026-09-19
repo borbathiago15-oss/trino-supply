@@ -17,6 +17,16 @@ public sealed record CreateCostCenterRequest(string Code, string Name, string? P
 public sealed record CancelOrderRequest(string Reason);
 public sealed record RegisterReceiptRequest(
     string? InvoiceNumber, DateOnly? InvoiceDate, string? Notes, IReadOnlyList<ReceiptLineRequest> Lines);
+public sealed record OpenQuotationRequest(
+    IReadOnlyList<Guid>? RequisitionLineIds, IReadOnlyList<string> SupplierCodes,
+    DateTimeOffset ClosesAt, string? Notes);
+public sealed record ProposalBidRequest(Guid LineId, decimal UnitPrice, int? DeliveryDays, string? Notes);
+public sealed record SubmitProposalRequest(
+    string SupplierCode, string? PaymentTerms, string? FreightTerms, DateOnly? ValidUntil, string? Notes,
+    IReadOnlyList<ProposalBidRequest> Bids);
+public sealed record AwardLineRequest(Guid LineId, string SupplierCode, string? Note);
+public sealed record AwardQuotationRequest(IReadOnlyList<AwardLineRequest> Awards);
+public sealed record CancelQuotationRequest(string Reason);
 
 /// <summary>Endpoints de Compras (PR-001). Requisitar e aprovar são permissões distintas (SoD).</summary>
 public static class ProcurementEndpoints
@@ -452,8 +462,92 @@ public static class ProcurementEndpoints
             };
         }).RequireAuthorization();
 
+        // ---- Cotação / concorrência (RFQ — Fase 03) ------------------------------------------
+        // A requisição aprovada vai a mercado: propostas por item, mapa de equalização (preço ×
+        // prazo × OTIF) e adjudicação por item, que desemboca nas OCs da compra dividida.
+        p.MapGet("/quotations", async (int? limit, IPermissionChecker perm, IQuotationService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
+            return Results.Ok(await svc.ListAsync(limit ?? 200, ct));
+        }).RequireAuthorization();
+
+        // Mapa de equalização completo — é a tela de decisão do comprador.
+        p.MapGet("/quotations/{id:guid}", async (Guid id, IPermissionChecker perm, IQuotationService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesRead, ct)) return Results.Forbid();
+            var r = await svc.GetAsync(id, ct);
+            return r.IsSuccess ? Results.Ok(r.Value) : Results.NotFound(new { code = r.Error.Code, message = r.Error.Message });
+        }).RequireAuthorization();
+
+        p.MapPost("/requisitions/{id:guid}/quotation", async (Guid id, OpenQuotationRequest req,
+            IPermissionChecker perm, IQuotationService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesOrder, ct)) return Results.Forbid();
+            var r = await svc.OpenAsync(id, new OpenQuotationInput(
+                req.RequisitionLineIds ?? [], req.SupplierCodes ?? [], req.ClosesAt, req.Notes), ct);
+            return r.IsSuccess
+                ? Results.Created($"/api/v1/purchases/quotations/{r.Value}", new { quotationId = r.Value })
+                : MapQuotationError(r.Error);
+        }).RequireAuthorization();
+
+        // Lançamento da proposta pelo comprador (o portal do fornecedor entra por aqui depois).
+        p.MapPost("/quotations/{id:guid}/proposals", async (Guid id, SubmitProposalRequest req,
+            IPermissionChecker perm, IQuotationService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesOrder, ct)) return Results.Forbid();
+            var r = await svc.SubmitProposalAsync(id, new SubmitProposalInput(
+                req.SupplierCode, req.PaymentTerms, req.FreightTerms, req.ValidUntil, req.Notes,
+                (req.Bids ?? []).Select(b => new ProposalBidInput(b.LineId, b.UnitPrice, b.DeliveryDays, b.Notes)).ToList()), ct);
+            return r.IsSuccess ? Results.NoContent() : MapQuotationError(r.Error);
+        }).RequireAuthorization();
+
+        // Adjudicação por item: fora do menor preço, o domínio exige a justificativa.
+        p.MapPost("/quotations/{id:guid}/award", async (Guid id, AwardQuotationRequest req,
+            IPermissionChecker perm, IQuotationService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesOrder, ct)) return Results.Forbid();
+            var r = await svc.AwardAsync(id, new AwardQuotationInput(
+                (req.Awards ?? []).Select(a => new AwardLineInput(a.LineId, a.SupplierCode, a.Note)).ToList()), ct);
+            return r.IsSuccess ? Results.NoContent() : MapQuotationError(r.Error);
+        }).RequireAuthorization();
+
+        // Fecha o ciclo: uma OC por fornecedor vencedor, no preço adjudicado e no prazo prometido.
+        p.MapPost("/quotations/{id:guid}/orders", async (Guid id, IPermissionChecker perm,
+            IQuotationService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesOrder, ct)) return Results.Forbid();
+            var r = await svc.IssueOrdersAsync(id, ct);
+            return r.IsSuccess
+                ? Results.Created($"/api/v1/purchases/quotations/{id}", new { orderIds = r.Value.OrderIds })
+                : MapQuotationError(r.Error);
+        }).RequireAuthorization();
+
+        p.MapPost("/quotations/{id:guid}/cancel", async (Guid id, CancelQuotationRequest req,
+            IPermissionChecker perm, IQuotationService svc, CancellationToken ct) =>
+        {
+            if (!await perm.HasAsync(PermissionCatalog.PurchasesOrder, ct)) return Results.Forbid();
+            var r = await svc.CancelAsync(id, req.Reason, ct);
+            return r.IsSuccess ? Results.NoContent() : MapQuotationError(r.Error);
+        }).RequireAuthorization();
+
         return app;
     }
+
+    /// <summary>
+    /// Erros da cotação: o que é disputa de estado (item já adjudicado, já em outra cotação) vira
+    /// 409 — o cliente precisa recarregar o mapa antes de insistir; o resto é 400/404.
+    /// </summary>
+    private static IResult MapQuotationError(TrinoSupply.BuildingBlocks.Error error) => error.Code switch
+    {
+        "purchases.not_found" or "purchases.quotation.not_found" or "purchases.supplier.not_found"
+            or "purchases.paying_company.not_found"
+            => Results.NotFound(new { code = error.Code, message = error.Message }),
+        "purchases.conflict" or "purchases.quotation.line_already_awarded"
+            or "purchases.quotation.line_already_ordered" or "purchases.quotation.line_in_open_quotation"
+            or "purchases.quotation.already_awarded" or "purchases.order.line_already_ordered"
+            => Results.Conflict(new { code = error.Code, message = error.Message }),
+        _ => Results.BadRequest(new { code = error.Code, message = error.Message })
+    };
 
     private static IResult MapDecision(TrinoSupply.BuildingBlocks.Result result)
     {

@@ -868,5 +868,207 @@ BEGIN
     VALUES ('20260919172619_GoodsReceipt', '9.0.0');
     END IF;
 END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+    CREATE TABLE procurement.quotation (
+        id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        number bigint NOT NULL,
+        requisition_id uuid NOT NULL,
+        created_by character varying(200) NOT NULL,
+        created_at timestamp with time zone NOT NULL,
+        closes_at timestamp with time zone NOT NULL,
+        notes character varying(1000),
+        status smallint NOT NULL,
+        cancelled_by character varying(200),
+        cancelled_at timestamp with time zone,
+        cancel_reason character varying(500),
+        version integer NOT NULL,
+        CONSTRAINT "PK_quotation" PRIMARY KEY (id)
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+    CREATE TABLE procurement.quotation_bid (
+        id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        quotation_id uuid NOT NULL,
+        participant_id uuid NOT NULL,
+        line_id uuid NOT NULL,
+        unit_price numeric(18,6) NOT NULL,
+        delivery_days integer,
+        notes character varying(1000),
+        CONSTRAINT "PK_quotation_bid" PRIMARY KEY (id),
+        CONSTRAINT "FK_quotation_bid_quotation_quotation_id" FOREIGN KEY (quotation_id) REFERENCES procurement.quotation (id) ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+    CREATE TABLE procurement.quotation_line (
+        id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        quotation_id uuid NOT NULL,
+        requisition_line_id uuid NOT NULL,
+        item_code character varying(60) NOT NULL,
+        quantity numeric(18,6) NOT NULL,
+        unit character varying(30) NOT NULL,
+        awarded_supplier_id uuid,
+        awarded_unit_price numeric(18,6),
+        award_note character varying(1000),
+        awarded_by character varying(200),
+        awarded_at timestamp with time zone,
+        CONSTRAINT "PK_quotation_line" PRIMARY KEY (id),
+        CONSTRAINT "FK_quotation_line_quotation_quotation_id" FOREIGN KEY (quotation_id) REFERENCES procurement.quotation (id) ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+    CREATE TABLE procurement.quotation_participant (
+        id uuid NOT NULL,
+        company_id uuid NOT NULL,
+        quotation_id uuid NOT NULL,
+        supplier_id uuid NOT NULL,
+        invited_at timestamp with time zone NOT NULL,
+        responded_at timestamp with time zone,
+        is_late boolean NOT NULL,
+        payment_terms character varying(120),
+        freight_terms character varying(120),
+        valid_until date,
+        notes character varying(1000),
+        CONSTRAINT "PK_quotation_participant" PRIMARY KEY (id),
+        CONSTRAINT "FK_quotation_participant_quotation_quotation_id" FOREIGN KEY (quotation_id) REFERENCES procurement.quotation (id) ON DELETE CASCADE
+    );
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+    CREATE UNIQUE INDEX "IX_quotation_company_id_number" ON procurement.quotation (company_id, number);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+    CREATE INDEX "IX_quotation_company_id_status" ON procurement.quotation (company_id, status);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+    CREATE INDEX "IX_quotation_bid_line_id" ON procurement.quotation_bid (line_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+    CREATE UNIQUE INDEX "IX_quotation_bid_participant_id_line_id" ON procurement.quotation_bid (participant_id, line_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+    CREATE INDEX "IX_quotation_bid_quotation_id" ON procurement.quotation_bid (quotation_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+    CREATE INDEX "IX_quotation_line_quotation_id" ON procurement.quotation_line (quotation_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+    CREATE INDEX "IX_quotation_line_requisition_line_id" ON procurement.quotation_line (requisition_line_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+    CREATE UNIQUE INDEX "IX_quotation_participant_quotation_id_supplier_id" ON procurement.quotation_participant (quotation_id, supplier_id);
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+
+    ALTER TABLE procurement.quotation             ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE procurement.quotation             FORCE  ROW LEVEL SECURITY;
+    ALTER TABLE procurement.quotation_line        ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE procurement.quotation_line        FORCE  ROW LEVEL SECURITY;
+    ALTER TABLE procurement.quotation_participant ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE procurement.quotation_participant FORCE  ROW LEVEL SECURITY;
+    ALTER TABLE procurement.quotation_bid         ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE procurement.quotation_bid         FORCE  ROW LEVEL SECURITY;
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+
+    CREATE POLICY tenant_isolation ON procurement.quotation
+        USING      (company_id = foundation.current_company())
+        WITH CHECK (company_id = foundation.current_company());
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+
+    CREATE POLICY tenant_isolation ON procurement.quotation_line
+        USING      (company_id = foundation.current_company())
+        WITH CHECK (company_id = foundation.current_company());
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+
+    CREATE POLICY tenant_isolation ON procurement.quotation_participant
+        USING      (company_id = foundation.current_company())
+        WITH CHECK (company_id = foundation.current_company());
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+
+    CREATE POLICY tenant_isolation ON procurement.quotation_bid
+        USING      (company_id = foundation.current_company())
+        WITH CHECK (company_id = foundation.current_company());
+    END IF;
+END $EF$;
+
+DO $EF$
+BEGIN
+    IF NOT EXISTS(SELECT 1 FROM procurement.__ef_migrations WHERE "MigrationId" = '20260919201514_Quotation') THEN
+    INSERT INTO procurement.__ef_migrations ("MigrationId", "ProductVersion")
+    VALUES ('20260919201514_Quotation', '9.0.0');
+    END IF;
+END $EF$;
 COMMIT;
 

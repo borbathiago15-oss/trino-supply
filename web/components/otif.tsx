@@ -56,3 +56,18 @@ export function OtifBadge({ score, detalhado = false }: { score?: SupplierScoreV
     </span>
   );
 }
+
+/**
+ * Só a faixa + o índice, para quando o chamador já tem a nota pronta (ex.: o participante da
+ * cotação) e não a linha inteira do scorecard. Sem tooltip: não se inventa o que não se sabe.
+ */
+export function TierChip({ tier, otif }: { tier?: string | null; otif?: number | null }) {
+  if (!tier || tier === "SemDados") {
+    return <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">sem histórico</span>;
+  }
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CORES[tier] ?? CORES.SemDados}`}>
+      {otif != null ? `OTIF ${otif}% · ` : ""}{ROTULOS[tier] ?? tier}
+    </span>
+  );
+}

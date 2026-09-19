@@ -19,6 +19,7 @@ public sealed class ProcurementDbContext(DbContextOptions<ProcurementDbContext> 
     public DbSet<ProcessedEvent> ProcessedEvents => Set<ProcessedEvent>();
     public DbSet<CostCenter> CostCenters => Set<CostCenter>();
     public DbSet<GoodsReceipt> GoodsReceipts => Set<GoodsReceipt>();
+    public DbSet<Quotation> Quotations => Set<Quotation>();
 
     protected override void OnModelCreating(ModelBuilder b)
     {
@@ -231,6 +232,91 @@ public sealed class ProcurementDbContext(DbContextOptions<ProcurementDbContext> 
             e.Ignore(x => x.NetQuantity);
             e.HasIndex(x => x.ReceiptId);
             e.HasIndex(x => x.OrderLineId);
+        });
+
+        b.Entity<Quotation>(e =>
+        {
+            e.ToTable("quotation");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id").HasConversion(id => id.Value, v => QuotationId.From(v));
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.Number).HasColumnName("number");
+            e.Property(x => x.RequisitionId).HasColumnName("requisition_id").HasConversion(id => id.Value, v => RequisitionId.From(v));
+            e.Property(x => x.CreatedBySubject).HasColumnName("created_by").HasMaxLength(200).IsRequired();
+            e.Property(x => x.CreatedAt).HasColumnName("created_at");
+            e.Property(x => x.ClosesAt).HasColumnName("closes_at");
+            e.Property(x => x.Notes).HasColumnName("notes").HasMaxLength(1000);
+            e.Property(x => x.Status).HasColumnName("status").HasConversion<short>();
+            e.Property(x => x.CancelledBySubject).HasColumnName("cancelled_by").HasMaxLength(200);
+            e.Property(x => x.CancelledAt).HasColumnName("cancelled_at");
+            e.Property(x => x.CancelReason).HasColumnName("cancel_reason").HasMaxLength(500);
+            e.Property(x => x.Version).HasColumnName("version").IsConcurrencyToken();
+            e.HasMany(x => x.Lines).WithOne().HasForeignKey(l => l.QuotationId);
+            e.HasMany(x => x.Participants).WithOne().HasForeignKey(p => p.QuotationId);
+            e.HasMany(x => x.Bids).WithOne().HasForeignKey(b => b.QuotationId);
+            // Número da cotação é único por tenant (o sequencial se resolve por retry na colisão).
+            e.HasIndex(x => new { x.CompanyId, x.Number }).IsUnique();
+            e.HasIndex(x => new { x.CompanyId, x.Status });
+            e.Ignore(x => x.ResponseCount);
+            e.Ignore(x => x.DomainEvents);
+        });
+
+        b.Entity<QuotationLine>(e =>
+        {
+            e.ToTable("quotation_line");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.QuotationId).HasColumnName("quotation_id").HasConversion(id => id.Value, v => QuotationId.From(v));
+            e.Property(x => x.RequisitionLineId).HasColumnName("requisition_line_id");
+            e.Property(x => x.ItemCode).HasColumnName("item_code").HasMaxLength(60).IsRequired();
+            e.Property(x => x.Quantity).HasColumnName("quantity").HasColumnType("numeric(18,6)");
+            e.Property(x => x.Unit).HasColumnName("unit").HasMaxLength(30).IsRequired();
+            e.Property(x => x.AwardedSupplierId).HasColumnName("awarded_supplier_id");
+            e.Property(x => x.AwardedUnitPrice).HasColumnName("awarded_unit_price").HasColumnType("numeric(18,6)");
+            e.Property(x => x.AwardNote).HasColumnName("award_note").HasMaxLength(1000);
+            e.Property(x => x.AwardedBySubject).HasColumnName("awarded_by").HasMaxLength(200);
+            e.Property(x => x.AwardedAt).HasColumnName("awarded_at");
+            e.Ignore(x => x.IsAwarded);
+            e.HasIndex(x => x.QuotationId);
+            e.HasIndex(x => x.RequisitionLineId);
+        });
+
+        b.Entity<QuotationParticipant>(e =>
+        {
+            e.ToTable("quotation_participant");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.QuotationId).HasColumnName("quotation_id").HasConversion(id => id.Value, v => QuotationId.From(v));
+            e.Property(x => x.SupplierId).HasColumnName("supplier_id");
+            e.Property(x => x.InvitedAt).HasColumnName("invited_at");
+            e.Property(x => x.RespondedAt).HasColumnName("responded_at");
+            e.Property(x => x.IsLate).HasColumnName("is_late");
+            e.Property(x => x.PaymentTerms).HasColumnName("payment_terms").HasMaxLength(120);
+            e.Property(x => x.FreightTerms).HasColumnName("freight_terms").HasMaxLength(120);
+            e.Property(x => x.ValidUntil).HasColumnName("valid_until");
+            e.Property(x => x.Notes).HasColumnName("notes").HasMaxLength(1000);
+            e.Ignore(x => x.HasResponded);
+            // Um fornecedor entra uma única vez na mesma cotação.
+            e.HasIndex(x => new { x.QuotationId, x.SupplierId }).IsUnique();
+        });
+
+        b.Entity<QuotationBid>(e =>
+        {
+            e.ToTable("quotation_bid");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CompanyId).HasColumnName("company_id").HasConversion(id => id.Value, v => CompanyId.From(v));
+            e.Property(x => x.QuotationId).HasColumnName("quotation_id").HasConversion(id => id.Value, v => QuotationId.From(v));
+            e.Property(x => x.ParticipantId).HasColumnName("participant_id");
+            e.Property(x => x.LineId).HasColumnName("line_id");
+            e.Property(x => x.UnitPrice).HasColumnName("unit_price").HasColumnType("numeric(18,6)");
+            e.Property(x => x.DeliveryDays).HasColumnName("delivery_days");
+            e.Property(x => x.Notes).HasColumnName("notes").HasMaxLength(1000);
+            // Uma oferta por participante e item (recotar substitui a anterior).
+            e.HasIndex(x => new { x.ParticipantId, x.LineId }).IsUnique();
+            e.HasIndex(x => x.LineId);
         });
 
         b.Entity<SupplierStats>(e =>

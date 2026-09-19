@@ -13,6 +13,7 @@ import { ReqHeader, RequisitionHeaderFields, emptyHeader, headerError, useRequis
 import { ConferenciaRecebimento } from "@/components/recebimento";
 import { SaldoBadge, useSaldoAlmox } from "@/components/saldoAlmox";
 import { OtifBadge, useScorecards } from "@/components/otif";
+import { AbrirCotacao } from "@/components/cotacao";
 
 const money = (v: number) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -101,7 +102,14 @@ export default function ComprasPage() {
                   </div>
                 </div>
                 {(r.status === "Approved" || r.status === "PartiallyOrdered") && has(Perm.PurchasesOrder) && (
-                  <EmitirOc req={r} onSuccess={() => ok("OC emitida.")} onErr={onErr} />
+                  <>
+                    <EmitirOc req={r} onSuccess={() => ok("OC emitida.")} onErr={onErr} />
+                    {/* Dois caminhos legítimos: comprar direto (preço já conhecido) ou disputar. */}
+                    <div className="mt-2 border-t border-slate-100 pt-2">
+                      <AbrirCotacao req={r} onErr={onErr}
+                        onSuccess={() => ok("Concorrência aberta — lance as propostas em Cotações.")} />
+                    </div>
+                  </>
                 )}
               </div>
             );})}

@@ -73,6 +73,10 @@ const STATUS_STYLES: Record<string, string> = {
   PartiallyReceived: "bg-amber-100 text-amber-700",
   Received: "bg-indigo-100 text-indigo-700",
   Cancelled: "bg-rose-100 text-rose-700",
+  // Cotação (RFQ)
+  Open: "bg-sky-100 text-sky-700",
+  PartiallyAwarded: "bg-amber-100 text-amber-700",
+  Awarded: "bg-indigo-100 text-indigo-700",
   Active: "bg-emerald-100 text-emerald-700",
   Inactive: "bg-slate-100 text-slate-600",
   // Solicitação de almoxarifado (Fluxo A)
@@ -101,6 +105,9 @@ const STATUS_LABELS: Record<string, string> = {
   PartiallyReceived: "Recebida parcial",
   Received: "Recebida",
   Cancelled: "Cancelada",
+  Open: "Aberta a propostas",
+  PartiallyAwarded: "Adjudicada parcial",
+  Awarded: "Adjudicada",
   Active: "Ativo",
   Inactive: "Bloqueado",
   EmSeparacao: "Em separação",

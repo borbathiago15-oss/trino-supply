@@ -636,3 +636,230 @@ public class SupplierScorecardTests
         Assert.Equal(10m, s.DamageRate);   // 2 avariadas de 20 recebidas
     }
 }
+
+/// <summary>
+/// Cotação / concorrência (Fase 03). O que os testes protegem: a disputa existe de verdade (dois
+/// convidados no mínimo), a recotação substitui a proposta inteira, e — o controle que dá sentido
+/// ao processo — escolher fora do menor preço só passa com justificativa registrada.
+/// </summary>
+public class QuotationTests
+{
+    private static readonly CompanyId Company = CompanyId.New();
+    private static readonly RequisitionId Req = RequisitionId.New();
+    private static readonly DateTimeOffset Agora = new(2026, 9, 19, 12, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Prazo = Agora.AddDays(3);
+    private static readonly Guid FornA = Guid.NewGuid();
+    private static readonly Guid FornB = Guid.NewGuid();
+    private static readonly Guid FornC = Guid.NewGuid();
+
+    private static readonly Guid LinhaReqA = Guid.NewGuid();
+    private static readonly Guid LinhaReqB = Guid.NewGuid();
+
+    private static readonly ProposalHeader Condicoes = new("30 dias", "CIF", null, null);
+
+    private static Result<Quotation> Abrir(
+        IEnumerable<Guid>? fornecedores = null, DateTimeOffset? fecha = null, int itens = 2) =>
+        Quotation.Open(
+            Company, 1, Req, "comprador", Agora, fecha ?? Prazo, "cotação de EPI",
+            itens == 2
+                ? [new QuotationLineInput(LinhaReqA, "LUVA", 100m, "un"),
+                   new QuotationLineInput(LinhaReqB, "BOTA", 50m, "par")]
+                : [new QuotationLineInput(LinhaReqA, "LUVA", 100m, "un")],
+            fornecedores ?? [FornA, FornB]);
+
+    /// <summary>Cotação com as duas propostas já lançadas: A é o menor na luva, B na bota.</summary>
+    private static Quotation ComPropostas()
+    {
+        var q = Abrir().Value;
+        var luva = q.Lines.Single(l => l.ItemCode == "LUVA").Id;
+        var bota = q.Lines.Single(l => l.ItemCode == "BOTA").Id;
+
+        q.SubmitProposal(FornA, Condicoes,
+            [new BidInput(luva, 10m, 5, null), new BidInput(bota, 90m, 5, null)], Agora.AddHours(1));
+        q.SubmitProposal(FornB, Condicoes,
+            [new BidInput(luva, 12m, 2, null), new BidInput(bota, 80m, 2, null)], Agora.AddHours(2));
+        return q;
+    }
+
+    private static Guid LinhaDe(Quotation q, string item) => q.Lines.Single(l => l.ItemCode == item).Id;
+
+    [Fact]
+    public void Cotacao_com_um_unico_convidado_e_recusada()
+    {
+        var r = Abrir(fornecedores: [FornA]);
+
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.quotation.suppliers_required", r.Error.Code);
+    }
+
+    [Fact]
+    public void Prazo_de_resposta_no_passado_e_recusado()
+    {
+        var r = Abrir(fecha: Agora.AddHours(-1));
+
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.quotation.deadline_invalid", r.Error.Code);
+    }
+
+    [Fact]
+    public void Fornecedor_nao_convidado_nao_propoe()
+    {
+        var q = Abrir().Value;
+
+        var r = q.SubmitProposal(FornC, Condicoes, [new BidInput(LinhaDe(q, "LUVA"), 9m, 3, null)], Agora);
+
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.quotation.not_invited", r.Error.Code);
+    }
+
+    [Fact]
+    public void Recotar_substitui_a_proposta_anterior_inteira()
+    {
+        var q = Abrir().Value;
+        var luva = LinhaDe(q, "LUVA");
+        var bota = LinhaDe(q, "BOTA");
+        q.SubmitProposal(FornA, Condicoes, [new BidInput(luva, 10m, 5, null), new BidInput(bota, 90m, 5, null)], Agora);
+
+        // Segunda rodada: só a luva, e mais barata. A bota da rodada anterior NÃO pode sobreviver.
+        q.SubmitProposal(FornA, Condicoes, [new BidInput(luva, 8m, 5, null)], Agora.AddHours(1));
+
+        var participante = q.Participants.Single(p => p.SupplierId == FornA);
+        var ofertas = q.Bids.Where(b => b.ParticipantId == participante.Id).ToList();
+        Assert.Single(ofertas);
+        Assert.Equal(8m, ofertas[0].UnitPrice);
+    }
+
+    [Fact]
+    public void Proposta_fora_do_prazo_entra_marcada_como_atrasada()
+    {
+        var q = Abrir().Value;
+
+        q.SubmitProposal(FornA, Condicoes, [new BidInput(LinhaDe(q, "LUVA"), 10m, 5, null)], Prazo.AddHours(1));
+
+        var participante = q.Participants.Single(p => p.SupplierId == FornA);
+        Assert.True(participante.HasResponded);
+        Assert.True(participante.IsLate);   // aceita, mas o comprador vê
+    }
+
+    [Fact]
+    public void Preco_zerado_e_recusado()
+    {
+        var q = Abrir().Value;
+
+        var r = q.SubmitProposal(FornA, Condicoes, [new BidInput(LinhaDe(q, "LUVA"), 0m, 5, null)], Agora);
+
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.quotation.price_invalid", r.Error.Code);
+    }
+
+    [Fact]
+    public void Adjudicar_fora_do_menor_preco_sem_justificativa_e_recusado()
+    {
+        var q = ComPropostas();
+
+        // B cobra 12 na luva; A cobra 10. Escolher B é legítimo (entrega em 2 dias), mas precisa dizer.
+        var r = q.Award([new AwardInput(LinhaDe(q, "LUVA"), FornB, null)], "comprador", Agora);
+
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.quotation.award_note_required", r.Error.Code);
+    }
+
+    [Fact]
+    public void Adjudicar_fora_do_menor_preco_com_justificativa_passa_e_grava_o_motivo()
+    {
+        var q = ComPropostas();
+
+        var r = q.Award([new AwardInput(LinhaDe(q, "LUVA"), FornB, "entrega em 2 dias; a obra para sem luva")],
+            "comprador", Agora);
+
+        Assert.True(r.IsSuccess);
+        var luva = q.Lines.Single(l => l.ItemCode == "LUVA");
+        Assert.Equal(FornB, luva.AwardedSupplierId);
+        Assert.Equal(12m, luva.AwardedUnitPrice);     // preço congelado para a OC
+        Assert.Contains("2 dias", luva.AwardNote);
+    }
+
+    [Fact]
+    public void Menor_preco_dispensa_justificativa()
+    {
+        var q = ComPropostas();
+
+        var r = q.Award([new AwardInput(LinhaDe(q, "LUVA"), FornA, null)], "comprador", Agora);
+
+        Assert.True(r.IsSuccess);
+        Assert.Equal(FornA, q.Lines.Single(l => l.ItemCode == "LUVA").AwardedSupplierId);
+    }
+
+    [Fact]
+    public void Adjudicacao_por_item_deixa_a_cotacao_parcial_ate_o_ultimo_item()
+    {
+        var q = ComPropostas();
+
+        q.Award([new AwardInput(LinhaDe(q, "LUVA"), FornA, null)], "comprador", Agora);
+        Assert.Equal(QuotationStatus.PartiallyAwarded, q.Status);
+
+        // Adjudicação MISTA: a bota sai para o outro fornecedor, que é o menor nela.
+        q.Award([new AwardInput(LinhaDe(q, "BOTA"), FornB, null)], "comprador", Agora);
+        Assert.Equal(QuotationStatus.Awarded, q.Status);
+        Assert.Equal(2, q.Lines.Select(l => l.AwardedSupplierId).Distinct().Count());
+    }
+
+    [Fact]
+    public void Item_ja_adjudicado_nao_e_readjudicado()
+    {
+        var q = ComPropostas();
+        q.Award([new AwardInput(LinhaDe(q, "LUVA"), FornA, null)], "comprador", Agora);
+
+        var r = q.Award([new AwardInput(LinhaDe(q, "LUVA"), FornB, "mudei de ideia")], "comprador", Agora);
+
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.quotation.line_already_awarded", r.Error.Code);
+    }
+
+    [Fact]
+    public void Nao_se_adjudica_a_quem_nao_cotou_o_item()
+    {
+        var q = Abrir().Value;
+        q.SubmitProposal(FornA, Condicoes, [new BidInput(LinhaDe(q, "LUVA"), 10m, 5, null)], Agora);
+
+        // B foi convidado mas não cotou nada — não pode ganhar.
+        var r = q.Award([new AwardInput(LinhaDe(q, "LUVA"), FornB, "preferência")], "comprador", Agora);
+
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.quotation.no_bid", r.Error.Code);
+    }
+
+    [Fact]
+    public void Depois_de_adjudicar_a_cotacao_nao_aceita_nova_proposta()
+    {
+        var q = ComPropostas();
+        q.Award([new AwardInput(LinhaDe(q, "LUVA"), FornA, null)], "comprador", Agora);
+
+        var r = q.SubmitProposal(FornB, Condicoes, [new BidInput(LinhaDe(q, "BOTA"), 1m, 1, null)], Agora);
+
+        Assert.True(r.IsFailure);
+        Assert.Equal("purchases.quotation.already_awarded", r.Error.Code);
+    }
+
+    [Fact]
+    public void Cancelamento_exige_motivo()
+    {
+        var q = Abrir().Value;
+
+        Assert.Equal("purchases.quotation.cancel_reason_required", q.Cancel("comprador", "  ", Agora).Error.Code);
+        Assert.True(q.Cancel("comprador", "demanda suspensa pela obra", Agora).IsSuccess);
+        Assert.Equal(QuotationStatus.Cancelled, q.Status);
+    }
+
+    [Fact]
+    public void Cotacao_cancelada_nao_recebe_proposta_nem_adjudicacao()
+    {
+        var q = ComPropostas();
+        q.Cancel("comprador", "escopo mudou", Agora);
+
+        Assert.Equal("purchases.quotation.cancelled",
+            q.SubmitProposal(FornA, Condicoes, [new BidInput(LinhaDe(q, "LUVA"), 5m, 1, null)], Agora).Error.Code);
+        Assert.Equal("purchases.quotation.cancelled",
+            q.Award([new AwardInput(LinhaDe(q, "LUVA"), FornA, null)], "comprador", Agora).Error.Code);
+    }
+}

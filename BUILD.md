@@ -586,6 +586,24 @@ dotnet ef database update \
   lead time medido; cards batem; chip de atrasados e busca filtram) e build web ok.
   Fora desta fatia: **família do item** como coluna/filtro — mora em Materiais (outro BC) e entra
   por orquestração no host, como o saldo do Almox.
+- ✅ **Fase 06 — Conferência mobile na doca (validado em navegador):** nova rota **`/doca`**,
+  pensada para o telemóvel e o coletor: campos grandes, contador com botões ±, ação fixa no rodapé.
+  **Bipa o DANFE** → a chave de 44 dígitos aponta o CNPJ do emitente (posições 6–19) e o número da
+  nota (25–33): a lista de OCs abertas a recebimento fica só com as daquele fornecedor e a NF já vem
+  preenchida. **Bipa a caixa** → soma 1 na linha do item (sem diferenciar caixa). Avaria acima de
+  zero, ou recebido acima do pendente, abre a ocorrência obrigatória. Leitura pela câmara com
+  **`BarcodeDetector`** onde existe (Chrome/Android); onde não existe (Safari/iOS), o mesmo campo
+  aceita o coletor ou digitação — a tela diz isso em vez de falhar em silêncio. **Sem backend novo**:
+  o registro usa o mesmo `POST /orders/{id}/receipts` da conferência de mesa, então entrada no
+  estoque, OTIF e conciliação fiscal seguem alimentados do mesmo jeito.
+  **Bug pré-existente corrigido no caminho:** o guard do layout redirecionava para o login no
+  primeiro render do cliente, antes do `persist` repor o token — navegação interna nunca sofria,
+  mas **carga a frio** (F5, ou o telemóvel reabrindo a aba) derrubava a sessão válida. Agora espera
+  a hidratação (`onFinishHydration`), só no cliente. **Validação em navegador real** (Chromium
+  headless a 390×844, API mockada): permanece em `/doca` na carga a frio, sem scroll horizontal,
+  DANFE filtra e preenche, bipagem soma, avaria exige ocorrência, corpo do POST exato, toast.
+  Domínio 127/127 e build web ok (backend intocado). Fotos de avaria e push ficaram de fora: exigem
+  armazenamento de arquivos e service worker, decisões de infra antes de código.
 - ✅ **v3 — Compra dividida: várias OCs por requisição (validado):** removida a trava que permitia
   **uma única OC por requisição** (índice único parcial `(company, requisition_id) WHERE status=1`).
   Agora a OC cobre **exatamente os itens precificados naquela emissão**, então a mesma requisição

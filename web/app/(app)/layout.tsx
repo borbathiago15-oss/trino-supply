@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/store";
 import { Toaster } from "@/components/Toaster";
@@ -19,6 +19,7 @@ const NAV = [
   { href: "/torre", label: "Torre de Controlo", perm: Perm.PurchasesRead },
   { href: "/materiais", label: "Estoque (Almox)", perm: Perm.MaterialsRead },
   { href: "/almoxarifado", label: "Entregas (EPI)", perm: Perm.MaterialsRead },
+  { href: "/doca", label: "Doca (mobile)", perms: [Perm.MaterialsManage, Perm.PurchasesOrder] },
   { href: "/cadastros", label: "Cadastros", perm: Perm.PurchasesRead },
   { href: "/auditoria", label: "Auditoria", perm: Perm.AuditRead },
 ] as { href: string; label: string; perm?: string | null; perms?: string[] }[];
@@ -30,11 +31,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const has = useHas();
   const qc = useQueryClient();
 
+  // O persist repõe o token DEPOIS do primeiro render do cliente. Sem esperar a hidratação, uma
+  // carga a frio (telemóvel reabrindo a aba na doca, F5 em qualquer tela) cai no login com a sessão
+  // válida ainda guardada. Navegação interna nunca sofria, por isso passou despercebido.
+  // Só no cliente: na pré-renderização estática o store não tem a API de persist.
+  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
-    if (!token) router.replace("/login");
-  }, [token, router]);
+    const p = useAuth.persist;
+    if (!p) { setHydrated(true); return; }
+    if (p.hasHydrated()) setHydrated(true);
+    return p.onFinishHydration(() => setHydrated(true));
+  }, []);
 
-  if (!token) return null;
+  useEffect(() => {
+    if (hydrated && !token) router.replace("/login");
+  }, [hydrated, token, router]);
+
+  if (!hydrated || !token) return null;
 
   const nav = NAV.filter((n) =>
     n.perms ? n.perms.some((p) => has(p)) : n.perm == null || has(n.perm));

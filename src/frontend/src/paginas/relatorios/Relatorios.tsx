@@ -4,8 +4,10 @@ import {
   type FiltrosRelatorio, type RelatorioExecutivo,
 } from '@/api/relatorios';
 import { abrirBlob } from '@/api/cliente';
+import { variacao } from '@/api/painel';
 import { Aviso, Carregando, Erro, FaixaKpis, Kpi, Painel, Vazio } from '@/componentes/basicos';
 import { Campo } from '@/componentes/formulario';
+import { CORES, GraficoColunas, Legenda, moedaCurta, rotuloDoMes, type Serie } from '@/componentes/graficos';
 import { useToast } from '@/componentes/Toast';
 import { data, moeda, quantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
@@ -47,19 +49,94 @@ function Bloco({ titulo, explicacao, vazio, testid, largura = 'min-w-[620px]', c
   );
 }
 
+/**
+ * "antes: R$ 10.000,00 (▲ 20%)" — o mesmo número na janela anterior, e a variação.
+ * Sem isso o KPI é um número solto: a pergunta seguinte da diretoria é sempre
+ * "e no período passado?".
+ */
+export function Antes({ atual, anterior, formatar = moeda }:
+  { atual: number; anterior: number; formatar?: (v: number) => string }) {
+  const v = variacao(atual, anterior);
+  return (
+    <span data-testid="antes">
+      antes: {formatar(anterior)}{' '}
+      <span className={v.classe}>({v.sinal} {Math.abs(v.pct)}%)</span>
+    </span>
+  );
+}
+
+const REGUAS: { chave: 'negotiation' | 'competition' | 'budget'; titulo: string; contra: string; ausente: string }[] = [
+  { chave: 'negotiation', titulo: 'Negociação', contra: 'contra a primeira proposta do fornecedor vencedor',
+    ausente: 'Nenhum processo negociado no recorte.' },
+  { chave: 'competition', titulo: 'Concorrência', contra: 'contra a maior proposta completa do BID',
+    ausente: 'Não se aplica: nenhum processo do recorte teve mais de um proponente.' },
+  { chave: 'budget', titulo: 'Orçamento', contra: 'contra o valor que o solicitante informou na SC',
+    ausente: 'Não se aplica: nenhum processo do recorte teve orçamento em todas as SCs.' },
+];
+
+/**
+ * As três réguas do saving, lado a lado e nunca somadas: "negociamos bem", "a disputa
+ * valeu" e "gastamos menos do que o previsto" são três respostas, não uma.
+ */
+function Reguas({ r }: { r: RelatorioExecutivo }) {
+  return (
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-3" data-testid="relatorio-reguas">
+      {REGUAS.map((g) => {
+        const regua = r.savingRulers[g.chave];
+        return (
+          <div key={g.chave} data-regua={g.chave} className="rounded-xl border border-slate-200/80 bg-white px-4 py-3.5 shadow-sm">
+            <div className="rotulo">{g.titulo}</div>
+            {regua.processes === 0 ? (
+              <p className="mt-2 text-[13px] text-texto-suave">{g.ausente}</p>
+            ) : (
+              <>
+                <div className="mt-1.5 text-3xl font-extrabold leading-none tracking-tight text-slate-900 tabular-nums">
+                  {moeda(regua.saving)}
+                </div>
+                <div className="sub mt-1.5">
+                  {pct(regua.percent)} {g.contra} · {quantidade(regua.processes)} processo(s)
+                </div>
+                <div className="sub">base {moeda(regua.baseline)} → fechado {moeda(regua.closed)}</div>
+              </>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function Blocos({ r }: { r: RelatorioExecutivo }) {
+  const a = r.previous;
+  const meses = r.months.map((m) => m.month);
+  const seriesDoMes: Serie[] = [
+    { nome: 'Total comprado', cor: CORES[1], valores: r.months.map((m) => m.spend) },
+    { nome: 'Saving negociado', cor: CORES[3], valores: r.months.map((m) => m.saving) },
+  ];
+
   return (
     <>
       <FaixaKpis>
         <Kpi rotulo="Total comprado" valor={moeda(r.kpis.spend)}
-          detalhe={`${quantidade(r.kpis.orders)} pedido(s) · ${quantidade(r.kpis.suppliers)} fornecedor(es)`} />
+          detalhe={<>
+            {quantidade(r.kpis.orders)} pedido(s) · {quantidade(r.kpis.suppliers)} fornecedor(es)
+            <br /><Antes atual={r.kpis.spend} anterior={a.spend} />
+          </>} />
         <Kpi rotulo="Saving negociado" valor={moeda(r.kpis.savingTotal)}
-          detalhe={r.kpis.savingPercent != null ? `${quantidade(r.kpis.savingPercent)}% da primeira proposta` : 'sem processo negociado'} />
-        <Kpi rotulo="Compras urgentes" valor={pct(r.kpis.urgentPercent)} detalhe="do valor do período" />
-        <Kpi rotulo="OTIF" valor={pct(r.kpis.otifPercent)} detalhe="entregas encerradas e medidas" />
+          detalhe={<>
+            {r.kpis.savingPercent != null ? `${quantidade(r.kpis.savingPercent)}% da primeira proposta` : 'sem processo negociado'}
+            <br /><Antes atual={r.kpis.savingTotal} anterior={a.savingTotal} />
+          </>} />
+        <Kpi rotulo="Compras urgentes" valor={pct(r.kpis.urgentPercent)}
+          detalhe={<>do valor do período<br />antes: {pct(a.urgentPercent)}</>} />
+        <Kpi rotulo="OTIF" valor={pct(r.kpis.otifPercent)}
+          detalhe={<>entregas encerradas e medidas<br />antes: {pct(a.otifPercent)}</>} />
         <Kpi rotulo="Sem O.C. do ERP" valor={moeda(r.kpis.withoutErpValue)}
           detalhe={`${quantidade(r.withoutErp.orders)} compra(s) fechada(s) pela exceção`} />
       </FaixaKpis>
+      <p className="sub -mt-2 mb-4" data-testid="periodo-anterior">
+        "Antes" é a janela de mesmo tamanho logo antes do recorte: {data(a.from)} a {data(a.to)}, com os mesmos filtros.
+      </p>
 
       {(r.coverage.ordersWithoutPr > 0 || r.coverage.capped) && (
         <Painel>
@@ -120,7 +197,43 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
         </tbody>
       </Bloco>
 
-      <Bloco titulo="3. Concentração por fornecedor" testid="relatorio-fornecedores"
+      <Painel titulo="3. Saving do período, mês a mês">
+        <p className="sub mb-3">
+          O pedido conta no mês em que foi criado; o processo conta uma vez, no mês do primeiro pedido que o
+          fechou — a mesma regra do bloco por comprador. Mês sem pedido aparece zerado: a linha do tempo não pula mês.
+        </p>
+        <Legenda series={seriesDoMes} />
+        <GraficoColunas rotulos={meses} series={seriesDoMes} formatar={moedaCurta} titulo="Total comprado e saving por mês" />
+        <div className="mt-3 overflow-x-auto">
+          <table data-testid="relatorio-meses" className="min-w-[620px]">
+            <thead><tr><th>Mês</th><th>Total comprado</th><th>Pedidos</th><th>Processos</th><th>Saving</th><th>%</th></tr></thead>
+            <tbody>
+              {r.months.map((m) => (
+                <tr key={m.month} data-mes={m.month}>
+                  <td className="whitespace-nowrap font-semibold">{rotuloDoMes(m.month)}</td>
+                  <td className="whitespace-nowrap">{moeda(m.spend)}</td>
+                  <td>{quantidade(m.orders)}</td>
+                  <td>{quantidade(m.processes)}</td>
+                  <td className="whitespace-nowrap"><strong>{moeda(m.saving)}</strong></td>
+                  <td className="whitespace-nowrap">{pct(m.savingPercent)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Painel>
+
+      <Painel titulo="4. As três réguas do saving">
+        <p className="sub mb-3">
+          Três perguntas, três números: <strong>negociação</strong> mede o que o comprador arrancou do mesmo
+          fornecedor; <strong>concorrência</strong>, o que valeu ter chamado mais gente para o BID;{' '}
+          <strong>orçamento</strong>, o quanto ficou abaixo do que o solicitante previa. Cada régua conta só o
+          processo que a tem, e elas não se somam.
+        </p>
+        <Reguas r={r} />
+      </Painel>
+
+      <Bloco titulo="5. Concentração por fornecedor" testid="relatorio-fornecedores"
         explicacao={`${quantidade(r.suppliers.supplierCount)} fornecedor(es) no recorte · maior fatia ${pct(r.suppliers.top1Percent)} · 3 maiores ${pct(r.suppliers.top3Percent)} · 5 maiores ${pct(r.suppliers.top5Percent)}.`}
         vazio={r.suppliers.rows.length ? undefined : 'Nenhum pedido no recorte.'}>
         <thead><tr><th>Fornecedor</th><th>Pedidos</th><th>Valor</th><th>% do total</th></tr></thead>
@@ -136,7 +249,7 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
         </tbody>
       </Bloco>
 
-      <Bloco titulo="4. Peso das compras urgentes" testid="relatorio-urgentes" largura="min-w-[760px]"
+      <Bloco titulo="6. Peso das compras urgentes" testid="relatorio-urgentes" largura="min-w-[760px]"
         explicacao={`${quantidade(r.urgent.orders)} pedido(s) vindos de solicitação urgente — ${moeda(r.urgent.value)} (${pct(r.urgent.percent)} do período). Urgência exige motivo e impacto declarados na SC.`}
         vazio={r.urgent.orders ? undefined : 'Nenhuma compra urgente no recorte.'}>
         <thead><tr><th>Pedido</th><th>SC</th><th>Fornecedor</th><th>Valor</th><th>Motivo declarado</th></tr></thead>
@@ -155,7 +268,7 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
         </tbody>
       </Bloco>
 
-      <Bloco titulo="5. Entrega no prazo (OTIF) por fornecedor" testid="relatorio-otif"
+      <Bloco titulo="7. Entrega no prazo (OTIF) por fornecedor" testid="relatorio-otif"
         explicacao="Só entram entregas encerradas com data prometida registrada. OTIF = chegou no prazo E completo; entrega em aberto não conta nem a favor nem contra."
         vazio={r.otif.length ? undefined : 'Nenhuma entrega encerrada com data prometida no recorte.'}>
         <thead><tr><th>Fornecedor</th><th>Entregas medidas</th><th>No prazo</th><th>Completo</th><th>OTIF</th></tr></thead>
@@ -172,7 +285,23 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
         </tbody>
       </Bloco>
 
-      <Bloco titulo="6. Compras sem O.C. do ERP" testid="relatorio-sem-oc" largura="min-w-[760px]"
+      <Bloco titulo="8. Tempo do ciclo" testid="relatorio-ciclo" largura="min-w-[480px]"
+        explicacao="Mediana em dias de cada etapa, no recorte. Cada etapa conta pelo seu próprio relógio e só entra quando as duas marcas existem. Mediana, não média: um processo parado por meses não esconde os outros que andaram em uma semana.">
+        <thead><tr><th>Etapa</th><th>Medidos</th><th>Mediana</th></tr></thead>
+        <tbody>
+          {r.cycleTimes.map((e) => (
+            <tr key={e.stage} data-etapa={e.stage}>
+              <td>{e.title}</td>
+              <td>{quantidade(e.measured)}</td>
+              <td className="whitespace-nowrap">
+                {e.medianDays != null ? <strong>{quantidade(e.medianDays)} d</strong> : <span className="sub">sem medição</span>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </Bloco>
+
+      <Bloco titulo="9. Compras sem O.C. do ERP" testid="relatorio-sem-oc" largura="min-w-[760px]"
         explicacao={`${quantidade(r.withoutErp.orders)} compra(s) fechada(s) pela exceção — ${moeda(r.withoutErp.value)} (${pct(r.withoutErp.percent)} do período). A regra é a O.C. do SENIOR; a justificativa abaixo é a única exceção que libera o fechamento. Outros ${quantidade(r.withoutErp.pendingOrders)} pedido(s) (${moeda(r.withoutErp.pendingValue)}) seguem em aberto com a O.C. por registrar — fila, não exceção`
           + (r.withoutErp.closedWithoutReason > 0
             ? `; e ${quantidade(r.withoutErp.closedWithoutReason)} andaram sem O.C. e sem justificativa nenhuma.`
@@ -253,8 +382,8 @@ export function Relatorios() {
           </button>
         }>
         <p className="sub mb-3">
-          Um recorte — período, empresa, centro de custo e comprador — lido por seis ângulos.
-          O PDF sai com o mesmo recorte no cabeçalho.
+          Um recorte — período, empresa, centro de custo e comprador — lido por nove ângulos, com o
+          período anterior ao lado de cada número. O PDF sai com o mesmo recorte no cabeçalho.
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <Campo id="rel-de" rotulo="De"><input id="rel-de" type="date" {...campo('de')} /></Campo>

@@ -65,6 +65,23 @@ const relatorio = (p: Partial<RelatorioExecutivo> = {}): RelatorioExecutivo => (
     costCenters: [{ code: 'CC-NE-01', name: 'Filial Recife' }],
     buyers: [{ id: 'b1', label: 'Carla Compradora' }],
   },
+  months: [
+    { month: '2026-07', spend: 0, orders: 0, processes: 0, saving: 0, savingPercent: null },
+    { month: '2026-08', spend: 20000, orders: 3, processes: 1, saving: 2000, savingPercent: 16.7 },
+  ],
+  savingRulers: {
+    negotiation: { processes: 1, baseline: 12000, closed: 10000, saving: 2000, percent: 16.7 },
+    competition: { processes: 1, baseline: 15000, closed: 10000, saving: 5000, percent: 33.3 },
+    budget: { processes: 0, baseline: 0, closed: 0, saving: 0, percent: null },
+  },
+  previous: {
+    from: '2026-07-01', to: '2026-07-31', spend: 16000, orders: 2, savingTotal: 2500,
+    urgentPercent: 10, otifPercent: null,
+  },
+  cycleTimes: [
+    { stage: 'solicitacao_escolha', title: 'Solicitação → escolha do fornecedor', measured: 1, medianDays: 4 },
+    { stage: 'oc_recebimento', title: 'O.C. → recebimento', measured: 0, medianDays: null },
+  ],
   ...p,
 });
 
@@ -72,6 +89,47 @@ const abrir = () => render(<MemoryRouter><Relatorios /></MemoryRouter>);
 
 describe('tela de Relatórios', () => {
   beforeEach(() => vi.resetAllMocks());
+
+  it('cada KPI diz o que era no período anterior, e a tela diz que janela é essa', async () => {
+    vi.mocked(relatorioExecutivo).mockResolvedValue(relatorio());
+    abrir();
+    await screen.findByTestId('relatorio-familias');
+
+    const antes = screen.getAllByTestId('antes');
+    // total comprado: 20 mil contra 16 mil → 25% a mais; saving: 2 mil contra 2,5 mil → 20% a menos
+    expect(antes[0]).toHaveTextContent('antes: R$ 16.000,00 (▲ 25%)');
+    expect(antes[1]).toHaveTextContent('antes: R$ 2.500,00 (▼ 20%)');
+    expect(screen.getByTestId('periodo-anterior')).toHaveTextContent('01/07/2026 a 31/07/2026');
+  });
+
+  it('o saving mês a mês não pula mês vazio, e as três réguas ficam separadas', async () => {
+    vi.mocked(relatorioExecutivo).mockResolvedValue(relatorio());
+    abrir();
+
+    const meses = within(await screen.findByTestId('relatorio-meses'));
+    expect(meses.getByText('jul/26')).toBeInTheDocument();
+    const agosto = meses.getByText('ago/26').closest('tr')!;
+    expect(agosto).toHaveTextContent('R$ 2.000,00');
+    expect(agosto).toHaveTextContent('16,7%');
+    // o mês sem pedido aparece zerado, não some
+    expect(meses.getByText('jul/26').closest('tr')).toHaveTextContent('R$ 0,00');
+
+    const reguas = screen.getByTestId('relatorio-reguas');
+    expect(reguas.querySelector('[data-regua="negotiation"]')).toHaveTextContent('R$ 2.000,00');
+    expect(reguas.querySelector('[data-regua="competition"]')).toHaveTextContent('R$ 5.000,00');
+    // a régua sem processo diz que não se aplica, em vez de mostrar zero de ganho
+    expect(reguas.querySelector('[data-regua="budget"]')).toHaveTextContent('Não se aplica');
+    expect(reguas.querySelector('[data-regua="budget"]')).not.toHaveTextContent('R$ 0,00');
+  });
+
+  it('o tempo do ciclo mostra a mediana da etapa medida e diz quando não há medição', async () => {
+    vi.mocked(relatorioExecutivo).mockResolvedValue(relatorio());
+    abrir();
+
+    const ciclo = await screen.findByTestId('relatorio-ciclo');
+    expect(ciclo.querySelector('[data-etapa="solicitacao_escolha"]')).toHaveTextContent('4 d');
+    expect(ciclo.querySelector('[data-etapa="oc_recebimento"]')).toHaveTextContent('sem medição');
+  });
 
   it('abre no recorte cheio e traz os seis blocos', async () => {
     vi.mocked(relatorioExecutivo).mockResolvedValue(relatorio());

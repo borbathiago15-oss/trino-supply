@@ -338,4 +338,135 @@ public class RelatorioExecutivoServiceTests
         Assert.True(pdf.Length > 1_000);
         Assert.Equal("%PDF"u8.ToArray(), pdf.Take(4).ToArray());
     }
+
+    [Fact]
+    public async Task Saving_mes_a_mes_conta_a_cotacao_uma_vez_e_nao_pula_mes_vazio()
+    {
+        var (db, svc) = Build();
+        var cotacao = new Quotation
+        {
+            Number = "RFQ-2026-000001", SourcePrId = Guid.NewGuid(),
+            BaselineValue = 12_000m, NegotiatedValue = 10_000m, SavingValue = 2_000m, CreatedAt = Agora,
+        };
+        db.Quotations.Add(cotacao);
+        var julho = Pedido("PO-0", "Alfa", 1_000m, Carla, "Carla Compradora");
+        julho.CreatedAt = new DateTimeOffset(2026, 7, 5, 9, 0, 0, TimeSpan.Zero);
+        db.PurchaseOrders.AddRange(julho,
+            // a compra dividida: dois pedidos da mesma cotação em agosto
+            Pedido("PO-1", "Alfa", 6_000m, Carla, "Carla Compradora", cotacaoId: cotacao.Id, dia: 3),
+            Pedido("PO-2", "Beta", 4_000m, Carla, "Carla Compradora", cotacaoId: cotacao.Id, dia: 20));
+        await db.SaveChangesAsync();
+
+        // junho a agosto: junho não tem pedido e ainda assim aparece, zerado
+        var r = await svc.GerarAsync(Agosto with { From = new DateOnly(2026, 6, 1) });
+
+        Assert.Equal(["2026-06", "2026-07", "2026-08"], r.Months.Select(m => m.Month));
+        Assert.Equal(0m, r.Months[0].Spend);
+        Assert.Equal(1_000m, r.Months[1].Spend);
+        var agosto = r.Months[2];
+        Assert.Equal(10_000m, agosto.Spend);
+        Assert.Equal(2, agosto.Orders);
+        Assert.Equal(1, agosto.Processes);       // a cotação, uma vez
+        Assert.Equal(2_000m, agosto.Saving);
+        Assert.Equal(16.7, agosto.SavingPercent);
+    }
+
+    [Fact]
+    public async Task As_tres_reguas_do_saving_saem_separadas_e_a_que_nao_se_aplica_diz_isso()
+    {
+        var (db, svc) = Build();
+        var comConcorrencia = new Quotation
+        {
+            Number = "RFQ-1", SourcePrId = Guid.NewGuid(), CreatedAt = Agora,
+            BaselineValue = 12_000m, NegotiatedValue = 10_000m, SavingValue = 2_000m,
+            CompetitionBaselineValue = 15_000m, CompetitionSaving = 5_000m,
+        };
+        var soNegociacao = new Quotation
+        {
+            Number = "RFQ-2", SourcePrId = Guid.NewGuid(), CreatedAt = Agora,
+            BaselineValue = 8_000m, NegotiatedValue = 8_000m, SavingValue = 0m,
+        };
+        db.Quotations.AddRange(comConcorrencia, soNegociacao);
+        db.PurchaseOrders.AddRange(
+            Pedido("PO-1", "Alfa", 10_000m, Carla, "Carla Compradora", cotacaoId: comConcorrencia.Id),
+            Pedido("PO-2", "Beta", 8_000m, Carla, "Carla Compradora", cotacaoId: soNegociacao.Id));
+        await db.SaveChangesAsync();
+
+        var r = await svc.GerarAsync(Agosto);
+
+        var negociacao = r.SavingRulers.Negotiation;
+        Assert.Equal(2, negociacao.Processes);
+        Assert.Equal(2_000m, negociacao.Saving);
+        Assert.Equal(20_000m, negociacao.Baseline);
+        Assert.Equal(10.0, negociacao.Percent);
+
+        // só um processo teve disputa: a régua conta ele, e só ele
+        var concorrencia = r.SavingRulers.Competition;
+        Assert.Equal(1, concorrencia.Processes);
+        Assert.Equal(5_000m, concorrencia.Saving);
+        Assert.Equal(33.3, concorrencia.Percent);
+
+        // ninguém informou orçamento: a régua não se aplica, em vez de dizer "zero de ganho"
+        Assert.Equal(0, r.SavingRulers.Budget.Processes);
+        Assert.Null(r.SavingRulers.Budget.Percent);
+    }
+
+    [Fact]
+    public async Task Periodo_anterior_e_a_janela_de_mesmo_tamanho_logo_antes_com_os_mesmos_filtros()
+    {
+        var (db, svc) = Build();
+        var julho = Pedido("PO-0", "Alfa", 4_000m, Carla, "Carla Compradora");
+        julho.CreatedAt = new DateTimeOffset(2026, 7, 15, 9, 0, 0, TimeSpan.Zero);
+        var junho = Pedido("PO-00", "Alfa", 9_000m, Carla, "Carla Compradora");
+        junho.CreatedAt = new DateTimeOffset(2026, 6, 15, 9, 0, 0, TimeSpan.Zero);
+        var deOutro = Pedido("PO-01", "Alfa", 1_000m, Diego, "Diego Comprador");
+        deOutro.CreatedAt = new DateTimeOffset(2026, 7, 20, 9, 0, 0, TimeSpan.Zero);
+        db.PurchaseOrders.AddRange(junho, julho, deOutro,
+            Pedido("PO-1", "Alfa", 6_000m, Carla, "Carla Compradora"));
+        await db.SaveChangesAsync();
+
+        var r = await svc.GerarAsync(Agosto with { BuyerId = Carla });
+
+        // agosto tem 31 dias: a janela anterior é 1/jul a 31/jul — junho fica fora, e o
+        // pedido do Diego também, porque o filtro por comprador vale nas duas janelas
+        Assert.Equal(new DateOnly(2026, 7, 1), r.Previous.From);
+        Assert.Equal(new DateOnly(2026, 7, 31), r.Previous.To);
+        Assert.Equal(4_000m, r.Previous.Spend);
+        Assert.Equal(1, r.Previous.Orders);
+        Assert.Equal(6_000m, r.Kpis.Spend);
+    }
+
+    [Fact]
+    public async Task Tempo_do_ciclo_e_a_mediana_de_cada_etapa_e_so_conta_quem_tem_as_duas_marcas()
+    {
+        var (db, svc) = Build();
+        var sc = Solicitacao("PR-1", "CC-01");
+        sc.SubmittedAt = new DateTimeOffset(2026, 8, 1, 9, 0, 0, TimeSpan.Zero);
+        db.Requisitions.Add(sc);
+        var cotacao = new Quotation
+        {
+            Number = "RFQ-1", SourcePrId = sc.Id, CreatedAt = Agora,
+            SelectedAt = new DateTimeOffset(2026, 8, 5, 9, 0, 0, TimeSpan.Zero),        // 4 dias depois da SC
+            ManagerApprovedAt = new DateTimeOffset(2026, 8, 6, 9, 0, 0, TimeSpan.Zero),
+            DirectorApprovedAt = new DateTimeOffset(2026, 8, 7, 9, 0, 0, TimeSpan.Zero), // 2 dias depois da escolha
+        };
+        db.Quotations.Add(cotacao);
+        var comEntrega = Pedido("PO-1", "Alfa", 5_000m, Carla, "Carla Compradora", prId: sc.Id, cotacaoId: cotacao.Id, dia: 10);
+        comEntrega.DeliveryCompletedAt = new DateTimeOffset(2026, 8, 20, 9, 0, 0, TimeSpan.Zero);   // 10 dias
+        var semEntrega = Pedido("PO-2", "Beta", 1_000m, Carla, "Carla Compradora", dia: 12);
+        db.PurchaseOrders.AddRange(comEntrega, semEntrega);
+        await db.SaveChangesAsync();
+
+        var r = await svc.GerarAsync(Agosto);
+        TempoDaEtapa Etapa(string chave) => r.CycleTimes.Single(e => e.Stage == chave);
+
+        Assert.Equal(4.0, Etapa("solicitacao_escolha").MedianDays);
+        Assert.Equal(2.0, Etapa("escolha_aprovacao").MedianDays);
+        Assert.Equal(3.0, Etapa("aprovacao_oc").MedianDays);        // 7 → 10 de agosto
+        // só o pedido entregue mede o recebimento; o outro não conta nem a favor nem contra
+        Assert.Equal(1, Etapa("oc_recebimento").Measured);
+        Assert.Equal(10.0, Etapa("oc_recebimento").MedianDays);
+        Assert.Equal(9.0, Etapa("solicitacao_oc").MedianDays);      // 1 → 10 de agosto
+        Assert.Equal(1, Etapa("solicitacao_oc").Measured);          // PO-2 não tem SC
+    }
 }

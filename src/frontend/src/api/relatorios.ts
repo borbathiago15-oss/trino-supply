@@ -60,6 +60,43 @@ export interface CompraSemOc {
   reason: string | null;
 }
 
+/** Um mês do recorte: o que saiu e o que a negociação segurou naquele mês. */
+export interface LinhaMes {
+  month: string;
+  spend: number;
+  orders: number;
+  processes: number;
+  saving: number;
+  savingPercent: number | null;
+}
+
+/** Uma régua do saving; `processes === 0` é "não se aplica", não "zero de ganho". */
+export interface ReguaDoSaving {
+  processes: number;
+  baseline: number;
+  closed: number;
+  saving: number;
+  percent: number | null;
+}
+
+/** A janela imediatamente anterior, do mesmo tamanho e com os mesmos filtros. */
+export interface PeriodoAnterior {
+  from: string;
+  to: string;
+  spend: number;
+  orders: number;
+  savingTotal: number;
+  urgentPercent: number;
+  otifPercent: number | null;
+}
+
+export interface TempoDaEtapa {
+  stage: string;
+  title: string;
+  measured: number;
+  medianDays: number | null;
+}
+
 export interface RelatorioExecutivo {
   from: string;
   to: string;
@@ -105,6 +142,11 @@ export interface RelatorioExecutivo {
     costCenters: { code: string; name: string }[];
     buyers: { id: string; label: string }[];
   };
+  months: LinhaMes[];
+  /** As três réguas — negociação, concorrência e orçamento — nunca somadas. */
+  savingRulers: { negotiation: ReguaDoSaving; competition: ReguaDoSaving; budget: ReguaDoSaving };
+  previous: PeriodoAnterior;
+  cycleTimes: TempoDaEtapa[];
 }
 
 export interface FiltrosRelatorio {

@@ -8,17 +8,18 @@ import { abrirAutenticado } from './sessao';
  * banco pode estar vazio, e a tela tem de continuar de pé.
  */
 test.describe('Relatórios (React)', () => {
-  test('a tela abre com os onze blocos e o recorte escrito na tela', async ({ page }) => {
+  test('a tela abre com os catorze blocos e o recorte escrito na tela', async ({ page }) => {
     await abrirAutenticado(page, '/relatorios');
     await expect(page.locator('#titulo-pagina')).toHaveText('Relatórios');
 
-    // os onze títulos são o contrato com quem lê: numerados e na mesma ordem
+    // os catorze títulos são o contrato com quem lê: numerados e na mesma ordem
     for (const titulo of [
       '1. Compras por família', '2. Saving por comprador', '3. Saving do período, mês a mês',
       '4. As três réguas do saving', '5. Saving por família e por fornecedor',
       '6. Saving de referência (× último preço pago)', '7. Concentração por fornecedor',
-      '8. Peso das compras urgentes', '9. Entrega no prazo (OTIF) por fornecedor', '10. Tempo do ciclo',
-      '11. Compras sem O.C. do ERP',
+      '8. Origem da demanda — quem pediu, de onde, material ou serviço', '9. Concorrências (BIDs) — quem ganhou',
+      '10. Formas e prazos de pagamento', '11. Peso das compras urgentes',
+      '12. Entrega no prazo (OTIF) por fornecedor', '13. Tempo do ciclo', '14. Compras sem O.C. do ERP',
     ])
       await expect(page.getByRole('heading', { name: titulo })).toBeVisible();
 

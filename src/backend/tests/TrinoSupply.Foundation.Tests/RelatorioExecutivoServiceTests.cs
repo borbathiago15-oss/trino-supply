@@ -540,4 +540,206 @@ public class RelatorioExecutivoServiceTests
         Assert.Equal(50m, r.Reference.Rows[0].LastPaidUnitPrice);
         Assert.Equal(60m, r.Reference.Rows[0].UnitPrice);
     }
+
+    [Fact]
+    public async Task Origem_da_demanda_diz_centro_gestor_solicitante_e_separa_servico_de_material()
+    {
+        var (db, svc) = Build();
+        db.CostCenters.Add(new CostCenter { Code = "CC-NE-01", Name = "Filial Recife", ManagerName = "Gerson Gerente", Active = true });
+        var sc1 = Solicitacao("PR-1", "CC-NE-01");
+        var sc2 = Solicitacao("PR-2", "CC-NE-01");
+        sc2.RequesterLabel = "Beto Solicitante";
+        db.Requisitions.AddRange(sc1, sc2);
+        var servico = Pedido("PO-2", "Beta", 4_000m, Carla, "Carla Compradora", prId: sc2.Id, familia: "SERVICOS");
+        db.PurchaseOrders.AddRange(
+            Pedido("PO-1", "Alfa", 6_000m, Carla, "Carla Compradora", prId: sc1.Id, familia: "EPI"),
+            servico);
+        await db.SaveChangesAsync();
+
+        var r = await svc.GerarAsync(Agosto);
+
+        var centro = Assert.Single(r.Demand.CostCenters);
+        Assert.Equal("CC-NE-01", centro.Code);
+        Assert.Equal("Filial Recife", centro.Name);
+        Assert.Equal("Gerson Gerente", centro.Manager);
+        Assert.Equal(10_000m, centro.Value);
+
+        Assert.Equal(6_000m, r.Demand.Requesters.Single(x => x.Requester == "Ana Solicitante").Value);
+        Assert.Equal(1, r.Demand.Requesters.Single(x => x.Requester == "Beto Solicitante").Requisitions);
+
+        // a família SERVICOS é serviço; o resto é material
+        Assert.Equal(4_000m, r.Demand.Scope.Services);
+        Assert.Equal(6_000m, r.Demand.Scope.Materials);
+        Assert.Equal(40.0, r.Demand.Scope.ServicesPercent);
+    }
+
+    [Fact]
+    public async Task Concorrencias_contam_proponentes_por_processo_e_quem_venceu_com_disputa()
+    {
+        var (db, svc) = Build();
+        var alfa = Guid.NewGuid(); var beta = Guid.NewGuid();
+        var disputado = new Quotation { Number = "RFQ-1", SourcePrId = Guid.NewGuid(), CreatedAt = Agora, WinnerSupplierId = alfa };
+        var sozinho = new Quotation { Number = "RFQ-2", SourcePrId = Guid.NewGuid(), CreatedAt = Agora, WinnerSupplierId = beta };
+        db.Quotations.AddRange(disputado, sozinho);
+        db.Proposals.AddRange(
+            new Proposal { QuotationId = disputado.Id, SupplierId = alfa, SupplierName = "Alfa", TotalValue = 9_000m, SubmittedAt = Agora },
+            new Proposal { QuotationId = disputado.Id, SupplierId = alfa, SupplierName = "Alfa", TotalValue = 8_000m, VersionNumber = 2, SubmittedAt = Agora },
+            new Proposal { QuotationId = disputado.Id, SupplierId = beta, SupplierName = "Beta", TotalValue = 9_500m, SubmittedAt = Agora },
+            new Proposal { QuotationId = sozinho.Id, SupplierId = beta, SupplierName = "Beta", TotalValue = 2_000m, SubmittedAt = Agora });
+        db.PurchaseOrders.AddRange(
+            Pedido("PO-1", "Alfa", 8_000m, Carla, "Carla Compradora", cotacaoId: disputado.Id, fornecedorId: alfa),
+            Pedido("PO-2", "Beta", 2_000m, Carla, "Carla Compradora", cotacaoId: sozinho.Id, fornecedorId: beta));
+        await db.SaveChangesAsync();
+
+        var r = await svc.GerarAsync(Agosto);
+
+        Assert.Equal(2, r.Bids.Processes);
+        // duas versões do mesmo fornecedor são um proponente só: (2 + 1) / 2
+        Assert.Equal(1.5, r.Bids.AverageProponents);
+        Assert.Equal(1, r.Bids.WithCompetition);
+        var vencedor = Assert.Single(r.Bids.Winners);
+        Assert.Equal("Alfa", vencedor.Supplier);        // a Beta venceu sem disputa: não é vencedora de concorrência
+        Assert.Equal(8_000m, vencedor.Value);
+    }
+
+    [Fact]
+    public async Task Prazo_de_pagamento_e_ponderado_pelo_valor_e_vem_da_proposta_vencedora()
+    {
+        var (db, svc) = Build();
+        var alfa = Guid.NewGuid();
+        var cotacao = new Quotation { Number = "RFQ-1", SourcePrId = Guid.NewGuid(), CreatedAt = Agora, WinnerSupplierId = alfa };
+        db.Quotations.Add(cotacao);
+        db.Proposals.Add(new Proposal
+        {
+            QuotationId = cotacao.Id, SupplierId = alfa, SupplierName = "Alfa", TotalValue = 9_000m,
+            PaymentDays = 60, PaymentTerms = "60 dias", SubmittedAt = Agora,
+        });
+        var negociado = Pedido("PO-1", "Alfa", 9_000m, Carla, "Carla Compradora", cotacaoId: cotacao.Id, fornecedorId: alfa);
+        negociado.PaymentTerms = "60 dias";
+        var aVista = Pedido("PO-2", "Beta", 1_000m, Carla, "Carla Compradora");
+        aVista.PaymentTerms = "À vista";
+        var semPrazo = Pedido("PO-3", "Gama", 5_000m, Carla, "Carla Compradora");
+        semPrazo.PaymentTerms = null;
+        db.PurchaseOrders.AddRange(negociado, aVista, semPrazo);
+        await db.SaveChangesAsync();
+
+        var r = await svc.GerarAsync(Agosto);
+
+        // (9.000 × 60 + 1.000 × 0) / 10.000 = 54 dias; o pedido sem condição fica fora da média
+        Assert.Equal(54.0, r.Payment.WeightedDays);
+        Assert.Equal(2, r.Payment.OrdersWithDays);
+        Assert.Equal(10_000m, r.Payment.ValueWithDays);
+        Assert.Equal(60, r.Payment.Terms.Single(t => t.Term == "60 dias").Days);
+        Assert.Equal(0, r.Payment.Terms.Single(t => t.Term == "À vista").Days);
+        Assert.Null(r.Payment.Terms.Single(t => t.Term == "não informada").Days);
+    }
+
+    [Theory]
+    [InlineData("À vista", 0)]
+    [InlineData("a vista", 0)]
+    [InlineData("28D", 28)]
+    [InlineData("30/60/90 dias", 30)]
+    [InlineData("boleto", null)]
+    [InlineData(null, null)]
+    public void O_prazo_em_dias_se_le_da_condicao(string? condicao, int? esperado) =>
+        Assert.Equal(esperado, RelatorioExecutivoService.DiasDe(condicao));
+
+    [Fact]
+    public async Task Aderencia_ao_fluxo_formal_julga_so_quem_ja_passou_do_ponto_de_registrar_a_OC()
+    {
+        var (db, svc) = Build();
+        var fila = Pedido("PO-3", "Gama", 3_000m, Carla, "Carla Compradora", erp: null);   // em aberto, sem O.C. ainda
+        db.PurchaseOrders.AddRange(
+            Pedido("PO-1", "Alfa", 6_000m, Carla, "Carla Compradora"),                                  // com O.C. do ERP
+            Pedido("PO-2", "Beta", 2_000m, Carla, "Carla Compradora", erp: null, semOcMotivo: "ERP fora"), // exceção justificada
+            fila);
+        await db.SaveChangesAsync();
+
+        var r = await svc.GerarAsync(Agosto);
+
+        // a fila não é julgada; dos dois julgados, um é formal
+        Assert.Equal(2, r.Adherence.Orders);
+        Assert.Equal(1, r.Adherence.Formal);
+        Assert.Equal(50.0, r.Adherence.Percent);
+        Assert.Equal(6_000m, r.Adherence.FormalValue);
+
+        // curva ABC na concentração: a Alfa sozinha passa de 80%? 6 de 11 = 54,5% → A; Gama acumula 81,8% → B
+        Assert.Equal("A", r.Suppliers.Rows[0].Class);
+        Assert.Equal(81.8, r.Suppliers.Rows[1].Cumulative);
+        Assert.Equal("B", r.Suppliers.Rows[1].Class);
+    }
+
+    /// <summary>
+    /// A lâmina com todos os blocos preenchidos: é o cenário que exercita cada seção do PDF de
+    /// uma vez. Com RELATORIO_PDF_SAIDA no ambiente, o arquivo é gravado ali — é como se olha
+    /// a folha de verdade, em vez de confiar em bytes que começam com %PDF.
+    /// </summary>
+    [Fact]
+    public async Task O_PDF_da_lamina_sai_com_todos_os_blocos_preenchidos()
+    {
+        var (db, svc) = Build();
+        db.CostCenters.AddRange(
+            new CostCenter { Code = "CC-NE-01", Name = "Filial Recife", ManagerName = "Gerson Gerente", Active = true },
+            new CostCenter { Code = "CC-SP-02", Name = "Filial Campinas", ManagerName = "Marta Gestora", Active = true });
+        var sc1 = Solicitacao("PR-2026-000101", "CC-NE-01");
+        sc1.SubmittedAt = new DateTimeOffset(2026, 8, 1, 9, 0, 0, TimeSpan.Zero);
+        var sc2 = Solicitacao("PR-2026-000102", "CC-SP-02", "URGENT", motivo: "parada de linha");
+        sc2.RequesterLabel = "Beto Solicitante";
+        var sc3 = Solicitacao("PR-2026-000103", "CC-NE-01");
+        sc3.RequesterLabel = "Clara Solicitante";
+        db.Requisitions.AddRange(sc1, sc2, sc3);
+
+        var alfa = Guid.NewGuid(); var beta = Guid.NewGuid(); var gama = Guid.NewGuid();
+        var disputado = new Quotation
+        {
+            Number = "RFQ-2026-000041", SourcePrId = sc1.Id, CreatedAt = Agora, WinnerSupplierId = alfa,
+            BaselineValue = 52_000m, NegotiatedValue = 45_000m, SavingValue = 7_000m,
+            CompetitionBaselineValue = 58_000m, CompetitionSaving = 13_000m,
+            BudgetBaselineValue = 60_000m, BudgetSaving = 15_000m,
+            SelectedAt = new DateTimeOffset(2026, 8, 6, 9, 0, 0, TimeSpan.Zero),
+            ManagerApprovedAt = new DateTimeOffset(2026, 8, 7, 9, 0, 0, TimeSpan.Zero),
+            DirectorApprovedAt = new DateTimeOffset(2026, 8, 8, 9, 0, 0, TimeSpan.Zero),
+        };
+        var servico = new Quotation
+        {
+            Number = "RFQ-2026-000042", SourcePrId = sc3.Id, CreatedAt = Agora, WinnerSupplierId = gama, Kind = QuotationKind.Service,
+            BaselineValue = 20_000m, NegotiatedValue = 18_500m, SavingValue = 1_500m,
+        };
+        db.Quotations.AddRange(disputado, servico);
+        db.Proposals.AddRange(
+            new Proposal { QuotationId = disputado.Id, SupplierId = alfa, SupplierName = "Alfa EPIs", TotalValue = 45_000m, PaymentDays = 30, PaymentTerms = "30 dias", SubmittedAt = Agora },
+            new Proposal { QuotationId = disputado.Id, SupplierId = beta, SupplierName = "Beta Uniformes", TotalValue = 58_000m, SubmittedAt = Agora },
+            new Proposal { QuotationId = disputado.Id, SupplierId = gama, SupplierName = "Gama Serviços", TotalValue = 55_000m, SubmittedAt = Agora },
+            new Proposal { QuotationId = servico.Id, SupplierId = gama, SupplierName = "Gama Serviços", TotalValue = 18_500m, PaymentDays = 60, PaymentTerms = "60 dias", SubmittedAt = Agora });
+
+        var po1 = Pedido("PO-2026-000201", "Alfa EPIs", 45_000m, Carla, "Carla Compradora", prId: sc1.Id, familia: "EPI", cotacaoId: disputado.Id, fornecedorId: alfa, dia: 10);
+        po1.PaymentTerms = "30 dias";
+        po1.PromisedDate = new DateOnly(2026, 8, 20);
+        po1.DeliveryCompletedAt = new DateTimeOffset(2026, 8, 19, 9, 0, 0, TimeSpan.Zero);
+        po1.Items[0].LastPaidUnitPrice = 5_000m;   // último pago 5.000 × 10 = 50.000 → ganhou 5.000
+        po1.Items[0].ReferenceSaving = 5_000m;
+        var po2 = Pedido("PO-2026-000202", "Beta Uniformes", 12_000m, Diego, "Diego Comprador", prId: sc2.Id, familia: "FARDAMENTO", erp: null, semOcMotivo: "ERP indisponível na emissão", dia: 12);
+        po2.PaymentTerms = "À vista";
+        var po3 = Pedido("PO-2026-000203", "Gama Serviços", 18_500m, Carla, "Carla Compradora", prId: sc3.Id, familia: "SERVICOS", cotacaoId: servico.Id, fornecedorId: gama, dia: 15);
+        po3.PaymentTerms = "60 dias";
+        var po4 = Pedido("PO-2026-000204", "Delta Limpeza", 3_200m, Diego, "Diego Comprador", prId: sc1.Id, familia: "HIGIENE", dia: 18);
+        po4.PaymentTerms = "28D";
+        db.PurchaseOrders.AddRange(po1, po2, po3, po4);
+        await db.SaveChangesAsync();
+
+        var r = await svc.GerarAsync(Agosto);
+        Assert.Equal(2, r.Bids.Processes);
+        Assert.Equal(1, r.Bids.WithCompetition);
+        Assert.Equal(3, r.SavingRulers.Negotiation.Processes + r.SavingRulers.Competition.Processes);
+        Assert.Equal(18_500m, r.Demand.Scope.Services);
+
+        var culturaAntes = System.Globalization.CultureInfo.CurrentCulture;
+        var pdf = RelatorioExecutivoPdf.Generate(r, new CompanyProfile { LegalName = "Trino Nordeste LTDA" }, "Carla Compradora");
+        Assert.True(pdf.Length > 5_000);
+        Assert.Equal("%PDF"u8.ToArray(), pdf.Take(4).ToArray());
+        // a cultura da folha é pt-BR só durante a geração; o servidor volta ao que era
+        Assert.Equal(culturaAntes, System.Globalization.CultureInfo.CurrentCulture);
+        if (Environment.GetEnvironmentVariable("RELATORIO_PDF_SAIDA") is { Length: > 0 } caminho)
+            await File.WriteAllBytesAsync(caminho, pdf);
+    }
 }

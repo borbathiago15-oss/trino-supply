@@ -162,7 +162,7 @@ public static class AnalyticsRotas
         });
 
         analytics.MapGet("/report/pdf", async (RelatorioExecutivoService svc, AppDbContext db,
-            ClaimsPrincipal p, HttpContext ctx, TimeProvider clock,
+            ClaimsPrincipal p, HttpContext ctx, TimeProvider clock, IWebHostEnvironment env,
             DateOnly? from, DateOnly? to, string? company, string? costCenter, Guid? buyerId,
             CancellationToken ct) =>
         {
@@ -172,7 +172,11 @@ public static class AnalyticsRotas
                 return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para este módulo.");
             var relatorio = await svc.GerarAsync(Recorte(clock, from, to, company, costCenter, buyerId), ct);
             var perfil = await db.CompanyProfiles.FirstOrDefaultAsync(ct);
-            var pdf = RelatorioExecutivoPdf.Generate(relatorio, perfil, p.FindFirstValue("name") ?? "Sistema");
+            // o logotipo oficial sai do mesmo lugar que a tela o serve; sem o arquivo, a marca vai em texto
+            var logoPath = Path.Combine(env.WebRootPath ?? Path.Combine(env.ContentRootPath, "wwwroot"),
+                "assets", "brand", "trino-supply-logo.png");
+            var logo = File.Exists(logoPath) ? await File.ReadAllBytesAsync(logoPath, ct) : null;
+            var pdf = RelatorioExecutivoPdf.Generate(relatorio, perfil, p.FindFirstValue("name") ?? "Sistema", logo);
             // sem gravar em stored_document, ao contrário do PDF da O.C.: a O.C. é
             // documento do processo e fica no histórico; relatório é uma leitura do
             // momento, e guardar uma cópia por clique só engordaria o banco.

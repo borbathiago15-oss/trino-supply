@@ -29,6 +29,9 @@ export interface LinhaFornecedor {
   orders: number;
   value: number;
   percent: number;
+  /** Acumulado da curva ABC e a classe: A até 80%, B até 95%, C o resto. */
+  cumulative?: number;
+  class?: 'A' | 'B' | 'C';
 }
 
 export interface LinhaOtif {
@@ -127,6 +130,54 @@ export interface BlocoReferencia {
   rows: LinhaReferencia[];
 }
 
+export interface LinhaCentroDeCusto {
+  code: string;
+  name: string;
+  manager: string | null;
+  orders: number;
+  value: number;
+  percent: number;
+}
+
+export interface LinhaSolicitante {
+  requester: string;
+  requisitions: number;
+  orders: number;
+  value: number;
+}
+
+/** Quem pediu, de onde, e quanto foi serviço em vez de material. */
+export interface OrigemDaDemanda {
+  costCenters: LinhaCentroDeCusto[];
+  requesters: LinhaSolicitante[];
+  scope: { materials: number; services: number; materialsPercent: number; servicesPercent: number };
+}
+
+/** As concorrências do recorte: proponente é quem mandou proposta, e vencedor é quem levou com disputa. */
+export interface BlocoBids {
+  processes: number;
+  averageProponents: number | null;
+  withCompetition: number;
+  winners: { supplier: string; wins: number; value: number }[];
+}
+
+/** Spend por condição comercial e o DPO ponderado pelo valor. */
+export interface BlocoPagamento {
+  weightedDays: number | null;
+  ordersWithDays: number;
+  valueWithDays: number;
+  terms: { term: string; orders: number; value: number; percent: number; days: number | null }[];
+}
+
+/** Dos pedidos que já passaram do ponto de registrar a O.C. do ERP, quantos a têm. */
+export interface AderenciaDaOc {
+  orders: number;
+  formal: number;
+  value: number;
+  formalValue: number;
+  percent: number | null;
+}
+
 export interface RelatorioExecutivo {
   from: string;
   to: string;
@@ -180,6 +231,10 @@ export interface RelatorioExecutivo {
   savingByFamily: LinhaSavingRateado[];
   savingBySupplier: LinhaSavingRateado[];
   reference: BlocoReferencia;
+  demand: OrigemDaDemanda;
+  bids: BlocoBids;
+  payment: BlocoPagamento;
+  adherence: AderenciaDaOc;
 }
 
 export interface FiltrosRelatorio {

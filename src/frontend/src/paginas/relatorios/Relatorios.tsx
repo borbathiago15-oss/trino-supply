@@ -5,7 +5,7 @@ import {
 } from '@/api/relatorios';
 import { abrirBlob } from '@/api/cliente';
 import { variacao } from '@/api/painel';
-import { Aviso, Carregando, Erro, FaixaKpis, Kpi, Painel, Vazio } from '@/componentes/basicos';
+import { Aviso, Badge, Carregando, Erro, FaixaKpis, Kpi, Painel, Vazio } from '@/componentes/basicos';
 import { Campo } from '@/componentes/formulario';
 import { CORES, GraficoColunas, Legenda, moedaCurta, rotuloDoMes, type Serie } from '@/componentes/graficos';
 import { useToast } from '@/componentes/Toast';
@@ -15,6 +15,11 @@ import { useCarregar } from '@/util/useCarregar';
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
 const pct = (v: number | null | undefined) => (v == null ? '—' : `${quantidade(v)}%`);
+
+/** Curva ABC: A concentra 80% do gasto, B chega a 95%, C é a cauda. */
+const CLASSE_ABC: Record<'A' | 'B' | 'C', string> = {
+  A: 'bg-ok-fundo text-ok', B: 'bg-aviso-fundo text-aviso', C: 'bg-slate-100 text-slate-600',
+};
 
 /** Barra proporcional: a fatia de cada linha lida de relance, sem virar gráfico. */
 function Fatia({ percent }: { percent: number }) {
@@ -162,6 +167,11 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
           detalhe={<>entregas encerradas e medidas<br />antes: {pct(a.otifPercent)}</>} />
         <Kpi rotulo="Sem O.C. do ERP" valor={moeda(r.kpis.withoutErpValue)}
           detalhe={`${quantidade(r.withoutErp.orders)} compra(s) fechada(s) pela exceção`} />
+        <Kpi rotulo="Prazo médio de pagamento (DPO)"
+          valor={r.payment.weightedDays != null ? `${quantidade(r.payment.weightedDays)} dias` : '—'}
+          detalhe={`ponderado pelo valor · ${quantidade(r.payment.ordersWithDays)} pedido(s) com prazo`} />
+        <Kpi rotulo="Aderência à O.C. do ERP" valor={pct(r.adherence.percent)}
+          detalhe={`${quantidade(r.adherence.formal)} de ${quantidade(r.adherence.orders)} pedido(s) já julgados`} />
       </FaixaKpis>
       <p className="sub -mt-2 mb-4" data-testid="periodo-anterior">
         "Antes" é a janela de mesmo tamanho logo antes do recorte: {data(a.from)} a {data(a.to)}, com os mesmos filtros.
@@ -297,7 +307,7 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
       <Bloco titulo="7. Concentração por fornecedor" testid="relatorio-fornecedores"
         explicacao={`${quantidade(r.suppliers.supplierCount)} fornecedor(es) no recorte · maior fatia ${pct(r.suppliers.top1Percent)} · 3 maiores ${pct(r.suppliers.top3Percent)} · 5 maiores ${pct(r.suppliers.top5Percent)}.`}
         vazio={r.suppliers.rows.length ? undefined : 'Nenhum pedido no recorte.'}>
-        <thead><tr><th>Fornecedor</th><th>Pedidos</th><th>Valor</th><th>% do total</th></tr></thead>
+        <thead><tr><th>Fornecedor</th><th>Pedidos</th><th>Valor</th><th>% do total</th><th>Acumulado</th><th>ABC</th></tr></thead>
         <tbody>
           {r.suppliers.rows.map((f) => (
             <tr key={f.supplier}>
@@ -305,12 +315,118 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
               <td>{quantidade(f.orders)}</td>
               <td className="whitespace-nowrap">{moeda(f.value)}</td>
               <td><Fatia percent={f.percent} /></td>
+              <td className="whitespace-nowrap sub">{f.cumulative != null ? pct(f.cumulative) : '—'}</td>
+              <td>{f.class && <Badge classe={CLASSE_ABC[f.class]}>{f.class}</Badge>}</td>
             </tr>
           ))}
         </tbody>
       </Bloco>
 
-      <Bloco titulo="8. Peso das compras urgentes" testid="relatorio-urgentes" largura="min-w-[760px]"
+      <Painel titulo="8. Origem da demanda — quem pediu, de onde, material ou serviço">
+        <p className="sub mb-3">
+          Os centros de custo e os solicitantes por valor comprado, com o gestor do centro quando o cadastro o
+          tem. Serviço é a família SERVIÇOS ou a cotação do tipo serviço; o resto é fornecimento de materiais.
+        </p>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <div className="overflow-x-auto xl:col-span-1">
+            <table data-testid="relatorio-centros">
+              <thead><tr><th>Centro de custo</th><th>Pedidos</th><th>Valor</th><th>%</th></tr></thead>
+              <tbody>
+                {r.demand.costCenters.map((cc) => (
+                  <tr key={cc.code}>
+                    <td>
+                      <span className="font-semibold">{cc.code}</span> — {cc.name}
+                      {cc.manager && <div className="sub">gestor: {cc.manager}</div>}
+                    </td>
+                    <td>{quantidade(cc.orders)}</td>
+                    <td className="whitespace-nowrap">{moeda(cc.value)}</td>
+                    <td><Fatia percent={cc.percent} /></td>
+                  </tr>
+                ))}
+                {!r.demand.costCenters.length && <tr><td colSpan={4} className="sub">Nenhum pedido no recorte.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <div className="overflow-x-auto">
+            <table data-testid="relatorio-solicitantes">
+              <thead><tr><th>Solicitante</th><th>SCs</th><th>Pedidos</th><th>Comprado</th></tr></thead>
+              <tbody>
+                {r.demand.requesters.map((q) => (
+                  <tr key={q.requester}>
+                    <td>{q.requester}</td>
+                    <td>{quantidade(q.requisitions)}</td>
+                    <td>{quantidade(q.orders)}</td>
+                    <td className="whitespace-nowrap">{moeda(q.value)}</td>
+                  </tr>
+                ))}
+                {!r.demand.requesters.length && <tr><td colSpan={4} className="sub">Nenhum pedido com solicitação de origem.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          <div data-testid="relatorio-escopo" className="rounded-xl border border-slate-200/80 bg-white px-4 py-3.5 shadow-sm">
+            <div className="rotulo">Materiais × serviços</div>
+            <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-slate-100" aria-hidden>
+              <div className="h-3 bg-marca" style={{ width: `${r.demand.scope.materialsPercent}%` }} />
+              <div className="h-3 bg-aviso-forte" style={{ width: `${r.demand.scope.servicesPercent}%` }} />
+            </div>
+            <div className="mt-3 flex flex-col gap-1 text-[13px]">
+              <span><span className="mr-2 inline-block h-2.5 w-2.5 rounded-sm bg-marca" />Materiais <strong>{pct(r.demand.scope.materialsPercent)}</strong> · {moeda(r.demand.scope.materials)}</span>
+              <span><span className="mr-2 inline-block h-2.5 w-2.5 rounded-sm bg-aviso-forte" />Serviços <strong>{pct(r.demand.scope.servicesPercent)}</strong> · {moeda(r.demand.scope.services)}</span>
+            </div>
+          </div>
+        </div>
+      </Painel>
+
+      <Painel titulo="9. Concorrências (BIDs) — quem ganhou">
+        <p className="sub mb-3">
+          Proponente é quem mandou proposta — convidado que não respondeu não conta como disputa. Vencedor de
+          concorrência é o fornecedor da O.C. de um processo com dois ou mais proponentes.
+        </p>
+        <FaixaKpis>
+          <Kpi rotulo="Processos cotados" valor={quantidade(r.bids.processes)} detalhe="com O.C. no recorte" />
+          <Kpi rotulo="Proponentes por BID" valor={r.bids.averageProponents != null ? quantidade(r.bids.averageProponents) : '—'} detalhe="média" />
+          <Kpi rotulo="Com disputa" valor={quantidade(r.bids.withCompetition)} detalhe="dois ou mais proponentes" />
+        </FaixaKpis>
+        {!r.bids.winners.length && <Vazio>Nenhum processo com disputa fechou no recorte.</Vazio>}
+        {r.bids.winners.length > 0 && (
+          <div className="overflow-x-auto">
+            <table data-testid="relatorio-vencedores">
+              <thead><tr><th>Vencedor de concorrência</th><th>Vitórias</th><th>Valor</th></tr></thead>
+              <tbody>
+                {r.bids.winners.map((v) => (
+                  <tr key={v.supplier}>
+                    <td className="font-semibold">{v.supplier}</td>
+                    <td>{quantidade(v.wins)}</td>
+                    <td className="whitespace-nowrap">{moeda(v.value)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Painel>
+
+      <Bloco titulo="10. Formas e prazos de pagamento" testid="relatorio-pagamento"
+        explicacao={(r.payment.weightedDays != null
+          ? `DPO ${quantidade(r.payment.weightedDays)} dias, ponderado pelo valor de ${quantidade(r.payment.ordersWithDays)} pedido(s) (${moeda(r.payment.valueWithDays)}). `
+          : 'Nenhum pedido do recorte tem prazo de pagamento legível. ')
+          + 'O prazo vem da proposta vencedora; sem ela, do texto da condição gravada na O.C.'}
+        vazio={r.payment.terms.length ? undefined : 'Nenhum pedido no recorte.'}>
+        <thead><tr><th>Condição comercial</th><th>Dias</th><th>Pedidos</th><th>Valor</th><th>% do total</th></tr></thead>
+        <tbody>
+          {r.payment.terms.map((t) => (
+            <tr key={t.term}>
+              <td>{t.term}</td>
+              <td className="whitespace-nowrap">{t.days != null ? `${t.days} d` : <span className="sub">—</span>}</td>
+              <td>{quantidade(t.orders)}</td>
+              <td className="whitespace-nowrap">{moeda(t.value)}</td>
+              <td><Fatia percent={t.percent} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </Bloco>
+
+      <Bloco titulo="11. Peso das compras urgentes" testid="relatorio-urgentes" largura="min-w-[760px]"
         explicacao={`${quantidade(r.urgent.orders)} pedido(s) vindos de solicitação urgente — ${moeda(r.urgent.value)} (${pct(r.urgent.percent)} do período). Urgência exige motivo e impacto declarados na SC.`}
         vazio={r.urgent.orders ? undefined : 'Nenhuma compra urgente no recorte.'}>
         <thead><tr><th>Pedido</th><th>SC</th><th>Fornecedor</th><th>Valor</th><th>Motivo declarado</th></tr></thead>
@@ -329,7 +445,7 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
         </tbody>
       </Bloco>
 
-      <Bloco titulo="9. Entrega no prazo (OTIF) por fornecedor" testid="relatorio-otif"
+      <Bloco titulo="12. Entrega no prazo (OTIF) por fornecedor" testid="relatorio-otif"
         explicacao="Só entram entregas encerradas com data prometida registrada. OTIF = chegou no prazo E completo; entrega em aberto não conta nem a favor nem contra."
         vazio={r.otif.length ? undefined : 'Nenhuma entrega encerrada com data prometida no recorte.'}>
         <thead><tr><th>Fornecedor</th><th>Entregas medidas</th><th>No prazo</th><th>Completo</th><th>OTIF</th></tr></thead>
@@ -346,7 +462,7 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
         </tbody>
       </Bloco>
 
-      <Bloco titulo="10. Tempo do ciclo" testid="relatorio-ciclo" largura="min-w-[480px]"
+      <Bloco titulo="13. Tempo do ciclo" testid="relatorio-ciclo" largura="min-w-[480px]"
         explicacao="Mediana em dias de cada etapa, no recorte. Cada etapa conta pelo seu próprio relógio e só entra quando as duas marcas existem. Mediana, não média: um processo parado por meses não esconde os outros que andaram em uma semana.">
         <thead><tr><th>Etapa</th><th>Medidos</th><th>Mediana</th></tr></thead>
         <tbody>
@@ -362,7 +478,7 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
         </tbody>
       </Bloco>
 
-      <Bloco titulo="11. Compras sem O.C. do ERP" testid="relatorio-sem-oc" largura="min-w-[760px]"
+      <Bloco titulo="14. Compras sem O.C. do ERP" testid="relatorio-sem-oc" largura="min-w-[760px]"
         explicacao={`${quantidade(r.withoutErp.orders)} compra(s) fechada(s) pela exceção — ${moeda(r.withoutErp.value)} (${pct(r.withoutErp.percent)} do período). A regra é a O.C. do SENIOR; a justificativa abaixo é a única exceção que libera o fechamento. Outros ${quantidade(r.withoutErp.pendingOrders)} pedido(s) (${moeda(r.withoutErp.pendingValue)}) seguem em aberto com a O.C. por registrar — fila, não exceção`
           + (r.withoutErp.closedWithoutReason > 0
             ? `; e ${quantidade(r.withoutErp.closedWithoutReason)} andaram sem O.C. e sem justificativa nenhuma.`
@@ -443,7 +559,7 @@ export function Relatorios() {
           </button>
         }>
         <p className="sub mb-3">
-          Um recorte — período, empresa, centro de custo e comprador — lido por onze ângulos, com o
+          Um recorte — período, empresa, centro de custo e comprador — lido por catorze ângulos, com o
           período anterior ao lado de cada número. O PDF sai com o mesmo recorte no cabeçalho.
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">

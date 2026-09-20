@@ -35,7 +35,7 @@ const relatorio = (p: Partial<RelatorioExecutivo> = {}): RelatorioExecutivo => (
     saving: 2000, savingPercent: 16.7, spend: 10000, orders: 1,
   }],
   suppliers: {
-    rows: [{ supplier: 'Alfa', orders: 2, value: 16000, percent: 80 }],
+    rows: [{ supplier: 'Alfa', orders: 2, value: 16000, percent: 80, cumulative: 80, class: 'A' }],
     supplierCount: 2, top1Percent: 80, top3Percent: 100, top5Percent: 100,
   },
   urgent: {
@@ -93,6 +93,23 @@ const relatorio = (p: Partial<RelatorioExecutivo> = {}): RelatorioExecutivo => (
         quantity: 100, lastPaidUnitPrice: 10, unitPrice: 8, saving: 200 },
     ],
   },
+  demand: {
+    costCenters: [{ code: 'CC-NE-01', name: 'Filial Recife', manager: 'Gerson Gerente', orders: 2, value: 16000, percent: 80 }],
+    requesters: [{ requester: 'Ana Solicitante', requisitions: 1, orders: 2, value: 16000 }],
+    scope: { materials: 15000, services: 5000, materialsPercent: 75, servicesPercent: 25 },
+  },
+  bids: {
+    processes: 2, averageProponents: 1.5, withCompetition: 1,
+    winners: [{ supplier: 'Alfa', wins: 1, value: 10000 }],
+  },
+  payment: {
+    weightedDays: 54, ordersWithDays: 2, valueWithDays: 10000,
+    terms: [
+      { term: '60 dias', orders: 1, value: 9000, percent: 45, days: 60 },
+      { term: 'não informada', orders: 1, value: 5000, percent: 25, days: null },
+    ],
+  },
+  adherence: { orders: 2, formal: 1, value: 8000, formalValue: 6000, percent: 50 },
   ...p,
 });
 
@@ -147,6 +164,30 @@ describe('tela de Relatórios', () => {
     expect(primeira).toHaveTextContent('Bota de PVC');
     expect(within(primeira as HTMLElement).getByText('-R$ 100,00')).toHaveClass('text-perigo');
     expect(screen.getByText(/ganho R\$ 200,00 · perda -R\$ 100,00 · líquido R\$ 100,00/)).toBeInTheDocument();
+  });
+
+  it('origem da demanda, concorrências e pagamento: quem pediu, quem ganhou, em que prazo', async () => {
+    vi.mocked(relatorioExecutivo).mockResolvedValue(relatorio());
+    abrir();
+
+    const centros = within(await screen.findByTestId('relatorio-centros'));
+    expect(centros.getByText(/Filial Recife/)).toBeInTheDocument();
+    expect(centros.getByText('gestor: Gerson Gerente')).toBeInTheDocument();
+    expect(within(screen.getByTestId('relatorio-solicitantes')).getByText('Ana Solicitante')).toBeInTheDocument();
+    expect(screen.getByTestId('relatorio-escopo')).toHaveTextContent('Serviços 25%');
+
+    // a Beta venceu sem disputa: só quem levou com dois ou mais proponentes é vencedor de concorrência
+    expect(within(screen.getByTestId('relatorio-vencedores')).getByText('Alfa')).toBeInTheDocument();
+    expect(screen.getByText('Proponentes por BID').parentElement).toHaveTextContent('1,5');
+
+    const pagamento = within(screen.getByTestId('relatorio-pagamento'));
+    expect(pagamento.getByText('60 d')).toBeInTheDocument();
+    expect(screen.getByText(/DPO 54 dias/)).toBeInTheDocument();
+    // KPIs novos no topo: DPO e aderência
+    expect(screen.getByText('Prazo médio de pagamento (DPO)').parentElement).toHaveTextContent('54 dias');
+    expect(screen.getByText('Aderência à O.C. do ERP').parentElement).toHaveTextContent('50%');
+    // curva ABC na concentração
+    expect(within(screen.getByTestId('relatorio-fornecedores')).getByText('A')).toHaveClass('badge');
   });
 
   it('o tempo do ciclo mostra a mediana da etapa medida e diz quando não há medição', async () => {

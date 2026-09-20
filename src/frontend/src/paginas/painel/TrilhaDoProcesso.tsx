@@ -57,7 +57,7 @@ function Passo({ etapa, numero }: { etapa: EtapaNaTela; numero: number }) {
   const parado = etapa.pendente > 0;
   // três estados: com trabalho parado (em destaque), ao alcance (neutro) e fora do alcance
   // do usuário (tracejado e apagado — está no mapa, mas não é dele)
-  const classe = 'flex min-w-[176px] shrink-0 items-center gap-2.5 rounded-lg border bg-white px-3 py-2.5 text-left '
+  const classe = 'flex min-w-0 flex-1 basis-[176px] items-center gap-2.5 rounded-lg border bg-white px-3 py-2.5 text-left '
     + (parado ? 'border-aviso-borda shadow-sm' : etapa.alcancavel ? 'border-slate-200' : 'border-dashed border-slate-200 opacity-60');
 
   const conteudo = (
@@ -90,7 +90,8 @@ export function TrilhaDoProcesso({ avisos, usuario }: { avisos: Aviso[]; usuario
 
   return (
     <Painel titulo="O ciclo da compra, do começo ao fim">
-      <div className="flex items-center gap-2 overflow-x-auto py-2" data-testid="trilha-processo">
+      {/* quebra linha em vez de rolar de lado: os nove passos precisam estar à vista, não atrás de uma barra */}
+      <div className="flex flex-wrap items-center gap-2 py-2" data-testid="trilha-processo">
         {trilha.map((e, i) => <Passo key={`${e.rotulo}-${i}`} etapa={e} numero={i + 1} />)}
       </div>
       <Nota>

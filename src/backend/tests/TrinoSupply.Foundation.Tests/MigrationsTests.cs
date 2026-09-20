@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
 using TrinoSupply.Foundation.Api.Infrastructure;
+using TrinoSupply.Foundation.Api.Procurement;
+using TrinoSupply.Foundation.Api.Domain;
 
 namespace TrinoSupply.Foundation.Tests;
 
@@ -36,5 +38,31 @@ public sealed class MigrationsTests : IAsyncLifetime
         // antes de todo PR que toca o modelo — aqui ninguém precisa lembrar de rodar.
         Assert.False(db.Database.HasPendingModelChanges(),
             "o modelo mudou depois da última migration: gere uma com `dotnet ef migrations add`");
+    }
+
+    /// <summary>
+    /// O provedor em memória aceita LINQ que o Npgsql não traduz — foi assim que a aprovação
+    /// da diretoria virou um 500 em produção (filtro sobre um record projetado, no histórico
+    /// de preço) com a suíte inteira verde. As consultas que só rodam em caminho de gravação
+    /// passam aqui pelo Postgres de verdade, com o banco vazio: o que se testa é a tradução.
+    /// </summary>
+    [Fact]
+    public async Task Consultas_dos_servicos_traduzem_no_Postgres_real()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(_pg.GetConnectionString())
+            .Options;
+        await using var db = new AppDbContext(options);
+        await db.Database.MigrateAsync();
+
+        var produto = Guid.NewGuid();
+        var historico = new HistoricoDePrecoService(db);
+        Assert.Empty(await historico.ResumoAsync([produto, Guid.NewGuid()]));
+        Assert.Empty(await historico.SerieAsync(produto));
+
+        var rfq = new QuotationService(db, TimeProvider.System);
+        Assert.Empty(await rfq.PendingApprovalsAsync(Roles.Director, Guid.NewGuid()));
+        Assert.Empty(await rfq.PendingApprovalsAsync(Roles.Approver, Guid.NewGuid()));
+        Assert.Empty(await rfq.MinhasDecisoesAsync(Guid.NewGuid()));
     }
 }

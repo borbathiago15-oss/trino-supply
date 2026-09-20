@@ -125,39 +125,38 @@ public partial class QuotationService(AppDbContext db, TimeProvider clock)
     }
 
     /// <summary>
-    /// Processos aguardando a alçada de quem está pedindo. O filtro é feito no
-    /// banco, e não sobre uma lista já cortada: uma fila de aprovação que trunca
-    /// esconde trabalho de quem decide, sem avisar ninguém (PO-BR-012).
+    /// Processos aguardando a alçada de quem está pedindo — <b>só os que ela pode decidir</b>,
+    /// pela mesma régua da decisão (<c>ImpedimentoNivel1Async</c>/<c>ImpedimentoNivel2Async</c>):
+    /// a lista do nível no centro, o gerente do centro sem lista, o diretor vinculado e a
+    /// segregação. Uma fila com o que a pessoa não pode aprovar é uma fila que mente; quem
+    /// quer ver a compra da empresa inteira tem o painel. O primeiro corte é no banco, e não
+    /// sobre uma lista já truncada, para não esconder trabalho de quem decide (PO-BR-012).
     /// </summary>
-    public Task<List<Quotation>> PendingApprovalsAsync(
+    public async Task<List<Quotation>> PendingApprovalsAsync(
         string role, Guid actorId, CancellationToken ct = default)
     {
         var podeNivel1 = CanApproveAsManager(role);
         var podeNivel2 = CanApproveAsDirector(role);
-        if (!podeNivel1 && !podeNivel2) return Task.FromResult(new List<Quotation>());
+        if (!podeNivel1 && !podeNivel2) return [];
 
-        // um Where só, e não Union: `Include` depois de operação de conjunto não é
-        // traduzível pelo EF — compilaria e quebraria na primeira chamada real
-        var soCentrosQueGerencio = podeNivel1 && role == Roles.Approver;
-        var meus = db.CostCenters.Where(c => c.Active && c.ManagerUserId == actorId).Select(c => c.Code.ToUpper());
-
-        // segregação de funções (RFQ-ERR-030) só no Nível 2: quem selecionou ou deu o
-        // Nível 1 não aparece na fila do Nível 2. No Nível 1 a própria escolha aparece —
-        // é o comprador fechando a primeira alçada do processo que conduziu.
-        var fila = db.Quotations.Where(q =>
-            (podeNivel1
-             && q.Status == QuotationStatus.AwaitingManager
-             && (!soCentrosQueGerencio || meus.Contains(q.CostCenter.ToUpper())))
-            ||
-            (podeNivel2
-             && q.Status == QuotationStatus.AwaitingDirector
-             && q.SelectedBy != actorId
-             && q.ManagerApprovedBy != actorId));
-
-        return fila.Include(q => q.Items).Include(q => q.Suppliers).Include(q => q.Awards)
+        var candidatos = await db.Quotations.Where(q =>
+                (podeNivel1 && q.Status == QuotationStatus.AwaitingManager)
+                || (podeNivel2 && q.Status == QuotationStatus.AwaitingDirector))
+            .Include(q => q.Items).Include(q => q.Suppliers).Include(q => q.Awards)
             .Include(q => q.Proposals).ThenInclude(p => p.Items)
             .OrderBy(q => q.CreatedAt)   // o mais antigo primeiro: a fila é de trabalho, não de novidade
             .ToListAsync(ct);
+
+        var actor = new Actor(actorId, string.Empty, role);
+        var fila = new List<Quotation>();
+        foreach (var q in candidatos)
+        {
+            var impedimento = q.Status == QuotationStatus.AwaitingManager
+                ? await ImpedimentoNivel1Async(q, actor, ct)
+                : await ImpedimentoNivel2Async(q, actor, ct);
+            if (impedimento is null) fila.Add(q);
+        }
+        return fila;
     }
 
     /// <summary>

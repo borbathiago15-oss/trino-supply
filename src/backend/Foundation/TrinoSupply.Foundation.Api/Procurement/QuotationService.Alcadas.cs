@@ -22,25 +22,53 @@ public partial class QuotationService
         if (q is null) return (null, new("RFQ-ERR-404", "Cotação não encontrada."));
         if (q.Status != QuotationStatus.AwaitingManager)
             return (null, new("RFQ-ERR-020", "O processo não está aguardando aprovação gerencial."));
-        // alçada do centro (Nível 1): qualquer pessoa da lista resolve a etapa. O comprador
-        // e o administrador decidem em qualquer centro — a lista do centro é para os gestores.
-        if (actor.Role is not (Roles.SystemAdministrator or Roles.PurchasingOfficer) &&
-            await ApprovalLevels.CanDecideAsync(db, q.CostCenter, ApprovalLevels.Level1, actor.Id, ct) is { } noNivel1)
-        {
-            if (!noNivel1)
-                return (null, new("RFQ-ERR-031", "Alçada por centro de custo: a 1ª aprovação deste processo é do Nível 1 do centro (" +
-                    await ApprovalLevels.LabelAsync(db, q.CostCenter, ApprovalLevels.Level1, ct) + ")."));
-        }
-        else if (actor.Role == Roles.Approver)
+        if (await ImpedimentoNivel1Async(q, actor, ct) is { } impedimento) return (null, impedimento);
+        return await DecideAsync(q, actor, decision, reason, isDirector: false, ct);
+    }
+
+    /// <summary>
+    /// Por que esta pessoa <b>não</b> pode dar o Nível 1 deste processo — nulo quando pode.
+    /// É a mesma régua da fila da Central: o que aparece lá é exatamente o que ela decide.
+    /// Alçada do centro: qualquer pessoa da lista resolve a etapa. O comprador e o
+    /// administrador decidem em qualquer centro — a lista do centro é para os gestores.
+    /// </summary>
+    internal async Task<UserError?> ImpedimentoNivel1Async(Quotation q, Actor actor, CancellationToken ct)
+    {
+        if (actor.Role is Roles.SystemAdministrator or Roles.PurchasingOfficer) return null;
+        if (await ApprovalLevels.CanDecideAsync(db, q.CostCenter, ApprovalLevels.Level1, actor.Id, ct) is { } noNivel1)
+            return noNivel1 ? null
+                : new("RFQ-ERR-031", "Alçada por centro de custo: a 1ª aprovação deste processo é do Nível 1 do centro (" +
+                    await ApprovalLevels.LabelAsync(db, q.CostCenter, ApprovalLevels.Level1, ct) + ").");
+        if (actor.Role == Roles.Approver)
         {
             // centro sem Nível 1 cadastrado: vale o gerente responsável antigo
             var cc = q.CostCenter.Trim().ToUpperInvariant();
             var manages = await db.CostCenters.AnyAsync(
                 c => c.Active && c.ManagerUserId == actor.Id && c.Code == cc, ct);
             if (!manages)
-                return (null, new("RFQ-ERR-031", "Alçada por centro de custo: este processo pertence a um centro de custo que não está sob a sua gerência."));
+                return new("RFQ-ERR-031", "Alçada por centro de custo: este processo pertence a um centro de custo que não está sob a sua gerência.");
         }
-        return await DecideAsync(q, actor, decision, reason, isDirector: false, ct);
+        return null;
+    }
+
+    /// <summary>
+    /// Por que esta pessoa <b>não</b> pode dar o Nível 2 deste processo — nulo quando pode:
+    /// segregação (RFQ-ERR-030), a lista do Nível 2 do centro e, sem lista, o diretor vinculado.
+    /// </summary>
+    internal async Task<UserError?> ImpedimentoNivel2Async(Quotation q, Actor actor, CancellationToken ct)
+    {
+        if (actor.Id == q.SelectedBy || actor.Id == q.ManagerApprovedBy)
+            return new("RFQ-ERR-030", "Segregação de funções: o Diretor não pode ser quem selecionou nem quem deu a aprovação gerencial.");
+        if (actor.Role == Roles.SystemAdministrator) return null;
+        // alçada do centro (Nível 2): qualquer pessoa da lista resolve a etapa
+        if (await ApprovalLevels.CanDecideAsync(db, q.CostCenter, ApprovalLevels.Level2, actor.Id, ct) is { } noNivel2)
+            return noNivel2 ? null
+                : new("RFQ-ERR-032", "Alçada por centro de custo: a 2ª aprovação deste processo é do Nível 2 do centro (" +
+                    await ApprovalLevels.LabelAsync(db, q.CostCenter, ApprovalLevels.Level2, ct) + ").");
+        // centro sem Nível 2 cadastrado: vale o diretor vinculado ao gerente
+        if (await LinkedDirectorAsync(q, ct) is { } linkedDirector && linkedDirector != actor.Id)
+            return new("RFQ-ERR-032", "Alçada por diretoria: este processo está vinculado a outro diretor responsável.");
+        return null;
     }
 
     public async Task<(Quotation? q, UserError? error)> DirectorDecisionAsync(
@@ -50,21 +78,7 @@ public partial class QuotationService
         if (q is null) return (null, new("RFQ-ERR-404", "Cotação não encontrada."));
         if (q.Status != QuotationStatus.AwaitingDirector)
             return (null, new("RFQ-ERR-020", "O processo não está aguardando aprovação da diretoria."));
-        if (actor.Id == q.SelectedBy || actor.Id == q.ManagerApprovedBy)
-            return (null, new("RFQ-ERR-030", "Segregação de funções: o Diretor não pode ser quem selecionou nem quem deu a aprovação gerencial."));
-        if (actor.Role != Roles.SystemAdministrator)
-        {
-            // alçada do centro (Nível 2): qualquer pessoa da lista resolve a etapa
-            if (await ApprovalLevels.CanDecideAsync(db, q.CostCenter, ApprovalLevels.Level2, actor.Id, ct) is { } noNivel2)
-            {
-                if (!noNivel2)
-                    return (null, new("RFQ-ERR-032", "Alçada por centro de custo: a 2ª aprovação deste processo é do Nível 2 do centro (" +
-                        await ApprovalLevels.LabelAsync(db, q.CostCenter, ApprovalLevels.Level2, ct) + ")."));
-            }
-            // centro sem Nível 2 cadastrado: vale o diretor vinculado ao gerente
-            else if (await LinkedDirectorAsync(q, ct) is { } linkedDirector && linkedDirector != actor.Id)
-                return (null, new("RFQ-ERR-032", "Alçada por diretoria: este processo está vinculado a outro diretor responsável."));
-        }
+        if (await ImpedimentoNivel2Async(q, actor, ct) is { } impedimento) return (null, impedimento);
         return await DecideAsync(q, actor, decision, reason, isDirector: true, ct);
     }
 

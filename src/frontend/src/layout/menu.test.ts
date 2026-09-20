@@ -88,6 +88,14 @@ describe('menu', () => {
     expect(noGrupo('Compras')).not.toContain('triage');
   });
 
+  it('a Central de Aprovação aparece para quem aprova, pelo papel, sem depender de módulo', () => {
+    // o diretor dá o Nível 2 e chegava à Central só pelo atalho da Torre
+    for (const papel of ['Director', 'Approver', 'SupplyManager', 'PurchasingOfficer'] as const)
+      expect(folhas({ role: papel, modules: [] }).map((i) => i.id)).toContain('pr-approvals');
+    // quem não aprova nada não a vê, mesmo com o módulo marcado
+    expect(folhas({ role: 'Requester', modules: ['APROVACAO'] }).map((i) => i.id)).not.toContain('pr-approvals');
+  });
+
   it('Comunicados é do administrador: quem escreve o recado não é qualquer um', () => {
     expect(folhas({ role: 'SystemAdministrator', modules: [] }).map((i) => i.id)).toContain('announcements');
     for (const papel of ['SupplyManager', 'Director', 'PurchasingOfficer', 'Requester'] as const)

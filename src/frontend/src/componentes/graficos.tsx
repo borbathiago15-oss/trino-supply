@@ -79,8 +79,10 @@ export function GraficoColunas({ rotulos, series, empilhado = false, formatar = 
   return (
     <div className="relative overflow-x-auto">
       <Tooltip dica={dica} />
-      <svg viewBox={`0 0 ${L} ${A}`} style={{ width: '100%' }} role="img" aria-label={titulo}
-        onMouseLeave={() => setDica(null)}>
+      {/* altura máxima e alinhamento à esquerda: com um ou dois meses o gráfico não estica
+          até a largura da tela — era o que fazia o rótulo do mês virar um título */}
+      <svg viewBox={`0 0 ${L} ${A}`} style={{ width: '100%', maxHeight: 260 }} preserveAspectRatio="xMinYMid meet"
+        role="img" aria-label={titulo} onMouseLeave={() => setDica(null)}>
         <defs>
           {series.map((s, si) => (
             <linearGradient key={s.nome} id={`${id}-g${si}`} x1="0" y1="0" x2="0" y2="1">

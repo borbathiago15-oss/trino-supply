@@ -8,17 +8,21 @@ import { abrirAutenticado } from './sessao';
  * banco pode estar vazio, e a tela tem de continuar de pé.
  */
 test.describe('Relatórios (React)', () => {
-  test('a tela abre com os seis blocos e o recorte escrito na tela', async ({ page }) => {
+  test('a tela abre com os nove blocos e o recorte escrito na tela', async ({ page }) => {
     await abrirAutenticado(page, '/relatorios');
     await expect(page.locator('#titulo-pagina')).toHaveText('Relatórios');
 
-    // os seis títulos são o contrato com quem lê: numerados e na mesma ordem
+    // os nove títulos são o contrato com quem lê: numerados e na mesma ordem
     for (const titulo of [
-      '1. Compras por família', '2. Saving por comprador', '3. Concentração por fornecedor',
-      '4. Peso das compras urgentes', '5. Entrega no prazo (OTIF) por fornecedor',
-      '6. Compras sem O.C. do ERP',
+      '1. Compras por família', '2. Saving por comprador', '3. Saving do período, mês a mês',
+      '4. As três réguas do saving', '5. Concentração por fornecedor', '6. Peso das compras urgentes',
+      '7. Entrega no prazo (OTIF) por fornecedor', '8. Tempo do ciclo', '9. Compras sem O.C. do ERP',
     ])
       await expect(page.getByRole('heading', { name: titulo })).toBeVisible();
+
+    // cada KPI diz o que era no período anterior, e a tela diz que janela é essa
+    await expect(page.getByTestId('antes').first()).toContainText('antes:');
+    await expect(page.getByTestId('periodo-anterior')).toContainText('mesmos filtros');
 
     await expect(page.getByTestId('recorte-aplicado')).toContainText('Empresa: todas');
     await expect(page.getByTestId('recorte-aplicado')).toContainText('Comprador: todos');

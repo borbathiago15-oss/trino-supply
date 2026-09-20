@@ -59,8 +59,9 @@ export function Antes({ atual, anterior, formatar = moeda }:
   const v = variacao(atual, anterior);
   return (
     <span data-testid="antes">
-      antes: {formatar(anterior)}{' '}
-      <span className={v.classe}>({v.sinal} {Math.abs(v.pct)}%)</span>
+      antes: {formatar(anterior)}
+      {/* sem base não há variação: "▲ 100%" sobre zero é aritmética, não leitura */}
+      {anterior > 0 && <> <span className={v.classe}>({v.sinal} {Math.abs(v.pct)}%)</span></>}
     </span>
   );
 }

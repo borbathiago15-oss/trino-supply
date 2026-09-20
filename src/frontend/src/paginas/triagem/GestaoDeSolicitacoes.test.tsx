@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Usuario } from '@/api/auth';
-import { diasNaFila, faixaDeAging, type Demanda, type ItemDemanda, type Responsavel } from '@/api/triagem';
+import { diasNaFila, FAIXAS_AGING, faixaDeAging, type Demanda, type ItemDemanda, type Responsavel } from '@/api/triagem';
 import { ToastProvider } from '@/componentes/Toast';
 import { contarPorFaixa, GestaoDeSolicitacoes, linhasDe } from './GestaoDeSolicitacoes';
 
@@ -107,9 +107,13 @@ describe('tela Triagem de Demandas', () => {
     await usuario.selectOptions(screen.getByLabelText('Situação'), 'PENDENTE');
     await waitFor(() => expect(listarDemandas).toHaveBeenCalledWith(
       expect.objectContaining({ situacao: 'PENDENTE' }), expect.anything()));
+    await screen.findByTestId('tabela-demandas');
 
+    // a faixa escolhida é uma em que a demanda NÃO está, calculada agora: a tela mede a idade
+    // contra o relógio real, e uma faixa fixa passava a conter a demanda conforme os dias corriam
+    const semADemanda = String((faixaDeAging(demanda({})) + 1) % FAIXAS_AGING.length);
     const antes = vi.mocked(listarDemandas).mock.calls.length;
-    await usuario.selectOptions(screen.getByLabelText('Tempo na fila'), '3');
+    await usuario.selectOptions(await screen.findByLabelText('Tempo na fila'), semADemanda);
     expect(await screen.findByText('Nenhuma demanda neste filtro. ✔')).toBeInTheDocument();
     expect(vi.mocked(listarDemandas).mock.calls.length).toBe(antes);
   });

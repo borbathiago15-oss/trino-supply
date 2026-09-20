@@ -88,6 +88,28 @@ describe('menu', () => {
     expect(noGrupo('Compras')).not.toContain('triage');
   });
 
+  it('a Central de Aprovação aparece para quem aprova, pelo papel, sem depender de módulo', () => {
+    // o diretor dá o Nível 2 e chegava à Central só pelo atalho da Torre
+    for (const papel of ['Director', 'Approver', 'SupplyManager', 'PurchasingOfficer'] as const)
+      expect(folhas({ role: papel, modules: [] }).map((i) => i.id)).toContain('pr-approvals');
+    // quem não aprova nada não a vê, mesmo com o módulo marcado
+    expect(folhas({ role: 'Requester', modules: ['APROVACAO'] }).map((i) => i.id)).not.toContain('pr-approvals');
+  });
+
+  it('o diretor vê só o Dashboard, a Central de Aprovação e as solicitações, mesmo com todos os módulos', () => {
+    // segunda alçada e mais nada: Torre, cotações, material, estoque e cadastros eram ruído para quem só aprova
+    const todos = ['SOLICITACOES', 'APROVACAO', 'MATERIAL', 'ESTOQUE', 'COMPRAS', 'PRODUTOS', 'FORNECEDORES',
+      'CENTROS_CUSTO', 'USUARIOS', 'CONTRATOS', 'COMPLIANCE', 'INSIGHTS'] as const;
+    const grupos = itensVisiveis({ role: 'Director', modules: [...todos] });
+    expect(grupos.map((g) => g.titulo)).toEqual([null, 'Solicitações de Compra']);
+    const ids = folhas({ role: 'Director', modules: [...todos] }).map((i) => i.id);
+    expect(ids).toContain('pr-approvals');
+    expect(ids).toContain('reports');
+    expect(ids).toContain('pr-mine');
+    for (const fora of ['control-tower', 'quotations', 'rfq-queue', 'buy-orders', 'scorecard', 'triage', 'wh-queue', 'products'])
+      expect(ids).not.toContain(fora);
+  });
+
   it('Comunicados é do administrador: quem escreve o recado não é qualquer um', () => {
     expect(folhas({ role: 'SystemAdministrator', modules: [] }).map((i) => i.id)).toContain('announcements');
     for (const papel of ['SupplyManager', 'Director', 'PurchasingOfficer', 'Requester'] as const)

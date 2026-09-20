@@ -1,5 +1,6 @@
 import {
-  ehAdmin, podeAlmoxarifado, podeAprovarGerente, podeComprar, podeConduzirCotacao, podeCriarSc, podeDecidirSc, podeManterCatalogo,
+  ehAdmin, podeAlmoxarifado, podeAprovarDiretor, podeAprovarGerente, podeComprar, podeConduzirCotacao, podeCriarSc, podeDecidirSc,
+  podeManterCatalogo,
   podePedirMaterial, podeTriar, podeVerCompliance, podeVerCotacao, podeVerPedidos, podeVerRelatorios, temModulo,
   type Modulo, type Perfil,
 } from '@/dominio/papeis';
@@ -13,11 +14,26 @@ export interface ItemMenu {
   mostrar?: (u: Perfil) => boolean;
 }
 export interface SubgrupoMenu { rotulo: string; filhos: ItemMenu[] }
-export interface GrupoMenu { titulo: string | null; modulo?: Modulo; itens: (ItemMenu | SubgrupoMenu)[] }
+export interface GrupoMenu {
+  titulo: string | null;
+  modulo?: Modulo;
+  /** Grupo inteiro fora do menu de um papel, mesmo com o módulo marcado. */
+  mostrar?: (u: Perfil) => boolean;
+  itens: (ItemMenu | SubgrupoMenu)[];
+}
 
 export const ehSubgrupo = (x: ItemMenu | SubgrupoMenu): x is SubgrupoMenu => 'filhos' in x;
 
 const sempre = () => true;
+
+/**
+ * O diretor é a segunda alçada e mais nada: o menu dele é o Dashboard (com os relatórios),
+ * a Central de Aprovação e as solicitações. Torre, cotações, material, estoque e cadastros
+ * são ferramenta de quem opera a compra — para quem só aprova, era ruído que confundia,
+ * mesmo com os módulos marcados no cadastro. O que ele precisa ler de um processo chega
+ * pelo link da própria Central.
+ */
+const naoDiretor = (u: Perfil) => u.role !== 'Director';
 
 /**
  * O menu do sistema: cada item aponta para a sua rota.
@@ -60,7 +76,11 @@ export const MENU: GrupoMenu[] = [
       { id: 'compliance', rotulo: 'Compliance', rota: '/compliance', modulo: 'COMPLIANCE', mostrar: podeVerCompliance },
       { id: 'reports', rotulo: 'Relatórios', rota: '/relatorios', mostrar: podeVerRelatorios },
     ]},
-    { id: 'pr-approvals', rotulo: 'Central de Aprovação', rota: '/aprovacoes', modulo: 'APROVACAO', mostrar: (u) => podeDecidirSc(u) || podeAprovarGerente(u) },
+    // A Central é de quem aprova alguma coisa — SC, Nível 1 ou Nível 2 — e o direito vem do
+    // papel, como no servidor (que não pede módulo para decidir). O diretor chegava lá só pelo
+    // atalho da Torre, porque o item pedia o módulo APROVACAO e um papel que não era o dele.
+    { id: 'pr-approvals', rotulo: 'Central de Aprovação', rota: '/aprovacoes',
+      mostrar: (u) => podeDecidirSc(u) || podeAprovarGerente(u) || podeAprovarDiretor(u) },
   ]},
   { titulo: 'Solicitações de Compra', modulo: 'SOLICITACOES', itens: [
     { rotulo: 'Nova Solicitação', filhos: [
@@ -69,7 +89,7 @@ export const MENU: GrupoMenu[] = [
     ]},
     { id: 'pr-mine', rotulo: 'Minhas Solicitações (SC)', rota: '/solicitacoes', mostrar: sempre },
   ]},
-  { titulo: 'Compras', modulo: 'COMPRAS', itens: [
+  { titulo: 'Compras', modulo: 'COMPRAS', mostrar: naoDiretor, itens: [
     // Primeira do grupo, e uma tela só: é a que o comprador abre e deixa aberta.
     //
     // Já foi um subgrupo, com a Torre e a triagem lado a lado, e era um erro: as duas
@@ -90,7 +110,7 @@ export const MENU: GrupoMenu[] = [
     { id: 'contracts', rotulo: 'Contratos', rota: '/contratos', modulo: 'CONTRATOS', mostrar: (u) => podeComprar(u) || ehAdmin(u) },
     { id: 'scorecard', rotulo: 'Scorecard de Fornecedores', rota: '/scorecard', mostrar: (u) => podeComprar(u) || podeVerCompliance(u) },
   ]},
-  { titulo: 'Material', modulo: 'MATERIAL', itens: [
+  { titulo: 'Material', modulo: 'MATERIAL', mostrar: naoDiretor, itens: [
     { id: 'mr-new', rotulo: 'Solicitar Material', rota: '/material/nova', mostrar: podePedirMaterial },
     { id: 'mr-mine', rotulo: 'Minhas Solicitações de Material', rota: '/material', mostrar: sempre },
     // saiu do grupo Compras: o que ela tria é pedido ao almoxarifado, não compra —
@@ -98,11 +118,11 @@ export const MENU: GrupoMenu[] = [
     { id: 'triage', rotulo: 'Triagem de Material', rota: '/gestao-solicitacoes',
       mostrar: (u) => podeTriar(u) || podeAlmoxarifado(u) },
   ]},
-  { titulo: 'Estoque', modulo: 'ESTOQUE', itens: [
+  { titulo: 'Estoque', modulo: 'ESTOQUE', mostrar: naoDiretor, itens: [
     { id: 'wh-queue', rotulo: 'Fila de Atendimento', rota: '/estoque/fila', mostrar: podeAlmoxarifado },
     { id: 'wh-panel', rotulo: 'Painel de Atendimentos', rota: '/estoque/atendimentos', mostrar: podeAlmoxarifado },
   ]},
-  { titulo: 'Cadastros', itens: [
+  { titulo: 'Cadastros', mostrar: naoDiretor, itens: [
     { rotulo: 'Produtos', filhos: [
       { id: 'products', rotulo: 'Cadastro de Produtos', rota: '/produtos', modulo: 'PRODUTOS', mostrar: sempre },
       { id: 'families', rotulo: 'Famílias de Produtos', rota: '/familias', modulo: 'PRODUTOS', mostrar: podeManterCatalogo },
@@ -141,6 +161,7 @@ export function itensVisiveis(u: Perfil): GrupoMenu[] {
   const saida: GrupoMenu[] = [];
   for (const grupo of MENU) {
     if (grupo.modulo && !temModulo(u, grupo.modulo)) continue;
+    if (grupo.mostrar && !grupo.mostrar(u)) continue;
     const itens: (ItemMenu | SubgrupoMenu)[] = [];
     for (const item of grupo.itens) {
       if (ehSubgrupo(item)) {

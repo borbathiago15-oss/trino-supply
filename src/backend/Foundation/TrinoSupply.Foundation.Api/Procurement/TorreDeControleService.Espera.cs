@@ -1,4 +1,6 @@
+using Microsoft.EntityFrameworkCore;
 using TrinoSupply.Foundation.Api.Domain;
+using TrinoSupply.Foundation.Api.Infrastructure;
 
 namespace TrinoSupply.Foundation.Api.Procurement;
 
@@ -16,6 +18,52 @@ public record AlcadasDoCentro(IReadOnlyList<string> Nivel1, IReadOnlyList<string
 {
     public static readonly AlcadasDoCentro Nenhuma = new([], []);
     public IReadOnlyList<string> Do(int nivel) => nivel == ApprovalLevels.Level2 ? Nivel2 : Nivel1;
+
+    /// <summary>
+    /// Quem aprova em cada centro, pela <b>mesma regra que decide</b>: as alçadas por nível
+    /// quando cadastradas e, sem ninguém marcado, o vínculo antigo — Nível 1 com o gerente
+    /// responsável, Nível 2 com o diretor vinculado a ele. É o que a tela de Centros de Custo
+    /// promete ("sem ninguém marcado, o centro segue como hoje"), e é o que
+    /// <c>ManagerDecisionAsync</c>/<c>DirectorDecisionAsync</c> aceitam.
+    ///
+    /// <para>
+    /// Ler só o cadastro novo fazia a Torre e o caminho do processo dizerem "sem aprovador
+    /// cadastrado" para um centro cujo gerente e diretor estavam lá desde sempre — e o
+    /// comprador ia cadastrar de novo o que já existia.
+    /// </para>
+    /// </summary>
+    public static async Task<Dictionary<string, AlcadasDoCentro>> ResolverAsync(
+        AppDbContext db, IReadOnlyCollection<string> codigos, CancellationToken ct = default)
+    {
+        var codes = codigos.Select(c => c.Trim().ToUpperInvariant()).Where(c => c.Length > 0).Distinct().ToList();
+        if (codes.Count == 0) return [];
+
+        var centros = await db.CostCenters.Where(c => codes.Contains(c.Code.ToUpper()))
+            .Select(c => new
+            {
+                c.Code, c.ManagerUserId, c.ManagerName,
+                N1 = c.Approvers.Where(a => a.Level == ApprovalLevels.Level1).Select(a => a.UserName).ToList(),
+                N2 = c.Approvers.Where(a => a.Level == ApprovalLevels.Level2).Select(a => a.UserName).ToList(),
+            })
+            .ToListAsync(ct);
+
+        // o diretor de cada gerente, de uma vez — é o Nível 2 do vínculo antigo
+        var gerentes = centros.Where(c => c.N2.Count == 0 && c.ManagerUserId is not null)
+            .Select(c => c.ManagerUserId!.Value).Distinct().ToList();
+        var diretorDoGerente = gerentes.Count == 0
+            ? new Dictionary<Guid, string>()
+            : await db.Users.Where(u => gerentes.Contains(u.Id) && u.DirectorId != null)
+                .Join(db.Users, u => u.DirectorId, d => d.Id, (u, d) => new { u.Id, Diretor = d.Name })
+                .ToDictionaryAsync(x => x.Id, x => x.Diretor, ct);
+
+        return centros.ToDictionary(
+            c => c.Code.ToUpperInvariant(),
+            c => new AlcadasDoCentro(
+                c.N1.Count > 0 ? c.N1
+                    : string.IsNullOrWhiteSpace(c.ManagerName) ? [] : [c.ManagerName!],
+                c.N2.Count > 0 ? c.N2
+                    : c.ManagerUserId is { } g && diretorDoGerente.TryGetValue(g, out var diretor) ? [diretor] : []));
+    }
 }
 
 public partial class TorreDeControleService

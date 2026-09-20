@@ -43,7 +43,8 @@ public static class CotacaoRotas
 
         // o caminho (quem pediu, quem aprova, o que falta) só vai no detalhe: a lista não paga
         // as duas consultas a mais por linha
-        static object QuotationView(Quotation q, IReadOnlyList<EtapaDoCaminho>? caminho = null) => new
+        static object QuotationView(Quotation q, IReadOnlyList<EtapaDoCaminho>? caminho = null,
+            IReadOnlyDictionary<Guid, PurchaseOrder>? pedidos = null) => new
         {
             id = q.Id, number = q.Number, kind = QKindLabel(q.Kind), status = QStatusLabel(q.Status),
             caminho,
@@ -109,6 +110,8 @@ public static class CotacaoRotas
                     families = g.Select(a => a.Family).OrderBy(f => f).ToList(),
                     totalValue = g.Sum(a => a.TotalValue),
                 }),
+            // o pedido nasce na aprovação do Nível 2; a situação da O.C. do ERP (só no detalhe)
+            // diz à tela do processo o que ainda falta fazer na tela do pedido
             purchaseOrders = q.AwardList.Where(a => a.PurchaseOrderId is not null)
                 .GroupBy(a => new { a.PurchaseOrderId, a.PurchaseOrderNumber, a.SupplierName })
                 .Select(g => new
@@ -116,6 +119,10 @@ public static class CotacaoRotas
                     id = g.Key.PurchaseOrderId, number = g.Key.PurchaseOrderNumber, supplierName = g.Key.SupplierName,
                     families = g.Select(a => a.Family).OrderBy(f => f).ToList(),
                     totalValue = g.Sum(a => a.TotalValue),
+                    erpNumber = pedidos?.GetValueOrDefault(g.Key.PurchaseOrderId!.Value)?.ErpNumber,
+                    noErpReason = pedidos?.GetValueOrDefault(g.Key.PurchaseOrderId!.Value)?.NoErpReason,
+                    erpPending = pedidos?.GetValueOrDefault(g.Key.PurchaseOrderId!.Value)?.HasErpPending,
+                    status = pedidos?.GetValueOrDefault(g.Key.PurchaseOrderId!.Value) is { } po ? PoStatusLabel(po.Status) : null,
                 }),
             purchaseOrderId = q.PurchaseOrderId, purchaseOrderNumber = q.PurchaseOrderNumber,
             saving = q.NegotiatedValue is null ? null : new
@@ -181,12 +188,15 @@ public static class CotacaoRotas
             }, ctx);
         });
 
-        rfq.MapGet("/{id:guid}", async (Guid id, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+        rfq.MapGet("/{id:guid}", async (Guid id, QuotationService svc, AppDbContext db, ClaimsPrincipal p, HttpContext ctx) =>
         {
             if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");
             var q = await svc.GetAsync(id);
             if (q is null) return Error(ctx, 404, "RFQ-ERR-404", "Cotação não encontrada.");
-            return Ok(QuotationView(q, await svc.CaminhoAsync(q)), ctx);
+            var pedidos = await db.PurchaseOrders.AsNoTracking()
+                .Include(o => o.Items).Include(o => o.ErpDocuments).ThenInclude(d => d.Items)
+                .Where(o => o.QuotationId == id).ToDictionaryAsync(o => o.Id);
+            return Ok(QuotationView(q, await svc.CaminhoAsync(q), pedidos), ctx);
         });
 
         // score multicritério da escolha (V2-P4, decisão C5): INFORMATIVO — nunca decide nem bloqueia

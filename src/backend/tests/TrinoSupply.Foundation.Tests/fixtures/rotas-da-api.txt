@@ -110,6 +110,7 @@ POST /api/v1/purchase-orders/{id:guid}/cancel
 POST /api/v1/purchase-orders/{id:guid}/deliveries
 POST /api/v1/purchase-orders/{id:guid}/erp-order
 POST /api/v1/purchase-orders/{id:guid}/erp-order/attachment
+POST /api/v1/purchase-orders/{id:guid}/erp-documents/{docId:guid}/attachment
 POST /api/v1/purchase-orders/{id:guid}/invoices
 POST /api/v1/purchase-orders/{id:guid}/invoices/{invoiceId:guid}/attachment
 POST /api/v1/purchase-orders/{id:guid}/receive

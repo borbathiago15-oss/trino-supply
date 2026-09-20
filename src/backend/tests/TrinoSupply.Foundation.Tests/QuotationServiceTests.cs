@@ -540,8 +540,9 @@ public class QuotationServiceTests
             Carla, q.Id, "663", new DateOnly(2026, 8, 26), "Entregar no almoxarifado central.");
 
         Assert.Null(error);
-        Assert.Equal("663", order!.Number);                      // o número é o da OC fechada no SENIOR
-        Assert.Equal("663", order.ErpNumber);
+        Assert.StartsWith("PO-", order!.Number);                 // o pedido nasceu na aprovação, com a própria numeração
+        Assert.Equal("663", order.ErpNumber);                    // o número do SENIOR entra na O.C. registrada
+        Assert.Equal("663", Assert.Single(order.ErpDocuments).Number);
         Assert.Equal(new DateOnly(2026, 8, 26), order.ErpIssuedOn);
         Assert.Equal(922.73m, order.TotalValue);                 // 857,65 + 65,08 (modelo OC 663)
         Assert.Equal("28 dias", order.PaymentTerms);
@@ -559,6 +560,55 @@ public class QuotationServiceTests
 
         var (_, again) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, "664", null, null);
         Assert.Equal("RFQ-ERR-040", again!.Code); // nunca duas OCs do mesmo processo
+    }
+
+    /// <summary>
+    /// O pedido nasce na aprovação do Nível 2, sem O.C.: tudo o que vem depois — O.C. do
+    /// SENIOR (inteira ou em partes), faturamento e entrega — vive na tela do pedido, e o
+    /// processo fecha sozinho quando o último pedido dele tem O.C. ou a observação.
+    /// </summary>
+    [Fact]
+    public async Task Pedido_nasce_na_aprovacao_do_nivel_2_e_a_OC_parcial_e_registrada_na_tela_do_pedido()
+    {
+        var w = await BuildAsync();
+        var q = await UpToApprovedAsync(w);
+
+        var pedido = await w.Db.PurchaseOrders.Include(o => o.Items).Include(o => o.ErpDocuments)
+            .SingleAsync(o => o.QuotationId == q.Id);
+        Assert.Equal(PurchaseOrderStatus.Issued, pedido.Status);
+        Assert.StartsWith("PO-", pedido.Number);
+        Assert.Null(pedido.ErpNumber);                              // nenhuma O.C. inventada
+        Assert.Null(pedido.NoErpReason);
+        Assert.True(pedido.HasErpPending);
+        Assert.Equal(w.Alfa.Id, pedido.SupplierId);
+        Assert.Equal(pedido.Id, q.PurchaseOrderId);                 // o processo já aponta para o pedido
+        Assert.All(q.AwardList, a => Assert.Equal(pedido.Id, a.PurchaseOrderId));
+        Assert.Contains("PEDIDO_CRIADO", (await w.Rfq.TimelineAsync(q.Id)).Select(e => e.EventType));
+
+        var clock = new FixedTimeProvider(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero));
+        var pos = new PurchaseOrderService(w.Db, new InventoryService(w.Db, clock), clock);
+        var item = pedido.Items.First();
+
+        // metade do primeiro item numa O.C.: o processo continua aberto
+        var (parcial, e1) = await pos.RegisterErpOrderAsync(Carla, pedido.Id, "OC-700", new DateOnly(2026, 8, 26),
+            lines: [new ErpCoverageLine(item.Id, item.Quantity / 2)]);
+        Assert.Null(e1);
+        Assert.Equal("OC-700", parcial!.ErpNumber);
+        Assert.True(parcial.HasErpPending);
+        var meio = await w.Rfq.GetAsync(q.Id);
+        // a O.C. do cabeçalho já fecha o processo: o saldo é assunto da tela do pedido
+        Assert.Equal(QuotationStatus.PoIssued, meio!.Status);
+        Assert.Equal(parcial.Number, meio.PurchaseOrderNumber);
+
+        // o restante vem noutra O.C.
+        var (inteiro, e2) = await pos.RegisterErpOrderAsync(Carla, pedido.Id, "OC-701", new DateOnly(2026, 8, 28));
+        Assert.Null(e2);
+        Assert.False(inteiro!.HasErpPending);
+        Assert.Equal(2, inteiro.ErpDocuments.Count);
+
+        // e a rota antiga do processo não abre um segundo pedido
+        var (_, esgotado) = await w.Rfq.RegisterErpPurchaseOrderAsync(Carla, q.Id, "OC-702", null, null);
+        Assert.Equal("RFQ-ERR-040", esgotado!.Code);
     }
 
     /// <summary>OTIF (V2-P1): a data prometida congela no registro da O.C. e o OTIF deriva da entrega.</summary>
@@ -1459,8 +1509,13 @@ public class QuotationServiceTests
         // o processo continua aberto: falta a O.C. da Beta
         var meio = await w.Rfq.GetAsync(q.Id);
         Assert.Equal(QuotationStatus.ApprovedForIssue, meio!.Status);
-        Assert.Equal("900", meio.AwardList.Single(a => a.Family == "EPI").PurchaseOrderNumber);
-        Assert.Null(meio.AwardList.Single(a => a.Family == "FERRAMENTAS").PurchaseOrderId);
+        // os dois pedidos nasceram na aprovação: o da Alfa já tem O.C., o da Beta ainda não
+        Assert.Equal(ocAlfa.Number, meio.AwardList.Single(a => a.Family == "EPI").PurchaseOrderNumber);
+        Assert.Equal("900", ocAlfa.ErpNumber);
+        var idBeta = meio.AwardList.Single(a => a.Family == "FERRAMENTAS").PurchaseOrderId;
+        Assert.NotNull(idBeta);
+        var pedidoBeta = await w.Db.PurchaseOrders.SingleAsync(o => o.Id == idBeta);
+        Assert.Null(pedidoBeta.ErpNumber);
 
         var (ocBeta, e2) = await w.Rfq.RegisterErpPurchaseOrderAsync(
             Carla, q.Id, "901", new DateOnly(2026, 8, 31), null, null, w.Beta.Id);

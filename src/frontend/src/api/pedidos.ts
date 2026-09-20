@@ -8,6 +8,9 @@ export interface ItemPedido {
   description: string;
   unitOfMeasure: string;
   quantity: number;
+  /** Quanto deste item já está coberto por O.C. do ERP, e quanto ainda não está. */
+  erpCoveredQuantity: number;
+  erpPendingQuantity: number;
   receivedQuantity: number;
   pendingQuantity: number;
   rejectedQuantity: number;
@@ -30,6 +33,19 @@ export interface NotaFiscal {
   fileName: string | null;
   createdByLabel: string | null;
   createdAt: string;
+}
+
+/** Uma O.C. do ERP registrada no pedido, com o que ela cobre de cada item. */
+export interface OcDoErp {
+  id: string;
+  number: string;
+  issuedOn: string;
+  documentId: string | null;
+  fileName: string | null;
+  notes: string | null;
+  createdByLabel: string | null;
+  createdAt: string;
+  items: { itemId: string; quantity: number }[];
 }
 
 export interface PedidoCompra {
@@ -55,6 +71,12 @@ export interface PedidoCompra {
   erpIssuedOn: string | null;
   /** Observação que autorizou o fechamento sem O.C. do ERP (PO-BR-011). */
   noErpReason: string | null;
+  /**
+   * Ainda há item ou quantidade sem O.C. do ERP e sem a observação da exceção. Uma O.C. pode
+   * cobrir parte do pedido; o saldo fica aqui até a próxima O.C. ou até a observação.
+   */
+  erpPending: boolean;
+  erpDocuments: OcDoErp[];
   promisedDate: string | null;
   onTime: boolean | null;
   inFull: boolean | null;
@@ -105,7 +127,44 @@ const base = '/api/v1/purchase-orders';
 
 /** A API pode mandar `families`/`invoices`/`items` nulos; a tela sempre trabalha com listas. */
 export function normalizarPedido(bruto: PedidoCompra): PedidoCompra {
-  return { ...bruto, families: bruto.families ?? [], invoices: bruto.invoices ?? [], items: bruto.items ?? [] };
+  const items = (bruto.items ?? []).map((i) => ({
+    ...i,
+    erpCoveredQuantity: i.erpCoveredQuantity ?? 0,
+    erpPendingQuantity: i.erpPendingQuantity ?? Math.max(0, i.quantity - (i.erpCoveredQuantity ?? 0)),
+  }));
+  const erpDocuments = (bruto.erpDocuments ?? []).map((d) => ({ ...d, items: d.items ?? [] }));
+  return {
+    ...bruto, families: bruto.families ?? [], invoices: bruto.invoices ?? [], items, erpDocuments,
+    erpPending: bruto.erpPending ?? (bruto.noErpReason == null && items.some((i) => i.erpPendingQuantity > 0)),
+  };
+}
+
+/** As três etapas que vêm depois da aprovação, na ordem em que acontecem. */
+export type EtapaDoPedido = 'oc' | 'faturamento' | 'entrega';
+export type SituacaoDaEtapa = 'feita' | 'parcial' | 'atual' | 'pendente';
+
+/**
+ * A linha do tempo do pedido: O.C. → faturamento → entrega. É derivada do que o pedido
+ * já diz — não há estado próprio a gravar. "Parcial" é a etapa que começou e não fechou:
+ * O.C. que cobre parte dos itens, entrega de parte da quantidade.
+ */
+export function linhaDoTempo(o: PedidoCompra): { etapa: EtapaDoPedido; situacao: SituacaoDaEtapa }[] {
+  const ocFechada = !o.erpPending;
+  const ocComecou = o.erpDocuments.length > 0 || !!o.noErpReason;
+  const faturado = o.invoices.length > 0;
+  const entregue = pedidoEncerrado(o) && o.status !== 'CANCELADO';
+  const entregaComecou = o.items.some((i) => i.receivedQuantity > 0);
+  const etapas: { etapa: EtapaDoPedido; feita: boolean; comecou: boolean }[] = [
+    { etapa: 'oc', feita: ocFechada, comecou: ocComecou },
+    { etapa: 'faturamento', feita: faturado, comecou: faturado },
+    { etapa: 'entrega', feita: entregue, comecou: entregaComecou },
+  ];
+  let atualMarcada = false;
+  return etapas.map(({ etapa, feita, comecou }) => {
+    if (feita) return { etapa, situacao: 'feita' as const };
+    if (!atualMarcada) { atualMarcada = true; return { etapa, situacao: comecou ? 'parcial' as const : 'atual' as const }; }
+    return { etapa, situacao: 'pendente' as const };
+  });
 }
 
 export interface PaginaDePedidos { itens: PedidoCompra[]; total: number }
@@ -132,15 +191,24 @@ export async function listarPedidos(
 export const obterPedido = async (id: string, signal?: AbortSignal) =>
   normalizarPedido(await api<PedidoCompra>(`${base}/${id}`, { signal }));
 
+export interface CoberturaDaOc { itemId: string; quantity: number }
 export interface RegistroOc {
   erpNumber: string;
   issuedOn: string | null;
   /** Obrigatório quando `erpNumber` vem vazio (PO-BR-011). */
   noErpReason?: string | null;
+  /**
+   * O que esta O.C. cobre de cada item. Sem a lista, cobre tudo o que ainda falta — é o caso
+   * comum, uma O.C. para o pedido inteiro. A soma nunca passa do pedido (PO-ERR-059).
+   */
+  items?: CoberturaDaOc[];
 }
 export const registrarOc = (id: string, dados: RegistroOc) =>
-  api<PedidoCompra>(`${base}/${id}/erp-order`, { method: 'POST', body: dados });
+  api<PedidoCompra>(`${base}/${id}/erp-order`, { method: 'POST', body: dados }).then(normalizarPedido);
 export const anexarOc = (id: string, arquivo: File) => enviarArquivo(`${base}/${id}/erp-order/attachment`, arquivo);
+/** Anexo de uma O.C. específica, quando o pedido tem mais de uma. */
+export const anexarOcDocumento = (id: string, docId: string, arquivo: File) =>
+  enviarArquivo(`${base}/${id}/erp-documents/${docId}/attachment`, arquivo);
 
 export interface LancamentoNota { number: string; issuedOn: string | null; value: number | null }
 export const lancarNota = (id: string, dados: LancamentoNota) =>

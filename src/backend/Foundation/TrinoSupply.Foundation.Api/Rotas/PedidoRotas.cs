@@ -114,9 +114,11 @@ public static class PedidoRotas
             if (!PurchaseOrderService.CanManage(role))
                 return Error(ctx, 403, "PO-ERR-900", "Seu papel não registra a OC do ERP.");
             var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
-            var (order, error) = await svc.RegisterErpOrderAsync(actor, id, body.ErpNumber, body.IssuedOn, body.NoErpReason);
+            var linhas = (body.Items ?? []).Select(i => new ErpCoverageLine(i.ItemId, i.Quantity)).ToList();
+            var (order, error) = await svc.RegisterErpOrderAsync(actor, id, body.ErpNumber, body.IssuedOn, body.NoErpReason,
+                linhas, body.OverLimitJustification);
             return error is not null
-                ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, "PO-ERR-054" => 422, _ => 400 }, error.Code, error.Message)
+                ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, "PO-ERR-054" or "PO-ERR-059" or "CT-ERR-010" => 422, _ => 400 }, error.Code, error.Message)
                 : Ok(PoView(order!), ctx);
         });
 
@@ -175,6 +177,30 @@ public static class PedidoRotas
             if (error is not null) return Error(ctx, 400, error.Code, error.Message);
             order.ErpDocumentId = doc!.Id;
             order.ErpFileName = doc.FileName;
+            order.UpdatedAt = clock.GetUtcNow();
+            await db.SaveChangesAsync();
+            return Ok(new { documentId = doc.Id, fileName = doc.FileName }, ctx);
+        }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole())
+            .RequireRateLimiting("upload").ComTetoDeUpload(StoredDocument.MaxRequestBytes);
+
+        // anexo de UMA O.C. do ERP (o pedido pode ter várias); a primeira também vira o anexo do cabeçalho
+        app.MapPost("/api/v1/purchase-orders/{id:guid}/erp-documents/{docId:guid}/attachment",
+            async (Guid id, Guid docId, HttpRequest request, AppDbContext db, TimeProvider clock, ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            if (!PurchaseOrderService.CanManage(RoleOf(p)))
+                return Error(ctx, 403, "PO-ERR-900", "Seu papel não anexa a OC do ERP.");
+            var order = await db.PurchaseOrders.Include(o => o.ErpDocuments).SingleOrDefaultAsync(o => o.Id == id);
+            var documento = order?.ErpDocuments.SingleOrDefault(d => d.Id == docId);
+            if (order is null || documento is null) return Error(ctx, 404, "PO-ERR-404", "O.C. não encontrada neste pedido.");
+            var (doc, error) = await StoreUploadAsync(request, db, clock, p, "PURCHASE_ORDER", order.Id);
+            if (error is not null) return Error(ctx, 400, error.Code, error.Message);
+            documento.DocumentId = doc!.Id;
+            documento.FileName = doc.FileName;
+            if (order.ErpDocumentId is null || order.ErpNumber == documento.Number)
+            {
+                order.ErpDocumentId = doc.Id;
+                order.ErpFileName = doc.FileName;
+            }
             order.UpdatedAt = clock.GetUtcNow();
             await db.SaveChangesAsync();
             return Ok(new { documentId = doc.Id, fileName = doc.FileName }, ctx);

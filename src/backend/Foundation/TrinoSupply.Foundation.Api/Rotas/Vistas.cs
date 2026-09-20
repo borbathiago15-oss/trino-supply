@@ -18,18 +18,20 @@ public static class Vistas
     /// (IV-ERR-010) e a tela precisa saber disso antes do formulário. <c>null</c> quer dizer
     /// "não conferido aqui", e não "nenhum": só a leitura do pedido em si faz essa consulta.
     /// </param>
+    public static string PoStatusLabel(PurchaseOrderStatus s) => s switch
+    {
+        PurchaseOrderStatus.Issued => "EMITIDO",
+        PurchaseOrderStatus.Invoiced => "FATURADO",
+        PurchaseOrderStatus.PartiallyReceived => "PARCIAL",
+        PurchaseOrderStatus.Received => "RECEBIDO",
+        _ => "CANCELADO",
+    };
+
     public static object PoView(PurchaseOrder o, IReadOnlyList<string>? inactiveCatalogCodes = null) => new
     {
         inactiveCatalogCodes,
         id = o.Id, number = o.Number,
-        status = o.Status switch
-        {
-            PurchaseOrderStatus.Issued => "EMITIDO",
-            PurchaseOrderStatus.Invoiced => "FATURADO",
-            PurchaseOrderStatus.PartiallyReceived => "PARCIAL",
-            PurchaseOrderStatus.Received => "RECEBIDO",
-            _ => "CANCELADO",
-        },
+        status = PoStatusLabel(o.Status),
         supplierId = o.SupplierId, supplierName = o.SupplierName,
         sourcePrNumber = o.SourcePrNumber, quotationNumber = o.QuotationNumber,
         paymentTerms = o.PaymentTerms, deliveryDays = o.DeliveryDays, freightValue = o.FreightValue,
@@ -46,6 +48,14 @@ public static class Vistas
         erpDocumentId = o.ErpDocumentId, erpFileName = o.ErpFileName,
         deliveryCompletedAt = o.DeliveryCompletedAt,
         pendingDelivery = o.HasPendingDelivery,
+        // ainda há quantidade sem O.C. do ERP e sem a observação da exceção
+        erpPending = o.HasErpPending,
+        erpDocuments = o.ErpDocuments.OrderBy(d => d.CreatedAt).Select(d => new
+        {
+            id = d.Id, number = d.Number, issuedOn = d.IssuedOn, documentId = d.DocumentId, fileName = d.FileName,
+            notes = d.Notes, createdByLabel = d.CreatedByLabel, createdAt = d.CreatedAt,
+            items = d.Items.Select(i => new { itemId = i.OrderItemId, quantity = i.Quantity }),
+        }),
         invoices = o.Invoices.OrderBy(i => i.IssuedOn).Select(i => new
         {
             id = i.Id, number = i.Number, issuedOn = i.IssuedOn, value = i.Value,
@@ -56,6 +66,7 @@ public static class Vistas
         {
             itemId = i.Id, description = i.Description, unitOfMeasure = i.UnitOfMeasure, quantity = i.Quantity,
             receivedQuantity = i.ReceivedQuantity, pendingQuantity = i.Quantity - i.ReceivedQuantity,
+            erpCoveredQuantity = o.ErpCovered(i.Id), erpPendingQuantity = i.Quantity - o.ErpCovered(i.Id),
             rejectedQuantity = i.RejectedQuantity, rejectionReason = i.RejectionReason,
             lastPaidUnitPrice = i.LastPaidUnitPrice, referenceSaving = i.ReferenceSaving,
             sourcePrNumber = i.SourcePrNumber ?? o.SourcePrNumber,

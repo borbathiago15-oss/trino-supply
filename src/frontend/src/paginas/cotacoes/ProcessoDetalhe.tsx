@@ -212,26 +212,44 @@ export function ProcessoDetalhe() {
       </Painel>
 
       {q.purchaseOrders.length > 0 && (
-        <Painel titulo="O.C. registrada">
+        <Painel titulo="Pedidos da compra">
           <div className="overflow-x-auto">
             <table data-testid="ocs-do-processo">
-              <thead><tr><th>O.C.</th><th>Fornecedor</th><th>Família(s)</th><th>Valor</th><th></th></tr></thead>
+              <thead><tr><th>Pedido</th><th>Fornecedor</th><th>Família(s)</th><th>Valor</th><th>O.C. do ERP</th><th></th></tr></thead>
               <tbody>
-                {q.purchaseOrders.map((o) => (
-                  <tr key={o.id}>
-                    <td><strong>{o.number ?? '—'}</strong></td>
-                    <td>{o.supplierName}</td>
-                    <td className="sub">{o.families.join(', ') || '—'}</td>
-                    <td className="whitespace-nowrap">{moeda(o.totalValue)}</td>
-                    <td>
-                      <Link className="botao-secundario" to={`/pedidos/${o.id}`}>Faturamento e entrega</Link>
-                    </td>
-                  </tr>
-                ))}
+                {q.purchaseOrders.map((o) => {
+                  // processo ainda aberto e pedido sem O.C. nem observação: a bola está na tela do pedido
+                  const aguardaOc = q.status === 'APROVADO_PARA_EMISSAO' && !o.erpNumber && !o.noErpReason;
+                  return (
+                    <tr key={o.id} data-pedido={o.number ?? o.id} data-aguarda-oc={aguardaOc || undefined}>
+                      <td><strong>{o.number ?? '—'}</strong></td>
+                      <td>{o.supplierName}</td>
+                      <td className="sub">{o.families.join(', ') || '—'}</td>
+                      <td className="whitespace-nowrap">{moeda(o.totalValue)}</td>
+                      <td>
+                        {o.erpNumber ? (
+                          <>
+                            <strong>{o.erpNumber}</strong>
+                            {o.erpPending && <div className="sub">parcial: falta O.C. para parte do pedido</div>}
+                          </>
+                        ) : o.noErpReason ? <span className="sub">sem O.C., com a observação</span>
+                          : aguardaOc ? <Badge classe="bg-aviso-fundo text-aviso">a registrar</Badge> : '—'}
+                      </td>
+                      <td>
+                        <Link className="botao-secundario" to={`/pedidos/${o.id}`}>
+                          {aguardaOc ? 'Registrar O.C., faturamento e entrega' : 'Faturamento e entrega'}
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-          <Nota>O faturamento e a confirmação de entrega ficam na tela do pedido.</Nota>
+          <Nota>
+            O pedido nasce na aprovação do Nível 2. A O.C. do ERP — inteira ou em partes —, o
+            faturamento e a confirmação de entrega ficam na tela do pedido.
+          </Nota>
         </Painel>
       )}
 

@@ -54,12 +54,30 @@ public class PurchaseOrder
     public DateTimeOffset? ReceivedAt { get; set; }
     public string? CancelReason { get; set; }
     public List<PurchaseOrderInvoice> Invoices { get; set; } = [];
+    /// <summary>
+    /// As O.C.s do ERP deste pedido, cada uma dizendo quais itens e quantidades cobre. O ERP
+    /// pode fechar uma O.C. para parte do pedido (600 das 1.000 luvas) e outra depois; o
+    /// pedido é um só, e o que ainda não tem O.C. aparece como saldo por item.
+    /// <c>ErpNumber</c>/<c>ErpIssuedOn</c> acima guardam a <b>primeira</b>, para tudo o que
+    /// já lia "tem O.C.?" continuar lendo a mesma coisa.
+    /// </summary>
+    public List<PurchaseOrderErpDocument> ErpDocuments { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public int Version { get; set; } = 1;
 
     /// <summary>Ainda falta material chegar (usado na entrega parcial).</summary>
     public bool HasPendingDelivery => Items.Any(i => i.ReceivedQuantity < i.Quantity);
+
+    /// <summary>Quanto deste item já está coberto por O.C. do ERP.</summary>
+    public decimal ErpCovered(Guid itemId) =>
+        ErpDocuments.SelectMany(d => d.Items).Where(i => i.OrderItemId == itemId).Sum(i => i.Quantity);
+
+    /// <summary>
+    /// Ainda há quantidade sem O.C. do ERP e sem a observação da exceção (PO-BR-011). É o que
+    /// a tela do pedido mostra como "saldo sem O.C.".
+    /// </summary>
+    public bool HasErpPending => NoErpReason is null && Items.Any(i => ErpCovered(i.Id) < i.Quantity);
 
     // ---- OTIF (derivado; nada é persistido além da data prometida) -----------
     /// <summary>Entrega no prazo: encerrada até a data prometida. Null enquanto não encerrar (ou sem data).</summary>
@@ -113,4 +131,32 @@ public class PurchaseOrderItem
     /// <summary>Família do item: mostra, dentro da O.C., qual lote da compra ela atende.</summary>
     public string? Family { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
+}
+
+/// <summary>
+/// Uma O.C. do ERP registrada no pedido — número, data, anexo e a cobertura por item. Uma
+/// O.C. pode cobrir o pedido inteiro (o caso comum) ou só parte dele.
+/// </summary>
+public class PurchaseOrderErpDocument
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid OrderId { get; set; }
+    public string Number { get; set; } = string.Empty;
+    public DateOnly IssuedOn { get; set; }
+    public Guid? DocumentId { get; set; }
+    public string? FileName { get; set; }
+    public string? Notes { get; set; }
+    public Guid CreatedBy { get; set; }
+    public string CreatedByLabel { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; }
+    public List<PurchaseOrderErpDocumentItem> Items { get; set; } = [];
+}
+
+/// <summary>Quanto de um item do pedido esta O.C. do ERP cobre.</summary>
+public class PurchaseOrderErpDocumentItem
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid ErpDocumentId { get; set; }
+    public Guid OrderItemId { get; set; }
+    public decimal Quantity { get; set; }
 }

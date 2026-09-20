@@ -46,13 +46,38 @@ public record KpisDoRelatorio(decimal Spend, int Orders, int Suppliers, decimal 
 /// </summary>
 public record CoberturaDoRelatorio(int OrdersWithoutPr, decimal ValueWithoutPr, bool Capped, int Cap);
 
+/// <summary>Um mês do recorte: o que saiu e o que a negociação segurou naquele mês.</summary>
+public record LinhaMes(string Month, decimal Spend, int Orders, int Processes, decimal Saving, double? SavingPercent);
+
+/// <summary>
+/// Uma régua do saving: quanto se ganhou, contra que base, em quantos processos. Nula
+/// (<c>Processes == 0</c>) quando nenhum processo do recorte a tem — a tela diz "não se aplica"
+/// em vez de mostrar zero, porque zero seria "negociou e não ganhou nada".
+/// </summary>
+public record ReguaDoSaving(int Processes, decimal Baseline, decimal Closed, decimal Saving, double? Percent);
+
+/// <summary>As três réguas lado a lado — respostas a perguntas diferentes, nunca somadas.</summary>
+public record ReguasDoSaving(ReguaDoSaving Negotiation, ReguaDoSaving Competition, ReguaDoSaving Budget);
+
+/// <summary>
+/// O mesmo recorte na janela imediatamente anterior, do mesmo tamanho. Só os totais: é
+/// o que transforma "R$ 12 mil de saving" em "R$ 12 mil, 30% a mais que no mês passado".
+/// </summary>
+public record PeriodoAnterior(DateOnly From, DateOnly To, decimal Spend, int Orders, decimal SavingTotal,
+    double UrgentPercent, double? OtifPercent);
+
+/// <summary>Uma etapa do ciclo: quantas vezes foi medida e a mediana em dias.</summary>
+public record TempoDaEtapa(string Stage, string Title, int Measured, double? MedianDays);
+
 public record RelatorioExecutivo(
     DateOnly From, DateOnly To, FiltroRelatorio Filters, string? CompanyLabel, string? CostCenterLabel,
     string? BuyerLabel, DateTimeOffset GeneratedAt,
     KpisDoRelatorio Kpis, CoberturaDoRelatorio Coverage,
     IReadOnlyList<LinhaFamilia> Families, IReadOnlyList<LinhaSaving> Buyers,
     BlocoFornecedores Suppliers, BlocoUrgencia Urgent, IReadOnlyList<LinhaOtif> Otif,
-    BlocoSemOc WithoutErp, OpcoesDeFiltro FilterOptions);
+    BlocoSemOc WithoutErp, OpcoesDeFiltro FilterOptions,
+    IReadOnlyList<LinhaMes> Months, ReguasDoSaving SavingRulers, PeriodoAnterior Previous,
+    IReadOnlyList<TempoDaEtapa> CycleTimes);
 
 /// <summary>
 /// Relatório executivo de compras: os seis blocos que a diretoria pede sobre um mesmo
@@ -72,7 +97,36 @@ public class RelatorioExecutivoService(AppDbContext db, TimeProvider clock)
     /// <summary>Quem vê o dashboard de suprimentos vê o relatório: é o mesmo dado, consolidado.</summary>
     public static bool CanView(string role) => AnalyticsService.CanViewSupply(role);
 
-    public async Task<RelatorioExecutivo> GerarAsync(FiltroRelatorio filtro, CancellationToken ct = default)
+    /// <summary>
+    /// O universo de um recorte: os pedidos vivos do período, filtrados, e o caminho até a
+    /// empresa e o centro de custo de cada um. Sai daqui porque o período anterior precisa
+    /// do mesmo caminho — comparar com uma janela apurada por outra regra seria comparar nada.
+    /// </summary>
+    private sealed class Universo
+    {
+        public required List<PurchaseOrder> Todos { get; init; }
+        public required List<PurchaseOrder> Pos { get; init; }
+        public required Dictionary<Guid, SolicitacaoDoRelatorio> Prs { get; init; }
+        public required Dictionary<string, CentroDoRelatorio> CcPorCodigo { get; init; }
+        public required List<EmpresaDoRelatorio> Empresas { get; init; }
+        public required List<CentroDoRelatorio> Centros { get; init; }
+
+        public string? CentroDe(PurchaseOrder o) =>
+            o.SourcePrId is not null && Prs.TryGetValue(o.SourcePrId.Value, out var pr)
+                ? (string.IsNullOrWhiteSpace(pr.CostCenter) ? null : pr.CostCenter) : null;
+    }
+
+    private sealed record SolicitacaoDoRelatorio(Guid Id, string Number, string? CostCenter, string? Company,
+        string Priority, string? UrgencyReason, string? UrgencyImpact, string? RequesterLabel,
+        DateTimeOffset? SubmittedAt, DateTimeOffset CreatedAt);
+    private sealed record CentroDoRelatorio(string Code, string Name, Guid? CompanyId, bool Active);
+    private sealed record EmpresaDoRelatorio(Guid Id, string LegalName, bool Active);
+    private sealed record CotacaoDoRelatorio(Guid Id, Guid SourcePrId, decimal? BaselineValue, decimal? NegotiatedValue,
+        decimal? SavingValue, decimal? CompetitionBaselineValue, decimal? CompetitionSaving,
+        decimal? BudgetBaselineValue, decimal? BudgetSaving,
+        DateTimeOffset? SelectedAt, DateTimeOffset? ManagerApprovedAt, DateTimeOffset? DirectorApprovedAt);
+
+    private async Task<Universo> UniversoAsync(FiltroRelatorio filtro, CancellationToken ct)
     {
         var fromDt = new DateTimeOffset(filtro.From.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
         var toDt = new DateTimeOffset(filtro.To.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
@@ -89,16 +143,14 @@ public class RelatorioExecutivoService(AppDbContext db, TimeProvider clock)
         // para o CC que ainda não tem CNPJ vinculado.
         var prIds = todos.Where(o => o.SourcePrId is not null).Select(o => o.SourcePrId!.Value).Distinct().ToList();
         var prs = (await db.Requisitions.Where(r => prIds.Contains(r.Id))
-                .Select(r => new
-                {
-                    r.Id, r.Number, r.CostCenter, r.Company, r.Priority,
-                    r.UrgencyReason, r.UrgencyImpact, r.RequesterLabel,
-                }).ToListAsync(ct))
+                .Select(r => new SolicitacaoDoRelatorio(r.Id, r.Number, r.CostCenter, r.Company, r.Priority,
+                    r.UrgencyReason, r.UrgencyImpact, r.RequesterLabel, r.SubmittedAt, r.CreatedAt))
+                .ToListAsync(ct))
             .ToDictionary(x => x.Id);
 
-        var centros = await db.CostCenters.Select(c => new { c.Code, c.Name, c.CompanyId, c.Active }).ToListAsync(ct);
+        var centros = await db.CostCenters.Select(c => new CentroDoRelatorio(c.Code, c.Name, c.CompanyId, c.Active)).ToListAsync(ct);
         var ccPorCodigo = centros.ToDictionary(c => c.Code, StringComparer.OrdinalIgnoreCase);
-        var empresas = await db.Companies.Select(c => new { c.Id, c.LegalName, c.Active }).ToListAsync(ct);
+        var empresas = await db.Companies.Select(c => new EmpresaDoRelatorio(c.Id, c.LegalName, c.Active)).ToListAsync(ct);
         var empresaPorId = empresas.ToDictionary(c => c.Id, c => c.LegalName);
 
         string? CentroDe(PurchaseOrder o) =>
@@ -123,6 +175,64 @@ public class RelatorioExecutivoService(AppDbContext db, TimeProvider clock)
                 (filtro.Company is null
                  || string.Equals(EmpresaDe(o), filtro.Company, StringComparison.OrdinalIgnoreCase)))
             .ToList();
+
+        return new Universo { Todos = todos, Pos = pos, Prs = prs, CcPorCodigo = ccPorCodigo, Empresas = empresas, Centros = centros };
+    }
+
+    /// <summary>
+    /// As cotações por trás dos pedidos, com o que o relatório lê delas. O saving mora no
+    /// processo, não no pedido — e um processo dividido por família gera mais de um pedido,
+    /// então quem consome isto conta cada cotação **uma vez**.
+    /// </summary>
+    private async Task<Dictionary<Guid, CotacaoDoRelatorio>> CotacoesDeAsync(IEnumerable<PurchaseOrder> pos, CancellationToken ct)
+    {
+        var ids = pos.Where(o => o.QuotationId is not null).Select(o => o.QuotationId!.Value).Distinct().ToList();
+        return (await db.Quotations.Where(q => ids.Contains(q.Id))
+                .Select(q => new CotacaoDoRelatorio(q.Id, q.SourcePrId, q.BaselineValue, q.NegotiatedValue, q.SavingValue,
+                    q.CompetitionBaselineValue, q.CompetitionSaving, q.BudgetBaselineValue, q.BudgetSaving,
+                    q.SelectedAt, q.ManagerApprovedAt, q.DirectorApprovedAt))
+                .ToListAsync(ct))
+            .ToDictionary(x => x.Id);
+    }
+
+    /// <summary>Cada cotação uma vez, na ordem do primeiro pedido que a fechou.</summary>
+    private static IEnumerable<(PurchaseOrder Pedido, CotacaoDoRelatorio Cotacao)> CotacoesUnicas(
+        IEnumerable<PurchaseOrder> pos, Dictionary<Guid, CotacaoDoRelatorio> cotacoes)
+    {
+        var vistas = new HashSet<Guid>();
+        foreach (var o in pos.OrderBy(o => o.CreatedAt))
+            if (o.QuotationId is { } qid && vistas.Add(qid) && cotacoes.TryGetValue(qid, out var q))
+                yield return (o, q);
+    }
+
+    private static double? Percentual(decimal parte, decimal total) =>
+        total > 0 ? Math.Round((double)(parte * 100 / total), 1) : null;
+
+    private static double? OtifDe(IReadOnlyCollection<PurchaseOrder> pos)
+    {
+        var medidos = pos.Count(o => o.Otif is not null);
+        return medidos > 0 ? Math.Round(pos.Count(o => o.Otif == true) * 100.0 / medidos, 1) : null;
+    }
+
+    private static double? MedianaDias(IReadOnlyList<double> dias)
+    {
+        if (dias.Count == 0) return null;
+        var ordenado = dias.OrderBy(d => d).ToList();
+        var meio = ordenado.Count / 2;
+        var mediana = ordenado.Count % 2 == 1 ? ordenado[meio] : (ordenado[meio - 1] + ordenado[meio]) / 2;
+        return Math.Round(mediana, 1);
+    }
+
+    public async Task<RelatorioExecutivo> GerarAsync(FiltroRelatorio filtro, CancellationToken ct = default)
+    {
+        var u = await UniversoAsync(filtro, ct);
+        var todos = u.Todos;
+        var pos = u.Pos;
+        var prs = u.Prs;
+        var ccPorCodigo = u.CcPorCodigo;
+        var centros = u.Centros;
+        var empresas = u.Empresas;
+        string? CentroDe(PurchaseOrder o) => u.CentroDe(o);
 
         var spend = pos.Sum(o => o.TotalValue);
         decimal Fatia(decimal parte) => spend > 0 ? parte * 100 / spend : 0;
@@ -151,10 +261,7 @@ public class RelatorioExecutivoService(AppDbContext db, TimeProvider clock)
         // O saving mora no processo de cotação, não no pedido — e um processo dividido
         // por família gera mais de um pedido. Cada cotação só entra **uma vez**, senão a
         // compra dividida infla o ganho em duas ou três vezes.
-        var cotacaoIds = pos.Where(o => o.QuotationId is not null).Select(o => o.QuotationId!.Value).Distinct().ToList();
-        var cotacoes = (await db.Quotations.Where(q => cotacaoIds.Contains(q.Id))
-                .Select(q => new { q.Id, q.BaselineValue, q.NegotiatedValue, q.SavingValue }).ToListAsync(ct))
-            .ToDictionary(x => x.Id);
+        var cotacoes = await CotacoesDeAsync(pos, ct);
 
         var jaContadas = new HashSet<Guid>();
         var porComprador = new Dictionary<string, (int processos, decimal baseline, decimal fechado, decimal saving, decimal spend, int pedidos)>();
@@ -247,6 +354,89 @@ public class RelatorioExecutivoService(AppDbContext db, TimeProvider clock)
             pelaExcecao.Concat(semNadaFechadas).OrderByDescending(o => o.TotalValue)
                 .Take(50).Select(Linha).ToList());
 
+        // ---- 7. saving mês a mês ------------------------------------------------
+        // O pedido conta no mês em que foi criado; a cotação conta uma vez, no mês do
+        // primeiro pedido que a fechou — a mesma regra do bloco por comprador, senão os
+        // dois blocos somariam savings diferentes para o mesmo período. Mês sem pedido
+        // aparece zerado: a linha do tempo não pula mês.
+        var unicas = CotacoesUnicas(pos, cotacoes).ToList();
+        static string MesDe(DateTimeOffset d) => d.UtcDateTime.ToString("yyyy-MM");
+        var meses = new List<string>();
+        for (var m = new DateOnly(filtro.From.Year, filtro.From.Month, 1); m <= filtro.To; m = m.AddMonths(1))
+            meses.Add(m.ToString("yyyy-MM"));
+        var months = meses.Select(mes =>
+        {
+            var doMes = pos.Where(o => MesDe(o.CreatedAt) == mes).ToList();
+            var cotacoesDoMes = unicas.Where(x => MesDe(x.Pedido.CreatedAt) == mes).ToList();
+            var saving = cotacoesDoMes.Sum(x => x.Cotacao.SavingValue ?? 0);
+            var baseline = cotacoesDoMes.Sum(x => x.Cotacao.BaselineValue ?? 0);
+            return new LinhaMes(mes, doMes.Sum(o => o.TotalValue), doMes.Count, cotacoesDoMes.Count,
+                saving, Percentual(saving, baseline));
+        }).ToList();
+
+        // ---- 8. as três réguas do saving ----------------------------------------
+        // Três perguntas, três números com nome (ver `Quotation`): negociação (contra a
+        // primeira proposta do vencedor), concorrência (contra a maior proposta completa
+        // do BID) e orçamento (contra o que o solicitante previu). Cada régua só conta o
+        // processo que a tem — e nunca se somam.
+        ReguaDoSaving Regua(Func<CotacaoDoRelatorio, decimal?> saving, Func<CotacaoDoRelatorio, decimal?> baseline)
+        {
+            var com = unicas.Select(x => x.Cotacao).Where(q => saving(q) is not null).ToList();
+            var ganho = com.Sum(q => saving(q)!.Value);
+            var basePeriodo = com.Sum(q => baseline(q) ?? 0);
+            return new ReguaDoSaving(com.Count, basePeriodo, basePeriodo - ganho, ganho, Percentual(ganho, basePeriodo));
+        }
+        var savingRulers = new ReguasDoSaving(
+            Regua(q => q.SavingValue, q => q.BaselineValue),
+            Regua(q => q.CompetitionSaving, q => q.CompetitionBaselineValue),
+            Regua(q => q.BudgetSaving, q => q.BudgetBaselineValue));
+
+        // ---- 9. tempo do ciclo --------------------------------------------------
+        // Mediana, não média: um processo que ficou três meses parado numa aprovação
+        // arrastaria a média e esconderia que os outros vinte andaram em uma semana.
+        // Cada etapa conta pelo seu próprio relógio, e só quando as duas marcas existem.
+        static double Dias(DateTimeOffset de, DateTimeOffset ate) => (ate - de).TotalDays;
+        var porCotacao = unicas.Select(x => new
+        {
+            x.Pedido, x.Cotacao,
+            Pedida = prs.TryGetValue(x.Cotacao.SourcePrId, out var pr) ? pr.SubmittedAt ?? pr.CreatedAt : (DateTimeOffset?)null,
+            Aprovada = x.Cotacao.DirectorApprovedAt ?? x.Cotacao.ManagerApprovedAt,
+        }).ToList();
+        TempoDaEtapa Etapa(string chave, string titulo, IEnumerable<double?> medidas)
+        {
+            var validas = medidas.Where(d => d is >= 0).Select(d => d!.Value).ToList();
+            return new TempoDaEtapa(chave, titulo, validas.Count, MedianaDias(validas));
+        }
+        var cycleTimes = new List<TempoDaEtapa>
+        {
+            Etapa("solicitacao_escolha", "Solicitação → escolha do fornecedor",
+                porCotacao.Select(x => x.Pedida is { } p && x.Cotacao.SelectedAt is { } e ? Dias(p, e) : (double?)null)),
+            Etapa("escolha_aprovacao", "Escolha → aprovação final",
+                porCotacao.Select(x => x.Cotacao.SelectedAt is { } e && x.Aprovada is { } a ? Dias(e, a) : (double?)null)),
+            Etapa("aprovacao_oc", "Aprovação → O.C.",
+                porCotacao.Select(x => x.Aprovada is { } a ? Dias(a, x.Pedido.CreatedAt) : (double?)null)),
+            Etapa("oc_recebimento", "O.C. → recebimento",
+                pos.Select(o => (o.DeliveryCompletedAt ?? o.ReceivedAt) is { } r ? Dias(o.CreatedAt, r) : (double?)null)),
+            Etapa("solicitacao_oc", "Solicitação → O.C. (total)",
+                pos.Select(o => o.SourcePrId is { } id && prs.TryGetValue(id, out var pr)
+                    ? Dias(pr.SubmittedAt ?? pr.CreatedAt, o.CreatedAt) : (double?)null)),
+        };
+
+        // ---- período anterior ---------------------------------------------------
+        // A janela imediatamente antes, do mesmo tamanho, com os mesmos filtros. Só os
+        // totais: comparação é contexto para o KPI, não um segundo relatório.
+        var dias = filtro.To.DayNumber - filtro.From.DayNumber + 1;
+        var anteriorFiltro = filtro with { To = filtro.From.AddDays(-1), From = filtro.From.AddDays(-dias) };
+        var ua = await UniversoAsync(anteriorFiltro, ct);
+        var cotacoesAnteriores = await CotacoesDeAsync(ua.Pos, ct);
+        var spendAnterior = ua.Pos.Sum(o => o.TotalValue);
+        var urgenteAnterior = ua.Pos.Where(o => o.SourcePrId is not null && ua.Prs.TryGetValue(o.SourcePrId.Value, out var pr)
+                                                 && pr.Priority == "URGENT").Sum(o => o.TotalValue);
+        var previous = new PeriodoAnterior(anteriorFiltro.From, anteriorFiltro.To, spendAnterior, ua.Pos.Count,
+            CotacoesUnicas(ua.Pos, cotacoesAnteriores).Sum(x => x.Cotacao.SavingValue ?? 0),
+            spendAnterior > 0 ? Math.Round((double)(urgenteAnterior * 100 / spendAnterior), 1) : 0,
+            OtifDe(ua.Pos));
+
         // ---- KPIs, cobertura e opções de filtro ---------------------------------
         var savingTotal = buyers.Sum(b => b.Saving);
         var baselineTotal = buyers.Sum(b => b.Baseline);
@@ -281,6 +471,7 @@ public class RelatorioExecutivoService(AppDbContext db, TimeProvider clock)
 
         return new RelatorioExecutivo(filtro.From, filtro.To, filtro,
             filtro.Company, centroLabel, compradorLabel, clock.GetUtcNow(),
-            kpis, coverage, families, buyers, suppliers, urgent, otif, withoutErp, filterOptions);
+            kpis, coverage, families, buyers, suppliers, urgent, otif, withoutErp, filterOptions,
+            months, savingRulers, previous, cycleTimes);
     }
 }

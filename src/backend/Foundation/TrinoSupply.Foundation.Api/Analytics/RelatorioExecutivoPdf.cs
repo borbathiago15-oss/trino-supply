@@ -72,8 +72,59 @@ public static class RelatorioExecutivoPdf
                         }
                     }, r.Buyers.Count == 0 ? "Nenhum pedido no recorte." : null);
 
-                // 3 — concentração
-                Bloco(col, "3. Concentração por fornecedor",
+                // 3 — saving mês a mês
+                Bloco(col, "3. Saving do período, mês a mês",
+                    "O pedido conta no mês em que foi criado; o processo conta uma vez, no mês do primeiro pedido que o fechou. " +
+                    "Mês sem pedido aparece zerado.",
+                    t =>
+                    {
+                        Colunas(t, [null, 80, 50, 50, 80, 50]);
+                        Cabecalhos(t, ["Mês", "Total comprado", "Pedidos", "Proc.", "Saving", "%"]);
+                        foreach (var m in r.Months)
+                        {
+                            Celula(t, MesPorExtenso(m.Month));
+                            CelulaNum(t, $"{m.Spend:N2}");
+                            CelulaNum(t, $"{m.Orders}");
+                            CelulaNum(t, $"{m.Processes}");
+                            CelulaNum(t, $"{m.Saving:N2}");
+                            CelulaNum(t, Pct(m.SavingPercent));
+                        }
+                    }, r.Months.Count == 0 ? "Nenhum mês no recorte." : null);
+
+                // 4 — as três réguas
+                Bloco(col, "4. As três réguas do saving",
+                    "Negociação: contra a primeira proposta do vencedor. Concorrência: contra a maior proposta completa do BID " +
+                    "(não se aplica com um proponente só). Orçamento: contra o que o solicitante informou na SC (só quando todas " +
+                    "as SCs do processo informaram). Não se somam.",
+                    t =>
+                    {
+                        Colunas(t, [null, 50, 80, 80, 80, 50]);
+                        Cabecalhos(t, ["Régua", "Proc.", "Base", "Fechado", "Saving", "%"]);
+                        foreach (var (nome, regua) in new[]
+                                 {
+                                     ("Negociação", r.SavingRulers.Negotiation),
+                                     ("Concorrência", r.SavingRulers.Competition),
+                                     ("Orçamento", r.SavingRulers.Budget),
+                                 })
+                        {
+                            Celula(t, nome);
+                            if (regua.Processes == 0)
+                            {
+                                CelulaNum(t, "0");
+                                Celula(t, "não se aplica a nenhum processo do recorte");
+                                Celula(t, ""); Celula(t, ""); Celula(t, "");
+                                continue;
+                            }
+                            CelulaNum(t, $"{regua.Processes}");
+                            CelulaNum(t, $"{regua.Baseline:N2}");
+                            CelulaNum(t, $"{regua.Closed:N2}");
+                            CelulaNum(t, $"{regua.Saving:N2}");
+                            CelulaNum(t, Pct(regua.Percent));
+                        }
+                    }, null);
+
+                // 5 — concentração
+                Bloco(col, "5. Concentração por fornecedor",
                     $"{r.Suppliers.SupplierCount} fornecedor(es) no recorte · maior fatia {Pct(r.Suppliers.Top1Percent)} · " +
                     $"3 maiores {Pct(r.Suppliers.Top3Percent)} · 5 maiores {Pct(r.Suppliers.Top5Percent)}",
                     t =>
@@ -90,7 +141,7 @@ public static class RelatorioExecutivoPdf
                     }, r.Suppliers.Rows.Count == 0 ? "Nenhum pedido no recorte." : null);
 
                 // 4 — urgência
-                Bloco(col, "4. Peso das compras urgentes",
+                Bloco(col, "6. Peso das compras urgentes",
                     $"{r.Urgent.Orders} pedido(s) vindos de solicitação urgente — {r.Urgent.Value:N2} " +
                     $"({r.Urgent.Percent:0.#}% do período). Urgência exige motivo e impacto na SC.",
                     t =>
@@ -108,7 +159,7 @@ public static class RelatorioExecutivoPdf
                     }, r.Urgent.Orders == 0 ? "Nenhuma compra urgente no recorte." : null);
 
                 // 5 — OTIF
-                Bloco(col, "5. Entrega no prazo (OTIF) por fornecedor",
+                Bloco(col, "7. Entrega no prazo (OTIF) por fornecedor",
                     "Só entram entregas encerradas com data prometida registrada. OTIF = no prazo E completo.",
                     t =>
                     {
@@ -124,8 +175,24 @@ public static class RelatorioExecutivoPdf
                         }
                     }, r.Otif.Count == 0 ? "Nenhuma entrega encerrada com data prometida no recorte." : null);
 
+                // 8 — tempo do ciclo
+                Bloco(col, "8. Tempo do ciclo (mediana, em dias)",
+                    "Cada etapa conta pelo seu próprio relógio e só entra quando as duas marcas existem. " +
+                    "Mediana, não média: um processo parado por meses não esconde os outros que andaram em uma semana.",
+                    t =>
+                    {
+                        Colunas(t, [null, 60, 70]);
+                        Cabecalhos(t, ["Etapa", "Medidos", "Mediana"]);
+                        foreach (var e in r.CycleTimes)
+                        {
+                            Celula(t, e.Title);
+                            CelulaNum(t, $"{e.Measured}");
+                            CelulaNum(t, e.MedianDays is { } d ? $"{d:0.#} d" : "—");
+                        }
+                    }, null);
+
                 // 6 — sem O.C. do ERP
-                Bloco(col, "6. Compras sem O.C. do ERP",
+                Bloco(col, "9. Compras sem O.C. do ERP",
                     $"{r.WithoutErp.Orders} compra(s) fechada(s) pela exceção — {r.WithoutErp.Value:N2} " +
                     $"({r.WithoutErp.Percent:0.#}% do período). A regra é a O.C. do SENIOR; a justificativa " +
                     "abaixo é a única exceção que libera o fechamento. " +
@@ -158,22 +225,44 @@ public static class RelatorioExecutivoPdf
     private static void Kpis(ColumnDescriptor col, RelatorioExecutivo r) =>
         col.Item().Border(0.8f).Padding(6).Row(row =>
         {
-            void Kpi(string rotulo, string valor)
+            // a linha de baixo é o período anterior, do mesmo tamanho: o número sem ela é solto
+            void Kpi(string rotulo, string valor, string? anterior = null)
             {
                 row.RelativeItem().Column(k =>
                 {
                     k.Item().Text(rotulo).FontSize(7).FontColor(Colors.Grey.Darken1);
                     k.Item().Text(valor).Bold().FontSize(10);
+                    if (anterior is not null) k.Item().Text(anterior).FontSize(6.5f).FontColor(Colors.Grey.Darken1);
                 });
             }
-            Kpi("Total comprado", $"{r.Kpis.Spend:N2}");
-            Kpi("Pedidos", $"{r.Kpis.Orders}");
+            var a = r.Previous;
+            Kpi("Total comprado", $"{r.Kpis.Spend:N2}", Variacao(r.Kpis.Spend, a.Spend));
+            Kpi("Pedidos", $"{r.Kpis.Orders}", Variacao(r.Kpis.Orders, a.Orders));
             Kpi("Fornecedores", $"{r.Kpis.Suppliers}");
-            Kpi("Saving negociado", $"{r.Kpis.SavingTotal:N2}{(r.Kpis.SavingPercent is { } p ? $"  ({p:0.#}%)" : "")}");
-            Kpi("Urgentes", $"{r.Kpis.UrgentPercent:0.#}%");
-            Kpi("OTIF", Pct(r.Kpis.OtifPercent));
+            Kpi("Saving negociado", $"{r.Kpis.SavingTotal:N2}{(r.Kpis.SavingPercent is { } p ? $"  ({p:0.#}%)" : "")}",
+                Variacao(r.Kpis.SavingTotal, a.SavingTotal));
+            Kpi("Urgentes", $"{r.Kpis.UrgentPercent:0.#}%", $"antes: {a.UrgentPercent:0.#}%");
+            Kpi("OTIF", Pct(r.Kpis.OtifPercent), $"antes: {Pct(a.OtifPercent)}");
             Kpi("Sem O.C. do ERP", $"{r.Kpis.WithoutErpValue:N2}");
         });
+
+    /// <summary>"antes: 10.000,00 (▲ 20%)" — o período anterior e a variação contra ele.</summary>
+    private static string Variacao(decimal atual, decimal anterior)
+    {
+        var valor = $"{anterior:N2}";
+        if (anterior == 0) return $"antes: {valor}";
+        var pct = Math.Round((double)((atual - anterior) * 100 / anterior));
+        var seta = pct > 0 ? "▲" : pct < 0 ? "▼" : "•";
+        return $"antes: {valor} ({seta} {Math.Abs(pct):0}%)";
+    }
+
+    private static string MesPorExtenso(string yyyyMM)
+    {
+        var partes = yyyyMM.Split('-');
+        string[] nomes = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+        return partes.Length == 2 && int.TryParse(partes[1], out var m) && m is >= 1 and <= 12
+            ? $"{nomes[m - 1]}/{partes[0][2..]}" : yyyyMM;
+    }
 
     /// <summary>
     /// O que o recorte não alcança. Sai impresso porque um total que não fecha com o

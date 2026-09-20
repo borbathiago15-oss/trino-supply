@@ -34,14 +34,17 @@ export function PrazosDasEtapas() {
   const [herdar, setHerdar] = useState<string[]>([]);
   const [salvando, setSalvando] = useState(false);
 
-  useEffect(() => {
-    if (!dados) return;
-    setDias(Object.fromEntries(dados.items.map((i) => [i.stage, String(i.maxDays)])));
-    setHerdar([]);
-  }, [dados]);
+  // O valor mostrado é o editado ou, sem edição, o do servidor — derivado, não copiado num
+  // efeito. Copiar deixava um quadro em que o campo já estava na tela e o número ainda não
+  // tinha chegado nele; uma recarga só descarta as edições.
+  useEffect(() => { setDias({}); setHerdar([]); }, [dados]);
+  const etapas = dados?.items ?? [];
+  const valorDe = (etapa: string) =>
+    dias[etapa] ?? String(etapas.find((i) => i.stage === etapa)?.maxDays ?? '');
 
   const pode = dados?.canEdit ?? false;
-  const invalido = Object.values(dias).some((v) => {
+  const invalido = etapas.some((i) => {
+    const v = valorDe(i.stage);
     const n = Number(v);
     return v.trim() === '' || !Number.isInteger(n) || n < 0 || n > 365;
   });
@@ -52,9 +55,9 @@ export function PrazosDasEtapas() {
     try {
       // etapa marcada para herdar não vai como número: ela é apagada, e o tipo volta a
       // seguir o padrão — mandar o valor a congelaria numa cópia
-      const valores = Object.entries(dias)
-        .filter(([etapa]) => !herdar.includes(etapa))
-        .map(([etapa, v]) => [etapa, Number(v)] as const);
+      const valores = etapas
+        .filter((i) => !herdar.includes(i.stage))
+        .map((i) => [i.stage, Number(valorDe(i.stage))] as const);
       await salvarPrazosDasEtapas(Object.fromEntries(valores), tipo, herdar);
       avisar('Prazos atualizados. A Torre já julga por eles.');
       recarregar();
@@ -97,10 +100,10 @@ export function PrazosDasEtapas() {
                 <input
                   id={`prazo-${i.stage}`} type="number" min={0} max={365} step={1}
                   disabled={!pode}
-                  value={dias[i.stage] ?? ''}
+                  value={valorDe(i.stage)}
                   onChange={(e) => setDias((d) => ({ ...d, [i.stage]: e.target.value }))} />
                 <p className="sub mt-1" data-testid={`leitura-${i.stage}`}>
-                  {leituraDoPrazo(Number(dias[i.stage] ?? 0), dados.warnAtPercent)}
+                  {leituraDoPrazo(Number(valorDe(i.stage) || 0), dados.warnAtPercent)}
                 </p>
                 {/* herdado acompanha o padrão; próprio é exceção deste tipo. Sem dizer qual
                     é qual, o administrador não sabe se mexer aqui muda uma etapa ou todas */}

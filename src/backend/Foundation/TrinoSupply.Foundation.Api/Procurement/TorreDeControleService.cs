@@ -363,17 +363,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
         // uma consulta por item, e a Torre é justamente a tela com muitas linhas
         var centros = bruto.Select(x => x.sc.CostCenter.Trim().ToUpperInvariant())
             .Where(c => c.Length > 0).Distinct().ToList();
-        var alcadaPorCentro = centros.Count == 0
-            ? []
-            : await db.CostCenters.Where(c => centros.Contains(c.Code.ToUpper()))
-                .Select(c => new
-                {
-                    c.Code,
-                    N1 = c.Approvers.Where(a => a.Level == ApprovalLevels.Level1).Select(a => a.UserName).ToList(),
-                    N2 = c.Approvers.Where(a => a.Level == ApprovalLevels.Level2).Select(a => a.UserName).ToList(),
-                })
-                .ToDictionaryAsync(x => x.Code.ToUpperInvariant(),
-                    x => new AlcadasDoCentro(x.N1, x.N2), ct);
+        var alcadaPorCentro = await AlcadasDoCentro.ResolverAsync(db, centros, ct);
 
         var linhas = new List<LinhaDaTorre>(bruto.Count);
         foreach (var x in bruto)

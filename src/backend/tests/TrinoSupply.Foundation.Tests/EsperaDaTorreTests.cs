@@ -251,6 +251,47 @@ public class EsperaDaTorreTests
     }
 
     [Fact]
+    public async Task Centro_com_gerente_e_diretor_do_vinculo_antigo_diz_os_nomes_deles()
+    {
+        // a tela de Centros de Custo promete "sem ninguém marcado, o centro segue como hoje:
+        // Nível 1 com o gerente responsável e Nível 2 com o diretor vinculado a ele" — e é o
+        // que a decisão aceita. Dizer "sem aprovador cadastrado" aqui mandava cadastrar de
+        // novo o que já existia.
+        var w = Build();
+        var dora = new User { Name = "Dora Diretora", Email = "dora@t.com", Role = Roles.Director };
+        var gerson = new User { Name = "Gerson Gerente", Email = "gerson@t.com", Role = Roles.Approver, DirectorId = dora.Id };
+        w.Db.Users.AddRange(dora, gerson);
+        w.Db.CostCenters.Add(new CostCenter
+        {
+            Code = "CC-01", Name = "Manutenção", Active = true,
+            ManagerUserId = gerson.Id, ManagerName = gerson.Name,   // vínculo antigo, sem alçada por nível
+        });
+        await w.Db.SaveChangesAsync();
+
+        var pr = await ScAprovadaAsync(w);
+        var alfa = await FornecedorAsync(w, "Alfa", "12345678000190");
+        var (q, _) = await w.Rfq.CreateFromPrAsync(Carla, pr.Id, QuotationKind.Purchase, null, null);
+        await w.Rfq.InviteSuppliersAsync(Carla, q!.Id, [alfa.Id]);
+        await w.Rfq.SubmitProposalAsync(q.Id, alfa.Id,
+            new(10, "30 dias", 0, null, null, [new ProposalItemInput(q.Items.Single().Id, 90m, null)]),
+            "PORTAL", "Alfa");
+        await w.Rfq.CloseForAnalysisAsync(Carla, q.Id);
+        var atual = await w.Rfq.GetAsync(q.Id);
+        await w.Rfq.AwardByItemAsync(Carla, q.Id,
+            [new AwardInput("", atual!.Proposals.Single().Id, "Menor preco", "Unica proposta",
+                atual.Items.Single().Id)]);
+
+        var espera = await EsperaAsync(w);
+        Assert.Equal("Aprovação Nível 1 — Gerson Gerente", espera!.Who);
+
+        // e o caminho do processo vê o mesmo: o Nível 2 é o diretor vinculado ao gerente
+        var caminho = await w.Rfq.CaminhoAsync((await w.Rfq.GetAsync(q.Id))!);
+        Assert.Equal("Gerson Gerente", caminho.Single(e => e.Chave == "nivel1").Quem);
+        Assert.Equal("Dora Diretora", caminho.Single(e => e.Chave == "nivel2").Quem);
+        Assert.DoesNotContain(caminho, e => e.SemAprovador);
+    }
+
+    [Fact]
     public void Sem_marca_de_entrada_a_espera_fica_sem_data_em_vez_de_chutar()
     {
         // usar a criação da SC contaria como espera um tempo em que a etapa nem existia

@@ -19,18 +19,20 @@ public partial class QuotationService
         var solicitantes = scs.Select(x => x.RequesterLabel).ToList();
         var pedidaEm = scs.Count == 0 ? (DateTimeOffset?)null : scs.Min(x => x.SubmittedAt ?? x.CreatedAt);
 
-        // a mesma consulta da Torre, para um centro só
+        // a mesma regra da Torre e da decisão: alçadas por nível, senão o vínculo antigo
         var centro = q.CostCenter.Trim().ToUpperInvariant();
-        var alcada = centro.Length == 0 ? null : await db.CostCenters
-            .Where(c => c.Code.ToUpper() == centro)
-            .Select(c => new
-            {
-                N1 = c.Approvers.Where(a => a.Level == ApprovalLevels.Level1).Select(a => a.UserName).ToList(),
-                N2 = c.Approvers.Where(a => a.Level == ApprovalLevels.Level2).Select(a => a.UserName).ToList(),
-            })
-            .FirstOrDefaultAsync(ct);
+        var alcadas = (await AlcadasDoCentro.ResolverAsync(db, [centro], ct)).GetValueOrDefault(centro, AlcadasDoCentro.Nenhuma);
 
-        return CaminhoDoProcesso.De(q, solicitantes, pedidaEm,
-            alcada is null ? AlcadasDoCentro.Nenhuma : new AlcadasDoCentro(alcada.N1, alcada.N2));
+        // dado o Nível 1, o Nível 2 do vínculo antigo é o diretor de QUEM aprovou — é o que
+        // DirectorDecisionAsync cobra (LinkedDirectorAsync), e o gerente do centro pode não ser ele
+        if (alcadas.Nivel2.Count == 0 && q.ManagerApprovedBy is { } gerente)
+        {
+            var diretor = await db.Users.Where(u => u.Id == gerente && u.DirectorId != null)
+                .Join(db.Users, u => u.DirectorId, d => d.Id, (u, d) => d.Name)
+                .FirstOrDefaultAsync(ct);
+            if (!string.IsNullOrWhiteSpace(diretor)) alcadas = alcadas with { Nivel2 = [diretor] };
+        }
+
+        return CaminhoDoProcesso.De(q, solicitantes, pedidaEm, alcadas);
     }
 }

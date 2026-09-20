@@ -138,6 +138,19 @@ describe('tela Inclusão de SC', () => {
     expect(screen.getByLabelText('Unidade')).toHaveValue('SC');
   });
 
+  it('o essencial vem primeiro e o resto fica recolhido em "Mais detalhes"', async () => {
+    abrir();
+    await screen.findByLabelText('Produto');
+    const extras = screen.getByTestId('mais-detalhes');
+    expect(extras).not.toHaveAttribute('open');
+    // o que decide a SC fica fora da gaveta
+    expect(screen.getByLabelText('Centro de Custo').closest('[data-testid="mais-detalhes"]')).toBeNull();
+    expect(screen.getByLabelText('Prioridade').closest('[data-testid="mais-detalhes"]')).toBeNull();
+    // o opcional, dentro dela
+    for (const rotulo of [/Orçamento previsto/, 'Local de Entrega', 'Observação Interna', 'Empresa'])
+      expect(screen.getByLabelText(rotulo).closest('[data-testid="mais-detalhes"]')).toBe(extras);
+  });
+
   it('o orçamento informado vai na SC — é a régua do saving (§17)', async () => {
     const usuario = userEvent.setup();
     vi.mocked(criarSolicitacao).mockResolvedValue({ id: 'sc1', number: 'PR-2026-000001' } as never);

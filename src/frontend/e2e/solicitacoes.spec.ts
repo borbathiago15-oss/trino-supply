@@ -40,6 +40,10 @@ test.describe('Solicitações de Compra (React)', () => {
     // e não mais o rótulo bruto de rascunho
     await expect(revisada).not.toContainText('Rascunho');
     await expect(revisada).toContainText('aguardando a designação');
+    // e a linha do tempo do solicitante: enviada, e agora com o comprador
+    const tempo = revisada.getByTestId('linha-do-tempo-sc');
+    await expect(tempo.locator('[data-etapa="enviada"]')).toHaveAttribute('data-situacao', 'feita');
+    await expect(tempo.locator('[data-etapa="comprador"]')).toHaveAttribute('data-situacao', 'atual');
     await expect(revisada.getByRole('button', { name: 'Enviar solicitação' })).toHaveCount(0);
   });
 
@@ -99,7 +103,7 @@ test.describe('Solicitações de Compra (React)', () => {
     await abrirAutenticado(page, '/aprovacoes');
     await expect(page.locator('#titulo-pagina')).toHaveText('Central de Aprovação');
     // a tela sempre responde: ou lista processos, ou diz que não há nenhum
-    await expect(page.locator('body')).toContainText(/aguardando a sua aprovação|Nenhuma aprovação pendente/);
+    await expect(page.locator('body')).toContainText(/aguardando a sua decisão|Nenhuma aprovação pendente/);
 
     // a decisão se toma no card; o processo completo é o segundo caminho
     const fila = page.getByTestId('fila-decisao');

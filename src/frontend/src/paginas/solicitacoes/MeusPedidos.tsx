@@ -1,10 +1,13 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { abrirBlob } from '@/api/cliente';
+import { diasDesde } from '@/api/cotacoes';
 import { listarCentrosCusto, type CentroCusto } from '@/api/centrosCusto';
 import { baixarDocumento } from '@/api/documentos';
 import {
   atualizarSolicitacao, enviarSolicitacao, excluirSolicitacao, listarSolicitacoes, podeEnviar, podeMexer,
-  ROTULO_PRIORIDADE, situacaoDaSc, type Prioridade, type SolicitacaoCompra,
+  precisaDoSolicitante, ROTULO_PRIORIDADE, scEncerrada, situacaoDaSc,
+  type AcompanhamentoDaSc, type Prioridade, type SolicitacaoCompra,
 } from '@/api/solicitacoes';
 import { Aviso, Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { Confirmacao } from '@/componentes/Dialogo';
@@ -50,6 +53,43 @@ export function andamentoDaSc(r: SolicitacaoCompra): { texto: string; alerta: bo
  * recusa só aparecia no clique em "Enviar" — depois de tudo preenchido.
  */
 export const dataNoPassado = (iso: string) => !!iso && iso < hojeIso();
+
+/** "há 3 dias", "hoje" — quanto tempo a etapa atual já espera. */
+export function esperaDesde(iso: string | null | undefined, agora: Date = new Date()): string | null {
+  const dias = diasDesde(iso, agora);
+  if (dias == null) return null;
+  return dias === 0 ? 'hoje' : dias === 1 ? 'há 1 dia' : `há ${dias} dias`;
+}
+
+const CLASSE_ETAPA: Record<string, string> = {
+  feita: 'bg-ok text-white border-ok',
+  atual: 'bg-marca text-white border-marca',
+  parada: 'bg-perigo text-white border-perigo',
+  pendente: 'bg-white text-slate-400 border-borda',
+};
+
+/**
+ * Seis passos, na língua de quem pediu. A cor diz o que já passou, onde está e onde
+ * parou; o texto de cada passo é curto porque a frase abaixo explica o passo atual.
+ */
+export function LinhaDoTempoDaSc({ a }: { a: AcompanhamentoDaSc }) {
+  return (
+    <ol data-testid="linha-do-tempo-sc" className="flex flex-wrap items-center gap-x-1 gap-y-1">
+      {a.etapas.map((e, i) => (
+        <li key={e.chave} data-etapa={e.chave} data-situacao={e.situacao} className="flex items-center gap-1"
+          title={e.quando ? `${e.rotulo} · ${data(e.quando.slice(0, 10))}${e.quem ? ` · ${e.quem}` : ''}` : e.rotulo}>
+          {i > 0 && <span aria-hidden className={`h-px w-3 ${e.situacao === 'pendente' ? 'bg-borda' : 'bg-slate-400'}`} />}
+          <span aria-hidden className={`flex h-4 w-4 items-center justify-center rounded-full border text-[9px] leading-none ${CLASSE_ETAPA[e.situacao] ?? CLASSE_ETAPA.pendente}`}>
+            {e.situacao === 'feita' ? '✓' : e.situacao === 'parada' ? '!' : i + 1}
+          </span>
+          <span className={`text-[11px] ${e.situacao === 'atual' ? 'font-bold text-marca' : e.situacao === 'parada' ? 'font-bold text-perigo' : e.situacao === 'pendente' ? 'text-slate-400' : 'text-texto-suave'}`}>
+            {e.rotulo}
+          </span>
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 export const resumoDosItens = (r: SolicitacaoCompra) =>
   r.items.map((i) => `${quantidade(i.quantity)}× ${i.catalogCode ? `[${i.catalogCode}] ` : ''}${i.description}`).join(' · ');
@@ -157,12 +197,21 @@ export function MeusPedidos() {
     onChange: (ev: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: ev.target.value })),
   });
 
+  // o resumo do topo é da página carregada: diz o que precisa de quem está olhando
+  const minhas = lista.filter((r) => r.requesterId === usuario.id);
+  const comigo = minhas.filter(precisaDoSolicitante).length;
+  const encerradas = minhas.filter(scEncerrada).length;
+  const andando = minhas.length - comigo - encerradas;
+
   return (
     <>
       <Painel titulo="Minhas Solicitações de Compra (SC)" acoes={
-        <input aria-label="Buscar" placeholder="Buscar por número, item, justificativa ou CC"
-          className="!w-[320px]" value={busca}
-          onChange={(e) => { setTamanho(POR_PAGINA); setBusca(e.target.value); }} />
+        <>
+          <input aria-label="Buscar" placeholder="Buscar por número, item, justificativa ou CC"
+            className="!w-[320px]" value={busca}
+            onChange={(e) => { setTamanho(POR_PAGINA); setBusca(e.target.value); }} />
+          <Link to="/solicitacoes/nova" className="botao">+ Nova solicitação</Link>
+        </>
       }>
         {erro && <Erro>{erro}</Erro>}
         {carregando && !dados && <Carregando />}
@@ -170,22 +219,33 @@ export function MeusPedidos() {
           <Vazio>
             {termo.trim()
               ? 'Nenhuma solicitação encontrada para esta busca.'
-              : 'Nenhuma SC ainda. Crie pelo menu “Inclusão de SC” ou “Solicitação em Lote”.'}
+              : <>Nenhuma SC ainda. <Link className="font-semibold text-marca underline" to="/solicitacoes/nova">Crie a primeira solicitação</Link> — ela nasce como rascunho e você envia quando estiver pronta.</>}
           </Vazio>
+        )}
+        {minhas.length > 0 && !termo.trim() && (
+          <div className="mb-3 flex flex-wrap gap-2 text-[12.5px]" data-testid="resumo-solicitacoes">
+            <Badge classe={comigo > 0 ? 'bg-aviso-fundo text-aviso' : 'bg-slate-100 text-slate-600'}>
+              {comigo === 0 ? 'nada esperando por você' : `${comigo} esperando por você`}
+            </Badge>
+            <Badge classe="bg-blue-50 text-blue-800">{andando} em andamento</Badge>
+            <Badge classe="bg-slate-100 text-slate-600">{encerradas} encerrada(s)</Badge>
+          </div>
         )}
         {lista.length > 0 && (
           <div className="overflow-x-auto">
             <table data-testid="tabela-solicitacoes" className="min-w-[980px]">
               <thead>
-                <tr><th>Número</th><th>Resumo</th><th>Valor est.</th><th>Situação</th><th>Ações</th></tr>
+                <tr><th>Número</th><th>O que</th><th>Valor est.</th><th>Onde está</th><th>Ações</th></tr>
               </thead>
               <tbody>
                 {lista.map((r) => {
                   const marca = situacaoDaSc(r);
                   const andamento = andamentoDaSc(r);
+                  const a = r.acompanhamento;
                   const minha = r.requesterId === usuario.id;
+                  const devolvida = r.status === 'RETURNED';
                   return (
-                    <tr key={r.id} data-solicitacao={r.number}>
+                    <tr key={r.id} data-solicitacao={r.number} data-etapa={a?.etapaAtual}>
                       <td className="whitespace-nowrap">
                         <span className="font-semibold">{r.number}</span>
                         <div className="sub">ciclo {r.cycle} · {r.kind === 'CATALOGO' ? 'lote' : 'SC'}</div>
@@ -211,24 +271,52 @@ export function MeusPedidos() {
                             ))}
                           </div>
                         )}
-                        {andamento && (
-                          <div className={andamento.alerta ? 'text-[12px] text-perigo' : 'sub'}>{andamento.texto}</div>
-                        )}
-                        {r.decisionReason && (
-                          <div className="sub">Motivo: {r.decisionReason}{r.decidedByLabel ? ` (${r.decidedByLabel})` : ''}</div>
-                        )}
                       </td>
                       <td className="whitespace-nowrap">{moeda(r.totalEstimatedValue)}</td>
-                      <td><Badge classe={marca.classe}>{marca.rotulo}</Badge></td>
+                      <td className="min-w-[300px]" data-testid="onde-esta">
+                        <Badge classe={marca.classe}>{marca.rotulo}</Badge>
+                        {a ? (
+                          <div className="mt-1.5">
+                            <LinhaDoTempoDaSc a={a} />
+                            <div className={`mt-1 text-[12.5px] ${a.motivo ? 'font-semibold text-perigo' : ''}`}>
+                              {a.frase}
+                              {esperaDesde(a.desde) && !a.motivo && a.etapas.some((e) => e.situacao === 'atual') && (
+                                <span className="sub"> · {esperaDesde(a.desde)}</span>
+                              )}
+                            </div>
+                            {a.motivo && <div className="text-[12.5px]">Motivo: {a.motivo}</div>}
+                            <div className="sub">
+                              {a.previsao && <span>previsão de chegada {data(a.previsao)}</span>}
+                              {a.previsao && a.fornecedor && ' · '}
+                              {a.fornecedor && <span>fornecedor {a.fornecedor}</span>}
+                              {(a.previsao || a.fornecedor) && a.purchaseOrderNumber && ' · '}
+                              {a.purchaseOrderNumber && <span>pedido {a.purchaseOrderNumber}</span>}
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {andamento && (
+                              <div className={andamento.alerta ? 'mt-1 text-[12px] text-perigo' : 'sub mt-1'}>{andamento.texto}</div>
+                            )}
+                            {r.decisionReason && (
+                              <div className="sub">Motivo: {r.decisionReason}{r.decidedByLabel ? ` (${r.decidedByLabel})` : ''}</div>
+                            )}
+                          </>
+                        )}
+                      </td>
                       <td className="whitespace-nowrap">
                         {minha && (
                           <div className="flex gap-1.5">
                             {podeEnviar(r) && (
-                              <button type="button" className="botao" onClick={() => enviar(r)}>Enviar solicitação</button>
+                              <button type="button" className="botao" onClick={() => enviar(r)}>
+                                {devolvida ? 'Reenviar' : 'Enviar solicitação'}
+                              </button>
                             )}
                             {podeMexer(r) && (
                               <>
-                                <button type="button" className="botao-secundario" onClick={() => editar(r)}>Editar</button>
+                                <button type="button" className="botao-secundario" onClick={() => editar(r)}>
+                                  {devolvida ? 'Corrigir' : 'Editar'}
+                                </button>
                                 <button type="button" className="botao-perigo" onClick={() => setAExcluir(r)}>Excluir</button>
                               </>
                             )}

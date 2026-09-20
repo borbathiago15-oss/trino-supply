@@ -29,17 +29,15 @@ const vazio: Record<ChaveDePeso, string> = { price: '', delivery: '', payment: '
 export function PesosDoScore() {
   const { avisar } = useToast();
   const { dados, erro, carregando, recarregar } = useCarregar(lerPesosDoScore, []);
-  const [pesos, setPesos] = useState<Record<ChaveDePeso, string>>(vazio);
+  // O que se mostra é o editado ou, sem edição, o do servidor — derivado, não copiado num
+  // efeito. Copiar deixava um quadro em que o campo já estava na tela e o número ainda não
+  // tinha chegado nele; uma recarga só descarta as edições.
+  const [edicoes, setEdicoes] = useState<Partial<Record<ChaveDePeso, string>>>({});
   const [salvando, setSalvando] = useState(false);
-
-  useEffect(() => {
-    if (!dados) return;
-    setPesos({
-      price: String(dados.weights.price), delivery: String(dados.weights.delivery),
-      payment: String(dados.weights.payment), otif: String(dados.weights.otif),
-      risk: String(dados.weights.risk),
-    });
-  }, [dados]);
+  useEffect(() => { setEdicoes({}); }, [dados]);
+  const pesos: Record<ChaveDePeso, string> = dados
+    ? Object.fromEntries(CHAVES_DE_PESO.map((k) => [k, edicoes[k] ?? String(dados.weights[k])])) as Record<ChaveDePeso, string>
+    : vazio;
 
   const soma = somaDosPesos(pesos);
   const fecha = soma === 100;
@@ -82,7 +80,7 @@ export function PesosDoScore() {
                   id={`peso-${c.code}`} type="number" min={0} max={100} step={1}
                   disabled={!pode}
                   value={pesos[c.code as ChaveDePeso] ?? ''}
-                  onChange={(e) => setPesos((p) => ({ ...p, [c.code]: e.target.value }))}
+                  onChange={(e) => setEdicoes((p) => ({ ...p, [c.code]: e.target.value }))}
                 />
               </Campo>
             ))}

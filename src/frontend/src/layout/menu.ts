@@ -71,9 +71,13 @@ export const MENU: GrupoMenu[] = [
     // de coisa que ninguém abre todo dia. Quem só enxerga o painel não paga por
     // isso: subgrupo com uma tela só vira item simples (`itensVisiveis`).
     { rotulo: 'Dashboard', filhos: [
+      // a diretoria tem a própria página inicial: cinco números, a fila de decisão e os
+      // achados. O painel do comprador e o Insights ficam para quem opera; para o diretor
+      // os dois se fundem aqui.
+      { id: 'director-view', rotulo: 'Visão da diretoria', rota: '/diretoria', mostrar: (u) => u.role === 'Director' || ehAdmin(u) },
       // o painel é do comprador e de quem lê tudo; o solicitante começa nas próprias SCs
-      { id: 'supply-dash', rotulo: 'Dashboard de Suprimentos', rota: '/painel', mostrar: (u) => u.role !== 'Requester' },
-      { id: 'insights', rotulo: 'Insights & Executivo', rota: '/insights', modulo: 'INSIGHTS', mostrar: podeVerCompliance },
+      { id: 'supply-dash', rotulo: 'Dashboard de Suprimentos', rota: '/painel', mostrar: (u) => u.role !== 'Requester' && u.role !== 'Director' },
+      { id: 'insights', rotulo: 'Insights & Executivo', rota: '/insights', modulo: 'INSIGHTS', mostrar: (u) => podeVerCompliance(u) && u.role !== 'Director' },
       { id: 'compliance', rotulo: 'Compliance', rota: '/compliance', modulo: 'COMPLIANCE', mostrar: podeVerCompliance },
       { id: 'reports', rotulo: 'Relatórios', rota: '/relatorios', mostrar: podeVerRelatorios },
     ]},

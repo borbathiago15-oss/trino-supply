@@ -42,7 +42,7 @@ describe('menu', () => {
     const dashboard = topo.find((i) => ehSubgrupo(i) && i.rotulo === 'Dashboard');
     expect(dashboard).toBeDefined();
     expect((dashboard as SubgrupoMenu).filhos.map((f) => f.id))
-      .toEqual(['supply-dash', 'insights', 'compliance', 'reports']);
+      .toEqual(['director-view', 'supply-dash', 'insights', 'compliance', 'reports']);
     // a Central de Aprovação continua fora: ela é passo do ciclo, não leitura
     expect(topo.some((i) => !ehSubgrupo(i) && i.id === 'pr-approvals')).toBe(true);
   });
@@ -106,8 +106,13 @@ describe('menu', () => {
     expect(ids).toContain('pr-approvals');
     expect(ids).toContain('reports');
     expect(ids).toContain('pr-mine');
-    for (const fora of ['control-tower', 'quotations', 'rfq-queue', 'buy-orders', 'scorecard', 'triage', 'wh-queue', 'products'])
+    // a visão da diretoria substitui o painel do comprador e o Insights para esse papel
+    expect(ids[0]).toBe('director-view');
+    for (const fora of ['supply-dash', 'insights', 'control-tower', 'quotations', 'rfq-queue', 'buy-orders', 'scorecard', 'triage', 'wh-queue', 'products'])
       expect(ids).not.toContain(fora);
+    // o administrador continua vendo as duas leituras, e a da diretoria também
+    const admin = folhas({ role: 'SystemAdministrator', modules: [] }).map((i) => i.id);
+    for (const dentro of ['director-view', 'supply-dash', 'insights']) expect(admin).toContain(dentro);
   });
 
   it('Comunicados é do administrador: quem escreve o recado não é qualquer um', () => {

@@ -12,16 +12,19 @@ test.describe('Relatórios (React)', () => {
     await abrirAutenticado(page, '/relatorios');
     await expect(page.locator('#titulo-pagina')).toHaveText('Relatórios');
 
-    // os catorze títulos são o contrato com quem lê: numerados e na mesma ordem
-    for (const titulo of [
-      '1. Compras por família', '2. Saving por comprador', '3. Saving do período, mês a mês',
-      '4. As três réguas do saving', '5. Saving por família e por fornecedor',
-      '6. Saving de referência (× último preço pago)', '7. Concentração por fornecedor',
-      '8. Origem da demanda — quem pediu, de onde, material ou serviço', '9. Concorrências (BIDs) — quem ganhou',
-      '10. Formas e prazos de pagamento', '11. Peso das compras urgentes',
-      '12. Entrega no prazo (OTIF) por fornecedor', '13. Tempo do ciclo', '14. Compras sem O.C. do ERP',
-    ])
-      await expect(page.getByRole('heading', { name: titulo })).toBeVisible();
+    // o relatório abre em três frases e nas cinco abas; os catorze títulos continuam sendo o
+    // contrato com quem lê — numerados, cada um na sua aba
+    await expect(page.getByTestId('resumo-executivo').locator('li')).toHaveCount(3);
+    for (const [aba, titulos] of [
+      ['Visão geral', ['3. Saving do período, mês a mês', '4. As três réguas do saving']],
+      ['Saving', ['2. Saving por comprador', '5. Saving por família e por fornecedor', '6. Saving de referência (× último preço pago)']],
+      ['Fornecedores', ['7. Concentração por fornecedor', '9. Concorrências (BIDs) — quem ganhou', '10. Formas e prazos de pagamento', '12. Entrega no prazo (OTIF) por fornecedor']],
+      ['Demanda e prazos', ['1. Compras por família', '8. Origem da demanda — quem pediu, de onde, material ou serviço', '11. Peso das compras urgentes', '13. Tempo do ciclo']],
+      ['Exceções', ['14. Compras sem O.C. do ERP']],
+    ] as const) {
+      await page.getByRole('tab', { name: new RegExp(aba) }).click();
+      for (const titulo of titulos) await expect(page.getByRole('heading', { name: titulo })).toBeVisible();
+    }
 
     // cada KPI diz o que era no período anterior, e a tela diz que janela é essa
     await expect(page.getByTestId('antes').first()).toContainText('antes:');

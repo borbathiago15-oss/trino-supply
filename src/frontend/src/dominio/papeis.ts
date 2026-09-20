@@ -88,6 +88,7 @@ export const podeConfirmarEntrega = (u: Perfil) => podeGerirPedidos(u) || podeAl
 export function paginaInicial(u: Perfil): string {
   switch (u.role) {
     case 'Director':
+      return '/diretoria';
     case 'Approver':
       return '/aprovacoes';
     case 'Requester':

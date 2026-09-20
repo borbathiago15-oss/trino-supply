@@ -397,6 +397,8 @@ public class RequisitionServiceTests
         Assert.True(comprador.CanCreate);
         // o diretor também solicita (2026-09); o auditor continua só lendo
         Assert.True(new Actor(Guid.NewGuid(), "Diretora", Roles.Director).CanCreate);
+        Assert.True(TrinoSupply.Foundation.Api.Materials.MaterialRequisitionService.CanRequest(Roles.Director));
+        Assert.Contains(AppModules.Material, AppModules.DefaultsFor(Roles.Director));
         Assert.False(new Actor(Guid.NewGuid(), "Auditor", Roles.Auditor).CanCreate);
 
         var (pr, erro) = await svc.CreateAsync(comprador, "Compra conduzida pelo comprador", "CC-QUALQUER", "NORMAL", null, [Notebook]);

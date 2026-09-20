@@ -25,7 +25,7 @@ export const MODULOS_PADRAO: Record<Papel, Modulo[]> = {
   WarehouseOperator: ['ESTOQUE'],
   WarehouseSupervisor: ['ESTOQUE', 'PRODUTOS'],
   SupplyManager: ['SOLICITACOES', 'APROVACAO', 'MATERIAL', 'ESTOQUE', 'COMPRAS', 'PRODUTOS', 'FORNECEDORES', 'CENTROS_CUSTO'],
-  Director: ['SOLICITACOES', 'APROVACAO', 'COMPRAS'],
+  Director: ['SOLICITACOES', 'APROVACAO', 'MATERIAL', 'COMPRAS'],
   Auditor: ['SOLICITACOES', 'ESTOQUE', 'COMPRAS'],
 };
 
@@ -54,7 +54,8 @@ export const temModulo = (u: Perfil, m: Modulo) => ehAdmin(u) || (u.modules ?? [
  */
 export const podeCriarSc = (u: Perfil) => entre(u, 'Requester', 'SupplyManager', 'SystemAdministrator', 'PurchasingOfficer', 'Director');
 export const podeDecidirSc = (u: Perfil) => entre(u, 'Approver', 'SupplyManager', 'SystemAdministrator');
-export const podePedirMaterial = (u: Perfil) => entre(u, 'Requester', 'SupplyManager', 'SystemAdministrator');
+/** O diretor também pede material ao almoxarifado (2026-09), como na SC. */
+export const podePedirMaterial = (u: Perfil) => entre(u, 'Requester', 'SupplyManager', 'SystemAdministrator', 'Director');
 export const podeAlmoxarifado = (u: Perfil) => temModulo(u, 'ESTOQUE')
   || entre(u, 'WarehouseOperator', 'WarehouseSupervisor', 'SupplyManager', 'SystemAdministrator');
 export const podeComprar = (u: Perfil) => entre(u, 'PurchasingOfficer', 'SupplyManager', 'SystemAdministrator');

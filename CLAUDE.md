@@ -64,7 +64,9 @@ o usuário descobrir no erro do servidor:
   solicita** (`Actor.CanCreate`, `podeCriarSc`): a SC dele segue o caminho de todas — o Nível 1
   é do comprador ou da lista do centro, e o Nível 2 ele mesmo dá, porque a segregação separa
   quem escolhe e quem aprova, não quem pede. Com centros vinculados no cadastro, solicita só
-  deles (PR-ERR-021), como o solicitante.
+  deles (PR-ERR-021), como o solicitante. O mesmo vale para **material** ao almoxarifado
+  (`MaterialRequisitionService.CanRequest`, `podePedirMaterial`); o módulo Material entra no
+  padrão do diretor, e usuário já cadastrado precisa dele marcado em Usuários.
 - **RFQ-ERR-040/041** — a O.C. nunca é emitida pelo sistema. Ela é fechada no ERP
   SENIOR e aqui só se registra o número, depois das duas aprovações.
 - **PO-BR-011** — **sem O.C. gerada no ERP, a compra não fecha.** A única exceção

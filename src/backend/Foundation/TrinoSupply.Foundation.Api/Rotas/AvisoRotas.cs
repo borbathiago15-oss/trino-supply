@@ -214,7 +214,7 @@ public static class AvisoRotas
                 }
                 if (QuotationService.CanApproveAsManager(role))
                 {
-                    var mgrQuery = db.Quotations.Where(q => q.Status == QuotationStatus.AwaitingManager && q.SelectedBy != uid);
+                    var mgrQuery = db.Quotations.Where(q => q.Status == QuotationStatus.AwaitingManager);
                     if (role == Roles.Approver)
                     {
                         // Pleno: só processos dos CCs sob a sua gerência

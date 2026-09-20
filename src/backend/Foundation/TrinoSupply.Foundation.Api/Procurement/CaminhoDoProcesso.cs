@@ -9,9 +9,9 @@ namespace TrinoSupply.Foundation.Api.Procurement;
 /// <param name="Em">Quando foi feita, ou desde quando se espera. Nulo quando não há marca honesta.</param>
 /// <param name="SemAprovador">O centro não tem ninguém cadastrado neste nível — a tela aponta onde consertar.</param>
 /// <param name="Impasse">
-/// Há gente na lista, mas <b>todos</b> estão impedidos pela segregação de funções (RFQ-ERR-030):
-/// escolheram o fornecedor ou deram o nível anterior. "Aguardando fulano" seria mentira — ninguém
-/// da lista pode agir, e a tela precisa dizer quem pode.
+/// Há gente na lista do Nível 2, mas <b>todos</b> estão impedidos pela segregação de funções
+/// (RFQ-ERR-030): escolheram o fornecedor ou deram o Nível 1. "Aguardando fulano" seria mentira —
+/// ninguém da lista pode agir, e a tela precisa dizer quem pode. O Nível 1 não tem impedidos.
 /// </param>
 public record EtapaDoCaminho(
     string Chave, string Titulo, string Situacao, string? Quem, DateTimeOffset? Em,
@@ -62,9 +62,10 @@ public static class CaminhoDoProcesso
             Etapa("escolha", "Escolha do fornecedor vencedor",
                 feita: q.SelectedAt is not null, atual: viva && s == QuotationStatus.Analysis,
                 quem: q.SelectedAt is null ? comprador : q.SelectedByLabel, em: q.SelectedAt),
+            // Nível 1 sem impedidos: quem escolheu o fornecedor pode dar a primeira alçada
             Alcada("nivel1", "Aprovação de Nível 1", q.ManagerApprovedAt, q.ManagerApprovedByLabel,
                 atual: viva && s == QuotationStatus.AwaitingManager, desde: q.SelectedAt,
-                alcadas.Nivel1, alcadas.IdsDo(1), impedidos: [q.SelectedBy]),
+                alcadas.Nivel1, alcadas.IdsDo(1), impedidos: []),
             Alcada("nivel2", "Aprovação de Nível 2", q.DirectorApprovedAt, q.DirectorApprovedByLabel,
                 atual: viva && s == QuotationStatus.AwaitingDirector, desde: q.ManagerApprovedAt,
                 alcadas.Nivel2, alcadas.IdsDo(2), impedidos: [q.SelectedBy, q.ManagerApprovedBy]),

@@ -6,9 +6,11 @@ using TrinoSupply.Foundation.Api.Users;
 namespace TrinoSupply.Foundation.Api.Procurement;
 
 /// <summary>
-/// As duas alçadas (RFQ-BR-006/007) e a segregação de funções que as separa: quem
-/// escolheu o fornecedor não aprova a própria escolha, e quem deu o Nível 1 não dá o
-/// Nível 2 (RFQ-ERR-030).
+/// As duas alçadas (RFQ-BR-006/007) e a segregação de funções entre elas (RFQ-ERR-030),
+/// que vale <b>no Nível 2</b>: o diretor não pode ser quem escolheu o fornecedor nem quem
+/// deu o Nível 1. No Nível 1 não há segregação — decisão da empresa (2026-09): o comprador
+/// abre a SC em qualquer centro, cota e fecha a primeira alçada do próprio processo; a
+/// separação de funções fica garantida pela segunda.
 /// </summary>
 public partial class QuotationService
 {
@@ -20,10 +22,9 @@ public partial class QuotationService
         if (q is null) return (null, new("RFQ-ERR-404", "Cotação não encontrada."));
         if (q.Status != QuotationStatus.AwaitingManager)
             return (null, new("RFQ-ERR-020", "O processo não está aguardando aprovação gerencial."));
-        if (actor.Id == q.SelectedBy)
-            return (null, new("RFQ-ERR-030", "Segregação de funções: quem selecionou o fornecedor não aprova a própria escolha."));
-        // alçada do centro (Nível 1): qualquer pessoa da lista resolve a etapa
-        if (actor.Role != Roles.SystemAdministrator &&
+        // alçada do centro (Nível 1): qualquer pessoa da lista resolve a etapa. O comprador
+        // e o administrador decidem em qualquer centro — a lista do centro é para os gestores.
+        if (actor.Role is not (Roles.SystemAdministrator or Roles.PurchasingOfficer) &&
             await ApprovalLevels.CanDecideAsync(db, q.CostCenter, ApprovalLevels.Level1, actor.Id, ct) is { } noNivel1)
         {
             if (!noNivel1)

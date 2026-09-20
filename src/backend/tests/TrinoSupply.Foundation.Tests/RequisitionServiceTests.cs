@@ -384,4 +384,22 @@ public class RequisitionServiceTests
 
         Assert.Equal("MATERIAL DE ESCRITORIO", pr!.Items.Single().Family);
     }
+
+    /// <summary>
+    /// O comprador abre SC em qualquer centro — decisão da empresa (2026-09). Ele não tem
+    /// vínculo de centro a respeitar: o vínculo (PR-ERR-021) é do solicitante e do aprovador.
+    /// </summary>
+    [Fact]
+    public async Task Comprador_abre_solicitacao_em_qualquer_centro()
+    {
+        var (svc, _, _) = Build();
+        var comprador = new Actor(Guid.NewGuid(), "Carla Compradora", Roles.PurchasingOfficer);
+        Assert.True(comprador.CanCreate);
+
+        var (pr, erro) = await svc.CreateAsync(comprador, "Compra conduzida pelo comprador", "CC-QUALQUER", "NORMAL", null, [Notebook]);
+
+        Assert.Null(erro);
+        Assert.Equal("CC-QUALQUER", pr!.CostCenter);
+        Assert.Equal(comprador.Id, pr.RequesterId);
+    }
 }

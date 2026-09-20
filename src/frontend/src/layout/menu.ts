@@ -1,5 +1,5 @@
 import {
-  ehAdmin, podeAlmoxarifado, podeComprar, podeConduzirCotacao, podeCriarSc, podeDecidirSc, podeManterCatalogo,
+  ehAdmin, podeAlmoxarifado, podeAprovarGerente, podeComprar, podeConduzirCotacao, podeCriarSc, podeDecidirSc, podeManterCatalogo,
   podePedirMaterial, podeTriar, podeVerCompliance, podeVerCotacao, podeVerPedidos, podeVerRelatorios, temModulo,
   type Modulo, type Perfil,
 } from '@/dominio/papeis';
@@ -60,7 +60,7 @@ export const MENU: GrupoMenu[] = [
       { id: 'compliance', rotulo: 'Compliance', rota: '/compliance', modulo: 'COMPLIANCE', mostrar: podeVerCompliance },
       { id: 'reports', rotulo: 'Relatórios', rota: '/relatorios', mostrar: podeVerRelatorios },
     ]},
-    { id: 'pr-approvals', rotulo: 'Central de Aprovação', rota: '/aprovacoes', modulo: 'APROVACAO', mostrar: podeDecidirSc },
+    { id: 'pr-approvals', rotulo: 'Central de Aprovação', rota: '/aprovacoes', modulo: 'APROVACAO', mostrar: (u) => podeDecidirSc(u) || podeAprovarGerente(u) },
   ]},
   { titulo: 'Solicitações de Compra', modulo: 'SOLICITACOES', itens: [
     { rotulo: 'Nova Solicitação', filhos: [

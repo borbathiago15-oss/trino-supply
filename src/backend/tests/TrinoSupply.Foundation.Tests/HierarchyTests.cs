@@ -188,6 +188,23 @@ public class HierarchyTests
         Assert.Equal(QuotationStatus.AwaitingDirector, ok!.Status);
     }
 
+    /// <summary>
+    /// A lista do centro é para os gestores. O comprador dá o Nível 1 em qualquer centro —
+    /// inclusive num centro que tem gerente responsável e do qual ele não faz parte — e
+    /// inclusive do processo em que ele mesmo escolheu o fornecedor.
+    /// </summary>
+    [Fact]
+    public async Task Comprador_da_o_Nivel_1_em_qualquer_centro_mesmo_do_processo_que_conduziu()
+    {
+        var w = await BuildAsync();
+        var q = await UpToAwaitingManagerAsync(w);   // a Carla escolheu o fornecedor
+        Assert.Equal(w.Carla.Id, q.SelectedBy);
+
+        var (ok, error) = await w.Rfq.ManagerDecisionAsync(w.Carla, q.Id, "APROVAR", null);
+        Assert.Null(error);
+        Assert.Equal(QuotationStatus.AwaitingDirector, ok!.Status);
+    }
+
     [Fact]
     public async Task Aprovacao_da_diretoria_respeita_o_diretor_vinculado_ao_gerente()
     {

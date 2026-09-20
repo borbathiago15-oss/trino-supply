@@ -18,15 +18,26 @@ const montar = (p: Partial<Processo>) => render(
 );
 
 describe('proximoPasso', () => {
-  it('quem escolheu o fornecedor lê que a aprovação é de outra pessoa, sem link para a Central', () => {
-    // é o caso do administrador que faz o processo inteiro sozinho e não entende por que travou
+  it('quem escolheu o fornecedor segue para a Central e dá o Nível 1 do próprio processo', () => {
+    // o comprador cota, escolhe e fecha a primeira alçada: a segregação fica no Nível 2
     const q = processo({
       status: 'AGUARDANDO_GERENTE',
       selection: { winnerSupplierId: 's1', winnerProposalId: 'p1', criteria: null, justification: 'x', by: 'eu', byLabel: 'Eu' },
     });
     const passo = proximoPasso(q, 'eu')!;
     expect(passo.titulo).toBe('Aprovação de Nível 1');
-    expect(passo.detalhe).toMatch(/Você escolheu o fornecedor/);
+    expect(passo.rota).toBe('/aprovacoes');
+    expect(passo.detalhe).not.toMatch(/RFQ-ERR-030/);
+  });
+
+  it('quem escolheu o fornecedor lê que o Nível 2 é de outra pessoa, sem link para a Central', () => {
+    const q = processo({
+      status: 'AGUARDANDO_DIRETOR',
+      selection: { winnerSupplierId: 's1', winnerProposalId: 'p1', criteria: null, justification: 'x', by: 'eu', byLabel: 'Eu' },
+    });
+    const passo = proximoPasso(q, 'eu')!;
+    expect(passo.titulo).toBe('Aprovação de Nível 2');
+    expect(passo.detalhe).toMatch(/Você escolheu o fornecedor.*Nível 2/);
     expect(passo.rota).toBeUndefined();
     // outra pessoa continua vendo o caminho normal
     expect(proximoPasso(q, 'outro')!.rota).toBe('/aprovacoes');
@@ -39,11 +50,11 @@ describe('proximoPasso', () => {
 
   it('a aprovação sai desta tela: manda para a Central de Aprovação', () => {
     // é o salto que confundia — a aprovação não fica no grupo Compras
-    for (const status of ['AGUARDANDO_GERENTE', 'AGUARDANDO_DIRETOR']) {
-      const passo = proximoPasso(processo({ status }))!;
-      expect(passo.rota).toBe('/aprovacoes');
-      expect(passo.detalhe).toMatch(/RFQ-ERR-030/);
-    }
+    for (const status of ['AGUARDANDO_GERENTE', 'AGUARDANDO_DIRETOR'])
+      expect(proximoPasso(processo({ status }))!.rota).toBe('/aprovacoes');
+    // só o Nível 2 tem segregação de funções a avisar
+    expect(proximoPasso(processo({ status: 'AGUARDANDO_DIRETOR' }))!.detalhe).toMatch(/RFQ-ERR-030/);
+    expect(proximoPasso(processo({ status: 'AGUARDANDO_GERENTE' }))!.detalhe).not.toMatch(/RFQ-ERR-030/);
   });
 
   it('com a O.C. registrada, aponta o pedido em que a compra continua', () => {

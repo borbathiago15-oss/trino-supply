@@ -54,8 +54,13 @@ dotnet ef migrations has-pending-model-changes
 Estão no backend, com teste, e a interface deve **antecipá-las** em vez de deixar
 o usuário descobrir no erro do servidor:
 
-- **RFQ-ERR-030** — segregação de funções: quem escolheu o fornecedor não aprova
-  a própria escolha; quem deu o Nível 1 não dá o Nível 2.
+- **RFQ-ERR-030** — segregação de funções, **no Nível 2**: o diretor não pode ser quem
+  escolheu o fornecedor nem quem deu o Nível 1. **No Nível 1 não há segregação** — decisão
+  da empresa (2026-09): o comprador (`PurchasingOfficer`) abre SC em **qualquer centro de
+  custo**, cota, escolhe e dá o Nível 1 do próprio processo, sem depender da lista de
+  aprovadores do centro (que continua valendo para os gestores). O que o separa da compra é
+  a segunda alçada, que ele não dá. A fila do Nível 1 e a Central de Avisos contam a própria
+  escolha; o impasse do caminho do processo só existe no Nível 2.
 - **RFQ-ERR-040/041** — a O.C. nunca é emitida pelo sistema. Ela é fechada no ERP
   SENIOR e aqui só se registra o número, depois das duas aprovações.
 - **PO-BR-011** — **sem O.C. gerada no ERP, a compra não fecha.** A única exceção

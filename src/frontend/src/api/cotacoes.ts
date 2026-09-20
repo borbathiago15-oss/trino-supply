@@ -655,19 +655,20 @@ export function menorTotal(q: Processo): number | null {
 
 /** O que o usuário pode fazer no processo, dado o papel e a etapa. */
 /**
- * Segregação de funções (RFQ-ERR-030): quem escolheu o fornecedor não aprova a
- * própria escolha, e o Nível 2 não pode ser quem já resolveu o Nível 1. O
- * servidor recusa de qualquer jeito — aqui a regra existe para a tela não
+ * Segregação de funções (RFQ-ERR-030), que vale **no Nível 2**: o diretor não pode ser
+ * quem escolheu o fornecedor nem quem deu o Nível 1. No Nível 1 não há segregação —
+ * decisão da empresa (2026-09): o comprador cota e fecha a primeira alçada do próprio
+ * processo. O servidor recusa de qualquer jeito — aqui a regra existe para a tela não
  * oferecer um botão que só vai dar erro, e para dizer o porquê.
  *
  * `de` é o id de quem está logado. Sem ele (ou sem os ids no processo) a tela
  * não trava nada: prefere-se o botão que falha à ação escondida por engano.
  */
 export function conflitoDeSegregacao(q: Processo, de: string | undefined, alcada: Alcada): string | null {
-  if (!de) return null;
+  if (!de || alcada !== 'director') return null;
   if (q.selection?.by === de)
-    return 'Você escolheu o fornecedor deste processo — a aprovação é de outra pessoa (RFQ-ERR-030).';
-  if (alcada === 'director' && q.managerApproval?.by === de)
+    return 'Você escolheu o fornecedor deste processo — o Nível 2 é de outra pessoa (RFQ-ERR-030).';
+  if (q.managerApproval?.by === de)
     return 'Você deu a aprovação de Nível 1 deste processo — o Nível 2 é de outra pessoa (RFQ-ERR-030).';
   return null;
 }

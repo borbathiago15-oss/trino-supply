@@ -19,10 +19,9 @@ export interface Passo {
  * cor, a tela diz qual é e leva até lá.
  */
 export function proximoPasso(q: Processo, de?: string): Passo | null {
-  // Quem já agiu no processo não aprova: dizer isso aqui poupa a ida à Central para
+  // Quem já agiu no processo não dá o Nível 2: dizer isso aqui poupa a ida à Central para
   // descobrir que o botão não existe para ela — e diz que a bola é de outra pessoa.
-  const conflito = q.status === 'AGUARDANDO_GERENTE' ? conflitoDeSegregacao(q, de, 'manager')
-    : q.status === 'AGUARDANDO_DIRETOR' ? conflitoDeSegregacao(q, de, 'director') : null;
+  const conflito = q.status === 'AGUARDANDO_DIRETOR' ? conflitoDeSegregacao(q, de, 'director') : null;
   if (conflito) {
     return {
       titulo: q.status === 'AGUARDANDO_GERENTE' ? 'Aprovação de Nível 1' : 'Aprovação de Nível 2',
@@ -44,7 +43,7 @@ export function proximoPasso(q: Processo, de?: string): Passo | null {
     case 'AGUARDANDO_GERENTE':
       return {
         titulo: 'Aprovação de Nível 1',
-        detalhe: 'A decisão é tomada na Central de Aprovação. Quem escolheu o fornecedor não aprova a própria escolha (RFQ-ERR-030).',
+        detalhe: 'A decisão é tomada na Central de Aprovação. O comprador que conduziu o processo também pode dar o Nível 1.',
         rota: '/aprovacoes', rotulo: 'Ir para a Central de Aprovação',
       };
     case 'AGUARDANDO_DIRETOR':

@@ -48,7 +48,8 @@ const entre = (u: Perfil, ...papeis: Papel[]) => papeis.includes(u.role);
 export const ehAdmin = (u: Perfil) => u.role === 'SystemAdministrator';
 export const temModulo = (u: Perfil, m: Modulo) => ehAdmin(u) || (u.modules ?? []).includes(m);
 
-export const podeCriarSc = (u: Perfil) => entre(u, 'Requester', 'SupplyManager', 'SystemAdministrator');
+/** O comprador também solicita, em qualquer centro — decisão da empresa (2026-09). */
+export const podeCriarSc = (u: Perfil) => entre(u, 'Requester', 'SupplyManager', 'SystemAdministrator', 'PurchasingOfficer');
 export const podeDecidirSc = (u: Perfil) => entre(u, 'Approver', 'SupplyManager', 'SystemAdministrator');
 export const podePedirMaterial = (u: Perfil) => entre(u, 'Requester', 'SupplyManager', 'SystemAdministrator');
 export const podeAlmoxarifado = (u: Perfil) => temModulo(u, 'ESTOQUE')
@@ -57,7 +58,8 @@ export const podeComprar = (u: Perfil) => entre(u, 'PurchasingOfficer', 'SupplyM
 export const podeManterCatalogo = (u: Perfil) => entre(u, 'SupplyManager', 'SystemAdministrator');
 export const podeTriar = podeComprar;
 export const podeConduzirCotacao = podeComprar;
-export const podeAprovarGerente = (u: Perfil) => entre(u, 'SupplyManager', 'SystemAdministrator', 'Approver');
+/** O comprador dá o Nível 1, inclusive do processo que conduziu; a segregação fica no Nível 2. */
+export const podeAprovarGerente = (u: Perfil) => entre(u, 'SupplyManager', 'SystemAdministrator', 'Approver', 'PurchasingOfficer');
 export const podeAprovarDiretor = (u: Perfil) => entre(u, 'Director', 'SystemAdministrator');
 export const podeVerCotacao = (u: Perfil) =>
   podeConduzirCotacao(u) || podeAprovarGerente(u) || podeAprovarDiretor(u) || u.role === 'Auditor';

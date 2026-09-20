@@ -66,7 +66,7 @@ public static class RelatorioExecutivoPdf
 
             page.Content().PaddingTop(6).Column(col =>
             {
-                col.Spacing(7);
+                col.Spacing(9);
 
                 // ---- página 1: a lâmina --------------------------------------------
                 HeroCards(col, r);
@@ -74,14 +74,14 @@ public static class RelatorioExecutivoPdf
 
                 col.Item().Row(row =>
                 {
-                    row.Spacing(7);
+                    row.Spacing(9);
                     row.RelativeItem(6).Element(e => Secao(e, "Geração de valor — as três réguas do saving", Blue, s => Reguas(s, r)));
                     row.RelativeItem(5).Element(e => Secao(e, "Ranking de compradores", Blue, s => Compradores(s, r)));
                 });
 
                 col.Item().Row(row =>
                 {
-                    row.Spacing(7);
+                    row.Spacing(9);
                     row.RelativeItem(5).Element(e => Secao(e, "Origem da demanda — centros de custo", Navy, s => Centros(s, r)));
                     row.RelativeItem(4).Element(e => Secao(e, "Quem solicitou", Navy, s => Solicitantes(s, r)));
                     row.RelativeItem(3).Element(e => Secao(e, "Materiais × serviços", Navy, s => Escopo(s, r)));
@@ -89,14 +89,14 @@ public static class RelatorioExecutivoPdf
 
                 col.Item().Row(row =>
                 {
-                    row.Spacing(7);
+                    row.Spacing(9);
                     row.RelativeItem(6).Element(e => Secao(e, "Fornecedores — curva ABC", Emerald, s => Abc(s, r)));
                     row.RelativeItem(5).Element(e => Secao(e, "Concorrências (BIDs) — quem ganhou", Emerald, s => Bids(s, r)));
                 });
 
                 col.Item().Row(row =>
                 {
-                    row.Spacing(7);
+                    row.Spacing(9);
                     row.RelativeItem(6).Element(e => Secao(e, "Formas e prazos de pagamento", Amber, s => Pagamento(s, r)));
                     row.RelativeItem(5).Element(e => Secao(e, "Governança e eficiência", Rose, s => Governanca(s, r)));
                 });
@@ -373,13 +373,13 @@ public static class RelatorioExecutivoPdf
         row.RelativeItem().Border(0.6f).BorderColor(Slate200).Background(Colors.White).Column(k =>
         {
             k.Item().Height(3).Background(cor);
-            k.Item().Padding(5).Column(b =>
+            k.Item().Padding(7).Column(b =>
             {
                 b.Spacing(1.5f);
-                b.Item().Text(rotulo).FontSize(5.8f).SemiBold().FontColor(Slate).LetterSpacing(0.05f);
-                b.Item().Text(valor).Bold().FontSize(12.5f).FontColor(Slate900);
-                b.Item().Text(detalhe).FontSize(6).FontColor(Slate);
-                if (anterior is not null) b.Item().Text(anterior).FontSize(6).SemiBold().FontColor(cor);
+                b.Item().Text(rotulo).FontSize(6.4f).SemiBold().FontColor(Slate).LetterSpacing(0.05f);
+                b.Item().Text(valor).Bold().FontSize(15).FontColor(Slate900);
+                b.Item().Text(detalhe).FontSize(6.6f).FontColor(Slate);
+                if (anterior is not null) b.Item().Text(anterior).FontSize(6.6f).SemiBold().FontColor(cor);
             });
         });
 
@@ -396,8 +396,8 @@ public static class RelatorioExecutivoPdf
         c.Border(0.6f).BorderColor(Slate200).Background(Colors.White).Column(col =>
         {
             col.Item().BorderLeft(3).BorderColor(cor).PaddingLeft(5).PaddingVertical(3)
-                .Text(titulo).Bold().FontSize(7.8f).FontColor(Slate900);
-            col.Item().BorderTop(0.5f).BorderColor(Slate100).Padding(5).Column(corpo);
+                .Text(titulo).Bold().FontSize(8.8f).FontColor(Slate900);
+            col.Item().BorderTop(0.5f).BorderColor(Slate100).Padding(7).Column(corpo);
         });
 
     /// <summary>Barra proporcional: a fatia lida de relance sem virar gráfico.</summary>
@@ -423,7 +423,7 @@ public static class RelatorioExecutivoPdf
             {
                 foreach (var titulo in cabecalhos)
                     h.Cell().BorderBottom(0.6f).BorderColor(Slate200).PaddingBottom(1.5f).PaddingRight(3)
-                        .Text(titulo.ToUpperInvariant()).FontSize(5.6f).SemiBold().FontColor(Slate).LetterSpacing(0.04f);
+                        .Text(titulo.ToUpperInvariant()).FontSize(6.2f).SemiBold().FontColor(Slate).LetterSpacing(0.04f);
             });
             linhas(t);
         });
@@ -432,7 +432,7 @@ public static class RelatorioExecutivoPdf
     private static void M(TableDescriptor t, string texto, string? cor = null, bool negrito = false)
     {
         var txt = t.Cell().BorderBottom(0.3f).BorderColor(Slate100).PaddingVertical(1.2f).PaddingRight(3)
-            .Text(texto).FontSize(6.6f);
+            .Text(texto).FontSize(7.4f);
         if (cor is not null) txt.FontColor(cor);
         if (negrito) txt.SemiBold();
     }
@@ -440,7 +440,7 @@ public static class RelatorioExecutivoPdf
     private static void N(TableDescriptor t, string texto, string? cor = null, bool negrito = false)
     {
         var txt = t.Cell().BorderBottom(0.3f).BorderColor(Slate100).PaddingVertical(1.2f).PaddingRight(3)
-            .AlignRight().Text(texto).FontSize(6.6f);
+            .AlignRight().Text(texto).FontSize(7.4f);
         if (cor is not null) txt.FontColor(cor);
         if (negrito) txt.SemiBold();
     }
@@ -453,14 +453,14 @@ public static class RelatorioExecutivoPdf
             ("Concorrência (BIDs)", "maior proposta × vencedora", r.SavingRulers.Competition, Blue),
             ("Orçamento", "orçado na SC × O.C.", r.SavingRulers.Budget, Amber),
         };
-        Mini(col, [null, 22, 48, 48, 48, 26, 36], ["Régua", "Proc.", "Base", "Fechado", "Saving", "%", ""], t =>
+        Mini(col, [null, 28, 48, 48, 48, 28, 30], ["Régua", "Proc.", "Base", "Fechado", "Saving", "%", ""], t =>
         {
             foreach (var (nome, contra, g, cor) in reguas)
             {
                 t.Cell().BorderBottom(0.3f).BorderColor(Slate100).PaddingVertical(1.2f).PaddingRight(3).Column(x =>
                 {
-                    x.Item().Text(nome).FontSize(6.6f).SemiBold();
-                    x.Item().Text(contra).FontSize(5.4f).FontColor(Slate);
+                    x.Item().Text(nome).FontSize(7.4f).SemiBold();
+                    x.Item().Text(contra).FontSize(6).FontColor(Slate);
                 });
                 if (g.Processes == 0)
                 {
@@ -483,7 +483,7 @@ public static class RelatorioExecutivoPdf
     }
 
     private static void Compradores(ColumnDescriptor col, RelatorioExecutivo r) =>
-        Mini(col, [null, 30, 62, 58, 32], ["Comprador", "Proc.", "Spend gerido", "Saving", "%"], t =>
+        Mini(col, [null, 28, 58, 54, 30], ["Comprador", "Proc.", "Spend", "Saving", "%"], t =>
         {
             foreach (var b in r.Buyers.Take(6))
             {
@@ -496,20 +496,20 @@ public static class RelatorioExecutivoPdf
         }, r.Buyers.Count == 0 ? "Nenhum pedido no recorte." : null);
 
     private static void Centros(ColumnDescriptor col, RelatorioExecutivo r) =>
-        Mini(col, [null, 26, 58, 44], ["Centro de custo / gestor", "Ped.", "Valor", "%"], t =>
+        Mini(col, [null, 26, 58, 44], ["Centro / gestor", "Ped.", "Valor", "%"], t =>
         {
             foreach (var cc in r.Demand.CostCenters)
             {
                 t.Cell().BorderBottom(0.3f).BorderColor(Slate100).PaddingVertical(1.2f).PaddingRight(3).Column(x =>
                 {
-                    x.Item().Text($"{cc.Code} — {cc.Name}").FontSize(6.6f).SemiBold();
-                    if (cc.Manager is not null) x.Item().Text($"gestor: {cc.Manager}").FontSize(5.4f).FontColor(Slate);
+                    x.Item().Text($"{cc.Code} — {cc.Name}").FontSize(7.4f).SemiBold();
+                    if (cc.Manager is not null) x.Item().Text($"gestor: {cc.Manager}").FontSize(6).FontColor(Slate);
                 });
                 N(t, $"{cc.Orders}");
                 N(t, Moeda(cc.Value));
                 t.Cell().BorderBottom(0.3f).BorderColor(Slate100).PaddingVertical(1.2f).PaddingRight(3).Column(x =>
                 {
-                    x.Item().Text($"{cc.Percent:0.#}%").FontSize(6.6f).AlignRight();
+                    x.Item().Text($"{cc.Percent:0.#}%").FontSize(7.4f).AlignRight();
                     x.Item().Element(e => Barra(e, cc.Percent, Navy));
                 });
             }
@@ -544,7 +544,7 @@ public static class RelatorioExecutivoPdf
               <text x="50" y="60" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="7" fill="{Slate}">materiais</text>
             </svg>
             """;
-        col.Item().AlignCenter().Width(66).Svg(svg);
+        col.Item().AlignCenter().Width(80).Svg(svg);
         col.Item().PaddingTop(3).Column(l =>
         {
             l.Spacing(1);
@@ -559,8 +559,8 @@ public static class RelatorioExecutivoPdf
         l.Item().Row(row =>
         {
             row.ConstantItem(7).AlignMiddle().Height(6).Background(cor);
-            row.RelativeItem().PaddingLeft(3).Text(rotulo).FontSize(6.4f).SemiBold();
-            row.AutoItem().Text(valor).FontSize(6.4f);
+            row.RelativeItem().PaddingLeft(3).Text(rotulo).FontSize(7).SemiBold();
+            row.AutoItem().Text(valor).FontSize(7);
         });
 
     private static void Abc(ColumnDescriptor col, RelatorioExecutivo r)
@@ -568,7 +568,7 @@ public static class RelatorioExecutivoPdf
         var s = r.Suppliers;
         col.Item().PaddingBottom(3).Text(
                 $"{s.SupplierCount} fornecedor(es) · maior fatia {Pct(s.Top1Percent)} · 3 maiores {Pct(s.Top3Percent)} · 5 maiores {Pct(s.Top5Percent)}")
-            .FontSize(6.2f).FontColor(Slate);
+            .FontSize(6.8f).FontColor(Slate);
         Mini(col, [null, 24, 58, 30, 34, 18], ["Fornecedor", "Ped.", "Spend", "%", "Acum.", "ABC"], t =>
         {
             foreach (var f in s.Rows.Take(8))
@@ -580,7 +580,7 @@ public static class RelatorioExecutivoPdf
                 N(t, $"{f.Cumulative:0.#}%", Slate);
                 var cor = f.Class == "A" ? Emerald : f.Class == "B" ? Amber : Slate;
                 t.Cell().BorderBottom(0.3f).BorderColor(Slate100).PaddingVertical(1.2f).AlignCenter()
-                    .Text(f.Class).FontSize(6.6f).Bold().FontColor(cor);
+                    .Text(f.Class).FontSize(7.4f).Bold().FontColor(cor);
             }
         }, s.Rows.Count == 0 ? "Nenhum pedido no recorte." : null);
     }
@@ -609,8 +609,8 @@ public static class RelatorioExecutivoPdf
     private static void Numero(RowDescriptor row, string valor, string rotulo) =>
         row.RelativeItem().Background(Slate100).Padding(4).Column(k =>
         {
-            k.Item().Text(valor).Bold().FontSize(11).FontColor(Slate900);
-            k.Item().Text(rotulo).FontSize(5.6f).FontColor(Slate);
+            k.Item().Text(valor).Bold().FontSize(13).FontColor(Slate900);
+            k.Item().Text(rotulo).FontSize(6.2f).FontColor(Slate);
         });
 
     private static void Pagamento(ColumnDescriptor col, RelatorioExecutivo r)
@@ -619,7 +619,7 @@ public static class RelatorioExecutivoPdf
         col.Item().PaddingBottom(3).Text(p.WeightedDays is { } d
                 ? $"DPO {d:0.#} dias, ponderado pelo valor de {p.OrdersWithDays} pedido(s) ({Moeda(p.ValueWithDays)}). O prazo vem da proposta vencedora; sem ela, da condição da O.C."
                 : "Nenhum pedido do recorte tem prazo de pagamento legível.")
-            .FontSize(6.2f).FontColor(Slate);
+            .FontSize(6.8f).FontColor(Slate);
         Mini(col, [null, 30, 26, 58, 60], ["Condição comercial", "Dias", "Ped.", "Spend", "%"], t =>
         {
             foreach (var l in p.Terms.Take(7))
@@ -630,7 +630,7 @@ public static class RelatorioExecutivoPdf
                 N(t, Moeda(l.Value));
                 t.Cell().BorderBottom(0.3f).BorderColor(Slate100).PaddingVertical(1.2f).PaddingRight(3).Column(x =>
                 {
-                    x.Item().Text($"{l.Percent:0.#}%").FontSize(6.6f).AlignRight();
+                    x.Item().Text($"{l.Percent:0.#}%").FontSize(7.4f).AlignRight();
                     x.Item().Element(e => Barra(e, l.Percent, Amber));
                 });
             }
@@ -646,15 +646,15 @@ public static class RelatorioExecutivoPdf
             foreach (var e in r.CycleTimes.Where(e => e.Stage != "solicitacao_oc"))
                 row.RelativeItem().Background(Slate100).Padding(3).Column(k =>
                 {
-                    k.Item().Text(e.MedianDays is { } d ? $"{d:0.#} d" : "—").Bold().FontSize(9).FontColor(Slate900);
-                    k.Item().Text(EtapaCurta(e.Stage)).FontSize(5.2f).FontColor(Slate);
+                    k.Item().Text(e.MedianDays is { } d ? $"{d:0.#} d" : "—").Bold().FontSize(10.5f).FontColor(Slate900);
+                    k.Item().Text(EtapaCurta(e.Stage)).FontSize(5.8f).FontColor(Slate);
                 });
             var total = r.CycleTimes.FirstOrDefault(e => e.Stage == "solicitacao_oc");
             if (total is not null)
                 row.RelativeItem().Background(Navy).Padding(3).Column(k =>
                 {
-                    k.Item().Text(total.MedianDays is { } d ? $"{d:0.#} d" : "—").Bold().FontSize(9).FontColor(Colors.White);
-                    k.Item().Text("SC → O.C. total").FontSize(5.2f).FontColor(Colors.Grey.Lighten2);
+                    k.Item().Text(total.MedianDays is { } d ? $"{d:0.#} d" : "—").Bold().FontSize(10.5f).FontColor(Colors.White);
+                    k.Item().Text("SC → O.C. total").FontSize(5.8f).FontColor(Colors.Grey.Lighten2);
                 });
         });
 
@@ -666,7 +666,7 @@ public static class RelatorioExecutivoPdf
             row.RelativeItem().Border(0.6f).BorderColor(corAd).Padding(4).Column(k =>
             {
                 k.Item().Text("ADERÊNCIA AO FLUXO FORMAL DE O.C.").FontSize(5.4f).SemiBold().FontColor(Slate);
-                k.Item().Text(Pct(ad.Percent)).Bold().FontSize(12).FontColor(corAd);
+                k.Item().Text(Pct(ad.Percent)).Bold().FontSize(15).FontColor(corAd);
                 k.Item().Text($"{ad.Formal} de {ad.Orders} pedido(s) com O.C. do ERP · {Moeda(ad.FormalValue)} de {Moeda(ad.Value)}")
                     .FontSize(5.4f).FontColor(Slate);
             });
@@ -675,7 +675,7 @@ public static class RelatorioExecutivoPdf
                 k.Spacing(2);
                 k.Item().Text(t =>
                 {
-                    t.DefaultTextStyle(x => x.FontSize(6));
+                    t.DefaultTextStyle(x => x.FontSize(6.8f));
                     t.Span("Sem O.C. do ERP: ").SemiBold();
                     t.Span($"{r.WithoutErp.Orders} pela exceção justificada ({Moeda(r.WithoutErp.Value)})");
                     if (r.WithoutErp.ClosedWithoutReason > 0)
@@ -684,7 +684,7 @@ public static class RelatorioExecutivoPdf
                 });
                 k.Item().Text(t =>
                 {
-                    t.DefaultTextStyle(x => x.FontSize(6));
+                    t.DefaultTextStyle(x => x.FontSize(6.8f));
                     t.Span("Saving de referência (× último preço pago): ").SemiBold();
                     t.Span($"ganho {Moeda(r.Reference.Gain)}").FontColor(Emerald);
                     t.Span(" · ");
@@ -693,7 +693,7 @@ public static class RelatorioExecutivoPdf
                 });
                 k.Item().Text(t =>
                 {
-                    t.DefaultTextStyle(x => x.FontSize(6));
+                    t.DefaultTextStyle(x => x.FontSize(6.8f));
                     t.Span("Compliance: ").SemiBold();
                     t.Span($"{r.Kpis.Orders} pedido(s), {r.Urgent.Orders} urgente(s) ({r.Urgent.Percent:0.#}% do valor).");
                 });

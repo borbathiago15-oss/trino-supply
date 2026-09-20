@@ -38,6 +38,7 @@ import { ProcessoDetalhe } from '@/paginas/cotacoes/ProcessoDetalhe';
 import { Portal } from '@/paginas/portal/Portal';
 import { TrocarSenha } from '@/paginas/senha/TrocarSenha';
 import { SessaoProvider, useSessao } from '@/sessao/SessaoProvider';
+import { paginaInicial } from '@/dominio/papeis';
 import { Carregando } from '@/componentes/basicos';
 import { LimiteErro } from '@/componentes/LimiteErro';
 
@@ -56,6 +57,12 @@ function Protegida() {
   return <Outlet />;
 }
 
+/** A raiz leva cada papel para onde o dia dele começa (`paginaInicial`). */
+function Inicio() {
+  const { usuario } = useSessao();
+  return <Navigate to={usuario ? paginaInicial(usuario) : '/login'} replace />;
+}
+
 export function Rotas() {
   return (
     <Routes>
@@ -66,7 +73,7 @@ export function Rotas() {
         {/* fora do AppLayout: com a senha provisória o menu não deve nem aparecer */}
         <Route path="/trocar-senha" element={<TrocarSenha />} />
         <Route element={<AppLayout />}>
-          <Route index element={<Navigate to="/painel" replace />} />
+          <Route index element={<Inicio />} />
           <Route path="/pedidos" element={<PedidosLista />} />
           <Route path="/pedidos/:id" element={<PedidoDetalhe />} />
           <Route path="/fornecedores" element={<Fornecedores />} />
@@ -102,7 +109,7 @@ export function Rotas() {
           <Route path="/cotacoes/:id" element={<ProcessoDetalhe />} />
         </Route>
       </Route>
-      <Route path="*" element={<Navigate to="/painel" replace />} />
+      <Route path="*" element={<Inicio />} />
     </Routes>
   );
 }

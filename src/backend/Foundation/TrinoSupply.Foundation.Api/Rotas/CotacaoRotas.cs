@@ -44,10 +44,20 @@ public static class CotacaoRotas
         // o caminho (quem pediu, quem aprova, o que falta) só vai no detalhe: a lista não paga
         // as duas consultas a mais por linha
         static object QuotationView(Quotation q, IReadOnlyList<EtapaDoCaminho>? caminho = null,
-            IReadOnlyDictionary<Guid, PurchaseOrder>? pedidos = null) => new
+            IReadOnlyDictionary<Guid, PurchaseOrder>? pedidos = null, DecisaoResumo? decisao = null) => new
         {
             id = q.Id, number = q.Number, kind = QKindLabel(q.Kind), status = QStatusLabel(q.Status),
             caminho,
+            // só na fila de aprovação: o que o card de decisão mostra sem abrir o processo
+            decisao = decisao is null ? null : new
+            {
+                requesterLabel = decisao.RequesterLabel, priority = decisao.Priority,
+                urgencyReason = decisao.UrgencyReason, urgencyImpact = decisao.UrgencyImpact,
+                neededBy = decisao.NeededBy, budget = decisao.Budget, level = decisao.Level,
+                waitingSince = decisao.WaitingSince, complianceScore = decisao.ComplianceScore,
+                compliancePenalties = decisao.CompliancePenalties.Select(p => new { code = p.Code, label = p.Label, points = p.Points, evidence = p.Evidence }),
+                contractNumber = decisao.ContractNumber,
+            },
             sourcePrId = q.SourcePrId, sourcePrNumber = q.SourcePrNumber, costCenter = q.CostCenter,
             sourcePrNumbers = q.SourcePrNumbers,
             justification = q.Justification, deadline = q.Deadline, notes = q.Notes,
@@ -153,10 +163,27 @@ public static class CotacaoRotas
         });
 
         // Central de Aprovação: processos de compra aguardando a MINHA alçada, já com preços
-        rfq.MapGet("/my-approvals", async (QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
+        rfq.MapGet("/my-approvals", async (QuotationService svc, AppDbContext db,
+            TrinoSupply.Foundation.Api.Compliance.ComplianceService compliance, TimeProvider clock, ClaimsPrincipal p, HttpContext ctx) =>
         {
             var fila = await svc.PendingApprovalsAsync(RoleOf(p), ActorId(p));
-            return Ok(new { items = fila.Select(x => QuotationView(x)) }, ctx);
+            var resumos = await ResumoDaDecisao.MontarAsync(db, compliance, clock, fila, ctx.RequestAborted);
+            return Ok(new { items = fila.Select(x => QuotationView(x, decisao: resumos.GetValueOrDefault(x.Id))) }, ctx);
+        });
+
+        // Central de Aprovação: o que eu decidi nos últimos dias — memória curta de quem aprova
+        rfq.MapGet("/my-decisions", async (QuotationService svc, ClaimsPrincipal p, HttpContext ctx, int? dias) =>
+        {
+            var lista = await svc.MinhasDecisoesAsync(ActorId(p), Math.Clamp(dias ?? 30, 1, 90));
+            return Ok(new
+            {
+                items = lista.Select(d => new
+                {
+                    quotationId = d.QuotationId, number = d.Number, status = QStatusLabel(d.Status),
+                    eventType = d.EventType, occurredAt = d.OccurredAt, note = d.Note,
+                    supplierName = d.SupplierName, totalValue = d.TotalValue,
+                }),
+            }, ctx);
         });
 
         // fila de Suprimentos: PRs aprovadas aguardando cotação

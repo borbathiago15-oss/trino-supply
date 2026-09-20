@@ -71,7 +71,8 @@ export const MENU: GrupoMenu[] = [
     // de coisa que ninguém abre todo dia. Quem só enxerga o painel não paga por
     // isso: subgrupo com uma tela só vira item simples (`itensVisiveis`).
     { rotulo: 'Dashboard', filhos: [
-      { id: 'supply-dash', rotulo: 'Dashboard de Suprimentos', rota: '/painel', mostrar: sempre },
+      // o painel é do comprador e de quem lê tudo; o solicitante começa nas próprias SCs
+      { id: 'supply-dash', rotulo: 'Dashboard de Suprimentos', rota: '/painel', mostrar: (u) => u.role !== 'Requester' },
       { id: 'insights', rotulo: 'Insights & Executivo', rota: '/insights', modulo: 'INSIGHTS', mostrar: podeVerCompliance },
       { id: 'compliance', rotulo: 'Compliance', rota: '/compliance', modulo: 'COMPLIANCE', mostrar: podeVerCompliance },
       { id: 'reports', rotulo: 'Relatórios', rota: '/relatorios', mostrar: podeVerRelatorios },

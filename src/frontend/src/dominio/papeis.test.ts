@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
-  podeAprovarDiretor, podeAprovarGerente, podeConfirmarEntrega, podeCriarSc, podeGerirPedidos, podeVerPedidos, temModulo,
+  paginaInicial, podeAprovarDiretor, podeAprovarGerente, podeConfirmarEntrega, podeCriarSc, podeGerirPedidos, podeVerPedidos, temModulo,
 } from './papeis';
 
 describe('papéis', () => {
+  it('cada papel começa o dia onde o trabalho dele está', () => {
+    // quem aprova abre a fila de decisão; quem pede abre as próprias SCs; o resto, o painel
+    expect(paginaInicial({ role: 'Director' })).toBe('/aprovacoes');
+    expect(paginaInicial({ role: 'Approver' })).toBe('/aprovacoes');
+    expect(paginaInicial({ role: 'Requester' })).toBe('/solicitacoes');
+    expect(paginaInicial({ role: 'PurchasingOfficer' })).toBe('/painel');
+    expect(paginaInicial({ role: 'SystemAdministrator' })).toBe('/painel');
+  });
+
   it('gestão de pedidos segue PurchaseOrderService.CanManage/CanView', () => {
     expect(podeGerirPedidos({ role: 'PurchasingOfficer' })).toBe(true);
     expect(podeGerirPedidos({ role: 'Auditor' })).toBe(false);

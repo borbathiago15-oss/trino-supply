@@ -160,6 +160,33 @@ public partial class QuotationService(AppDbContext db, TimeProvider clock)
             .ToListAsync(ct);
     }
 
+    /// <summary>
+    /// As decisões de alçada que esta pessoa tomou nos últimos dias, mais recentes primeiro.
+    /// Sai dos eventos do processo — o mesmo registro que a auditoria lê —, não de uma lista
+    /// paralela que poderia contar diferente.
+    /// </summary>
+    public async Task<List<DecisaoRecente>> MinhasDecisoesAsync(Guid actorId, int dias = 30, CancellationToken ct = default)
+    {
+        string[] tipos = ["GERENTE_APROVOU", "DIRETOR_APROVOU", "PROCESSO_REJEITADO", "AJUSTES_SOLICITADOS"];
+        var desde = clock.GetUtcNow().AddDays(-dias);
+        var eventos = await db.ProcessEvents
+            .Where(e => e.ActorId == actorId && tipos.Contains(e.EventType) && e.OccurredAt >= desde)
+            .OrderByDescending(e => e.OccurredAt).Take(50).ToListAsync(ct);
+        if (eventos.Count == 0) return [];
+        var ids = eventos.Select(e => e.QuotationId).Distinct().ToList();
+        var processos = await db.Quotations.Include(q => q.Awards).Include(q => q.Proposals)
+            .Where(q => ids.Contains(q.Id)).ToDictionaryAsync(q => q.Id, ct);
+        return eventos.Where(e => processos.ContainsKey(e.QuotationId)).Select(e =>
+        {
+            var q = processos[e.QuotationId];
+            var vencedora = q.Proposals.FirstOrDefault(p => p.Id == q.WinnerProposalId);
+            var fornecedor = q.IsSplitAward ? string.Join(", ", q.AwardList.Select(a => a.SupplierName).Distinct())
+                : q.AwardList.FirstOrDefault()?.SupplierName ?? vencedora?.SupplierName;
+            var total = q.AwardList.Count > 0 ? q.AwardList.Sum(a => a.TotalValue) : vencedora?.TotalValue;
+            return new DecisaoRecente(q.Id, q.Number, q.Status, e.EventType, e.OccurredAt, e.Note, fornecedor, total);
+        }).ToList();
+    }
+
     public Task<Quotation?> GetAsync(Guid id, CancellationToken ct = default) =>
         db.Quotations.Include(q => q.Items).Include(q => q.Suppliers).Include(q => q.Awards)
             .Include(q => q.Proposals).ThenInclude(p => p.Items)

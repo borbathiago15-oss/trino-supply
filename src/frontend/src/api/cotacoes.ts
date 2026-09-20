@@ -18,25 +18,111 @@ export const ROTULO_RFQ: Record<string, { rotulo: string; classe: string }> = {
 
 export interface PropostaResumo { id: string; supplierName: string; totalValue: number | null }
 
-export interface ProcessoParaAprovar {
-  id: string;
-  number: string;
-  status: string;
-  costCenter: string;
-  sourcePrNumber: string | null;
-  justification: string | null;
-  selection: { winnerProposalId: string; justification: string | null } | null;
-  proposals: PropostaResumo[];
+/** Penalização do Compliance Score, com a evidência que a justifica. */
+export interface PenalidadeDeCompliance { code: string; label: string; points: number; evidence: string }
+
+/**
+ * O que a fila de aprovação traz além do processo: os fatos da SC de origem, a espera pelo
+ * relógio da alçada, o compliance e o contrato. É o que o card mostra sem abrir o processo.
+ */
+export interface ResumoDaDecisao {
+  requesterLabel: string;
+  priority: string;
+  urgencyReason: string | null;
+  urgencyImpact: string | null;
+  neededBy: string | null;
+  budget: number | null;
+  /** 1 = gestor do centro, 2 = diretoria. */
+  level: number;
+  waitingSince: string | null;
+  complianceScore: number | null;
+  compliancePenalties: PenalidadeDeCompliance[];
+  contractNumber: string | null;
 }
+
+/** Um processo na fila de quem aprova: o processo inteiro mais o resumo da decisão. */
+export type ProcessoParaAprovar = Processo & { decisao: ResumoDaDecisao | null };
 
 /** Processos cotados aguardando a alçada de quem está logado. */
 export const processosParaMinhaAprovacao = async (signal?: AbortSignal) =>
-  (await api<{ items: ProcessoParaAprovar[] }>('/api/v1/quotations/my-approvals', { signal })).items;
+  (await api<{ items: ProcessoParaAprovar[] }>('/api/v1/quotations/my-approvals', { signal })).items
+    .map((q) => ({ ...normalizar(q), decisao: q.decisao ? { ...q.decisao, compliancePenalties: q.decisao.compliancePenalties ?? [] } : null }));
 
 /** Proposta vencedora escolhida pelo comprador, quando já houver seleção. */
-export function propostaVencedora(q: ProcessoParaAprovar): PropostaResumo | null {
+export function propostaVencedora(q: Pick<Processo, 'selection' | 'proposals'>): PropostaResumo | null {
   if (!q.selection) return null;
   return q.proposals?.find((p) => p.id === q.selection!.winnerProposalId) ?? null;
+}
+
+/** Uma decisão de alçada que quem está logado já tomou. */
+export interface DecisaoRecente {
+  quotationId: string;
+  number: string;
+  status: string;
+  eventType: 'GERENTE_APROVOU' | 'DIRETOR_APROVOU' | 'PROCESSO_REJEITADO' | 'AJUSTES_SOLICITADOS' | string;
+  occurredAt: string;
+  note: string | null;
+  supplierName: string | null;
+  totalValue: number | null;
+}
+
+export const ROTULO_DECISAO: Record<string, string> = {
+  GERENTE_APROVOU: 'Aprovou (Nível 1)',
+  DIRETOR_APROVOU: 'Aprovou (Nível 2)',
+  PROCESSO_REJEITADO: 'Rejeitou',
+  AJUSTES_SOLICITADOS: 'Pediu ajustes',
+};
+
+export const minhasDecisoes = async (signal?: AbortSignal) =>
+  (await api<{ items: DecisaoRecente[] }>('/api/v1/quotations/my-decisions', { signal })).items ?? [];
+
+/**
+ * O que o comprador escolheu, contra a proposta mais barata em jogo. É a pergunta que o
+ * aprovador faz primeiro — "por que não a mais barata?" — e a resposta tem de estar no
+ * card, não a três cliques. Compra dividida soma as adjudicações; a comparação usa só as
+ * propostas vigentes (a última versão de cada fornecedor).
+ */
+export interface ComparacaoDaEscolha {
+  total: number | null;
+  fornecedor: string | null;
+  /** Nulo quando não há outra proposta para comparar. */
+  maisBarata: { supplierName: string; totalValue: number } | null;
+  /** Quanto a escolha está acima da mais barata, em percentual; 0 quando é a própria. */
+  acimaPercent: number | null;
+  propostas: number;
+  deliveryDays: number | null;
+  paymentTerms: string | null;
+}
+
+export function comparacaoDaEscolha(q: Pick<Processo, 'selection' | 'proposals' | 'awards'>): ComparacaoDaEscolha {
+  const vigentes = q.proposals.filter((p) => p.isLatest);
+  const vencedora = propostaVencedora(q);
+  const dividida = q.awards.length > 0 && new Set(q.awards.map((a) => a.supplierId)).size > 1;
+  const total = q.awards.length > 0 ? q.awards.reduce((s, a) => s + a.totalValue, 0) : vencedora?.totalValue ?? null;
+  const fornecedor = dividida
+    ? [...new Set(q.awards.map((a) => a.supplierName))].join(' + ')
+    : q.awards[0]?.supplierName ?? vencedora?.supplierName ?? null;
+  const escolhidos = new Set(q.awards.length > 0 ? q.awards.map((a) => a.supplierId) : vencedora ? [vencedora.id] : []);
+  const outras = vigentes.filter((p) => !escolhidos.has(p.supplierId) && p.id !== vencedora?.id);
+  const menor = outras.length ? outras.reduce((m, p) => (p.totalValue < m.totalValue ? p : m)) : null;
+  const maisBarata = menor && total != null && menor.totalValue < total ? { supplierName: menor.supplierName, totalValue: menor.totalValue } : null;
+  const acimaPercent = maisBarata && total != null && maisBarata.totalValue > 0
+    ? Math.round(((total - maisBarata.totalValue) / maisBarata.totalValue) * 1000) / 10
+    : total != null && outras.length ? 0 : null;
+  const proposta = vigentes.find((p) => p.id === vencedora?.id) ?? vencedora as Proposta | null;
+  return {
+    total, fornecedor, maisBarata, acimaPercent, propostas: vigentes.length,
+    deliveryDays: (proposta as Proposta | null)?.deliveryDays ?? null,
+    paymentTerms: (proposta as Proposta | null)?.paymentTerms ?? null,
+  };
+}
+
+/** Dias inteiros desde uma data até agora; nulo sem data. */
+export function diasDesde(iso: string | null | undefined, agora: Date = new Date()): number | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  return Math.max(0, Math.floor((agora.getTime() - t) / 86_400_000));
 }
 
 // ---- fila de solicitações aguardando cotação ------------------------------

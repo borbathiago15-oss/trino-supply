@@ -79,3 +79,20 @@ export const podeGerirPedidos = (u: Perfil) => entre(u, 'PurchasingOfficer', 'Su
 export const podeVerPedidos = (u: Perfil) => podeGerirPedidos(u) || u.role === 'Auditor';
 /** Entrega pode ser confirmada por quem gere o pedido ou por quem opera o estoque. */
 export const podeConfirmarEntrega = (u: Perfil) => podeGerirPedidos(u) || podeAlmoxarifado(u);
+
+/**
+ * Onde cada papel começa o dia. Quem aprova abre a Central; quem pede abre as próprias
+ * solicitações; quem compra, e quem lê tudo, abre o painel. Mandar o diretor para o
+ * dashboard do comprador era pedir que ele achasse a fila dele num menu.
+ */
+export function paginaInicial(u: Perfil): string {
+  switch (u.role) {
+    case 'Director':
+    case 'Approver':
+      return '/aprovacoes';
+    case 'Requester':
+      return '/solicitacoes';
+    default:
+      return '/painel';
+  }
+}

@@ -90,7 +90,7 @@ export function CentralDeAprovacao() {
       <Painel titulo="Compras aguardando a sua aprovação">
         {erro && <Erro>{erro}</Erro>}
         {carregando && !dados && <Carregando />}
-        {dados && !processos.length && <Vazio>Nenhuma compra aguardando a sua aprovação.</Vazio>}
+        {dados && !processos.length && <Vazio icone="ok" titulo="Fila limpa">Nenhuma compra aguardando a sua aprovação.</Vazio>}
         {/*
           Duas formas para os mesmos processos. No celular, cartão: medi a tabela em 900px
           dentro de uma caixa de 316px, com o botão "Analisar e decidir" em x=784 numa tela
@@ -227,7 +227,11 @@ export function CentralDeAprovacao() {
         </Painel>
       )}
 
-      {vazia && <Painel titulo="Nada na sua fila"><Vazio>Nenhuma aprovação pendente para você agora.</Vazio></Painel>}
+      {vazia && (
+        <Painel titulo="Nada na sua fila">
+          <Vazio icone="ok" titulo="Sua fila está limpa">Nenhuma aprovação pendente para você agora.</Vazio>
+        </Painel>
+      )}
 
       {acao?.tipo === 'aprovar-sc' && (
         <DialogoMotivo titulo={`Aprovar ${acao.sc.number}`} rotulo="Comentário da aprovação" dica="(opcional)"

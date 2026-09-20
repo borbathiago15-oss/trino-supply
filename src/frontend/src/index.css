@@ -11,19 +11,26 @@
   }
   label { @apply block text-[12.5px] font-semibold text-texto-suave mb-1; }
   table { @apply w-full border-collapse text-[13.5px]; }
-  th { @apply text-left text-[11.5px] font-bold uppercase tracking-wide text-texto-suave border-b border-borda px-2.5 py-2; }
-  td { @apply border-b border-borda px-2.5 py-2 align-top; }
+  th { @apply text-left text-xs font-semibold uppercase tracking-wider text-slate-500 border-b border-borda px-2.5 py-2; }
+  td { @apply border-b border-slate-100 px-2.5 py-2 align-top; }
   tr:last-child td { @apply border-b-0; }
+  tbody tr { @apply transition-colors hover:bg-slate-50/70; }
 }
 
 @layer components {
-  .painel { @apply bg-superficie border border-borda rounded-painel px-5 py-[18px] mb-4; }
+  /* cartão: branco sobre o slate-50 do fundo, borda suave e sombra curta */
+  .painel { @apply bg-white border border-slate-200/80 shadow-sm rounded-xl px-5 py-[18px] mb-4; }
   .sub { @apply text-[12px] text-texto-suave; }
+  /* rótulo de seção e de cartão: o mesmo em toda a aplicação */
+  .rotulo { @apply text-xs font-semibold uppercase tracking-wider text-slate-500; }
   .botao { @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-[13.5px] font-semibold
-    bg-marca text-white hover:bg-marca-escuro disabled:opacity-50 disabled:cursor-not-allowed transition-colors; }
-  .botao-secundario { @apply botao bg-white text-texto border border-borda hover:bg-superficie-suave; }
-  .botao-perigo { @apply botao bg-perigo-fundo text-perigo border border-perigo/30 hover:bg-perigo/10; }
+    bg-marca text-white shadow-sm hover:bg-marca-escuro disabled:opacity-50 disabled:cursor-not-allowed transition-colors; }
+  .botao-secundario { @apply botao bg-white text-texto border border-borda hover:bg-slate-50 shadow-none; }
+  .botao-perigo { @apply botao bg-perigo-fundo text-perigo border border-perigo-borda hover:bg-perigo/10 shadow-none; }
   /* ações dentro de tabela: compactas, numa linha só */
   td .botao, td .botao-secundario, td .botao-perigo { @apply px-2.5 py-1.5 text-[12.5px] whitespace-nowrap; }
-  .badge { @apply inline-block rounded-full px-2.5 py-0.5 text-[12px] font-semibold whitespace-nowrap; }
+  /* A borda do badge sai da própria cor do texto, a 22%: emerald ganha borda emerald, rose ganha
+     rose — sem cada mapa de classes precisar declarar a sua. */
+  .badge { @apply inline-block rounded-full border px-2.5 py-0.5 text-[12px] font-semibold whitespace-nowrap; }
+  .badge { border-color: color-mix(in srgb, currentColor 22%, transparent); }
 }

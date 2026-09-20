@@ -47,7 +47,7 @@ export function CaminhoDoProcesso({ etapas, centro }: { etapas: EtapaDoCaminho[]
 
   return (
     <div data-testid="caminho-do-processo" className="mt-3 rounded-lg border border-marca/25 px-4 py-3">
-      <p className="text-[11.5px] font-bold uppercase tracking-wide text-texto-suave">Caminho do processo</p>
+      <p className="rotulo">Caminho do processo</p>
       <ol className="mt-2 grid gap-x-6 gap-y-1.5 md:grid-cols-2">
         {etapas.map((e) => (
           <li key={e.chave} data-etapa={e.chave} data-situacao={e.situacao}

@@ -26,7 +26,7 @@ function Cartao({ rotulo, valor, detalhe, aberto, aoEscolher }: {
     <button type="button" onClick={aoEscolher} aria-pressed={aberto}
       className={'rounded-painel border px-4 py-3 text-left transition-colors '
         + (aberto ? 'border-marca bg-marca/5' : 'border-borda bg-superficie hover:bg-superficie-suave')}>
-      <div className="text-[11.5px] font-bold uppercase tracking-wide text-texto-suave">{rotulo}</div>
+      <div className="rotulo">{rotulo}</div>
       <div className="mt-1 text-[22px] font-bold leading-tight">{valor}</div>
       <div className="sub mt-0.5">{detalhe}</div>
       <div className="mt-1 text-[12px] font-semibold text-marca">{aberto ? 'mostrando só este →' : 'ver a lista →'}</div>

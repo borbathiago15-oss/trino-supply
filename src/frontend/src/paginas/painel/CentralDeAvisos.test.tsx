@@ -73,6 +73,6 @@ describe('Central de Avisos', () => {
     abrir();
     const lista = await screen.findByTestId('lista-avisos');
     expect(lista.querySelector('[data-aviso="ALTA"]')?.className).toContain('text-perigo');
-    expect(lista.querySelector('[data-aviso="INFO"]')?.className).toContain('bg-superficie-suave');
+    expect(lista.querySelector('[data-aviso="INFO"]')?.className).toContain('border-l-slate-300');
   });
 });

@@ -46,7 +46,7 @@ export function AppLayout() {
                 className="botao-secundario shrink-0 !px-2.5 !py-1.5 text-[16px] leading-none lg:hidden">
                 ☰
               </button>
-              <h1 className="truncate text-[17px] font-bold sm:text-[19px]" id="titulo-pagina">{titulo}</h1>
+              <h1 className="truncate text-xl font-bold tracking-tight text-slate-900 sm:text-2xl" id="titulo-pagina">{titulo}</h1>
             </div>
             <div className="flex items-center gap-2.5 text-[13px] text-texto-suave">
               {/* o sino vem antes do nome: é o que muda, e o nome é o que fica */}

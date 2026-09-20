@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { GraficoColunas, ListaBarras, moedaCurta, rotuloDoMes, type Serie } from './graficos';
 
@@ -22,20 +23,28 @@ describe('formatos do gráfico', () => {
 });
 
 describe('GraficoColunas', () => {
-  it('desenha uma barra por série e mês, com o valor no tooltip', () => {
+  it('desenha uma barra por série e mês, com o valor no tooltip', async () => {
     render(<GraficoColunas rotulos={['2026-08', '2026-09']} series={series} titulo="Por mês" />);
     const grafico = screen.getByRole('img', { name: 'Por mês' });
     // 2 meses × 2 séries; a barra de valor zero continua no DOM, com altura mínima
-    expect(grafico.querySelectorAll('rect')).toHaveLength(4);
+    // (o rect do clipPath não é barra: fica em <defs>)
+    const barras = grafico.querySelectorAll('g[clip-path] rect');
+    expect(barras).toHaveLength(4);
     expect(within(grafico).getByText('set/26')).toBeInTheDocument();
-    expect(grafico.querySelector('title')?.textContent).toBe('ago/26 — Aprovadas: 3');
+    expect(barras[0]).toHaveAttribute('aria-label', 'ago/26 — Aprovadas: 3');
+    // o tooltip escuro aparece ao passar o ponteiro, e some ao sair do gráfico
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    await userEvent.hover(barras[0]);
+    expect(screen.getByRole('tooltip')).toHaveTextContent('ago/26 — Aprovadas: 3');
+    await userEvent.unhover(grafico);
+    expect(screen.queryByRole('tooltip')).toBeNull();
   });
 
   it('empilhado omite a fatia zerada em vez de desenhar uma barra invisível', () => {
     render(<GraficoColunas rotulos={['2026-08', '2026-09']} series={series} empilhado titulo="Empilhado" />);
     const grafico = screen.getByRole('img', { name: 'Empilhado' });
     // ago tem 3 e 1; set tem 5 e 0 → 3 fatias
-    expect(grafico.querySelectorAll('rect')).toHaveLength(3);
+    expect(grafico.querySelectorAll('g[clip-path] rect')).toHaveLength(3);
   });
 
   it('sem meses no período, explica em vez de desenhar um eixo vazio', () => {

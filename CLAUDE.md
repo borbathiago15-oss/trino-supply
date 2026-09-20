@@ -60,7 +60,11 @@ o usuário descobrir no erro do servidor:
   custo**, cota, escolhe e dá o Nível 1 do próprio processo, sem depender da lista de
   aprovadores do centro (que continua valendo para os gestores). O que o separa da compra é
   a segunda alçada, que ele não dá. A fila do Nível 1 e a Central de Avisos contam a própria
-  escolha; o impasse do caminho do processo só existe no Nível 2.
+  escolha; o impasse do caminho do processo só existe no Nível 2. **O diretor também
+  solicita** (`Actor.CanCreate`, `podeCriarSc`): a SC dele segue o caminho de todas — o Nível 1
+  é do comprador ou da lista do centro, e o Nível 2 ele mesmo dá, porque a segregação separa
+  quem escolhe e quem aprova, não quem pede. Com centros vinculados no cadastro, solicita só
+  deles (PR-ERR-021), como o solicitante.
 - **RFQ-ERR-040/041** — a O.C. nunca é emitida pelo sistema. Ela é fechada no ERP
   SENIOR e aqui só se registra o número, depois das duas aprovações.
 - **PO-BR-011** — **sem O.C. gerada no ERP, a compra não fecha.** A única exceção

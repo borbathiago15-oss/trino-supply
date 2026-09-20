@@ -48,8 +48,11 @@ const entre = (u: Perfil, ...papeis: Papel[]) => papeis.includes(u.role);
 export const ehAdmin = (u: Perfil) => u.role === 'SystemAdministrator';
 export const temModulo = (u: Perfil, m: Modulo) => ehAdmin(u) || (u.modules ?? []).includes(m);
 
-/** O comprador também solicita, em qualquer centro — decisão da empresa (2026-09). */
-export const podeCriarSc = (u: Perfil) => entre(u, 'Requester', 'SupplyManager', 'SystemAdministrator', 'PurchasingOfficer');
+/**
+ * O comprador também solicita, em qualquer centro — decisão da empresa (2026-09). O diretor
+ * também: o Nível 1 da SC dele é do comprador ou da lista do centro, e o Nível 2 ele mesmo dá.
+ */
+export const podeCriarSc = (u: Perfil) => entre(u, 'Requester', 'SupplyManager', 'SystemAdministrator', 'PurchasingOfficer', 'Director');
 export const podeDecidirSc = (u: Perfil) => entre(u, 'Approver', 'SupplyManager', 'SystemAdministrator');
 export const podePedirMaterial = (u: Perfil) => entre(u, 'Requester', 'SupplyManager', 'SystemAdministrator');
 export const podeAlmoxarifado = (u: Perfil) => temModulo(u, 'ESTOQUE')

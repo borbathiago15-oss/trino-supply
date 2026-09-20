@@ -106,6 +106,7 @@ describe('menu', () => {
     expect(ids).toContain('pr-approvals');
     expect(ids).toContain('reports');
     expect(ids).toContain('pr-mine');
+    expect(ids).toContain('pr-new-unit');   // o diretor também solicita
     // a visão da diretoria substitui o painel do comprador e o Insights para esse papel
     expect(ids[0]).toBe('director-view');
     for (const fora of ['supply-dash', 'insights', 'control-tower', 'quotations', 'rfq-queue', 'buy-orders', 'scorecard', 'triage', 'wh-queue', 'products'])

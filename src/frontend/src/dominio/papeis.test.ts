@@ -31,6 +31,8 @@ describe('papéis', () => {
   it('o comprador solicita e dá o Nível 1; o Nível 2 continua da diretoria', () => {
     // decisão da empresa (2026-09): quem cota abre a SC em qualquer centro e fecha a primeira alçada
     expect(podeCriarSc({ role: 'PurchasingOfficer' })).toBe(true);
+    expect(podeCriarSc({ role: 'Director' })).toBe(true);   // o diretor também solicita (2026-09)
+    expect(podeCriarSc({ role: 'Auditor' })).toBe(false);
     expect(podeAprovarGerente({ role: 'PurchasingOfficer' })).toBe(true);
     expect(podeAprovarDiretor({ role: 'PurchasingOfficer' })).toBe(false);
   });

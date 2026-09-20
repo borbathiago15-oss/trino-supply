@@ -209,6 +209,42 @@ public class QuotationServiceTests
         Assert.Single(await w.Rfq.PendingApprovalsAsync(Roles.PurchasingOfficer, Carla.Id)); // o comprador decide em qualquer centro
     }
 
+    /// <summary>
+    /// O diretor também solicita (2026-09): a SC dele segue o caminho de todas — o comprador
+    /// cota e escolhe, o Nível 1 é do gestor (ou do comprador), e o Nível 2 ele mesmo dá. A
+    /// segregação separa quem escolhe e quem aprova, não quem pede.
+    /// </summary>
+    [Fact]
+    public async Task Diretor_solicita_e_da_o_nivel_2_da_propria_SC()
+    {
+        var w = await BuildAsync();
+        await ComAlcadasAsync(w, "BAH-001", [Gustavo], [Diana]);
+        var (sc, erroSc) = await w.Prs.CreateAsync(Diana, "Notebooks para a diretoria", "BAH-001", "NORMAL", null,
+            [new ItemInput("Notebook", 2, "UN", 4000m, null), new ItemInput("Mouse", 2, "UN", 80m, null)]);
+        Assert.Null(erroSc);
+        var (_, erroEnvio) = await w.Prs.SubmitAsync(Diana, sc!.Id);
+        Assert.Null(erroEnvio);
+
+        var (q, e1) = await w.Rfq.CreateFromPrAsync(Carla, sc.Id, QuotationKind.Purchase, null, null);
+        Assert.Null(e1);
+        await w.Rfq.InviteSuppliersAsync(Carla, q!.Id, [w.Alfa.Id]);
+        await w.Rfq.SubmitProposalAsync(q.Id, w.Alfa.Id, ProposalFor(q, 3900m, 75m), "PORTAL", "Alfa");
+        await w.Rfq.CloseForAnalysisAsync(Carla, q.Id);
+        var winner = (await w.Rfq.GetAsync(q.Id))!.Proposals.Single();
+        var (_, e2) = await w.Rfq.SelectWinnerAsync(Carla, q.Id, winner.Id, "Preço", "Proposta única dentro do orçamento.");
+        Assert.Null(e2);
+
+        // o diretor não dá o Nível 1 nem da própria SC: é do gestor do centro (ou do comprador)
+        var (_, e3) = await w.Rfq.ManagerDecisionAsync(Gustavo, q.Id, "APROVAR", null);
+        Assert.Null(e3);
+        // e a fila do Nível 2 traz a SC dele, porque pedir não é escolher nem aprovar
+        Assert.Single(await w.Rfq.PendingApprovalsAsync(Roles.Director, Diana.Id));
+        var (aprovado, e4) = await w.Rfq.DirectorDecisionAsync(Diana, q.Id, "APROVAR", null);
+        Assert.Null(e4);
+        Assert.Equal(QuotationStatus.ApprovedForIssue, aprovado!.Status);
+        Assert.Equal(RequisitionStatus.Approved, (await w.Db.Requisitions.SingleAsync(r => r.Id == sc.Id)).Status);
+    }
+
     private static async Task<Quotation> UpToApprovedAsync(World w)
     {
         var q = await UpToAnalysisAsync(w);

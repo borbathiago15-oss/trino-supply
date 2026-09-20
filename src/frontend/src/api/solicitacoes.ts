@@ -41,6 +41,37 @@ export interface AnexoSc {
   uploadedByLabel: string | null;
 }
 
+/** Uma etapa da linha do tempo do solicitante. */
+export interface EtapaDaSc {
+  chave: 'enviada' | 'comprador' | 'cotacao' | 'aprovacao' | 'pedido' | 'entrega' | string;
+  rotulo: string;
+  situacao: 'feita' | 'atual' | 'pendente' | 'parada';
+  quando: string | null;
+  quem: string | null;
+}
+
+/**
+ * Onde a solicitação está, na língua de quem pediu: a etapa atual, com quem está, desde
+ * quando e quando chega. Vem pronto do servidor, derivado da SC, do processo e do pedido —
+ * a etiqueta e a frase saem da mesma consulta e nunca discordam.
+ */
+export interface AcompanhamentoDaSc {
+  etapas: EtapaDaSc[];
+  etapaAtual: string;
+  frase: string;
+  comQuem: string | null;
+  desde: string | null;
+  previsao: string | null;
+  motivo: string | null;
+  /** A bola está com quem pediu: rascunho a enviar ou devolvida a corrigir. */
+  precisaDoSolicitante: boolean;
+  quotationId: string | null;
+  quotationNumber: string | null;
+  purchaseOrderId: string | null;
+  purchaseOrderNumber: string | null;
+  fornecedor: string | null;
+}
+
 export interface SolicitacaoCompra {
   id: string;
   number: string;
@@ -73,9 +104,29 @@ export interface SolicitacaoCompra {
   processStatusLabel: string | null;
   processStatusTone: string | null;
   processStatusHint: string | null;
+  /** Linha do tempo do solicitante; nula quando a API ainda não a manda. */
+  acompanhamento: AcompanhamentoDaSc | null;
   attachments: AnexoSc[];
   items: ItemSc[];
 }
+
+/** A API pode mandar listas nulas e, em versão antiga, sem o acompanhamento. */
+export const normalizarSc = (r: SolicitacaoCompra): SolicitacaoCompra => ({
+  ...r, attachments: r.attachments ?? [], items: r.items ?? [],
+  acompanhamento: r.acompanhamento ? { ...r.acompanhamento, etapas: r.acompanhamento.etapas ?? [] } : null,
+});
+
+/** Encerrada = chegou ao fim ou parou de vez: não conta como "em andamento". */
+export function scEncerrada(r: Pick<SolicitacaoCompra, 'status' | 'acompanhamento'>) {
+  if (r.status === 'REJECTED' || r.status === 'CANCELLED') return true;
+  const a = r.acompanhamento;
+  if (!a) return false;
+  return a.etapas.every((e) => e.situacao === 'feita') || a.etapas.some((e) => e.situacao === 'parada');
+}
+
+/** A bola está com o solicitante: rascunho para enviar ou devolvida para corrigir. */
+export const precisaDoSolicitante = (r: Pick<SolicitacaoCompra, 'status' | 'acompanhamento'>) =>
+  r.acompanhamento?.precisaDoSolicitante ?? (r.status === 'DRAFT' || r.status === 'RETURNED');
 
 /** Situação a exibir: a do processo tem prioridade sobre a bruta da SC. */
 export function situacaoDaSc(r: Pick<SolicitacaoCompra, 'status' | 'processStatusLabel' | 'processStatusTone'>) {
@@ -115,7 +166,7 @@ export async function listarSolicitacoes(
   const consulta = params.toString();
   const r = await api<{ items: SolicitacaoCompra[]; total: number }>(
     `${base}/${consulta ? `?${consulta}` : ''}`, { signal });
-  return { itens: r.items ?? [], total: r.total ?? 0 };
+  return { itens: (r.items ?? []).map(normalizarSc), total: r.total ?? 0 };
 }
 
 export interface ItemNovo {

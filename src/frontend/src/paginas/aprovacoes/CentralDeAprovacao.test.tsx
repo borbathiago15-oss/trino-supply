@@ -60,7 +60,7 @@ const scLegado = {
   requesterId: 'u9', requesterLabel: 'João', totalEstimatedValue: 500, decisionReason: null,
   decidedByLabel: null, approverLabel: null, approvalIssue: null, assignedToLabel: null, submittedAt: null,
   decidedAt: null, processStatusLabel: null, processStatusTone: null, processStatusHint: null,
-  attachments: [], items: [{ itemId: 'i1', sequence: 1, description: 'Cabo', catalogCode: null, quantity: 2, unitOfMeasure: 'RL', estimatedUnitPrice: 250 }],
+  acompanhamento: null, attachments: [], items: [{ itemId: 'i1', sequence: 1, description: 'Cabo', catalogCode: null, quantity: 2, unitOfMeasure: 'RL', estimatedUnitPrice: 250 }],
 } as SolicitacaoCompra;
 
 describe('regras da central', () => {

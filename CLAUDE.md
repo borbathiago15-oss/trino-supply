@@ -266,6 +266,17 @@ se consolidam como no saving de orçamento (orçamento só quando **todas** as S
 a espera conta pelo relógio da alçada. "Suas decisões recentes" (`my-decisions`) sai dos
 eventos do processo, o mesmo registro que a auditoria lê.
 
+**O solicitante vê a SC como uma linha do tempo, não como um status.** `AcompanhamentoDaSc`
+(backend) deriva, da SC, do processo e do pedido, seis passos — Enviada → Com o comprador →
+Em cotação → Aprovação → Pedido fechado → Entregue — mais a frase que diz **com quem está,
+desde quando e quando chega** ("Aguardando aprovação de Gustavo — Nível 1", "Pedido fechado
+com Alfa, aguardando o faturamento. Chega até 28/09"). Sai da mesma consulta que a etiqueta
+(`ProcessStatus`), por isso as duas nunca discordam. Devolvida e rejeitada param a linha e
+mostram o motivo; devolvida devolve a bola ao solicitante (`precisaDoSolicitante`) e os botões
+viram "Corrigir" e "Reenviar". Centro sem aprovador cadastrado é dito na frase, não escondido
+em "aguardando ninguém". O formulário de nova SC pergunta o essencial primeiro (itens,
+justificativa, centro, data, prioridade) e recolhe o resto em "Mais detalhes".
+
 **Cuidado com a palavra "pedido" (D7).** "Tipo de pedido" no vocabulário do usuário é o tipo
 da **solicitação**; no do sistema, "pedido" é a O.C. O teste do menu pegou o rótulo errado — é
 para isso que ele existe.

@@ -22,10 +22,22 @@ public static class SolicitacaoRotas
     public static void MapSolicitacoes(this WebApplication app)
     {
         // ---- PR-001 — Requisição de Compra (MVP conforme PR-001-03/13) --------------
-        static object PrView(PurchaseRequisition r, ApproverHint? approver = null, ProcessStatusView? process = null) => new
+        static object PrView(PurchaseRequisition r, ApproverHint? approver = null, ProcessStatusView? process = null,
+            Acompanhamento? acompanhamento = null) => new
         {
             processStatus = process?.Key, processStatusLabel = process?.Label,
             processStatusTone = process?.Tone, processStatusHint = process?.Explanation,
+            // a linha do tempo do solicitante: onde está, com quem, desde quando, quando chega
+            acompanhamento = acompanhamento is null ? null : new
+            {
+                etapas = acompanhamento.Etapas.Select(e => new { chave = e.Chave, rotulo = e.Rotulo, situacao = e.Situacao, quando = e.Quando, quem = e.Quem }),
+                etapaAtual = acompanhamento.EtapaAtual, frase = acompanhamento.Frase, comQuem = acompanhamento.ComQuem,
+                desde = acompanhamento.Desde, previsao = acompanhamento.Previsao, motivo = acompanhamento.Motivo,
+                precisaDoSolicitante = acompanhamento.PrecisaDoSolicitante,
+                quotationId = acompanhamento.QuotationId, quotationNumber = acompanhamento.QuotationNumber,
+                purchaseOrderId = acompanhamento.PurchaseOrderId, purchaseOrderNumber = acompanhamento.PurchaseOrderNumber,
+                fornecedor = acompanhamento.Fornecedor,
+            },
             id = r.Id,
             number = r.Number,
             kind = r.Kind,
@@ -79,30 +91,11 @@ public static class SolicitacaoRotas
         };
 
         /// <summary>
-        /// Situação única de cada solicitação (os oito status do fluxo de compras), juntando o que
-        /// existe de cotação e de ordem de compra — a tela do solicitante mostra uma etiqueta só.
+        /// Situação única de cada solicitação (os oito status do fluxo de compras) e a linha do
+        /// tempo do solicitante, das mesmas consultas — a etiqueta e a frase nunca discordam.
         /// </summary>
-        static async Task<Dictionary<Guid, ProcessStatusView>> ProcessStatusMapAsync(
-            AppDbContext db, IReadOnlyCollection<PurchaseRequisition> prs)
-        {
-            var map = new Dictionary<Guid, ProcessStatusView>();
-            if (prs.Count == 0) return map;
-            var ids = prs.Select(r => r.Id).ToList();
-            var quotations = await db.Quotations.Include(q => q.Items)
-                .Where(q => ids.Contains(q.SourcePrId)
-                            || q.Items.Any(i => i.SourcePrId != null && ids.Contains(i.SourcePrId.Value)))
-                .OrderByDescending(q => q.CreatedAt).ToListAsync();
-            var orders = await db.PurchaseOrders.Include(o => o.Items)
-                .Where(o => o.SourcePrId != null && ids.Contains(o.SourcePrId!.Value))
-                .OrderByDescending(o => o.CreatedAt).ToListAsync();
-            foreach (var pr in prs)
-            {
-                var q = quotations.FirstOrDefault(x => x.CoversPr(pr.Id));
-                var o = orders.FirstOrDefault(x => x.SourcePrId == pr.Id);
-                map[pr.Id] = ProcessStatus.Of(pr, q, o);
-            }
-            return map;
-        }
+        static Task<Dictionary<Guid, (ProcessStatusView Situacao, Acompanhamento Acompanhamento)>> ProcessStatusMapAsync(
+            AppDbContext db, IReadOnlyCollection<PurchaseRequisition> prs) => AcompanhamentoDaSc.MontarMapAsync(db, prs);
 
         static IResult PrError(HttpContext ctx, UserError e) => Error(ctx, e.Code switch
         {
@@ -138,7 +131,7 @@ public static class SolicitacaoRotas
             var process = await ProcessStatusMapAsync(db, items);
             return Ok(new
             {
-                items = items.Select(r => PrView(r, svc.HintFor(hints, r), process.GetValueOrDefault(r.Id))),
+                items = items.Select(r => PrView(r, svc.HintFor(hints, r), process.GetValueOrDefault(r.Id).Situacao, process.GetValueOrDefault(r.Id).Acompanhamento)),
                 total, tamanho = items.Count,
             }, ctx);
         });
@@ -149,7 +142,7 @@ public static class SolicitacaoRotas
             var pr = await svc.GetAsync(actor, id);
             if (pr is null) return Error(ctx, 404, "PR-ERR-404", "Requisição não encontrada.");
             var process = await ProcessStatusMapAsync(db, [pr]);
-            return Ok(PrView(pr, null, process.GetValueOrDefault(pr.Id)), ctx);
+            return Ok(PrView(pr, null, process.GetValueOrDefault(pr.Id).Situacao, process.GetValueOrDefault(pr.Id).Acompanhamento), ctx);
         });
 
         prs.MapPost("/", async (CreateRequisitionRequest body, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>

@@ -228,20 +228,60 @@ export function NovaSolicitacao() {
           + Adicionar item
         </button>
 
+        {/*
+          O essencial primeiro: o que, por quê, para qual centro, para quando. O resto é
+          opcional e fica recolhido — um formulário de doze campos faz o solicitante achar
+          que precisa de todos, e é aí que ele desiste ou inventa.
+        */}
         <Campo id="sc-justificativa" rotulo="Justificativa da solicitação" className="mt-5">
           <input id="sc-justificativa" required placeholder="Por que esta compra é necessária?" {...campo('justificativa')} />
         </Campo>
 
-        <Grade2 className="mt-3">
-          <Campo id="sc-local" rotulo="Local de Entrega">
-            <select id="sc-local" {...campo('local')}>
-              <option value="">Selecione…</option>
-              {(dados?.locais ?? []).map((l) => (
-                <option key={l.id} value={rotuloDoLocal(l)}>{rotuloDoLocal(l)}</option>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <Campo id="sc-cc" rotulo="Centro de Custo">
+            <select id="sc-cc" required {...campo('centroCusto')}>
+              <option value="">Selecione o centro de custo…</option>
+              {(dados?.centros ?? []).map((c) => (
+                <option key={c.id} value={c.code}>{c.code} — {c.name}{c.region ? ` · ${c.region}` : ''}</option>
               ))}
             </select>
           </Campo>
-          <Grade2>
+          {/* a submissão recusa data no passado (PR-ERR-050): o campo diz isso antes */}
+          <Campo id="sc-necessidade" rotulo="Precisa até" dica="(de hoje em diante)">
+            <input id="sc-necessidade" type="date" min={hojeIso()} {...campo('necessidade')} />
+          </Campo>
+          <Campo id="sc-prioridade" rotulo="Prioridade">
+            <select id="sc-prioridade" {...campo('prioridade')}>
+              <option value="NORMAL">{ROTULO_PRIORIDADE.NORMAL}</option>
+              <option value="URGENT">{ROTULO_PRIORIDADE.URGENT}</option>
+            </select>
+          </Campo>
+        </div>
+
+        {urgente && (
+          <Grade2 className="mt-3" >
+            <Campo id="sc-urg-motivo" rotulo="Justificativa da urgência" dica="(obrigatória)">
+              <input id="sc-urg-motivo" required placeholder="ex.: parada de linha na obra" {...campo('urgenciaMotivo')} />
+            </Campo>
+            <Campo id="sc-urg-impacto" rotulo="Impacto se não comprar" dica="(obrigatório)">
+              <input id="sc-urg-impacto" required placeholder="ex.: equipe parada e multa contratual" {...campo('urgenciaImpacto')} />
+            </Campo>
+          </Grade2>
+        )}
+
+        <details className="mt-4 rounded-lg border border-borda px-3 py-2" data-testid="mais-detalhes">
+          <summary className="cursor-pointer text-[13.5px] font-semibold text-marca">
+            Mais detalhes <span className="sub font-normal">(opcional: local de entrega, tipo, empresa, orçamento, observação, anexos)</span>
+          </summary>
+          <Grade2 className="mt-3">
+            <Campo id="sc-local" rotulo="Local de Entrega">
+              <select id="sc-local" {...campo('local')}>
+                <option value="">Selecione…</option>
+                {(dados?.locais ?? []).map((l) => (
+                  <option key={l.id} value={rotuloDoLocal(l)}>{rotuloDoLocal(l)}</option>
+                ))}
+              </select>
+            </Campo>
             {/* o tipo decide qual conjunto de prazos a Torre cobra desta SC. Em branco,
                 vale o padrão — que é o que valia antes de os tipos existirem */}
             {!!dados?.tipos.length && (
@@ -256,69 +296,34 @@ export function NovaSolicitacao() {
                 </select>
               </Campo>
             )}
-            <Campo id="sc-prioridade" rotulo="Prioridade">
-              <select id="sc-prioridade" {...campo('prioridade')}>
-                <option value="NORMAL">{ROTULO_PRIORIDADE.NORMAL}</option>
-                <option value="URGENT">{ROTULO_PRIORIDADE.URGENT}</option>
-              </select>
+          </Grade2>
+
+          <Grade2 className="mt-3">
+            <Campo id="sc-empresa" rotulo="Empresa">
+              <input id="sc-empresa" list="empresas-solicitantes" placeholder="empresa solicitante" {...campo('empresa')} />
+              <datalist id="empresas-solicitantes">
+                {(dados?.empresas ?? []).map((e) => <option key={e} value={e} />)}
+              </datalist>
             </Campo>
-            {/* a submissão recusa data no passado (PR-ERR-050): o campo diz isso antes */}
-            <Campo id="sc-necessidade" rotulo="Necessidade" dica="(de hoje em diante)">
-              <input id="sc-necessidade" type="date" min={hojeIso()} {...campo('necessidade')} />
+            {/* §17: o orçamento é a régua do saving que só o solicitante conhece. Opcional
+                de propósito — quem não tem número não é obrigado a inventar um */}
+            <Campo id="sc-orcamento" rotulo="Orçamento previsto (R$)"
+              dica="(opcional — fechar abaixo dele vira saving)">
+              <input id="sc-orcamento" type="number" min="0" step="0.01" placeholder="ex.: 1200,00"
+                {...campo('orcamento')} />
             </Campo>
           </Grade2>
-        </Grade2>
 
-        {urgente && (
-          <Grade2 className="mt-3" >
-            <Campo id="sc-urg-motivo" rotulo="Justificativa da urgência" dica="(obrigatória)">
-              <input id="sc-urg-motivo" required placeholder="ex.: parada de linha na obra" {...campo('urgenciaMotivo')} />
-            </Campo>
-            <Campo id="sc-urg-impacto" rotulo="Impacto se não comprar" dica="(obrigatório)">
-              <input id="sc-urg-impacto" required placeholder="ex.: equipe parada e multa contratual" {...campo('urgenciaImpacto')} />
-            </Campo>
-          </Grade2>
-        )}
-
-        {/* a família saiu daqui: uma SC pode misturar EPI e material de escritório, e um
-            campo só no cabeçalho obrigava a escolher uma família para o pedido inteiro.
-            Agora ela é por item, junto do produto a que pertence. */}
-        <Grade2 className="mt-3">
-          <Campo id="sc-cc" rotulo="Centro de Custo">
-            <select id="sc-cc" required {...campo('centroCusto')}>
-              <option value="">Selecione o centro de custo…</option>
-              {(dados?.centros ?? []).map((c) => (
-                <option key={c.id} value={c.code}>{c.code} — {c.name}{c.region ? ` · ${c.region}` : ''}</option>
-              ))}
-            </select>
+          <Campo id="sc-observacao" rotulo="Observação Interna" className="mt-3">
+            <textarea id="sc-observacao" rows={3} {...campo('observacao')} />
           </Campo>
-        </Grade2>
 
-        <Grade2 className="mt-3">
-          <Campo id="sc-empresa" rotulo="Empresa">
-            <input id="sc-empresa" list="empresas-solicitantes" placeholder="empresa solicitante" {...campo('empresa')} />
-            <datalist id="empresas-solicitantes">
-              {(dados?.empresas ?? []).map((e) => <option key={e} value={e} />)}
-            </datalist>
+          <Campo id="sc-anexos" className="mt-3" rotulo="Anexos"
+            dica="(PDF, imagem ou planilha — pode escolher mais de um)">
+            <input id="sc-anexos" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.docx"
+              onChange={(ev: ChangeEvent<HTMLInputElement>) => setAnexos([...(ev.target.files ?? [])])} />
           </Campo>
-          {/* §17: o orçamento é a régua do saving que só o solicitante conhece. Opcional
-              de propósito — quem não tem número não é obrigado a inventar um */}
-          <Campo id="sc-orcamento" rotulo="Orçamento previsto (R$)"
-            dica="(opcional — fechar abaixo dele vira saving)">
-            <input id="sc-orcamento" type="number" min="0" step="0.01" placeholder="ex.: 1200,00"
-              {...campo('orcamento')} />
-          </Campo>
-        </Grade2>
-
-        <Campo id="sc-observacao" rotulo="Observação Interna" className="mt-3">
-          <textarea id="sc-observacao" rows={3} {...campo('observacao')} />
-        </Campo>
-
-        <Campo id="sc-anexos" className="mt-3" rotulo="Anexos"
-          dica="(PDF, imagem ou planilha — pode escolher mais de um)">
-          <input id="sc-anexos" type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.csv,.docx"
-            onChange={(ev: ChangeEvent<HTMLInputElement>) => setAnexos([...(ev.target.files ?? [])])} />
-        </Campo>
+        </details>
 
         <button type="submit" className="botao mt-4 w-full" disabled={salvando}>
           {salvando ? 'Criando…' : 'Criar rascunho da SC'}

@@ -51,6 +51,41 @@ describe('caminho do processo', () => {
   it('com aprovador cadastrado não há link de conserto', () => {
     montar(caminho);
     expect(screen.queryByRole('link', { name: /Cadastrar aprovadores/ })).toBeNull();
+    expect(screen.queryByTestId('impasse-da-alcada')).toBeNull();
+  });
+
+  it('impasse no Nível 1: diz que o aprovador está impedido, por quê, e quem destrava', () => {
+    // o caso real: o administrador é o único aprovador do centro e escolheu o fornecedor
+    montar([
+      etapa({ chave: 'escolha', titulo: 'Escolha do fornecedor vencedor', situacao: 'feita', quem: 'Administrador' }),
+      etapa({ chave: 'nivel1', titulo: 'Aprovação de Nível 1', situacao: 'atual', quem: 'Administrador', impasse: true }),
+    ], 'BAH-002');
+
+    const bloco = screen.getByTestId('caminho-do-processo');
+    // a linha não diz "aguardando Administrador" — ele não pode agir
+    expect(bloco.querySelector('[data-etapa="nivel1"]')).toHaveTextContent('impasse · Administrador não pode aprovar');
+    expect(bloco).not.toHaveTextContent('aguardando Administrador');
+
+    const aviso = screen.getByTestId('impasse-da-alcada');
+    expect(aviso).toHaveTextContent('Ninguém da lista pode dar o Nível 1');
+    expect(aviso).toHaveTextContent('Administrador escolheu o fornecedor');
+    expect(aviso).toHaveTextContent('RFQ-ERR-030');
+    expect(aviso).toHaveTextContent('outro administrador pode aprovar');
+    const link = screen.getByRole('link', { name: /cadastre outra pessoa no Nível 1 do BAH-002/ });
+    expect(link).toHaveAttribute('href', '/centros-custo');
+    // não é caso de "sem aprovador": há gente cadastrada, o problema é outro
+    expect(screen.queryByRole('link', { name: /Cadastrar aprovadores/ })).toBeNull();
+  });
+
+  it('impasse no Nível 2 fala do Nível 1 dado, e a marca fora da etapa atual não acusa ninguém', () => {
+    montar([
+      etapa({ chave: 'nivel1', titulo: 'Aprovação de Nível 1', situacao: 'feita', quem: 'Gerson' }),
+      etapa({ chave: 'nivel2', titulo: 'Aprovação de Nível 2', situacao: 'atual', quem: 'Gerson', impasse: true }),
+    ]);
+    const aviso = screen.getByTestId('impasse-da-alcada');
+    expect(aviso).toHaveTextContent('Ninguém da lista pode dar o Nível 2');
+    expect(aviso).toHaveTextContent('Gerson escolheu o fornecedor ou deu o Nível 1');
+    expect(screen.getByRole('link', { name: /cadastre outra pessoa no Nível 2/ })).toBeInTheDocument();
   });
 
   it('sem etapas não desenha nada', () => {
@@ -68,6 +103,12 @@ describe('legenda de cada etapa', () => {
   it('atual: aguardando quem, e o desde só quando há marca honesta', () => {
     expect(legenda(etapa({ situacao: 'atual', quem: 'Bruno' }))).toBe('aguardando Bruno');
     expect(legenda(etapa({ situacao: 'atual', quem: 'Bruno', em: '2026-09-03T12:00:00Z' }))).toMatch(/^aguardando Bruno desde /);
+  });
+
+  it('atual em impasse: diz que quem está na lista não pode aprovar', () => {
+    expect(legenda(etapa({ situacao: 'atual', quem: 'Bruno', impasse: true }))).toBe('impasse · Bruno não pode aprovar');
+    expect(legenda(etapa({ situacao: 'atual', quem: 'Bruno', impasse: true, em: '2026-09-03T12:00:00Z' })))
+      .toMatch(/^impasse · Bruno não pode aprovar desde /);
   });
 
   it('pendente: o nome quando o sistema o conhece; encerrada: nada a dizer', () => {

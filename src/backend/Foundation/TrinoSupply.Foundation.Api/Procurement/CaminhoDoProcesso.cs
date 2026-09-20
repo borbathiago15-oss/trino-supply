@@ -8,8 +8,14 @@ namespace TrinoSupply.Foundation.Api.Procurement;
 /// <param name="Quem">Quem fez (etapa feita) ou de quem se espera (atual e pendente).</param>
 /// <param name="Em">Quando foi feita, ou desde quando se espera. Nulo quando não há marca honesta.</param>
 /// <param name="SemAprovador">O centro não tem ninguém cadastrado neste nível — a tela aponta onde consertar.</param>
+/// <param name="Impasse">
+/// Há gente na lista, mas <b>todos</b> estão impedidos pela segregação de funções (RFQ-ERR-030):
+/// escolheram o fornecedor ou deram o nível anterior. "Aguardando fulano" seria mentira — ninguém
+/// da lista pode agir, e a tela precisa dizer quem pode.
+/// </param>
 public record EtapaDoCaminho(
-    string Chave, string Titulo, string Situacao, string? Quem, DateTimeOffset? Em, bool SemAprovador = false);
+    string Chave, string Titulo, string Situacao, string? Quem, DateTimeOffset? Em,
+    bool SemAprovador = false, bool Impasse = false);
 
 /// <summary>
 /// O caminho do processo: quem pediu, o que já aconteceu, de quem se espera agora e o que
@@ -57,9 +63,11 @@ public static class CaminhoDoProcesso
                 feita: q.SelectedAt is not null, atual: viva && s == QuotationStatus.Analysis,
                 quem: q.SelectedAt is null ? comprador : q.SelectedByLabel, em: q.SelectedAt),
             Alcada("nivel1", "Aprovação de Nível 1", q.ManagerApprovedAt, q.ManagerApprovedByLabel,
-                atual: viva && s == QuotationStatus.AwaitingManager, desde: q.SelectedAt, alcadas.Nivel1),
+                atual: viva && s == QuotationStatus.AwaitingManager, desde: q.SelectedAt,
+                alcadas.Nivel1, alcadas.IdsDo(1), impedidos: [q.SelectedBy]),
             Alcada("nivel2", "Aprovação de Nível 2", q.DirectorApprovedAt, q.DirectorApprovedByLabel,
-                atual: viva && s == QuotationStatus.AwaitingDirector, desde: q.ManagerApprovedAt, alcadas.Nivel2),
+                atual: viva && s == QuotationStatus.AwaitingDirector, desde: q.ManagerApprovedAt,
+                alcadas.Nivel2, alcadas.IdsDo(2), impedidos: [q.SelectedBy, q.ManagerApprovedBy]),
             Etapa("oc", "Registro da O.C. do ERP",
                 feita: s == QuotationStatus.PoIssued, atual: viva && s == QuotationStatus.ApprovedForIssue,
                 quem: s == QuotationStatus.ApprovedForIssue ? comprador : null,
@@ -80,12 +88,16 @@ public static class CaminhoDoProcesso
 
     private static EtapaDoCaminho Alcada(
         string chave, string titulo, DateTimeOffset? feitaEm, string? feitaPor,
-        bool atual, DateTimeOffset? desde, IReadOnlyList<string> aprovadores)
+        bool atual, DateTimeOffset? desde, IReadOnlyList<string> aprovadores, IReadOnlyList<Guid> ids,
+        IReadOnlyList<Guid?> impedidos)
     {
         if (feitaEm is not null) return new(chave, titulo, Feita, feitaPor, feitaEm);
         var ninguem = aprovadores.Count == 0;
         var quem = ninguem ? "sem aprovador cadastrado no centro" : string.Join(", ", aprovadores);
-        return new(chave, titulo, atual ? Atual : Pendente, quem, atual ? desde : null, SemAprovador: ninguem);
+        // só se conhece o impasse quando se conhecem os ids; sem eles, não se acusa ninguém
+        var impasse = atual && ids.Count > 0 && ids.All(id => impedidos.Contains(id));
+        return new(chave, titulo, atual ? Atual : Pendente, quem, atual ? desde : null,
+            SemAprovador: ninguem, Impasse: impasse);
     }
 
     private static string? Nomes(IReadOnlyList<string> nomes)

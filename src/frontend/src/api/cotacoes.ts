@@ -273,6 +273,11 @@ export interface EtapaDoCaminho {
   em: string | null;
   /** O centro não tem ninguém cadastrado neste nível — a tela aponta onde consertar. */
   semAprovador?: boolean;
+  /**
+   * Há gente cadastrada, mas todos impedidos pela segregação de funções (RFQ-ERR-030):
+   * escolheram o fornecedor ou deram o nível anterior. A tela diz quem pode destravar.
+   */
+  impasse?: boolean;
 }
 
 export interface Processo {

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { leituraDoPrazo, type PrazosDasEtapas as Regua } from '@/api/prazosDasEtapas';
@@ -61,9 +61,12 @@ describe('tela dos prazos por etapa', () => {
     vi.mocked(lerPrazosDasEtapas).mockResolvedValue(regua());
     abrir();
     const cotacao = await screen.findByLabelText(/Cotação/);
-    await userEvent.clear(cotacao);
-    await userEvent.type(cotacao, '10');
-    await userEvent.click(screen.getByRole('button', { name: /Salvar prazos/ }));
+    // um evento só, em vez de limpar e digitar tecla a tecla: com a máquina carregada o
+    // "clear" deixava o campo vazio, o botão desabilitava e o clique caía no vazio
+    fireEvent.change(cotacao, { target: { value: '10' } });
+    const salvar = screen.getByRole('button', { name: /Salvar prazos/ });
+    await waitFor(() => expect(salvar).toBeEnabled());
+    await userEvent.click(salvar);
 
     await waitFor(() => expect(salvarPrazosDasEtapas).toHaveBeenCalledWith(
       { SOLICITACAO: 2, COTACAO: 10, APROVACAO: 3 }, '', []));

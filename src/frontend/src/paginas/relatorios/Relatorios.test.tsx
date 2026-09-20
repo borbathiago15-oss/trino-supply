@@ -115,13 +115,18 @@ const relatorio = (p: Partial<RelatorioExecutivo> = {}): RelatorioExecutivo => (
 
 const abrir = () => render(<MemoryRouter><Relatorios /></MemoryRouter>);
 
+/** Os catorze blocos vivem em cinco abas: cada teste abre a que precisa. */
+const aba = async (nome: string) => {
+  await userEvent.click(await screen.findByRole('tab', { name: new RegExp(nome) }));
+};
+
 describe('tela de Relatórios', () => {
   beforeEach(() => vi.resetAllMocks());
 
   it('cada KPI diz o que era no período anterior, e a tela diz que janela é essa', async () => {
     vi.mocked(relatorioExecutivo).mockResolvedValue(relatorio());
     abrir();
-    await screen.findByTestId('relatorio-familias');
+    await screen.findByTestId('resumo-executivo');
 
     const antes = screen.getAllByTestId('antes');
     // total comprado: 20 mil contra 16 mil → 25% a mais; saving: 2 mil contra 2,5 mil → 20% a menos
@@ -153,6 +158,7 @@ describe('tela de Relatórios', () => {
   it('o saving rateado por família e fornecedor, e a referência com a perda em destaque', async () => {
     vi.mocked(relatorioExecutivo).mockResolvedValue(relatorio());
     abrir();
+    await aba('Saving');
 
     const familia = within(await screen.findByTestId('relatorio-saving-familia'));
     expect(familia.getByText('MATERIAL DE LIMPEZA').closest('tr')).toHaveTextContent('R$ 1.600,00');
@@ -170,6 +176,7 @@ describe('tela de Relatórios', () => {
     vi.mocked(relatorioExecutivo).mockResolvedValue(relatorio());
     abrir();
 
+    await aba('Demanda e prazos');
     const centros = within(await screen.findByTestId('relatorio-centros'));
     expect(centros.getByText(/Filial Recife/)).toBeInTheDocument();
     expect(centros.getByText('gestor: Gerson Gerente')).toBeInTheDocument();
@@ -177,7 +184,8 @@ describe('tela de Relatórios', () => {
     expect(screen.getByTestId('relatorio-escopo')).toHaveTextContent('Serviços 25%');
 
     // a Beta venceu sem disputa: só quem levou com dois ou mais proponentes é vencedor de concorrência
-    expect(within(screen.getByTestId('relatorio-vencedores')).getByText('Alfa')).toBeInTheDocument();
+    await aba('Fornecedores');
+    expect(within(await screen.findByTestId('relatorio-vencedores')).getByText('Alfa')).toBeInTheDocument();
     expect(screen.getByText('Proponentes por BID').parentElement).toHaveTextContent('1,5');
 
     const pagamento = within(screen.getByTestId('relatorio-pagamento'));
@@ -193,6 +201,7 @@ describe('tela de Relatórios', () => {
   it('o tempo do ciclo mostra a mediana da etapa medida e diz quando não há medição', async () => {
     vi.mocked(relatorioExecutivo).mockResolvedValue(relatorio());
     abrir();
+    await aba('Demanda e prazos');
 
     const ciclo = await screen.findByTestId('relatorio-ciclo');
     expect(ciclo.querySelector('[data-etapa="solicitacao_escolha"]')).toHaveTextContent('4 d');
@@ -203,23 +212,39 @@ describe('tela de Relatórios', () => {
     vi.mocked(relatorioExecutivo).mockResolvedValue(relatorio());
     abrir();
 
-    await screen.findByTestId('relatorio-familias');
+    await screen.findByTestId('resumo-executivo');
     expect(relatorioExecutivo).toHaveBeenCalledWith(
       { de: '', ate: '', empresa: '', centroCusto: '', comprador: '' }, expect.anything());
 
-    for (const bloco of ['relatorio-familias', 'relatorio-saving', 'relatorio-fornecedores',
-      'relatorio-urgentes', 'relatorio-otif', 'relatorio-sem-oc'])
-      expect(screen.getByTestId(bloco)).toBeInTheDocument();
+    // as três frases abrem o relatório
+    const resumo = screen.getByTestId('resumo-executivo');
+    expect(resumo).toHaveTextContent('R$ 20.000,00 em 3 pedido(s) com 2 fornecedor(es), 25% acima do período anterior');
+    expect(resumo).toHaveTextContent('A negociação segurou R$ 2.000,00 (16,7% da primeira proposta); a concorrência valeu R$ 5.000,00.');
+    expect(resumo).toHaveTextContent('1 compra(s) fecharam sem O.C. do ERP (R$ 2.000,00), 3 ainda com a O.C. por registrar; 30% do valor foi urgente; OTIF de 50%');
 
-    // 1 — a família com o maior gasto e a fatia dela
-    const familias = within(screen.getByTestId('relatorio-familias'));
-    expect(familias.getByText('MATERIAL DE LIMPEZA')).toBeInTheDocument();
-    expect(familias.getByText('80%')).toBeInTheDocument();
+    // cada aba traz os seus blocos, e só eles
+    expect(screen.queryByTestId('relatorio-familias')).not.toBeInTheDocument();
+    for (const [nome, blocos] of [
+      ['Demanda e prazos', ['relatorio-familias', 'relatorio-urgentes', 'relatorio-ciclo']],
+      ['Fornecedores', ['relatorio-fornecedores', 'relatorio-otif', 'relatorio-pagamento']],
+      ['Exceções', ['relatorio-sem-oc']],
+      ['Saving', ['relatorio-saving', 'relatorio-referencia']],
+    ] as const) {
+      await aba(nome);
+      for (const bloco of blocos) expect(await screen.findByTestId(bloco)).toBeInTheDocument();
+    }
+    expect(screen.getByRole('tab', { name: /Saving/ })).toHaveAttribute('aria-selected', 'true');
 
     // 2 — o saving do comprador vem com a base contra a qual foi apurado
     const saving = within(screen.getByTestId('relatorio-saving'));
     expect(saving.getByText('Carla Compradora')).toBeInTheDocument();
     expect(saving.getByText(/12\.000,00/)).toBeInTheDocument();
+
+    // 1 — a família com o maior gasto e a fatia dela
+    await aba('Demanda e prazos');
+    const familias = within(await screen.findByTestId('relatorio-familias'));
+    expect(familias.getByText('MATERIAL DE LIMPEZA')).toBeInTheDocument();
+    expect(familias.getByText('80%')).toBeInTheDocument();
 
     // o recorte aplicado fica escrito na tela, não só nos campos
     expect(screen.getByTestId('recorte-aplicado')).toHaveTextContent('01/08/2026 a 31/08/2026');
@@ -229,6 +254,7 @@ describe('tela de Relatórios', () => {
   it('a compra sem O.C. do ERP mostra a justificativa, e a fila não vira violação', async () => {
     vi.mocked(relatorioExecutivo).mockResolvedValue(relatorio());
     abrir();
+    await aba('Exceções');
 
     const semOc = within(await screen.findByTestId('relatorio-sem-oc'));
     expect(semOc.getByText('ERP indisponível na emissão')).toBeInTheDocument();
@@ -245,7 +271,7 @@ describe('tela de Relatórios', () => {
     const usuario = userEvent.setup();
     vi.mocked(relatorioExecutivo).mockResolvedValue(relatorio());
     abrir();
-    await screen.findByTestId('relatorio-familias');
+    await screen.findByTestId('resumo-executivo');
 
     await usuario.selectOptions(screen.getByLabelText('Empresa'), 'Trino Nordeste LTDA');
     await usuario.selectOptions(screen.getByLabelText('Centro de custo'), 'CC-NE-01');
@@ -261,7 +287,7 @@ describe('tela de Relatórios', () => {
     vi.mocked(relatorioExecutivo).mockResolvedValue(relatorio());
     vi.mocked(pdfDoRelatorio).mockResolvedValue(new Blob(['%PDF']));
     abrir();
-    await screen.findByTestId('relatorio-familias');
+    await screen.findByTestId('resumo-executivo');
 
     // mexer no campo sem aplicar não pode mudar a folha que vai para a reunião
     await usuario.selectOptions(screen.getByLabelText('Comprador'), 'b1');
@@ -286,7 +312,7 @@ describe('tela de Relatórios', () => {
   it('sem cobertura em falta, não inventa aviso', async () => {
     vi.mocked(relatorioExecutivo).mockResolvedValue(relatorio());
     abrir();
-    await screen.findByTestId('relatorio-familias');
+    await screen.findByTestId('resumo-executivo');
     expect(screen.queryByTestId('cobertura-do-recorte')).not.toBeInTheDocument();
   });
 });

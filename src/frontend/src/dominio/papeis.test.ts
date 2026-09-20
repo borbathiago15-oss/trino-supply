@@ -6,7 +6,7 @@ import {
 describe('papéis', () => {
   it('cada papel começa o dia onde o trabalho dele está', () => {
     // quem aprova abre a fila de decisão; quem pede abre as próprias SCs; o resto, o painel
-    expect(paginaInicial({ role: 'Director' })).toBe('/aprovacoes');
+    expect(paginaInicial({ role: 'Director' })).toBe('/diretoria');
     expect(paginaInicial({ role: 'Approver' })).toBe('/aprovacoes');
     expect(paginaInicial({ role: 'Requester' })).toBe('/solicitacoes');
     expect(paginaInicial({ role: 'PurchasingOfficer' })).toBe('/painel');

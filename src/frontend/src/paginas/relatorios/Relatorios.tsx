@@ -5,12 +5,13 @@ import {
 } from '@/api/relatorios';
 import { abrirBlob } from '@/api/cliente';
 import { variacao } from '@/api/painel';
-import { Aviso, Badge, Carregando, Erro, FaixaKpis, Kpi, Painel, Vazio } from '@/componentes/basicos';
+import { Aviso, Badge, Carregando, Erro, FaixaKpis, Kpi, Painel } from '@/componentes/basicos';
 import { Campo } from '@/componentes/formulario';
 import { CORES, GraficoColunas, Legenda, moedaCurta, rotuloDoMes, type Serie } from '@/componentes/graficos';
 import { useToast } from '@/componentes/Toast';
 import { data, moeda, quantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
+import { resumoExecutivo } from './resumoExecutivo';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
@@ -44,12 +45,61 @@ function Bloco({ titulo, explicacao, vazio, testid, largura = 'min-w-[620px]', c
 }) {
   return (
     <Painel titulo={titulo}>
-      <p className="sub mb-3">{explicacao}</p>
-      {vazio ? <Vazio>{vazio}</Vazio> : (
+      <ComoECalculado>{explicacao}</ComoECalculado>
+      {vazio ? <p className="sub" data-testid={`${testid}-vazio`}>{vazio}</p> : (
         <div className="overflow-x-auto">
           <table data-testid={testid} className={largura}>{children}</table>
         </div>
       )}
+    </Painel>
+  );
+}
+
+/**
+ * A régua do número fica a um clique, não em cima dele: a diretoria lê o número primeiro
+ * e abre a explicação quando discorda dele — que é quando ela importa.
+ */
+export function ComoECalculado({ children }: { children: React.ReactNode }) {
+  return (
+    <details className="mb-3">
+      <summary className="cursor-pointer text-[12.5px] font-semibold text-marca">como é calculado</summary>
+      <p className="sub mt-1">{children}</p>
+    </details>
+  );
+}
+
+export type Aba = 'geral' | 'saving' | 'fornecedores' | 'demanda' | 'excecoes';
+export const ABAS: { chave: Aba; rotulo: string; blocos: string }[] = [
+  { chave: 'geral', rotulo: 'Visão geral', blocos: '3–4' },
+  { chave: 'saving', rotulo: 'Saving', blocos: '2, 5–6' },
+  { chave: 'fornecedores', rotulo: 'Fornecedores', blocos: '7, 9–10, 12' },
+  { chave: 'demanda', rotulo: 'Demanda e prazos', blocos: '1, 8, 11, 13' },
+  { chave: 'excecoes', rotulo: 'Exceções', blocos: '14' },
+];
+
+/** Catorze blocos em cinco abas: a rolagem de cinco telas virou uma escolha. */
+function Abas({ valor, aoMudar }: { valor: Aba; aoMudar: (a: Aba) => void }) {
+  return (
+    <div role="tablist" aria-label="Blocos do relatório" className="mb-4 flex flex-wrap gap-1 rounded-xl border border-borda bg-white p-1">
+      {ABAS.map((a) => (
+        <button key={a.chave} type="button" role="tab" aria-selected={valor === a.chave} data-aba={a.chave}
+          onClick={() => aoMudar(a.chave)}
+          className={`rounded-lg px-3 py-1.5 text-[13px] font-semibold ${valor === a.chave ? 'bg-marca text-white' : 'text-texto-suave hover:bg-slate-50'}`}>
+          {a.rotulo} <span className={`text-[11px] font-normal ${valor === a.chave ? 'text-white/80' : ''}`}>({a.blocos})</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** As três frases que abrem o relatório: gasto, saving, exceções. */
+function ResumoExecutivo({ r }: { r: RelatorioExecutivo }) {
+  const [gasto, saving, excecoes] = resumoExecutivo(r);
+  return (
+    <Painel titulo="Em três frases">
+      <ol className="list-decimal space-y-1.5 pl-5 text-[14px]" data-testid="resumo-executivo">
+        <li>{gasto}</li><li>{saving}</li><li>{excecoes}</li>
+      </ol>
     </Painel>
   );
 }
@@ -114,7 +164,7 @@ function Reguas({ r }: { r: RelatorioExecutivo }) {
 
 /** Uma das duas tabelas do saving rateado — família ou fornecedor — com a mesma forma. */
 function SavingRateado({ titulo, linhas, testid }: { titulo: string; linhas: LinhaSavingRateado[]; testid: string }) {
-  if (!linhas.length) return <Vazio>Nenhum processo com saving no recorte.</Vazio>;
+  if (!linhas.length) return <p className="sub">Nenhum processo com saving no recorte.</p>;
   return (
     <div className="overflow-x-auto">
       <table data-testid={testid}>
@@ -140,7 +190,7 @@ const Diferenca = ({ valor }: { valor: number }) => (
   <strong className={valor < 0 ? 'text-perigo' : valor > 0 ? 'text-ok' : ''}>{moeda(valor)}</strong>
 );
 
-function Blocos({ r }: { r: RelatorioExecutivo }) {
+function Blocos({ r, aba, aoMudar }: { r: RelatorioExecutivo; aba: Aba; aoMudar: (a: Aba) => void }) {
   const a = r.previous;
   const meses = r.months.map((m) => m.month);
   const seriesDoMes: Serie[] = [
@@ -195,47 +245,9 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
         </Painel>
       )}
 
-      <Bloco titulo="1. Compras por família" testid="relatorio-familias"
-        explicacao="O que foi comprado no período, pelo valor dos itens do pedido — material de limpeza, fardamento, EPI e o resto do catálogo."
-        vazio={r.families.length ? undefined : 'Nenhuma compra no recorte.'}>
-        <thead><tr><th>Família</th><th>Valor</th><th>Quantidade</th><th>Pedidos</th><th>% do total</th></tr></thead>
-        <tbody>
-          {r.families.map((f) => (
-            <tr key={f.family}>
-              <td>{f.family}</td>
-              <td className="whitespace-nowrap">{moeda(f.value)}</td>
-              <td className="whitespace-nowrap">{quantidade(f.quantity)}</td>
-              <td>{quantidade(f.orders)}</td>
-              <td><Fatia percent={f.percent} /></td>
-            </tr>
-          ))}
-        </tbody>
-      </Bloco>
-
-      <Bloco titulo="2. Saving por comprador" testid="relatorio-saving" largura="min-w-[760px]"
-        explicacao="Ganho de negociação apurado contra a primeira proposta do fornecedor vencedor. Cada processo entra uma vez, mesmo quando a compra foi dividida em várias O.C.s."
-        vazio={r.buyers.length ? undefined : 'Nenhum pedido no recorte.'}>
-        <thead>
-          <tr>
-            <th>Comprador</th><th>Processos</th><th>Base (1ª proposta)</th>
-            <th>Fechado</th><th>Saving</th><th>%</th><th>Total comprado</th>
-          </tr>
-        </thead>
-        <tbody>
-          {r.buyers.map((b) => (
-            <tr key={b.buyer}>
-              <td>{b.buyer}</td>
-              <td>{quantidade(b.processes)}</td>
-              <td className="whitespace-nowrap">{moeda(b.baseline)}</td>
-              <td className="whitespace-nowrap">{moeda(b.closed)}</td>
-              <td className="whitespace-nowrap"><strong>{moeda(b.saving)}</strong></td>
-              <td className="whitespace-nowrap">{pct(b.savingPercent)}</td>
-              <td className="whitespace-nowrap">{moeda(b.spend)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </Bloco>
-
+      <ResumoExecutivo r={r} />
+      <Abas valor={aba} aoMudar={aoMudar} />
+      {aba === 'geral' && (<>
       <Painel titulo="3. Saving do período, mês a mês">
         <p className="sub mb-3">
           O pedido conta no mês em que foi criado; o processo conta uma vez, no mês do primeiro pedido que o
@@ -261,7 +273,6 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
           </table>
         </div>
       </Painel>
-
       <Painel titulo="4. As três réguas do saving">
         <p className="sub mb-3">
           Três perguntas, três números: <strong>negociação</strong> mede o que o comprador arrancou do mesmo
@@ -271,7 +282,31 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
         </p>
         <Reguas r={r} />
       </Painel>
-
+      </>)}
+      {aba === 'saving' && (<>
+      <Bloco titulo="2. Saving por comprador" testid="relatorio-saving" largura="min-w-[760px]"
+        explicacao="Ganho de negociação apurado contra a primeira proposta do fornecedor vencedor. Cada processo entra uma vez, mesmo quando a compra foi dividida em várias O.C.s."
+        vazio={r.buyers.length ? undefined : 'Nenhum pedido no recorte.'}>
+        <thead>
+          <tr>
+            <th>Comprador</th><th>Processos</th><th>Base (1ª proposta)</th>
+            <th>Fechado</th><th>Saving</th><th>%</th><th>Total comprado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {r.buyers.map((b) => (
+            <tr key={b.buyer}>
+              <td>{b.buyer}</td>
+              <td>{quantidade(b.processes)}</td>
+              <td className="whitespace-nowrap">{moeda(b.baseline)}</td>
+              <td className="whitespace-nowrap">{moeda(b.closed)}</td>
+              <td className="whitespace-nowrap"><strong>{moeda(b.saving)}</strong></td>
+              <td className="whitespace-nowrap">{pct(b.savingPercent)}</td>
+              <td className="whitespace-nowrap">{moeda(b.spend)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </Bloco>
       <Painel titulo="5. Saving por família e por fornecedor">
         <p className="sub mb-3">
           Onde a negociação rende e onde não rende. O saving é do processo: quando o processo virou mais de uma
@@ -284,7 +319,6 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
           <SavingRateado titulo="Fornecedor" linhas={r.savingBySupplier} testid="relatorio-saving-fornecedor" />
         </div>
       </Painel>
-
       <Bloco titulo="6. Saving de referência (× último preço pago)" testid="relatorio-referencia" largura="min-w-[820px]"
         explicacao={`Preço fechado contra o último preço pago do mesmo produto de catálogo, congelado no registro da O.C. Não se mistura ao saving de negociação: um mede a conversa com o fornecedor, o outro a história de preço do produto. ${quantidade(r.reference.items)} item(ns) em ${quantidade(r.reference.orders)} pedido(s) — ganho ${moeda(r.reference.gain)} · perda ${moeda(r.reference.loss)} · líquido ${moeda(r.reference.net)}. A perda vem primeiro: é ela que pede ação.`}
         vazio={r.reference.items ? undefined : 'Nenhum item do recorte tem preço pago anterior para comparar.'}>
@@ -303,7 +337,8 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
           ))}
         </tbody>
       </Bloco>
-
+      </>)}
+      {aba === 'fornecedores' && (<>
       <Bloco titulo="7. Concentração por fornecedor" testid="relatorio-fornecedores"
         explicacao={`${quantidade(r.suppliers.supplierCount)} fornecedor(es) no recorte · maior fatia ${pct(r.suppliers.top1Percent)} · 3 maiores ${pct(r.suppliers.top3Percent)} · 5 maiores ${pct(r.suppliers.top5Percent)}.`}
         vazio={r.suppliers.rows.length ? undefined : 'Nenhum pedido no recorte.'}>
@@ -321,7 +356,87 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
           ))}
         </tbody>
       </Bloco>
-
+      <Painel titulo="9. Concorrências (BIDs) — quem ganhou">
+        <p className="sub mb-3">
+          Proponente é quem mandou proposta — convidado que não respondeu não conta como disputa. Vencedor de
+          concorrência é o fornecedor da O.C. de um processo com dois ou mais proponentes.
+        </p>
+        <FaixaKpis>
+          <Kpi rotulo="Processos cotados" valor={quantidade(r.bids.processes)} detalhe="com O.C. no recorte" />
+          <Kpi rotulo="Proponentes por BID" valor={r.bids.averageProponents != null ? quantidade(r.bids.averageProponents) : '—'} detalhe="média" />
+          <Kpi rotulo="Com disputa" valor={quantidade(r.bids.withCompetition)} detalhe="dois ou mais proponentes" />
+        </FaixaKpis>
+        {!r.bids.winners.length && <p className="sub">Nenhum processo com disputa fechou no recorte.</p>}
+        {r.bids.winners.length > 0 && (
+          <div className="overflow-x-auto">
+            <table data-testid="relatorio-vencedores">
+              <thead><tr><th>Vencedor de concorrência</th><th>Vitórias</th><th>Valor</th></tr></thead>
+              <tbody>
+                {r.bids.winners.map((v) => (
+                  <tr key={v.supplier}>
+                    <td className="font-semibold">{v.supplier}</td>
+                    <td>{quantidade(v.wins)}</td>
+                    <td className="whitespace-nowrap">{moeda(v.value)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Painel>
+      <Bloco titulo="12. Entrega no prazo (OTIF) por fornecedor" testid="relatorio-otif"
+        explicacao="Só entram entregas encerradas com data prometida registrada. OTIF = chegou no prazo E completo; entrega em aberto não conta nem a favor nem contra."
+        vazio={r.otif.length ? undefined : 'Nenhuma entrega encerrada com data prometida no recorte.'}>
+        <thead><tr><th>Fornecedor</th><th>Entregas medidas</th><th>No prazo</th><th>Completo</th><th>OTIF</th></tr></thead>
+        <tbody>
+          {r.otif.map((o) => (
+            <tr key={o.supplier}>
+              <td>{o.supplier}</td>
+              <td>{quantidade(o.measured)}</td>
+              <td>{pct(o.onTimePercent)}</td>
+              <td>{pct(o.inFullPercent)}</td>
+              <td><strong>{pct(o.otifPercent)}</strong></td>
+            </tr>
+          ))}
+        </tbody>
+      </Bloco>
+      <Bloco titulo="10. Formas e prazos de pagamento" testid="relatorio-pagamento"
+        explicacao={(r.payment.weightedDays != null
+          ? `DPO ${quantidade(r.payment.weightedDays)} dias, ponderado pelo valor de ${quantidade(r.payment.ordersWithDays)} pedido(s) (${moeda(r.payment.valueWithDays)}). `
+          : 'Nenhum pedido do recorte tem prazo de pagamento legível. ')
+          + 'O prazo vem da proposta vencedora; sem ela, do texto da condição gravada na O.C.'}
+        vazio={r.payment.terms.length ? undefined : 'Nenhum pedido no recorte.'}>
+        <thead><tr><th>Condição comercial</th><th>Dias</th><th>Pedidos</th><th>Valor</th><th>% do total</th></tr></thead>
+        <tbody>
+          {r.payment.terms.map((t) => (
+            <tr key={t.term}>
+              <td>{t.term}</td>
+              <td className="whitespace-nowrap">{t.days != null ? `${t.days} d` : <span className="sub">—</span>}</td>
+              <td>{quantidade(t.orders)}</td>
+              <td className="whitespace-nowrap">{moeda(t.value)}</td>
+              <td><Fatia percent={t.percent} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </Bloco>
+      </>)}
+      {aba === 'demanda' && (<>
+      <Bloco titulo="1. Compras por família" testid="relatorio-familias"
+        explicacao="O que foi comprado no período, pelo valor dos itens do pedido — material de limpeza, fardamento, EPI e o resto do catálogo."
+        vazio={r.families.length ? undefined : 'Nenhuma compra no recorte.'}>
+        <thead><tr><th>Família</th><th>Valor</th><th>Quantidade</th><th>Pedidos</th><th>% do total</th></tr></thead>
+        <tbody>
+          {r.families.map((f) => (
+            <tr key={f.family}>
+              <td>{f.family}</td>
+              <td className="whitespace-nowrap">{moeda(f.value)}</td>
+              <td className="whitespace-nowrap">{quantidade(f.quantity)}</td>
+              <td>{quantidade(f.orders)}</td>
+              <td><Fatia percent={f.percent} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </Bloco>
       <Painel titulo="8. Origem da demanda — quem pediu, de onde, material ou serviço">
         <p className="sub mb-3">
           Os centros de custo e os solicitantes por valor comprado, com o gestor do centro quando o cadastro o
@@ -376,56 +491,6 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
           </div>
         </div>
       </Painel>
-
-      <Painel titulo="9. Concorrências (BIDs) — quem ganhou">
-        <p className="sub mb-3">
-          Proponente é quem mandou proposta — convidado que não respondeu não conta como disputa. Vencedor de
-          concorrência é o fornecedor da O.C. de um processo com dois ou mais proponentes.
-        </p>
-        <FaixaKpis>
-          <Kpi rotulo="Processos cotados" valor={quantidade(r.bids.processes)} detalhe="com O.C. no recorte" />
-          <Kpi rotulo="Proponentes por BID" valor={r.bids.averageProponents != null ? quantidade(r.bids.averageProponents) : '—'} detalhe="média" />
-          <Kpi rotulo="Com disputa" valor={quantidade(r.bids.withCompetition)} detalhe="dois ou mais proponentes" />
-        </FaixaKpis>
-        {!r.bids.winners.length && <Vazio>Nenhum processo com disputa fechou no recorte.</Vazio>}
-        {r.bids.winners.length > 0 && (
-          <div className="overflow-x-auto">
-            <table data-testid="relatorio-vencedores">
-              <thead><tr><th>Vencedor de concorrência</th><th>Vitórias</th><th>Valor</th></tr></thead>
-              <tbody>
-                {r.bids.winners.map((v) => (
-                  <tr key={v.supplier}>
-                    <td className="font-semibold">{v.supplier}</td>
-                    <td>{quantidade(v.wins)}</td>
-                    <td className="whitespace-nowrap">{moeda(v.value)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Painel>
-
-      <Bloco titulo="10. Formas e prazos de pagamento" testid="relatorio-pagamento"
-        explicacao={(r.payment.weightedDays != null
-          ? `DPO ${quantidade(r.payment.weightedDays)} dias, ponderado pelo valor de ${quantidade(r.payment.ordersWithDays)} pedido(s) (${moeda(r.payment.valueWithDays)}). `
-          : 'Nenhum pedido do recorte tem prazo de pagamento legível. ')
-          + 'O prazo vem da proposta vencedora; sem ela, do texto da condição gravada na O.C.'}
-        vazio={r.payment.terms.length ? undefined : 'Nenhum pedido no recorte.'}>
-        <thead><tr><th>Condição comercial</th><th>Dias</th><th>Pedidos</th><th>Valor</th><th>% do total</th></tr></thead>
-        <tbody>
-          {r.payment.terms.map((t) => (
-            <tr key={t.term}>
-              <td>{t.term}</td>
-              <td className="whitespace-nowrap">{t.days != null ? `${t.days} d` : <span className="sub">—</span>}</td>
-              <td>{quantidade(t.orders)}</td>
-              <td className="whitespace-nowrap">{moeda(t.value)}</td>
-              <td><Fatia percent={t.percent} /></td>
-            </tr>
-          ))}
-        </tbody>
-      </Bloco>
-
       <Bloco titulo="11. Peso das compras urgentes" testid="relatorio-urgentes" largura="min-w-[760px]"
         explicacao={`${quantidade(r.urgent.orders)} pedido(s) vindos de solicitação urgente — ${moeda(r.urgent.value)} (${pct(r.urgent.percent)} do período). Urgência exige motivo e impacto declarados na SC.`}
         vazio={r.urgent.orders ? undefined : 'Nenhuma compra urgente no recorte.'}>
@@ -444,24 +509,6 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
           ))}
         </tbody>
       </Bloco>
-
-      <Bloco titulo="12. Entrega no prazo (OTIF) por fornecedor" testid="relatorio-otif"
-        explicacao="Só entram entregas encerradas com data prometida registrada. OTIF = chegou no prazo E completo; entrega em aberto não conta nem a favor nem contra."
-        vazio={r.otif.length ? undefined : 'Nenhuma entrega encerrada com data prometida no recorte.'}>
-        <thead><tr><th>Fornecedor</th><th>Entregas medidas</th><th>No prazo</th><th>Completo</th><th>OTIF</th></tr></thead>
-        <tbody>
-          {r.otif.map((o) => (
-            <tr key={o.supplier}>
-              <td>{o.supplier}</td>
-              <td>{quantidade(o.measured)}</td>
-              <td>{pct(o.onTimePercent)}</td>
-              <td>{pct(o.inFullPercent)}</td>
-              <td><strong>{pct(o.otifPercent)}</strong></td>
-            </tr>
-          ))}
-        </tbody>
-      </Bloco>
-
       <Bloco titulo="13. Tempo do ciclo" testid="relatorio-ciclo" largura="min-w-[480px]"
         explicacao="Mediana em dias de cada etapa, no recorte. Cada etapa conta pelo seu próprio relógio e só entra quando as duas marcas existem. Mediana, não média: um processo parado por meses não esconde os outros que andaram em uma semana.">
         <thead><tr><th>Etapa</th><th>Medidos</th><th>Mediana</th></tr></thead>
@@ -477,7 +524,8 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
           ))}
         </tbody>
       </Bloco>
-
+      </>)}
+      {aba === 'excecoes' && (<>
       <Bloco titulo="14. Compras sem O.C. do ERP" testid="relatorio-sem-oc" largura="min-w-[760px]"
         explicacao={`${quantidade(r.withoutErp.orders)} compra(s) fechada(s) pela exceção — ${moeda(r.withoutErp.value)} (${pct(r.withoutErp.percent)} do período). A regra é a O.C. do SENIOR; a justificativa abaixo é a única exceção que libera o fechamento. Outros ${quantidade(r.withoutErp.pendingOrders)} pedido(s) (${moeda(r.withoutErp.pendingValue)}) seguem em aberto com a O.C. por registrar — fila, não exceção`
           + (r.withoutErp.closedWithoutReason > 0
@@ -499,6 +547,20 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
           ))}
         </tbody>
       </Bloco>
+      </>)}
+
+
+
+
+
+
+
+
+
+
+
+
+
     </>
   );
 }
@@ -515,6 +577,7 @@ export function Relatorios() {
   const [rascunho, setRascunho] = useState<FiltrosRelatorio>(FILTROS_RELATORIO_VAZIOS);
   const [aplicados, setAplicados] = useState<FiltrosRelatorio>(FILTROS_RELATORIO_VAZIOS);
   const [gerando, setGerando] = useState(false);
+  const [aba, setAba] = useState<Aba>('geral');
   const { avisar } = useToast();
   // o relatório anterior fica na tela enquanto o novo recorte vem: trocar de
   // filtro não deve apagar o que a pessoa está lendo
@@ -601,7 +664,7 @@ export function Relatorios() {
 
       {erro && <Painel><Erro>{erro}</Erro></Painel>}
       {carregando && !dados && <Painel><Carregando texto="Apurando o recorte…" /></Painel>}
-      {dados && <Blocos r={dados} />}
+      {dados && <Blocos r={dados} aba={aba} aoMudar={setAba} />}
     </>
   );
 }

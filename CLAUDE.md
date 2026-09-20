@@ -295,6 +295,17 @@ viram "Corrigir" e "Reenviar". Centro sem aprovador cadastrado é dito na frase,
 em "aguardando ninguém". O formulário de nova SC pergunta o essencial primeiro (itens,
 justificativa, centro, data, prioridade) e recolhe o resto em "Mais detalhes".
 
+**A diretoria tem página própria (`/diretoria`), e o relatório abre em três frases.** A Visão da
+diretoria põe na ordem em que um diretor pergunta: cinco números com tendência (gasto, saving,
+o que espera a minha aprovação, exceções, OTIF), o relatório em três frases, a fila de decisão
+(que se decide na Central, não ali) e os achados do Insights. Três períodos em vez de dez
+filtros. Para o diretor ela substitui o painel do comprador e o Insights no menu; o
+administrador vê os três. Os Relatórios ficaram em cinco abas — Visão geral, Saving,
+Fornecedores, Demanda e prazos, Exceções — com os mesmos catorze blocos numerados, a
+explicação de cada um recolhida em "como é calculado" e bloco vazio em uma linha.
+`resumoExecutivo` gera as três frases dos mesmos números dos blocos: a frase nunca diz uma coisa
+e a tabela outra.
+
 **Cuidado com a palavra "pedido" (D7).** "Tipo de pedido" no vocabulário do usuário é o tipo
 da **solicitação**; no do sistema, "pedido" é a O.C. O teste do menu pegou o rótulo errado — é
 para isso que ele existe.

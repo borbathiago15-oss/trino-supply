@@ -31,6 +31,7 @@ import { GestaoDeSolicitacoes } from '@/paginas/triagem/GestaoDeSolicitacoes';
 import { TorreDeControle } from '@/paginas/torre/TorreDeControle';
 import { DashboardSuprimentos } from '@/paginas/painel/DashboardSuprimentos';
 import { Insights } from '@/paginas/insights/Insights';
+import { VisaoDaDiretoria } from '@/paginas/diretoria/VisaoDaDiretoria';
 import { Relatorios } from '@/paginas/relatorios/Relatorios';
 import { AbrirCotacao } from '@/paginas/cotacoes/AbrirCotacao';
 import { ProcessosDeCotacao } from '@/paginas/cotacoes/ProcessosDeCotacao';
@@ -103,6 +104,7 @@ export function Rotas() {
           <Route path="/torre" element={<TorreDeControle />} />
           <Route path="/painel" element={<DashboardSuprimentos />} />
           <Route path="/insights" element={<Insights />} />
+          <Route path="/diretoria" element={<VisaoDaDiretoria />} />
           <Route path="/relatorios" element={<Relatorios />} />
           <Route path="/cotacoes" element={<ProcessosDeCotacao />} />
           <Route path="/cotacoes/abrir" element={<AbrirCotacao />} />

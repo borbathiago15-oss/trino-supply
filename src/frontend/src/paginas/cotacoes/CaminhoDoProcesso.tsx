@@ -17,7 +17,9 @@ export function legenda(e: EtapaDoCaminho): string {
     case 'feita':
       return [e.quem ?? '—', e.em ? dataHora(e.em) : null].filter(Boolean).join(' · ');
     case 'atual':
-      return `aguardando ${e.quem ?? '—'}${e.em ? ` desde ${dataHora(e.em)}` : ''}`;
+      // no impasse, "aguardando fulano" seria mentira: fulano está impedido de agir
+      return `${e.impasse ? `impasse · ${e.quem ?? '—'} não pode aprovar` : `aguardando ${e.quem ?? '—'}`}${
+        e.em ? ` desde ${dataHora(e.em)}` : ''}`;
     case 'pendente':
       return e.quem ? `a seguir · ${e.quem}` : 'a seguir';
     case 'encerrada':
@@ -38,6 +40,10 @@ export function CaminhoDoProcesso({ etapas, centro }: { etapas: EtapaDoCaminho[]
   if (etapas.length === 0) return null;
   // um link só, mesmo que os dois níveis estejam vazios: o conserto é o mesmo cadastro
   const semAprovador = etapas.some((e) => e.semAprovador);
+  // O caso real que motivou isto: o administrador é o único aprovador do centro E escolheu o
+  // fornecedor. "Aguardando Administrador" apontava para alguém que não pode agir, e a tela não
+  // dizia quem pode — outro administrador, ou outra pessoa cadastrada no nível.
+  const impasse = etapas.find((e) => e.situacao === 'atual' && e.impasse);
 
   return (
     <div data-testid="caminho-do-processo" className="mt-3 rounded-lg border border-marca/25 px-4 py-3">
@@ -55,6 +61,18 @@ export function CaminhoDoProcesso({ etapas, centro }: { etapas: EtapaDoCaminho[]
           </li>
         ))}
       </ol>
+      {impasse && (
+        <p data-testid="impasse-da-alcada" className="mt-2 rounded-lg bg-aviso-fundo px-3 py-2 text-[12.5px] text-aviso">
+          <strong>Ninguém da lista pode dar {impasse.chave === 'nivel2' ? 'o Nível 2' : 'o Nível 1'}.</strong>{' '}
+          {impasse.quem} {impasse.chave === 'nivel2'
+            ? 'escolheu o fornecedor ou deu o Nível 1, e quem já agiu no processo não aprova a etapa seguinte'
+            : 'escolheu o fornecedor, e quem escolhe não aprova a própria escolha'} (RFQ-ERR-030).
+          Quem destrava: outro administrador pode aprovar na Central de Aprovação, ou{' '}
+          <Link to="/centros-custo" className="font-semibold underline">
+            cadastre outra pessoa {impasse.chave === 'nivel2' ? 'no Nível 2' : 'no Nível 1'}{centro ? ` do ${centro}` : ''} →
+          </Link>
+        </p>
+      )}
       {semAprovador && (
         <p className="mt-2 text-[12.5px]">
           Este processo não anda enquanto o centro não tiver aprovador.{' '}

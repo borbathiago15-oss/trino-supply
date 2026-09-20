@@ -70,6 +70,49 @@ public class CaminhoDoProcessoTests
     }
 
     [Fact]
+    public void Quando_o_unico_aprovador_do_nivel_foi_quem_escolheu_o_fornecedor_e_impasse()
+    {
+        // o caso real: o administrador é o gerente do centro E escolheu o fornecedor. "Aguardando
+        // Administrador" seria mentira — ele não pode aprovar (RFQ-ERR-030), e ninguém mais está na lista.
+        var q = Processo(QuotationStatus.AwaitingManager);
+        var admin = Guid.NewGuid();
+        q.SelectedBy = admin;
+        var alcadas = new AlcadasDoCentro(["Administrador"], ["Gerson"], [admin], [Guid.NewGuid()]);
+
+        var n1 = Etapa(CaminhoDoProcesso.De(q, ["Ana"], Dia1, alcadas), "nivel1");
+
+        Assert.Equal(CaminhoDoProcesso.Atual, n1.Situacao);
+        Assert.Equal("Administrador", n1.Quem);   // o nome continua: é quem está cadastrado
+        Assert.True(n1.Impasse);
+        Assert.False(n1.SemAprovador);            // há gente cadastrada; o problema é outro
+    }
+
+    [Fact]
+    public void Com_mais_alguem_na_lista_nao_ha_impasse_e_sem_ids_nao_se_acusa_ninguem()
+    {
+        var q = Processo(QuotationStatus.AwaitingManager);
+        var admin = Guid.NewGuid();
+        q.SelectedBy = admin;
+
+        var comOutro = new AlcadasDoCentro(["Administrador", "Bruno"], [], [admin, Guid.NewGuid()], []);
+        Assert.False(Etapa(CaminhoDoProcesso.De(q, ["Ana"], Dia1, comOutro), "nivel1").Impasse);
+
+        var semIds = new AlcadasDoCentro(["Administrador"], []);
+        Assert.False(Etapa(CaminhoDoProcesso.De(q, ["Ana"], Dia1, semIds), "nivel1").Impasse);
+    }
+
+    [Fact]
+    public void No_nivel_2_quem_deu_o_nivel_1_tambem_conta_como_impedido()
+    {
+        var q = Processo(QuotationStatus.AwaitingDirector);
+        var gerson = Guid.NewGuid();
+        q.ManagerApprovedBy = gerson;
+        var alcadas = new AlcadasDoCentro(["X"], ["Gerson"], [Guid.NewGuid()], [gerson]);
+
+        Assert.True(Etapa(CaminhoDoProcesso.De(q, ["Ana"], Dia1, alcadas), "nivel2").Impasse);
+    }
+
+    [Fact]
     public void Com_aprovador_cadastrado_a_marca_fica_desligada_mesmo_na_etapa_ja_feita()
     {
         var caminho = CaminhoDoProcesso.De(Processo(QuotationStatus.AwaitingDirector), ["Ana"], Dia1, Alcadas);

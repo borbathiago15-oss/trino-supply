@@ -28,9 +28,9 @@ public partial class QuotationService
         if (alcadas.Nivel2.Count == 0 && q.ManagerApprovedBy is { } gerente)
         {
             var diretor = await db.Users.Where(u => u.Id == gerente && u.DirectorId != null)
-                .Join(db.Users, u => u.DirectorId, d => d.Id, (u, d) => d.Name)
+                .Join(db.Users, u => u.DirectorId, d => d.Id, (u, d) => new { d.Id, d.Name })
                 .FirstOrDefaultAsync(ct);
-            if (!string.IsNullOrWhiteSpace(diretor)) alcadas = alcadas with { Nivel2 = [diretor] };
+            if (diretor is not null) alcadas = alcadas with { Nivel2 = [diretor.Name], Ids2 = [diretor.Id] };
         }
 
         return CaminhoDoProcesso.De(q, solicitantes, pedidaEm, alcadas);

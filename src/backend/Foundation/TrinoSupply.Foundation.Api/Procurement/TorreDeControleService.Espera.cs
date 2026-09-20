@@ -13,11 +13,17 @@ namespace TrinoSupply.Foundation.Api.Procurement;
 /// <param name="Detail">O detalhe que muda a cobrança: o atraso do fornecedor, por exemplo.</param>
 public record EsperaDaLinha(string Who, DateTimeOffset? Since, int? Days, string? Detail);
 
-/// <summary>Os aprovadores de um centro de custo, por nível.</summary>
-public record AlcadasDoCentro(IReadOnlyList<string> Nivel1, IReadOnlyList<string> Nivel2)
+/// <summary>
+/// Os aprovadores de um centro de custo, por nível. Os ids acompanham os nomes para a tela
+/// saber quando todos os da lista estão impedidos pela segregação de funções.
+/// </summary>
+public record AlcadasDoCentro(
+    IReadOnlyList<string> Nivel1, IReadOnlyList<string> Nivel2,
+    IReadOnlyList<Guid>? Ids1 = null, IReadOnlyList<Guid>? Ids2 = null)
 {
     public static readonly AlcadasDoCentro Nenhuma = new([], []);
     public IReadOnlyList<string> Do(int nivel) => nivel == ApprovalLevels.Level2 ? Nivel2 : Nivel1;
+    public IReadOnlyList<Guid> IdsDo(int nivel) => (nivel == ApprovalLevels.Level2 ? Ids2 : Ids1) ?? [];
 
     /// <summary>
     /// Quem aprova em cada centro, pela <b>mesma regra que decide</b>: as alçadas por nível
@@ -42,8 +48,8 @@ public record AlcadasDoCentro(IReadOnlyList<string> Nivel1, IReadOnlyList<string
             .Select(c => new
             {
                 c.Code, c.ManagerUserId, c.ManagerName,
-                N1 = c.Approvers.Where(a => a.Level == ApprovalLevels.Level1).Select(a => a.UserName).ToList(),
-                N2 = c.Approvers.Where(a => a.Level == ApprovalLevels.Level2).Select(a => a.UserName).ToList(),
+                N1 = c.Approvers.Where(a => a.Level == ApprovalLevels.Level1).Select(a => new { a.UserId, a.UserName }).ToList(),
+                N2 = c.Approvers.Where(a => a.Level == ApprovalLevels.Level2).Select(a => new { a.UserId, a.UserName }).ToList(),
             })
             .ToListAsync(ct);
 
@@ -51,18 +57,24 @@ public record AlcadasDoCentro(IReadOnlyList<string> Nivel1, IReadOnlyList<string
         var gerentes = centros.Where(c => c.N2.Count == 0 && c.ManagerUserId is not null)
             .Select(c => c.ManagerUserId!.Value).Distinct().ToList();
         var diretorDoGerente = gerentes.Count == 0
-            ? new Dictionary<Guid, string>()
+            ? new Dictionary<Guid, (Guid Id, string Nome)>()
             : await db.Users.Where(u => gerentes.Contains(u.Id) && u.DirectorId != null)
-                .Join(db.Users, u => u.DirectorId, d => d.Id, (u, d) => new { u.Id, Diretor = d.Name })
-                .ToDictionaryAsync(x => x.Id, x => x.Diretor, ct);
+                .Join(db.Users, u => u.DirectorId, d => d.Id, (u, d) => new { u.Id, DiretorId = d.Id, Diretor = d.Name })
+                .ToDictionaryAsync(x => x.Id, x => (x.DiretorId, x.Diretor), ct);
 
         return centros.ToDictionary(
             c => c.Code.ToUpperInvariant(),
-            c => new AlcadasDoCentro(
-                c.N1.Count > 0 ? c.N1
-                    : string.IsNullOrWhiteSpace(c.ManagerName) ? [] : [c.ManagerName!],
-                c.N2.Count > 0 ? c.N2
-                    : c.ManagerUserId is { } g && diretorDoGerente.TryGetValue(g, out var diretor) ? [diretor] : []));
+            c =>
+            {
+                var gerente = c.ManagerUserId is { } g && !string.IsNullOrWhiteSpace(c.ManagerName)
+                    ? (Id: g, Nome: c.ManagerName!) : ((Guid Id, string Nome)?)null;
+                var diretor = c.ManagerUserId is { } g2 && diretorDoGerente.TryGetValue(g2, out var d) ? d : ((Guid, string)?)null;
+                return new AlcadasDoCentro(
+                    c.N1.Count > 0 ? c.N1.Select(a => a.UserName).ToList() : gerente is { } ge ? [ge.Nome] : [],
+                    c.N2.Count > 0 ? c.N2.Select(a => a.UserName).ToList() : diretor is { } di ? [di.Item2] : [],
+                    c.N1.Count > 0 ? c.N1.Select(a => a.UserId).ToList() : gerente is { } ge2 ? [ge2.Id] : [],
+                    c.N2.Count > 0 ? c.N2.Select(a => a.UserId).ToList() : diretor is { } di2 ? [di2.Item1] : []);
+            });
     }
 }
 

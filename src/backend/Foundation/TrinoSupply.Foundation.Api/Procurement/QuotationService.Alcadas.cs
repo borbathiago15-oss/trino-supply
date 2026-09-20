@@ -120,8 +120,11 @@ public partial class QuotationService
                     q.Status = QuotationStatus.ApprovedForIssue;
                     await MarkSourcePrApprovedAsync(q, actor, ct);
                     AddEvent(q, "DIRETOR_APROVOU",
-                        "Aprovador 02 (Nível 2) aprovou. Processo aguardando o comprador registrar a OC fechada no SENIOR.",
+                        "Aprovador 02 (Nível 2) aprovou. Pedido(s) criado(s): o comprador registra a O.C. do SENIOR, o faturamento e a entrega na tela do pedido.",
                         actor, from, q.Status, reason);
+                    // o pedido nasce aqui, sem O.C.: tudo o que vem depois da aprovação vive numa tela só
+                    if (await CriarPedidosAsync(q, actor, ct) is { } erroPedido)
+                        return (null, erroPedido);
                 }
                 else
                 {
@@ -195,13 +198,15 @@ public partial class QuotationService
                     $"{tipo}:{q.Id}:{nivel}", $"/cotacoes/{q.Id}");
                 break;
             }
-            // aviso 5: aprovado — volta ao comprador para registrar a O.C. do ERP
+            // aviso 5: aprovado — volta ao comprador para registrar a O.C. do ERP. O pedido já
+            // nasceu na aprovação: o link leva à tela dele, onde ficam O.C., faturamento e entrega
             case QuotationStatus.ApprovedForIssue:
                 avisos.Enfileirar(q.CreatedBy, AvisoKinds.LiberadoParaOc,
                     $"{q.Number} aprovado — registre a O.C.",
                     $"As duas alçadas aprovaram o processo {q.Number}. "
-                    + "Feche a O.C. no ERP SENIOR e registre o número aqui.",
-                    $"{AvisoKinds.LiberadoParaOc}:{q.Id}", $"/cotacoes/{q.Id}");
+                    + "Feche a O.C. no ERP SENIOR e registre o número na tela do pedido.",
+                    $"{AvisoKinds.LiberadoParaOc}:{q.Id}",
+                    q.PurchaseOrderId is { } pedido ? $"/pedidos/{pedido}" : $"/cotacoes/{q.Id}");
                 break;
         }
     }

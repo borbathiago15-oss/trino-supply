@@ -42,6 +42,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<StoredDocument> StoredDocuments => Set<StoredDocument>();
     public DbSet<RequisitionAttachment> RequisitionAttachments => Set<RequisitionAttachment>();
     public DbSet<PurchaseOrderInvoice> PurchaseOrderInvoices => Set<PurchaseOrderInvoice>();
+    public DbSet<PurchaseOrderErpDocument> PurchaseOrderErpDocuments => Set<PurchaseOrderErpDocument>();
     public DbSet<Domain.CostCenterApprover> CostCenterApprovers => Set<Domain.CostCenterApprover>();
     public DbSet<CompanyProfile> CompanyProfiles => Set<CompanyProfile>();
     public DbSet<Announcement> Announcements => Set<Announcement>();
@@ -594,6 +595,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(o => o.NoErpReason).HasColumnName("no_erp_reason").HasMaxLength(500);
             e.Property(o => o.DeliveryCompletedAt).HasColumnName("delivery_completed_at");
             e.Ignore(o => o.HasPendingDelivery);
+            e.Ignore(o => o.HasErpPending);
             e.Property(o => o.CreatedAt).HasColumnName("created_at");
             e.Property(o => o.UpdatedAt).HasColumnName("updated_at");
             e.Property(o => o.Version).HasColumnName("version").IsConcurrencyToken();
@@ -605,6 +607,41 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .OnDelete(DeleteBehavior.Cascade);
             e.HasMany(o => o.Invoices).WithOne().HasForeignKey(i => i.OrderId)
                 .OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(o => o.ErpDocuments).WithOne().HasForeignKey(d => d.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PurchaseOrderErpDocument>(e =>
+        {
+            e.ToTable("purchase_order_erp_document", "procurement");
+            e.HasKey(d => d.Id);
+            e.Property(d => d.Id).HasColumnName("id");
+            e.Property(d => d.OrderId).HasColumnName("order_id");
+            e.Property(d => d.Number).HasColumnName("number").HasMaxLength(30).IsRequired();
+            e.Property(d => d.IssuedOn).HasColumnName("issued_on");
+            e.Property(d => d.DocumentId).HasColumnName("document_id");
+            e.Property(d => d.FileName).HasColumnName("file_name").HasMaxLength(260);
+            e.Property(d => d.Notes).HasColumnName("notes").HasMaxLength(500);
+            e.Property(d => d.CreatedBy).HasColumnName("created_by");
+            e.Property(d => d.CreatedByLabel).HasColumnName("created_by_label").HasMaxLength(200);
+            e.Property(d => d.CreatedAt).HasColumnName("created_at");
+            e.HasIndex(d => d.OrderId);
+            // a O.C. do SENIOR é única no sistema (RFQ-ERR-041 / PO-ERR-050)
+            e.HasIndex(d => d.Number).IsUnique();
+            e.HasMany(d => d.Items).WithOne().HasForeignKey(i => i.ErpDocumentId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PurchaseOrderErpDocumentItem>(e =>
+        {
+            e.ToTable("purchase_order_erp_document_item", "procurement");
+            e.HasKey(i => i.Id);
+            e.Property(i => i.Id).HasColumnName("id");
+            e.Property(i => i.ErpDocumentId).HasColumnName("erp_document_id");
+            e.Property(i => i.OrderItemId).HasColumnName("order_item_id");
+            e.Property(i => i.Quantity).HasColumnName("quantity").HasPrecision(18, 4);
+            e.HasIndex(i => i.ErpDocumentId);
+            e.HasIndex(i => i.OrderItemId);
         });
 
         modelBuilder.Entity<PurchaseOrderInvoice>(e =>

@@ -66,6 +66,26 @@ describe('proximoPasso', () => {
     expect(passo.rotulo).toContain('PO-2026-000007');
   });
 
+  it('aprovado com o pedido criado na alçada, aponta a tela do pedido para a O.C.', () => {
+    const oc = (id: string, erpPending = true) =>
+      ({ id, number: `PO-${id}`, supplierName: 'A', families: [], totalValue: 1, erpNumber: null, noErpReason: null, erpPending });
+    const passo = proximoPasso(processo({ status: 'APROVADO_PARA_EMISSAO', purchaseOrders: [oc('a')] }))!;
+    expect(passo.titulo).toMatch(/na tela do pedido/);
+    expect(passo.rota).toBe('/pedidos/a');
+    expect(passo.rotulo).toContain('PO-a');
+    // dois pedidos e só um sem O.C.: leva direto ao que falta
+    const falta = proximoPasso(processo({
+      status: 'APROVADO_PARA_EMISSAO',
+      purchaseOrders: [{ ...oc('a', false), erpNumber: 'OC-1' }, oc('b')],
+    }))!;
+    expect(falta.rota).toBe('/pedidos/b');
+    // fornecedor ainda sem pedido: o formulário antigo continua aqui, sem link
+    expect(proximoPasso(processo({
+      status: 'APROVADO_PARA_EMISSAO', purchaseOrders: [oc('a')],
+      pendingPoSuppliers: [{ supplierId: 's2', supplierName: 'B', families: ['X'], totalValue: 1 }],
+    }))!.rota).toBeUndefined();
+  });
+
   it('compra dividida em várias O.C. cai na lista, não num pedido só', () => {
     const oc = (id: string) => ({ id, number: id, supplierName: 'A', families: [], totalValue: 1 });
     const passo = proximoPasso(processo({ status: 'OC_REGISTRADA', purchaseOrders: [oc('a'), oc('b')] }))!;

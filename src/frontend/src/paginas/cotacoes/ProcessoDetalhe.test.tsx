@@ -820,6 +820,39 @@ describe('tela do processo', () => {
     await waitFor(() => expect(anexarOc).toHaveBeenCalledWith('po-novo', expect.any(File)));
   });
 
+  it('aprovado com o pedido já criado: a O.C. se registra na tela do pedido, não aqui', async () => {
+    // o pedido nasce na aprovação do Nível 2; o formulário antigo fica só para o processo
+    // aprovado antes disso (sem pedido nenhum) ou com fornecedor ainda sem pedido
+    vi.mocked(lerProcesso).mockResolvedValue(processo({
+      status: 'APROVADO_PARA_EMISSAO',
+      purchaseOrders: [{ id: 'po1', number: 'PO-2026-000001', supplierName: 'Alfa', families: ['EPI'], totalValue: 1200,
+        erpNumber: null, noErpReason: null, erpPending: true, status: 'EMITIDO' }],
+    }));
+    abrir();
+
+    const tabela = await screen.findByTestId('ocs-do-processo');
+    expect(screen.queryByTestId('form-oc')).not.toBeInTheDocument();
+    expect(within(tabela).getByText('a registrar')).toBeInTheDocument();
+    expect(within(tabela).getByRole('link', { name: 'Registrar O.C., faturamento e entrega' }))
+      .toHaveAttribute('href', '/pedidos/po1');
+    expect(screen.getByTestId('proximo-passo')).toHaveTextContent('na tela do pedido');
+    expect(within(screen.getByTestId('proximo-passo')).getByRole('link')).toHaveAttribute('href', '/pedidos/po1');
+  });
+
+  it('a O.C. parcial aparece no processo com o número e o aviso do saldo', async () => {
+    vi.mocked(lerProcesso).mockResolvedValue(processo({
+      status: 'APROVADO_PARA_EMISSAO',
+      purchaseOrders: [{ id: 'po1', number: 'PO-2026-000001', supplierName: 'Alfa', families: ['EPI'], totalValue: 1200,
+        erpNumber: 'OC-100', noErpReason: null, erpPending: true, status: 'EMITIDO' }],
+    }));
+    abrir();
+
+    const tabela = await screen.findByTestId('ocs-do-processo');
+    expect(within(tabela).getByText('OC-100')).toBeInTheDocument();
+    expect(within(tabela).getByText(/parcial: falta O.C./)).toBeInTheDocument();
+    expect(within(tabela).getByRole('link', { name: 'Faturamento e entrega' })).toHaveAttribute('href', '/pedidos/po1');
+  });
+
   it('a O.C. registrada leva ao pedido, onde ficam faturamento e entrega', async () => {
     vi.mocked(lerProcesso).mockResolvedValue(processo({
       status: 'OC_REGISTRADA',

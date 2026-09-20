@@ -4,8 +4,9 @@ import { abrirBlob } from '@/api/cliente';
 import { baixarDocumento } from '@/api/documentos';
 import { listarLocais, type LocalEstoque } from '@/api/estoque';
 import {
-  anexarNota, anexarOc, entradaBloqueada, lancarNota, obterPedido, pdfPedido, pedidoEncerrado,
-  registrarEntrega, registrarOc, ROTULO_SITUACAO, type PedidoCompra,
+  anexarNota, anexarOcDocumento, entradaBloqueada, lancarNota, linhaDoTempo, obterPedido, pdfPedido,
+  pedidoEncerrado, registrarEntrega, registrarOc, ROTULO_SITUACAO,
+  type CoberturaDaOc, type EtapaDoPedido, type PedidoCompra, type SituacaoDaEtapa,
 } from '@/api/pedidos';
 import { MINIMO_MOTIVO_SEM_OC } from '@/api/cotacoes';
 import { Aviso, Badge, Carregando, Dado, Erro, Painel, Vazio } from '@/componentes/basicos';
@@ -59,6 +60,7 @@ export function PedidoDetalhe() {
         </div>
         {pedido.cancelReason && <p className="mt-3 rounded-lg bg-perigo-fundo px-3 py-2 text-perigo">Cancelado: {pedido.cancelReason}</p>}
         {pedido.notes && <p className="sub mt-3">{pedido.notes}</p>}
+        {pedido.status !== 'CANCELADO' && <LinhaDoTempo pedido={pedido} />}
       </Painel>
 
       <Painel titulo="Itens do pedido">
@@ -89,35 +91,103 @@ export function PedidoDetalhe() {
   );
 }
 
+// ---------- linha do tempo ----------
+const ETAPAS: Record<EtapaDoPedido, { numero: number; titulo: string; alvo: string }> = {
+  oc: { numero: 1, titulo: 'O.C. do ERP', alvo: '#oc-erp' },
+  faturamento: { numero: 2, titulo: 'Faturamento', alvo: '#notas-fiscais' },
+  entrega: { numero: 3, titulo: 'Entrega', alvo: '#entrega' },
+};
+const ROTULO_ETAPA: Record<SituacaoDaEtapa, string> = {
+  feita: 'concluída', parcial: 'em andamento', atual: 'agora', pendente: 'depois',
+};
+const CLASSE_ETAPA: Record<SituacaoDaEtapa, string> = {
+  feita: 'border-ok/40 bg-ok-fundo text-ok',
+  parcial: 'border-aviso/40 bg-aviso-fundo text-aviso',
+  atual: 'border-marca bg-marca/5 text-marca',
+  pendente: 'border-borda text-texto-suave',
+};
+
+/**
+ * Tudo o que vem depois da aprovação, numa tela só: O.C. → faturamento → entrega. Cada
+ * passo leva à própria seção, logo abaixo. A situação é derivada do pedido.
+ */
+function LinhaDoTempo({ pedido }: { pedido: PedidoCompra }) {
+  const etapas = linhaDoTempo(pedido);
+  return (
+    <ol data-testid="linha-do-tempo" className="mt-4 grid gap-2 md:grid-cols-3">
+      {etapas.map(({ etapa, situacao }) => {
+        const e = ETAPAS[etapa];
+        return (
+          <li key={etapa} data-etapa={etapa} data-situacao={situacao}>
+            <a href={e.alvo} className={`flex items-center gap-3 rounded-lg border px-3 py-2 ${CLASSE_ETAPA[situacao]} ${situacao === 'atual' || situacao === 'parcial' ? 'font-bold' : ''}`}>
+              <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-current text-[13px]">
+                {situacao === 'feita' ? '✓' : e.numero}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-[13px]">{e.numero}. {e.titulo}</span>
+                <span className="block text-[11.5px] font-normal">{ROTULO_ETAPA[situacao]}</span>
+              </span>
+            </a>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 // ---------- OC do ERP ----------
+/**
+ * A O.C. é gerada no ERP SENIOR; aqui só se registra o número. Uma O.C. pode cobrir parte do
+ * pedido — o ERP fecha 600 das 1.000 luvas e o resto vem noutra O.C. —, por isso a lista
+ * mostra o que cada uma cobre e o formulário pergunta quanto de cada item entra nesta.
+ * Sem O.C., o restante só fecha com a observação (PO-BR-011).
+ */
 function FormularioOc({ pedido, podeEditar, aoSalvar, abrirDocumento }:
   { pedido: PedidoCompra; podeEditar: boolean; aoSalvar: () => void; abrirDocumento: (id: string) => void }) {
   const { avisar } = useToast();
-  const [numero, setNumero] = useState(pedido.erpNumber ?? '');
-  const [dataOc, setDataOc] = useState(pedido.erpIssuedOn ?? '');
-  const [motivoSemOc, setMotivoSemOc] = useState(pedido.noErpReason ?? '');
+  const [numero, setNumero] = useState('');
+  const [dataOc, setDataOc] = useState('');
+  const [motivoSemOc, setMotivoSemOc] = useState('');
   const [arquivo, setArquivo] = useState<File | null>(null);
+  // quanto de cada item entra nesta O.C.; vazio = o que ainda falta do item
+  const [cobertura, setCobertura] = useState<Record<string, string>>({});
   const [salvando, setSalvando] = useState(false);
-  useEffect(() => {
-    setNumero(pedido.erpNumber ?? '');
-    setDataOc(pedido.erpIssuedOn ?? '');
-    setMotivoSemOc(pedido.noErpReason ?? '');
-  }, [pedido.erpNumber, pedido.erpIssuedOn, pedido.noErpReason]);
 
-  // a O.C. é gerada no ERP: sem ela o pedido não fecha, a não ser com a observação
+  const docs = pedido.erpDocuments;
+  const pendentes = pedido.items.filter((i) => i.erpPendingQuantity > 0);
+  const restante = pendentes.reduce((a, i) => a + i.erpPendingQuantity, 0);
+  const totalPedido = pedido.items.reduce((a, i) => a + i.quantity, 0);
+  // há saldo sem O.C.: com a observação a compra segue, mas a O.C. que chegar depois entra
+  const haSaldo = pendentes.length > 0;
   const semOc = numero.trim().length === 0;
   const pronto = !semOc || motivoSemOc.trim().length >= MINIMO_MOTIVO_SEM_OC;
+
+  const quantidadeDe = (itemId: string, falta: number) => {
+    const v = cobertura[itemId];
+    if (v === undefined || v === '') return falta;
+    const n = parseFloat(v.replace(',', '.'));
+    return Number.isFinite(n) ? n : 0;
+  };
+  const linhas: CoberturaDaOc[] = pendentes.map((i) => ({ itemId: i.itemId, quantity: quantidadeDe(i.itemId, i.erpPendingQuantity) }));
+  const parcial = linhas.some((l, k) => l.quantity !== pendentes[k].erpPendingQuantity);
+  const excede = linhas.some((l, k) => l.quantity < 0 || l.quantity > pendentes[k].erpPendingQuantity);
+  const nadaCoberto = !semOc && parcial && linhas.every((l) => l.quantity === 0);
 
   async function salvar(ev: FormEvent) {
     ev.preventDefault();
     setSalvando(true);
     try {
-      await registrarOc(pedido.id, {
+      const atualizado = await registrarOc(pedido.id, {
         erpNumber: numero, issuedOn: dataOc || null,
         noErpReason: semOc ? motivoSemOc.trim() : null,
+        // a lista só vai quando a O.C. cobre parte: sem ela, o servidor cobre o que falta
+        ...(!semOc && parcial ? { items: linhas } : {}),
       });
-      if (arquivo) await anexarOc(pedido.id, arquivo);
-      setArquivo(null);
+      if (arquivo && !semOc) {
+        const doc = atualizado.erpDocuments.find((d) => d.number === numero.trim());
+        if (doc) await anexarOcDocumento(pedido.id, doc.id, arquivo);
+      }
+      setNumero(''); setDataOc(''); setMotivoSemOc(''); setArquivo(null); setCobertura({});
       avisar(semOc ? 'Fechado sem O.C., com a observação na auditoria.' : 'OC registrada.');
       aoSalvar();
     } catch (e) { avisar(mensagem(e, 'Falha ao registrar a OC.'), 'erro'); }
@@ -125,29 +195,92 @@ function FormularioOc({ pedido, podeEditar, aoSalvar, abrirDocumento }:
   }
 
   return (
-    <Painel titulo="OC do ERP" id="oc-erp">
-      <p className="mb-3">
-        {pedido.erpNumber ? (
-          <>OC <strong>{pedido.erpNumber}</strong> de {data(pedido.erpIssuedOn)}
-            {pedido.erpFileName && pedido.erpDocumentId && <> · <button type="button" className="text-marca underline" onClick={() => abrirDocumento(pedido.erpDocumentId!)}>{pedido.erpFileName}</button></>}
-          </>
-        ) : pedido.noErpReason ? (
-          <>Fechado <strong>sem O.C. do ERP</strong> em {data(pedido.erpIssuedOn)}, sob o próprio
-            número do pedido <strong>{pedido.number}</strong>.
-          </>
-        ) : 'Nenhuma OC registrada ainda — informe o número gerado no ERP, ou a observação de por que ele não existe.'}
-      </p>
-      {pedido.noErpReason && (
-        <div className="mb-3"><Aviso testid="motivo-sem-oc">Observação: {pedido.noErpReason}</Aviso></div>
+    <Painel titulo="1. O.C. do ERP" id="oc-erp">
+      {docs.length > 0 ? (
+        <ul data-testid="ocs-do-erp" className="mb-3 space-y-1.5">
+          {docs.map((d) => (
+            <li key={d.id} data-oc={d.number} className="text-[13px]">
+              OC <strong>{d.number}</strong> de {data(d.issuedOn)}
+              {d.fileName && d.documentId && <> · <button type="button" className="text-marca underline" onClick={() => abrirDocumento(d.documentId!)}>{d.fileName}</button></>}
+              {d.createdByLabel && <span className="sub"> · por {d.createdByLabel}</span>}
+              <div className="sub">
+                {docs.length > 1 || pedido.erpPending || pedido.noErpReason
+                  ? `cobre ${d.items.map((c) => {
+                    const item = pedido.items.find((i) => i.itemId === c.itemId);
+                    return `${quantidade(c.quantity)} ${item?.unitOfMeasure ?? ''} de ${item?.description ?? c.itemId}`.trim();
+                  }).join(', ')}`
+                  : 'cobre o pedido inteiro'}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : pedido.noErpReason ? (
+        <p className="mb-3">
+          Fechado <strong>sem O.C. do ERP</strong> em {data(pedido.erpIssuedOn)}, sob o próprio
+          número do pedido <strong>{pedido.number}</strong>.
+        </p>
+      ) : (
+        <p className="mb-3">
+          Nenhuma OC registrada ainda — informe o número gerado no ERP, ou a observação de por que ele não existe.
+        </p>
       )}
-      {podeEditar && (
+      {pedido.noErpReason && (
+        <div className="mb-3">
+          <Aviso testid="motivo-sem-oc">
+            {docs.length > 0 ? 'Restante sem O.C., com a observação: ' : 'Observação: '}{pedido.noErpReason}
+          </Aviso>
+        </div>
+      )}
+      {pedido.erpPending && docs.length > 0 && (
+        <p data-testid="saldo-sem-oc" className="mb-3 rounded-lg bg-aviso-fundo px-3 py-2 text-[12.5px] text-aviso">
+          <strong>O.C. parcial:</strong> {quantidade(restante)} de {quantidade(totalPedido)} unidades ainda sem O.C. —{' '}
+          {pendentes.map((i) => `${quantidade(i.erpPendingQuantity)} ${i.unitOfMeasure} de ${i.description}`).join(', ')}.
+          Registre a próxima O.C., ou feche o restante com a observação.
+        </p>
+      )}
+      {podeEditar && haSaldo && (
         <form onSubmit={salvar} className="grid grid-cols-1 items-end gap-3 md:grid-cols-[1fr_170px_1fr_auto]">
           <div><label htmlFor="oc-numero">Número da OC no ERP</label><input id="oc-numero" value={numero} onChange={(e) => setNumero(e.target.value)} /></div>
           <div><label htmlFor="oc-data">Data</label><input id="oc-data" type="date" value={dataOc} onChange={(e) => setDataOc(e.target.value)} /></div>
           <div><label htmlFor="oc-arquivo">Anexo (PDF da OC)</label><input id="oc-arquivo" type="file" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} /></div>
-          <button type="submit" className="botao" disabled={!pronto || salvando}>
-            {salvando ? 'Salvando…' : semOc ? 'Fechar sem O.C.' : 'Registrar OC'}
+          <button type="submit" className="botao" disabled={!pronto || salvando || (!semOc && (excede || nadaCoberto))}>
+            {salvando ? 'Salvando…' : semOc ? (docs.length > 0 ? 'Fechar o restante sem O.C.' : 'Fechar sem O.C.') : 'Registrar OC'}
           </button>
+          {!semOc && pedido.items.length > 0 && (
+            <div className="md:col-span-4 overflow-x-auto" data-testid="cobertura-da-oc">
+              <p className="rotulo mb-1">O que esta O.C. cobre</p>
+              <table>
+                <thead><tr><th>Item</th><th>Pedido</th><th>Já com O.C.</th><th>Sem O.C.</th><th>Nesta O.C.</th></tr></thead>
+                <tbody>
+                  {pedido.items.map((i) => {
+                    const aberto = i.erpPendingQuantity > 0;
+                    const valor = quantidadeDe(i.itemId, i.erpPendingQuantity);
+                    const invalido = aberto && (valor < 0 || valor > i.erpPendingQuantity);
+                    return (
+                      <tr key={i.itemId} data-item={i.itemId}>
+                        <td>{i.description}</td>
+                        <td className="whitespace-nowrap">{quantidade(i.quantity)} {i.unitOfMeasure}</td>
+                        <td>{quantidade(i.erpCoveredQuantity)}</td>
+                        <td>{quantidade(i.erpPendingQuantity)}</td>
+                        <td>
+                          <input type="number" aria-label={`Nesta O.C.: ${i.description}`} className="!w-[110px]" min="0" step="0.01"
+                            max={i.erpPendingQuantity} disabled={!aberto} placeholder={quantidade(i.erpPendingQuantity)}
+                            aria-invalid={invalido || undefined}
+                            value={cobertura[i.itemId] ?? ''} onChange={(e) => setCobertura((c) => ({ ...c, [i.itemId]: e.target.value }))} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <p className="sub mt-1">
+                {excede ? 'A O.C. não pode cobrir mais do que falta no item (PO-ERR-059).'
+                  : nadaCoberto ? 'Informe o que esta O.C. cobre: com tudo em zero não há o que registrar.'
+                  : parcial ? 'O.C. parcial: o que ficar sem O.C. continua em aberto para a próxima, ou fecha com a observação.'
+                  : 'Deixe como está para a O.C. cobrir tudo o que ainda falta. Diminua a quantidade quando o ERP fechou só parte.'}
+              </p>
+            </div>
+          )}
           {semOc && (
             <div className="md:col-span-4">
               <label htmlFor="oc-motivo">Observação: por que a O.C. não foi gerada no ERP? (obrigatória para fechar sem O.C.)</label>
@@ -156,10 +289,14 @@ function FormularioOc({ pedido, podeEditar, aoSalvar, abrirDocumento }:
               <p className="sub mt-1">
                 A O.C. é gerada no ERP SENIOR, e sem ela o pedido não fecha. Esta observação é a
                 única exceção, e fica registrada na auditoria.
+                {docs.length > 0 && ' As O.C.s já registradas continuam valendo; a observação cobre só o restante.'}
               </p>
             </div>
           )}
         </form>
+      )}
+      {podeEditar && !haSaldo && (
+        <p className="sub">Todo o pedido está coberto por O.C. do ERP. O próximo passo é o faturamento.</p>
       )}
     </Painel>
   );
@@ -189,7 +326,7 @@ function NotasFiscais({ pedido, podeLancar, aoSalvar, abrirDocumento }:
   }
 
   return (
-    <Painel titulo="Faturamento (notas fiscais)" id="notas-fiscais">
+    <Painel titulo="2. Faturamento (notas fiscais)" id="notas-fiscais">
       {pedido.invoices.length ? (
         <div className="overflow-x-auto">
           <table data-testid="tabela-notas">
@@ -265,7 +402,7 @@ function Entrega({ pedido, podeConfirmar, aoSalvar }: { pedido: PedidoCompra; po
   }
 
   return (
-    <Painel titulo="Confirmação de entrega" id="entrega">
+    <Painel titulo="3. Confirmação de entrega" id="entrega">
       {encerrado && (
         <p className="sub mb-3">
           {pedido.status === 'CANCELADO' ? 'Pedido cancelado.' : `Entrega concluída em ${dataHora(pedido.deliveryCompletedAt ?? pedido.receivedAt)}`}

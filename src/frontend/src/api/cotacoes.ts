@@ -234,7 +234,23 @@ export interface OcDoProcesso {
   supplierName: string;
   families: string[];
   totalValue: number;
+  /**
+   * Situação da O.C. do ERP no pedido — só vem no detalhe do processo. O pedido nasce na
+   * aprovação do Nível 2 sem O.C.; ela (inteira ou em partes) é registrada na tela dele.
+   */
+  erpNumber?: string | null;
+  noErpReason?: string | null;
+  /** Ainda há item ou quantidade sem O.C. do ERP e sem a observação da exceção. */
+  erpPending?: boolean | null;
+  status?: string | null;
 }
+
+/**
+ * Se os pedidos do processo já existem e algum ainda espera a O.C. do ERP: é o que diz à
+ * tela do processo para apontar o pedido em vez de oferecer o formulário antigo.
+ */
+export const pedidosAguardandoOc = (q: Pick<Processo, 'purchaseOrders'>) =>
+  q.purchaseOrders.filter((o) => o.erpPending !== false && !o.erpNumber && !o.noErpReason);
 
 /**
  * As três réguas do saving (§17), lado a lado porque respondem perguntas diferentes:
@@ -702,7 +718,10 @@ export function acoesDisponiveis(
     porItem: q.items.length > 1,
     decidirNivel1: aprovaNivel1 && q.status === 'AGUARDANDO_GERENTE' && !barrado1,
     decidirNivel2: aprovaNivel2 && q.status === 'AGUARDANDO_DIRETOR' && !barrado2,
-    registrarOc: conduz && q.status === 'APROVADO_PARA_EMISSAO',
+    // o pedido nasce na aprovação: com ele criado, a O.C. se registra na tela do pedido. O
+    // formulário aqui fica só para o processo antigo, aprovado antes de o pedido nascer assim
+    registrarOc: conduz && q.status === 'APROVADO_PARA_EMISSAO'
+      && (q.purchaseOrders.length === 0 || q.pendingPoSuppliers.length > 0),
     cancelar: conduz && !['OC_REGISTRADA', 'REJEITADO', 'CANCELADA'].includes(q.status),
   };
 }

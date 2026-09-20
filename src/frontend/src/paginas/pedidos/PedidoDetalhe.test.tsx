@@ -33,8 +33,10 @@ const pedido = (p: Partial<PedidoCompra>): PedidoCompra => ({
   erpNumber: null, noErpReason: null, erpIssuedOn: null, promisedDate: null,
   onTime: null, inFull: null, otif: null, referenceSavingTotal: null, erpDocumentId: null,
   erpFileName: null, deliveryCompletedAt: null, pendingDelivery: true, inactiveCatalogCodes: null, invoices: [],
+  erpPending: true, erpDocuments: [],
   items: [{
     itemId: 'i1', description: 'Luva nitrílica', unitOfMeasure: 'PAR', quantity: 10, receivedQuantity: 0,
+    erpCoveredQuantity: 0, erpPendingQuantity: 10,
     pendingQuantity: 10, rejectedQuantity: 0, rejectionReason: null, lastPaidUnitPrice: null,
     referenceSaving: null, sourcePrNumber: null, unitPrice: 150, catalogCode: 'EPI-001',
     catalogItemId: null, family: 'EPI',
@@ -60,7 +62,7 @@ describe('O.C. do ERP no pedido', () => {
   it('com o número preenchido registra a O.C. e não pede motivo', async () => {
     const usuario = userEvent.setup();
     vi.mocked(obterPedido).mockResolvedValue(pedido({}));
-    vi.mocked(registrarOc).mockResolvedValue(pedido({ erpNumber: '663' }));
+    vi.mocked(registrarOc).mockResolvedValue(pedido({ erpNumber: '663', erpPending: false }));
     abrir();
 
     const painel = await screen.findByRole('region', { name: 'OC do ERP' }).catch(() => null)
@@ -77,7 +79,7 @@ describe('O.C. do ERP no pedido', () => {
   it('sem o número, a observação é obrigatória e libera o fechamento', async () => {
     const usuario = userEvent.setup();
     vi.mocked(obterPedido).mockResolvedValue(pedido({}));
-    vi.mocked(registrarOc).mockResolvedValue(pedido({ noErpReason: 'Compra emergencial de balcão.' }));
+    vi.mocked(registrarOc).mockResolvedValue(pedido({ noErpReason: 'Compra emergencial de balcão.', erpPending: false }));
     abrir();
 
     const motivo = await screen.findByLabelText(/por que a O.C. não foi gerada/i);
@@ -99,7 +101,7 @@ describe('O.C. do ERP no pedido', () => {
 
   it('a compra sem O.C. mostra a referência interna e o motivo registrado', async () => {
     vi.mocked(obterPedido).mockResolvedValue(pedido({
-      erpIssuedOn: '2026-09-01',
+      erpIssuedOn: '2026-09-01', erpPending: false,
       noErpReason: 'Fornecedor entregou antes de a O.C. sair do SENIOR.',
     }));
     abrir();
@@ -111,6 +113,102 @@ describe('O.C. do ERP no pedido', () => {
     expect(within(painel).getByText('PO-2026-000001')).toBeInTheDocument();
     // sem O.C. de verdade, o campo do número segue vazio e o motivo continua exigido
     expect(within(painel).getByLabelText('Número da OC no ERP')).toHaveValue('');
+  });
+});
+
+describe('O.C. parcial: várias O.C.s do ERP no mesmo pedido', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    eu = { id: 'u1', email: 'carla@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['COMPRAS'] };
+    vi.mocked(listarLocais).mockResolvedValue([]);
+  });
+
+  const parcial = () => pedido({
+    erpNumber: 'OC-100', erpIssuedOn: '2026-09-01', erpPending: true,
+    erpDocuments: [{ id: 'd1', number: 'OC-100', issuedOn: '2026-09-01', documentId: null, fileName: null, notes: null,
+      createdByLabel: 'Carla', createdAt: '2026-09-01T10:00:00Z', items: [{ itemId: 'i1', quantity: 6 }] }],
+    items: [{ ...pedido({}).items[0], erpCoveredQuantity: 6, erpPendingQuantity: 4 }],
+  });
+
+  it('mostra o que cada O.C. cobre e quanto ainda falta', async () => {
+    vi.mocked(obterPedido).mockResolvedValue(parcial());
+    abrir();
+
+    const painel = (await screen.findByTestId('ocs-do-erp')).closest('#oc-erp') as HTMLElement;
+    expect(within(painel).getByText('OC-100')).toBeInTheDocument();
+    expect(painel).toHaveTextContent('cobre 6 PAR de Luva nitrílica');
+    expect(screen.getByTestId('saldo-sem-oc')).toHaveTextContent('4 de 10 unidades ainda sem O.C.');
+    // a linha do tempo diz que a O.C. começou e não fechou
+    const etapaOc = screen.getByTestId('linha-do-tempo').querySelector('[data-etapa="oc"]');
+    expect(etapaOc).toHaveAttribute('data-situacao', 'parcial');
+    // o campo do número é da próxima O.C., não da que já existe
+    expect(within(painel).getByLabelText('Número da OC no ERP')).toHaveValue('');
+  });
+
+  it('a quantidade digitada vai na cobertura, e o que sobra continua em aberto', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(obterPedido).mockResolvedValue(parcial());
+    vi.mocked(registrarOc).mockResolvedValue(parcial());
+    abrir();
+
+    const painel = (await screen.findByTestId('ocs-do-erp')).closest('#oc-erp') as HTMLElement;
+    await usuario.type(within(painel).getByLabelText('Número da OC no ERP'), 'OC-101');
+    const cobertura = within(painel).getByTestId('cobertura-da-oc');
+    expect(cobertura).toHaveTextContent('Deixe como está para a O.C. cobrir tudo o que ainda falta');
+    await usuario.type(within(cobertura).getByLabelText('Nesta O.C.: Luva nitrílica'), '3');
+    expect(cobertura).toHaveTextContent('O.C. parcial');
+    await usuario.click(within(painel).getByRole('button', { name: 'Registrar OC' }));
+
+    await waitFor(() => expect(registrarOc).toHaveBeenCalledWith('po1', {
+      erpNumber: 'OC-101', issuedOn: null, noErpReason: null, items: [{ itemId: 'i1', quantity: 3 }],
+    }));
+  });
+
+  it('cobrir mais do que falta trava o botão antes de o servidor recusar (PO-ERR-059)', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(obterPedido).mockResolvedValue(parcial());
+    abrir();
+
+    const painel = (await screen.findByTestId('ocs-do-erp')).closest('#oc-erp') as HTMLElement;
+    await usuario.type(within(painel).getByLabelText('Número da OC no ERP'), 'OC-101');
+    await usuario.type(within(painel).getByLabelText('Nesta O.C.: Luva nitrílica'), '5');
+    expect(painel).toHaveTextContent('PO-ERR-059');
+    expect(within(painel).getByRole('button', { name: 'Registrar OC' })).toBeDisabled();
+  });
+
+  it('o restante fecha sem O.C. com a observação, e as O.C.s registradas ficam', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(obterPedido).mockResolvedValue(parcial());
+    vi.mocked(registrarOc).mockResolvedValue(parcial());
+    abrir();
+
+    const botao = await screen.findByRole('button', { name: 'Fechar o restante sem O.C.' });
+    expect(botao).toBeDisabled();
+    await usuario.type(screen.getByLabelText(/por que a O.C. não foi gerada/i), 'As 4 restantes vieram de balcão.');
+    await usuario.click(botao);
+    await waitFor(() => expect(registrarOc).toHaveBeenCalledWith('po1', {
+      erpNumber: '', issuedOn: null, noErpReason: 'As 4 restantes vieram de balcão.',
+    }));
+  });
+
+  it('com o pedido todo coberto não há mais O.C. a registrar', async () => {
+    vi.mocked(obterPedido).mockResolvedValue(pedido({
+      erpNumber: 'OC-100', erpIssuedOn: '2026-09-01', erpPending: false,
+      erpDocuments: [{ id: 'd1', number: 'OC-100', issuedOn: '2026-09-01', documentId: null, fileName: null, notes: null,
+        createdByLabel: 'Carla', createdAt: '2026-09-01T10:00:00Z', items: [{ itemId: 'i1', quantity: 10 }] }],
+      items: [{ ...pedido({}).items[0], erpCoveredQuantity: 10, erpPendingQuantity: 0 }],
+    }));
+    abrir();
+
+    const painel = (await screen.findByTestId('ocs-do-erp')).closest('#oc-erp') as HTMLElement;
+    expect(painel).toHaveTextContent('OC OC-100 de 01/09/2026');
+    expect(painel).toHaveTextContent('cobre o pedido inteiro');
+    expect(screen.queryByRole('button', { name: 'Registrar OC' })).not.toBeInTheDocument();
+    expect(painel).toHaveTextContent('O próximo passo é o faturamento');
+    const linha = screen.getByTestId('linha-do-tempo');
+    expect(linha.querySelector('[data-etapa="oc"]')).toHaveAttribute('data-situacao', 'feita');
+    expect(linha.querySelector('[data-etapa="faturamento"]')).toHaveAttribute('data-situacao', 'atual');
+    expect(linha.querySelector('[data-etapa="entrega"]')).toHaveAttribute('data-situacao', 'pendente');
   });
 });
 

@@ -348,6 +348,82 @@ public class PurchaseOrderServiceTests
         Assert.Equal("PO-ERR-050", longo!.Code);
     }
 
+    // ---- O.C. parcial: várias O.C.s do ERP por pedido (2026-09) ---------------
+    [Fact]
+    public async Task Oc_do_erp_pode_cobrir_parte_do_pedido_e_o_saldo_fica_visivel()
+    {
+        var w = await BuildAsync();
+        var (order, _) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null,
+            [new PoItemInput("Detergente neutro", 10, "UN", 3.5m, w.Detergente.Id),
+             new PoItemInput("Pano multiuso", 4, "UN", 2m, null)], null);
+        var detergente = order!.Items.Single(i => i.Description == "Detergente neutro");
+        var pano = order.Items.Single(i => i.Description == "Pano multiuso");
+        Assert.True(order.HasErpPending);
+
+        // a primeira O.C. cobre 6 dos 10 detergentes e nada do pano
+        var (parcial, e1) = await w.Pos.RegisterErpOrderAsync(Carla, order.Id, "OC-100", new DateOnly(2026, 8, 20),
+            lines: [new ErpCoverageLine(detergente.Id, 6)]);
+        Assert.Null(e1);
+        Assert.Equal("OC-100", parcial!.ErpNumber);               // a primeira O.C. é a do cabeçalho
+        Assert.Equal(6m, parcial.ErpCovered(detergente.Id));
+        Assert.Equal(0m, parcial.ErpCovered(pano.Id));
+        Assert.True(parcial.HasErpPending);
+
+        // cobrir mais do que falta é recusado dizendo quanto falta
+        var (_, demais) = await w.Pos.RegisterErpOrderAsync(Carla, order.Id, "OC-101", null,
+            lines: [new ErpCoverageLine(detergente.Id, 5)]);
+        Assert.Equal("PO-ERR-059", demais!.Code);
+        Assert.Contains("só faltam 4", demais.Message);
+
+        // item de outro pedido não entra
+        var (_, alheio) = await w.Pos.RegisterErpOrderAsync(Carla, order.Id, "OC-101", null,
+            lines: [new ErpCoverageLine(Guid.NewGuid(), 1)]);
+        Assert.Equal("PO-ERR-059", alheio!.Code);
+
+        // a segunda O.C. sem linhas cobre tudo o que ainda falta
+        var (inteiro, e2) = await w.Pos.RegisterErpOrderAsync(Carla, order.Id, "OC-101", new DateOnly(2026, 8, 25));
+        Assert.Null(e2);
+        Assert.Equal("OC-100", inteiro!.ErpNumber);               // o cabeçalho não muda
+        Assert.Equal(2, inteiro.ErpDocuments.Count);
+        var segunda = inteiro.ErpDocuments.Single(d => d.Number == "OC-101");
+        Assert.Equal(4m, segunda.Items.Single(i => i.OrderItemId == detergente.Id).Quantity);
+        Assert.Equal(4m, segunda.Items.Single(i => i.OrderItemId == pano.Id).Quantity);
+        Assert.False(inteiro.HasErpPending);
+
+        // pedido todo coberto: não há saldo para uma terceira
+        var (_, esgotado) = await w.Pos.RegisterErpOrderAsync(Carla, order.Id, "OC-102", null);
+        Assert.Equal("PO-ERR-059", esgotado!.Code);
+
+        // a mesma O.C. de novo é correção de data, não repetição
+        var (corrigido, e3) = await w.Pos.RegisterErpOrderAsync(Carla, order.Id, "OC-101", new DateOnly(2026, 8, 26));
+        Assert.Null(e3);
+        Assert.Equal(new DateOnly(2026, 8, 26), corrigido!.ErpDocuments.Single(d => d.Number == "OC-101").IssuedOn);
+    }
+
+    [Fact]
+    public async Task Restante_sem_oc_fecha_com_a_observacao_e_as_ocs_registradas_ficam()
+    {
+        var w = await BuildAsync();
+        var (order, _) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null,
+            [new PoItemInput("Detergente neutro", 10, "UN", 3.5m, w.Detergente.Id)], null);
+        var item = order!.Items.Single();
+
+        await w.Pos.RegisterErpOrderAsync(Carla, order.Id, "OC-200", null, lines: [new ErpCoverageLine(item.Id, 7)]);
+        var (fechado, erro) = await w.Pos.RegisterErpOrderAsync(Carla, order.Id, null, null,
+            "As 3 unidades restantes vieram de balcão, sem O.C. no SENIOR.");
+        Assert.Null(erro);
+        Assert.Equal("OC-200", fechado!.ErpNumber);               // a O.C. parcial continua sendo a do cabeçalho
+        Assert.Single(fechado.ErpDocuments);
+        Assert.Contains("balcão", fechado.NoErpReason);
+        Assert.False(fechado.HasErpPending);                        // a exceção vale para o saldo
+        Assert.Equal(7m, fechado.ErpCovered(item.Id));
+
+        // o faturamento e a entrega seguem normalmente
+        var (nf, erroNf) = await w.Pos.AddInvoiceAsync(Carla, order.Id, "3001", null, 35m);
+        Assert.Null(erroNf);
+        Assert.NotNull(nf);
+    }
+
     // ---- fechamento sem O.C. do ERP (PO-BR-011) -----------------------------
     [Fact]
     public async Task Sem_oc_do_erp_o_pedido_so_fecha_com_a_observacao()

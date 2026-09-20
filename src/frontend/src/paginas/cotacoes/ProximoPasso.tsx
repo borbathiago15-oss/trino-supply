@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { conflitoDeSegregacao, type Processo } from '@/api/cotacoes';
+import { conflitoDeSegregacao, pedidosAguardandoOc, type Processo } from '@/api/cotacoes';
 
 export interface Passo {
   /** O que precisa acontecer agora, em uma frase. */
@@ -52,11 +52,23 @@ export function proximoPasso(q: Processo, de?: string): Passo | null {
         detalhe: 'A decisão é tomada na Central de Aprovação. Quem deu o Nível 1 não dá o Nível 2 (RFQ-ERR-030).',
         rota: '/aprovacoes', rotulo: 'Ir para a Central de Aprovação',
       };
-    case 'APROVADO_PARA_EMISSAO':
+    case 'APROVADO_PARA_EMISSAO': {
+      // o pedido já nasceu na aprovação: a O.C., o faturamento e a entrega ficam na tela dele
+      if (q.purchaseOrders.length > 0 && q.pendingPoSuppliers.length === 0) {
+        const aguardando = pedidosAguardandoOc(q);
+        const unico = aguardando.length === 1 ? aguardando[0] : q.purchaseOrders.length === 1 ? q.purchaseOrders[0] : null;
+        return {
+          titulo: 'Registrar a O.C. do ERP na tela do pedido',
+          detalhe: 'O pedido foi criado na aprovação. Na tela dele se registra a O.C. do SENIOR — inteira ou em partes —, o faturamento e a entrega. Sem O.C., só com a observação dizendo por quê.',
+          rota: unico ? `/pedidos/${unico.id}` : '/pedidos',
+          rotulo: unico ? `Abrir o pedido ${unico.number ?? ''}`.trim() : 'Ir para Pedidos de Compra (O.C.)',
+        };
+      }
       return {
         titulo: 'Registrar a O.C. fechada no ERP',
         detalhe: 'O registro é feito nesta tela. A O.C. sai do ERP SENIOR: sem ela o processo não fecha, a não ser com a observação dizendo por quê.',
       };
+    }
     case 'OC_REGISTRADA': {
       const unica = q.purchaseOrders.length === 1 ? q.purchaseOrders[0] : null;
       return {

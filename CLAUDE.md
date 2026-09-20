@@ -71,6 +71,25 @@ o usuário descobrir no erro do servidor:
   é o que mantém honesto todo relatório que conta O.C. do ERP. A O.C. que chegar
   depois deixa de ser exceção e limpa a observação. Vale nos dois caminhos:
   `RFQ-ERR-043` no processo de cotação e `PO-ERR-054` na tela do pedido.
+- **O pedido nasce na aprovação do Nível 2, sem O.C., e tudo o que vem depois vive numa
+  tela só.** `CriarPedidosAsync` cria um pedido por fornecedor adjudicado no instante em que
+  o diretor aprova (`PEDIDO_CRIADO`); a tela do pedido é uma linha do tempo em três passos —
+  **1 O.C. → 2 Faturamento → 3 Entrega** — derivada do que o pedido já diz, sem estado próprio.
+  O formulário de O.C. na tela do processo ficou só para o processo aprovado antes dessa
+  regra (sem pedido nenhum) ou com fornecedor ainda sem pedido; `RegisterErpPurchaseOrderAsync`
+  encontra o pedido pendente do fornecedor e aplica a mesma regra. O processo passa a
+  `PoIssued` quando o **último** pedido dele tem O.C. ou observação (`OcDoErp.SincronizarProcessoAsync`).
+- **A O.C. do ERP pode cobrir parte do pedido, e várias O.C.s convivem no mesmo pedido.**
+  `PurchaseOrderErpDocument` é cada O.C. registrada, com o que ela cobre de cada item
+  (`PurchaseOrderErpDocumentItem`); sem linhas, cobre tudo o que ainda falta — é o caso comum
+  e o que toda chamada antiga significa. A soma nunca passa do pedido (`PO-ERR-059`, que diz
+  quanto falta em vez de só recusar), item de outro pedido não entra, e pedido todo coberto
+  não aceita outra. A **primeira** O.C. é a do cabeçalho (`erp_number`, `erp_issued_on`,
+  `promised_date`): é o que todo relatório que já lia "tem O.C.?" continua lendo. O mesmo
+  número de novo no mesmo pedido é correção de data, não repetição. `HasErpPending` diz se
+  ainda há saldo sem O.C. **e** sem observação: a observação (PO-BR-011) fecha o restante e
+  as O.C.s já registradas ficam. A regra vive em `Procurement/OcDoErp.cs`, chamada pelos dois
+  caminhos.
 - **IC-ERR-023** — EPI/EPC só circula com C.A. válido no par produto-fornecedor.
 - **A adjudicação é por escopo, e o escopo pode ser o item.** `QuotationAward.QuotationItemId`
   nulo quer dizer a família inteira — é o que toda adjudicação antiga significa e continua

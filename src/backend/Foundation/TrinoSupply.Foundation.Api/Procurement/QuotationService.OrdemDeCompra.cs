@@ -12,14 +12,39 @@ namespace TrinoSupply.Foundation.Api.Procurement;
 /// </summary>
 public partial class QuotationService
 {
-    // ---- registro da OC fechada no ERP (SENIOR) -----------------------------
+    // ---- o pedido nasce na aprovação; a O.C. do ERP é registrada nele ----------
     /// <summary>
-    /// A OC não é mais emitida aqui: ela é fechada no SENIOR (que conversa com o financeiro) e o
-    /// comprador registra o número dela no processo, dando origem ao pedido que recebe o
-    /// faturamento e a entrega (revisão de telas 2026-08-26).
-    /// Compra dividida: uma O.C. POR FORNECEDOR — as famílias que o mesmo fornecedor ganhou
-    /// entram na mesma O.C., com a família visível linha a linha. O processo só fecha quando
-    /// todas as O.C.s estiverem registradas.
+    /// Cria os pedidos do processo — um por fornecedor vencedor, com as famílias que ele
+    /// ganhou — no momento da aprovação do Nível 2. Nascem sem O.C. do ERP: registrar o
+    /// número (ou a observação da exceção), faturar e receber acontece na tela do pedido,
+    /// numa tela só. O processo continua "aprovado para emissão" até todos os pedidos dele
+    /// terem O.C. (ou a observação); daí fecha como "O.C. emitida", como sempre fechou.
+    /// </summary>
+    public async Task<UserError?> CriarPedidosAsync(Quotation q, Actor actor, CancellationToken ct = default)
+    {
+        await EnsureAwardsAsync(q, ct);
+        var pendentes = q.AwardList.Where(a => a.PurchaseOrderId is null).ToList();
+        foreach (var fornecedorId in pendentes.Select(a => a.SupplierId).Distinct().ToList())
+        {
+            var doFornecedor = pendentes.Where(a => a.SupplierId == fornecedorId).ToList();
+            var (order, error) = await MontarPedidoAsync(q, doFornecedor, actor, null, ct);
+            if (error is not null) return error;
+            db.PurchaseOrders.Add(order!);
+            foreach (var a in doFornecedor) { a.PurchaseOrderId = order!.Id; a.PurchaseOrderNumber = order.Number; }
+            q.PurchaseOrderId ??= order!.Id;              // o primeiro pedido mantém o vínculo histórico do cabeçalho
+            q.PurchaseOrderNumber ??= order!.Number;
+            AddEvent(q, "PEDIDO_CRIADO",
+                $"Pedido {order!.Number} criado para {order.SupplierName} — total {order.TotalValue:0.00}. " +
+                "A O.C. do ERP, o faturamento e a entrega são registrados na tela do pedido.", actor);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Rota antiga do registro pelo processo, mantida por compatibilidade. Com o pedido já
+    /// criado na aprovação, ela registra a O.C. <b>no pedido</b> daquele fornecedor, cobrindo
+    /// tudo o que falta; num processo aprovado antes desta regra (adjudicação ainda sem
+    /// pedido), cria o pedido na hora, como antes.
     /// </summary>
     public async Task<(PurchaseOrder? order, UserError? error)> RegisterErpPurchaseOrderAsync(
         Actor actor, Guid id, string? erpNumber, DateOnly? issuedOn, string? notes,
@@ -38,7 +63,7 @@ public partial class QuotationService
         {
             // a regra é a O.C. do SENIOR: sem ela o processo não fecha. A única
             // exceção é a observação explicando por que não houve O.C. (PO-BR-011)
-            if (string.IsNullOrWhiteSpace(motivo) || motivo.Length < 10)
+            if (string.IsNullOrWhiteSpace(motivo) || motivo.Length < OcDoErp.MotivoMinimo)
                 return (null, new("RFQ-ERR-043",
                     "A O.C. é gerada no ERP e sem ela o processo não fecha. Para fechar assim mesmo, "
                     + "informe na observação, em pelo menos 10 caracteres, por que a O.C. não foi gerada."));
@@ -49,37 +74,89 @@ public partial class QuotationService
         {
             motivo = null;
             if (numero!.Length > 30) return (null, new("RFQ-ERR-041", "O número da OC tem no máximo 30 caracteres."));
-            // `ErpNumber` junto com `Number`, e não só `Number`: por aqui o pedido nasce
-            // com os dois iguais, então olhar só o número pegava a repetição vinda deste
-            // mesmo caminho — mas não a que vem da tela do pedido, onde o pedido guarda a
-            // própria numeração PO-ano-sequência e o número do SENIOR fica só no
-            // `ErpNumber`. A trava do outro lado já existia; esta era de mão única.
-            if (await db.PurchaseOrders.AnyAsync(o => o.Number == numero || o.ErpNumber == numero, ct))
+            if (await db.PurchaseOrders.AnyAsync(o => o.Number == numero || o.ErpNumber == numero, ct)
+                || await db.PurchaseOrderErpDocuments.AnyAsync(d => d.Number == numero, ct))
                 return (null, new("RFQ-ERR-041", $"A OC {numero} já está registrada em outro processo."));
         }
 
         // processos anteriores à adjudicação por família continuam valendo: viram uma adjudicação única
         await EnsureAwardsAsync(q, ct);
-        var pendentes = q.AwardList.Where(a => a.PurchaseOrderId is null).ToList();
-        if (pendentes.Count == 0)
-            return (null, new("RFQ-ERR-040", "Todas as O.C.s deste processo já foram registradas."));
-        var aguardando = pendentes.Select(a => a.SupplierId).Distinct().ToList();
-        Guid alvo;
-        if (supplierId is { } escolhido)
+        var semPedido = q.AwardList.Where(a => a.PurchaseOrderId is null).ToList();
+        if (semPedido.Count == 0)
         {
-            if (!aguardando.Contains(escolhido))
-                return (null, new("RFQ-ERR-042", "Este fornecedor não tem família pendente de O.C. neste processo."));
-            alvo = escolhido;
-        }
-        else if (aguardando.Count == 1) alvo = aguardando[0];
-        else return (null, new("RFQ-ERR-042",
-            $"A compra foi dividida entre {aguardando.Count} fornecedores: informe de qual fornecedor é esta O.C."));
+            // o caminho de agora: os pedidos existem desde a aprovação; falta a O.C. em algum deles
+            var pedidosDoProcesso = await db.PurchaseOrders.Include(o => o.Items).Include(o => o.Invoices)
+                .Include(o => o.ErpDocuments).ThenInclude(d => d.Items)
+                .Where(o => o.QuotationId == q.Id && o.Status != PurchaseOrderStatus.Cancelled).ToListAsync(ct);
+            var aguardando = pedidosDoProcesso.Where(o => o.ErpNumber is null && o.NoErpReason is null).ToList();
+            if (aguardando.Count == 0)
+                return (null, new("RFQ-ERR-040", "Todas as O.C.s deste processo já foram registradas."));
+            PurchaseOrder alvo;
+            if (supplierId is { } escolhido)
+            {
+                var doEscolhido = aguardando.FirstOrDefault(o => o.SupplierId == escolhido);
+                if (doEscolhido is null)
+                    return (null, new("RFQ-ERR-042", "Este fornecedor não tem família pendente de O.C. neste processo."));
+                alvo = doEscolhido;
+            }
+            else if (aguardando.Count == 1) alvo = aguardando[0];
+            else return (null, new("RFQ-ERR-042",
+                $"A compra foi dividida entre {aguardando.Count} fornecedores: informe de qual fornecedor é esta O.C."));
 
-        var doFornecedor = pendentes.Where(a => a.SupplierId == alvo).ToList();
+            var fornecedorAtivo = await db.Suppliers.AnyAsync(s => s.Id == alvo.SupplierId && s.Active, ct);
+            if (!fornecedorAtivo)
+                return (null, new("RFQ-ERR-040", "Fornecedor vencedor inativo: regularize o cadastro ou solicite ajustes."));
+
+            if (!string.IsNullOrWhiteSpace(notes)) alvo.Notes = notes.Trim();
+            var (_, erro) = await OcDoErp.AplicarAsync(db, clock, alvo, actor, numero, issuedOn, motivo,
+                null, overLimitJustification, "RFQ-ERR-043", ct);
+            if (erro is not null) return (null, erro);
+            await OcDoErp.SincronizarProcessoAsync(db, clock, alvo, actor, ct);
+            alvo.UpdatedAt = clock.GetUtcNow();
+            alvo.Version += 1;
+            await db.SaveChangesAsync(ct);
+            return (alvo, null);
+        }
+
+        // o caminho antigo: processo aprovado antes de o pedido nascer na aprovação
+        var esperando = semPedido.Select(a => a.SupplierId).Distinct().ToList();
+        Guid fornecedorAlvo;
+        if (supplierId is { } pedido)
+        {
+            if (!esperando.Contains(pedido))
+                return (null, new("RFQ-ERR-042", "Este fornecedor não tem família pendente de O.C. neste processo."));
+            fornecedorAlvo = pedido;
+        }
+        else if (esperando.Count == 1) fornecedorAlvo = esperando[0];
+        else return (null, new("RFQ-ERR-042",
+            $"A compra foi dividida entre {esperando.Count} fornecedores: informe de qual fornecedor é esta O.C."));
+
+        var doFornecedor = semPedido.Where(a => a.SupplierId == fornecedorAlvo).ToList();
+        var (order, error) = await MontarPedidoAsync(q, doFornecedor, actor, notes, ct);
+        if (error is not null) return (null, error);
+        db.PurchaseOrders.Add(order!);
+        foreach (var a in doFornecedor) { a.PurchaseOrderId = order!.Id; a.PurchaseOrderNumber = order.Number; }
+        q.PurchaseOrderId ??= order!.Id;
+        q.PurchaseOrderNumber ??= order!.Number;
+        var (_, erroOc) = await OcDoErp.AplicarAsync(db, clock, order!, actor, numero, issuedOn, motivo,
+            null, overLimitJustification, "RFQ-ERR-043", ct);
+        if (erroOc is not null) return (null, erroOc);
+        await OcDoErp.SincronizarProcessoAsync(db, clock, order!, actor, ct);
+        await TouchAndSaveAsync(q, ct);
+        return (order, null);
+    }
+
+    /// <summary>
+    /// Monta o pedido de um fornecedor a partir do que ele ganhou: os itens (na quantidade
+    /// adjudicada, não na cotada), o rateio do frete, a condição e o prazo da proposta, o
+    /// último preço pago de cada item (saving de referência) e o total das fatias. Sem O.C.
+    /// do ERP: ela é registrada depois, na tela do pedido. Não grava.
+    /// </summary>
+    private async Task<(PurchaseOrder? order, UserError? error)> MontarPedidoAsync(
+        Quotation q, IReadOnlyList<QuotationAward> doFornecedor, Actor actor, string? notes, CancellationToken ct)
+    {
         var proposal = q.Proposals.Single(p => p.Id == doFornecedor[0].ProposalId);
-        // itens do contrato incluídos: a vigência (ContractIsCurrent) depende deles para o teto
-        var supplier = await db.Suppliers.Include(s => s.ContractItems)
-            .SingleOrDefaultAsync(s => s.Id == alvo, ct);
+        var supplier = await db.Suppliers.SingleOrDefaultAsync(s => s.Id == doFornecedor[0].SupplierId, ct);
         if (supplier is null || !supplier.Active)
             return (null, new("RFQ-ERR-040", "Fornecedor vencedor inativo: regularize o cadastro ou solicite ajustes."));
 
@@ -92,19 +169,10 @@ public partial class QuotationService
         // quanto de cada item saiu com ESTE fornecedor: com o item partido, a O.C. dele
         // leva a fatia dele, e não a quantidade que ele cotou
         var quantidades = QuantidadesDoFornecedor(q, doFornecedor);
-        // sem O.C. do ERP o pedido usa a própria numeração de pedido, a mesma das
-        // compras que não vêm de cotação — nada aqui se parece com número do SENIOR
-        var referencia = semOc ? await PurchaseOrderService.NextOrderNumberAsync(db, now, ct) : numero!;
         var order = new PurchaseOrder
         {
-            Number = referencia,
-            ErpNumber = semOc ? null : numero,
-            NoErpReason = motivo,
-            ErpIssuedOn = issuedOn ?? DateOnly.FromDateTime(now.UtcDateTime),
-            // congela a data prometida para o OTIF: data da O.C. + prazo de entrega da proposta
-            PromisedDate = proposal.DeliveryDays is { } prazo
-                ? (issuedOn ?? DateOnly.FromDateTime(now.UtcDateTime)).AddDays(prazo)
-                : null,
+            // o pedido usa a própria numeração; o número do SENIOR entra depois, em `ErpNumber`
+            Number = await PurchaseOrderService.NextOrderNumberAsync(db, now, ct),
             SupplierId = supplier.Id,
             SupplierName = supplier.TradeName ?? supplier.LegalName,
             SourcePrId = q.SourcePrId,
@@ -124,9 +192,6 @@ public partial class QuotationService
         // saving de referência (V2-P2): último preço pago de cada item de catálogo, congelado agora
         var catalogIds = q.Items.Where(i => itensDaOc.Contains(i.Id) && i.CatalogItemId is not null)
             .Select(i => i.CatalogItemId!.Value).Distinct().ToList();
-        // o último preço pago vem do histórico, que é onde essa regra passou a morar.
-        // Antes a consulta vivia aqui, privada: nada mais no sistema conseguia perguntar
-        // "quanto já pagamos por isto?", e era a mesma pergunta
         var historico = await new HistoricoDePrecoService(db).ResumoAsync(catalogIds, ct);
 
         foreach (var pi in proposal.Items.Where(pi => itensDaOc.Contains(pi.QuotationItemId)))
@@ -153,44 +218,6 @@ public partial class QuotationService
         order.TotalValue = doFornecedor.Sum(a => a.TotalValue);
         if (order.Items.Count == 0 || order.TotalValue <= 0)
             return (null, new("RFQ-ERR-040", "A OC precisa de itens e valor."));
-
-        // teto do contrato de parceria (V2-P2): exceder exige justificativa — mede, não trava cego
-        if (supplier.ContractValueLimit is { } teto && supplier.ContractIsCurrent(DateOnly.FromDateTime(now.UtcDateTime)))
-        {
-            var consumido = await ContractConsumedAsync(supplier, ct);
-            if (consumido + order.TotalValue > teto && string.IsNullOrWhiteSpace(overLimitJustification))
-                return (null, new("CT-ERR-010",
-                    $"Esta O.C. ({order.TotalValue:0.00}) ultrapassa o saldo do contrato {supplier.ContractNumber} " +
-                    $"(teto {teto:0.00}, consumido {consumido:0.00}). Informe a justificativa para prosseguir."));
-            if (consumido + order.TotalValue > teto)
-                AddEvent(q, "CONTRATO_TETO_EXCEDIDO",
-                    $"O.C. {numero} excede o teto do contrato {supplier.ContractNumber} " +
-                    $"({consumido + order.TotalValue:0.00} de {teto:0.00}).", actor, null, null, overLimitJustification!.Trim());
-        }
-        db.PurchaseOrders.Add(order);
-        foreach (var a in doFornecedor) { a.PurchaseOrderId = order.Id; a.PurchaseOrderNumber = order.Number; }
-
-        var from = q.Status;
-        q.PurchaseOrderId ??= order.Id;              // a primeira O.C. mantém o vínculo histórico do cabeçalho
-        q.PurchaseOrderNumber ??= order.Number;
-        var restantes = q.AwardList.Where(a => a.PurchaseOrderId is null).Select(a => a.SupplierName)
-            .Distinct().ToList();
-        var lote = q.Families.Count > 1 ? $" (família(s) {string.Join(", ", familias)})" : "";
-        if (restantes.Count == 0)
-        {
-            q.Status = QuotationStatus.PoIssued;
-            AddEvent(q, "OC_REGISTRADA",
-                $"OC {order.Number} do SENIOR registrada para {order.SupplierName}{lote} — total {order.TotalValue:0.00}." +
-                (q.IsSplitAward ? " Todas as O.C.s da compra dividida estão registradas." : ""),
-                actor, from, q.Status);
-        }
-        else
-        {
-            AddEvent(q, "OC_PARCIAL_REGISTRADA",
-                $"OC {order.Number} do SENIOR registrada para {order.SupplierName}{lote} — total {order.TotalValue:0.00}. " +
-                $"Falta registrar a O.C. de: {string.Join(", ", restantes)}.", actor);
-        }
-        await TouchAndSaveAsync(q, ct);
         return (order, null);
     }
 

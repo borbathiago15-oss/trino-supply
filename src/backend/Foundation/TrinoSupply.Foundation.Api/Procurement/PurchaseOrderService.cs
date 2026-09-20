@@ -35,7 +35,8 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
         int tamanho = 100, CancellationToken ct = default)
     {
         var termo = busca?.Trim();
-        var query = db.PurchaseOrders.Include(o => o.Items).Include(o => o.Invoices).AsQueryable();
+        var query = db.PurchaseOrders.Include(o => o.Items).Include(o => o.Invoices)
+            .Include(o => o.ErpDocuments).ThenInclude(d => d.Items).AsQueryable();
 
         if (situacao is { } s) query = query.Where(o => o.Status == s);
         if (!string.IsNullOrEmpty(termo))
@@ -56,6 +57,7 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
 
     public Task<PurchaseOrder?> GetAsync(Guid id, CancellationToken ct = default) =>
         db.PurchaseOrders.Include(o => o.Items).Include(o => o.Invoices)
+            .Include(o => o.ErpDocuments).ThenInclude(d => d.Items)
             .SingleOrDefaultAsync(o => o.Id == id, ct);
 
     /// <summary>
@@ -156,51 +158,26 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
 
     /// <summary>Recebimento: entradas de estoque para itens de catálogo (PO-BR-005/006).</summary>
     /// <summary>
-    /// Registra a OC feita no ERP (número, data e anexo ficam no endpoint de upload).
-    /// A data é a base do lead time "aprovação → OC" (revisão de telas 2026-08-26).
+    /// Registra uma O.C. feita no ERP (número, data, cobertura por item; anexo no endpoint de
+    /// upload) — ou a observação de por que ela não foi gerada (PO-BR-011). A regra mora em
+    /// <see cref="OcDoErp"/>; aqui só se carrega, aplica, grava e fecha o processo de origem
+    /// quando todos os pedidos dele estiverem com O.C.
     /// </summary>
     public async Task<(PurchaseOrder? order, UserError? error)> RegisterErpOrderAsync(
         Actor actor, Guid id, string? erpNumber, DateOnly? issuedOn,
-        string? noErpReason = null, CancellationToken ct = default)
+        string? noErpReason = null, IReadOnlyList<ErpCoverageLine>? lines = null,
+        string? overLimitJustification = null, CancellationToken ct = default)
     {
         var order = await LoadAsync(id, ct);
         if (order is null) return (null, new("PO-ERR-404", "Pedido não encontrado."));
         if (order.Status == PurchaseOrderStatus.Cancelled)
             return (null, new("PO-ERR-040", "Pedido cancelado não recebe OC."));
 
-        var agora = clock.GetUtcNow();
-        var numero = erpNumber?.Trim();
+        var (_, error) = await OcDoErp.AplicarAsync(db, clock, order, actor, erpNumber, issuedOn, noErpReason,
+            lines, overLimitJustification, "PO-ERR-054", ct);
+        if (error is not null) return (null, error);
 
-        if (string.IsNullOrWhiteSpace(numero))
-        {
-            // a regra é a O.C. do ERP: sem ela o pedido não fecha. A única exceção é a
-            // observação explicando por que a O.C. não foi gerada (PO-BR-011)
-            var motivo = noErpReason?.Trim();
-            if (string.IsNullOrWhiteSpace(motivo) || motivo.Length < 10)
-                return (null, new("PO-ERR-054",
-                    "A O.C. é gerada no ERP e sem ela o pedido não fecha. Para fechar assim mesmo, "
-                    + "informe na observação, em pelo menos 10 caracteres, por que a O.C. não foi gerada."));
-            if (motivo.Length > 500)
-                return (null, new("PO-ERR-054", "A observação tem no máximo 500 caracteres."));
-
-            order.ErpNumber = null;
-            order.NoErpReason = motivo;
-        }
-        else
-        {
-            if (numero.Length > 30)
-                return (null, new("PO-ERR-050", "O número da OC tem no máximo 30 caracteres."));
-            // a OC do SENIOR é única no sistema (RFQ-ERR-041): o caminho da cotação já
-            // garantia isso pelo número do pedido, mas por aqui dava para repetir
-            if (await db.PurchaseOrders.AnyAsync(o => o.Id != order.Id && o.ErpNumber == numero, ct))
-                return (null, new("PO-ERR-050", $"A OC {numero} já está registrada em outro pedido."));
-
-            order.ErpNumber = numero;
-            // chegou a O.C. de verdade: a observação da exceção sai de cena
-            order.NoErpReason = null;
-        }
-
-        order.ErpIssuedOn = issuedOn ?? DateOnly.FromDateTime(agora.UtcDateTime);
+        await OcDoErp.SincronizarProcessoAsync(db, clock, order, actor, ct);
         Touch(order);
         await db.SaveChangesAsync(ct);
         return (order, null);
@@ -337,6 +314,7 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
 
     private Task<PurchaseOrder?> LoadAsync(Guid id, CancellationToken ct) =>
         db.PurchaseOrders.Include(o => o.Items).Include(o => o.Invoices)
+            .Include(o => o.ErpDocuments).ThenInclude(d => d.Items)
             .SingleOrDefaultAsync(o => o.Id == id, ct);
 
     private void Touch(PurchaseOrder order)

@@ -288,7 +288,10 @@ public record UpdateCatalogItemRequest(string? Description, string? Family, stri
 public record CreateLocationRequest(string Code, string Name);
 public record MaterialLineRequest(Guid ItemId, decimal Quantity);
 public record ApproveMaterialRequest(List<MaterialLineRequest>? Items, string? Notes);
-public record ErpOrderRequest(string? ErpNumber, DateOnly? IssuedOn, string? NoErpReason);
+public record ErpCoverageRequest(Guid ItemId, decimal Quantity);
+/// <summary>`Items` diz quanto de cada item esta O.C. cobre; vazio cobre tudo o que ainda falta.</summary>
+public record ErpOrderRequest(string? ErpNumber, DateOnly? IssuedOn, string? NoErpReason,
+    List<ErpCoverageRequest>? Items = null, string? OverLimitJustification = null);
 public record InvoiceRequest(string? Number, DateOnly? IssuedOn, decimal? Value);
 public record DeliveryLineRequest(Guid ItemId, decimal Quantity, decimal? Rejected = null);
 public record DeliveryRequest(Guid? LocationId, List<DeliveryLineRequest>? Items, bool? CloseRemaining, string? CloseReason,

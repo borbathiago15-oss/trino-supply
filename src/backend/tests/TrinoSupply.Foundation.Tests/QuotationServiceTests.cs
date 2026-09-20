@@ -156,6 +156,59 @@ public class QuotationServiceTests
         Assert.Empty(await w.Rfq.PendingApprovalsAsync(Roles.Director, Carla.Id));    // selecionou
     }
 
+    /// <summary>
+    /// A fila de cada aprovador é só o que é dele: a lista do nível no centro decide. Um
+    /// diretor via a fila inteira e descobria no botão que não podia (RFQ-ERR-032).
+    /// </summary>
+    [Fact]
+    public async Task Fila_do_nivel_2_so_traz_os_centros_em_que_a_pessoa_e_aprovadora()
+    {
+        var w = await BuildAsync();
+        var Eduardo = new Actor(Guid.NewGuid(), "Eduardo Diretor", Roles.Director);
+        await ComAlcadasAsync(w, "BAH-001", [Gustavo], [Diana]);
+        await ComAlcadasAsync(w, "PER-001", [Gustavo], [Eduardo]);
+        Quotation Processo(string numero, string cc) => new()
+        {
+            Number = numero, Kind = QuotationKind.Purchase, Status = QuotationStatus.AwaitingDirector,
+            CostCenter = cc, SelectedBy = Carla.Id, ManagerApprovedBy = Gustavo.Id,
+            CreatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+        };
+        w.Db.Quotations.AddRange(Processo("RFQ-2026-000901", "BAH-001"), Processo("RFQ-2026-000902", "PER-001"),
+            Processo("RFQ-2026-000903", "SEM-LISTA"));
+        await w.Db.SaveChangesAsync();
+
+        // cada diretor vê o centro em que está na lista; o centro sem lista cai para os dois
+        Assert.Equal(["RFQ-2026-000901", "RFQ-2026-000903"],
+            (await w.Rfq.PendingApprovalsAsync(Roles.Director, Diana.Id)).Select(q => q.Number).Order().ToList());
+        Assert.Equal(["RFQ-2026-000902", "RFQ-2026-000903"],
+            (await w.Rfq.PendingApprovalsAsync(Roles.Director, Eduardo.Id)).Select(q => q.Number).Order().ToList());
+        // o administrador decide em qualquer centro, e a fila diz o mesmo
+        Assert.Equal(3, (await w.Rfq.PendingApprovalsAsync(Roles.SystemAdministrator, Guid.NewGuid())).Count);
+        // e a fila é exatamente o que a decisão aceita: Diana no centro do Eduardo é recusada
+        var (_, recusa) = await w.Rfq.DirectorDecisionAsync(Diana,
+            (await w.Db.Quotations.SingleAsync(q => q.Number == "RFQ-2026-000902")).Id, "APROVAR", null);
+        Assert.Equal("RFQ-ERR-032", recusa!.Code);
+    }
+
+    [Fact]
+    public async Task Fila_do_nivel_1_do_gestor_segue_a_lista_do_centro()
+    {
+        var w = await BuildAsync();
+        var Helena = new Actor(Guid.NewGuid(), "Helena Gestora", Roles.Approver);
+        await ComAlcadasAsync(w, "BAH-002", [Helena], [Diana]);
+        w.Db.Quotations.Add(new Quotation
+        {
+            Number = "RFQ-2026-000910", Kind = QuotationKind.Purchase, Status = QuotationStatus.AwaitingManager,
+            CostCenter = "BAH-002", SelectedBy = Carla.Id,
+            CreatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+        });
+        await w.Db.SaveChangesAsync();
+
+        Assert.Single(await w.Rfq.PendingApprovalsAsync(Roles.Approver, Helena.Id));   // está na lista
+        Assert.Empty(await w.Rfq.PendingApprovalsAsync(Roles.Approver, Gustavo.Id));   // não está
+        Assert.Single(await w.Rfq.PendingApprovalsAsync(Roles.PurchasingOfficer, Carla.Id)); // o comprador decide em qualquer centro
+    }
+
     private static async Task<Quotation> UpToApprovedAsync(World w)
     {
         var q = await UpToAnalysisAsync(w);

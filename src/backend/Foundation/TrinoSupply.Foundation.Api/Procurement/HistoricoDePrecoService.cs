@@ -58,10 +58,16 @@ public class HistoricoDePrecoService(AppDbContext db)
     /// nunca comprado, que é um estado legítimo e não um erro.
     /// </summary>
     public async Task<IReadOnlyList<PrecoPago>> SerieAsync(Guid catalogItemId, CancellationToken ct = default) =>
-        await Compras(db).Where(x => x.CatalogItemId == catalogItemId)
-            .OrderByDescending(x => x.Em).Take(TetoDaSerie)
-            .Select(x => new PrecoPago(x.Em, x.SupplierId, x.SupplierName, x.OrderNumber,
-                x.UnitPrice, x.Quantity, x.Family))
+        // ordenação e recorte na entidade, projeção por último: o Npgsql não traduz
+        // OrderBy sobre o membro de um record construído no meio da consulta
+        await (from item in db.PurchaseOrderItems
+               join pedido in db.PurchaseOrders on item.OrderId equals pedido.Id
+               where item.CatalogItemId == catalogItemId && item.UnitPrice != null
+                     && pedido.Status != PurchaseOrderStatus.Cancelled
+               orderby pedido.CreatedAt descending
+               select new PrecoPago(pedido.CreatedAt, pedido.SupplierId, pedido.SupplierName, pedido.Number,
+                   item.UnitPrice!.Value, item.Quantity, item.Family))
+            .Take(TetoDaSerie)
             .ToListAsync(ct);
 
     /// <summary>
@@ -78,7 +84,7 @@ public class HistoricoDePrecoService(AppDbContext db)
         // O agrupamento é em memória de propósito: são as compras dos produtos deste
         // pedido, não a base inteira, e a média ponderada com "o mais recente" junto sai
         // mais clara aqui do que espalhada em três consultas agregadas.
-        var compras = await Compras(db).Where(x => ids.Contains(x.CatalogItemId)).ToListAsync(ct);
+        var compras = await Compras(db, ids).ToListAsync(ct);
 
         return compras.GroupBy(x => x.CatalogItemId).ToDictionary(g => g.Key, g =>
         {
@@ -189,13 +195,27 @@ public class HistoricoDePrecoService(AppDbContext db)
     /// definição só, para o resumo e a série nunca discordarem sobre o que conta como
     /// compra.
     /// </summary>
-    private static IQueryable<CompraDoProduto> Compras(AppDbContext db) =>
-        from item in db.PurchaseOrderItems
-        join pedido in db.PurchaseOrders on item.OrderId equals pedido.Id
-        where item.CatalogItemId != null && item.UnitPrice != null
-              && pedido.Status != PurchaseOrderStatus.Cancelled
-        select new CompraDoProduto(item.CatalogItemId!.Value, pedido.CreatedAt, pedido.SupplierId,
-            pedido.SupplierName, pedido.Number, item.UnitPrice!.Value, item.Quantity, item.Family);
+    /// <summary>
+    /// As compras de produto de catálogo, já projetadas. O recorte por produto entra <b>antes</b>
+    /// da projeção, na entidade: filtrar depois, sobre o record construído, é algo que o provedor
+    /// em memória dos testes aceita e o Npgsql não traduz — foi um 500 na aprovação da diretoria,
+    /// que monta o pedido e pergunta o último preço pago de cada item.
+    /// </summary>
+    private static IQueryable<CompraDoProduto> Compras(AppDbContext db, IReadOnlyCollection<Guid>? soDosProdutos = null)
+    {
+        var itens = db.PurchaseOrderItems.Where(item => item.CatalogItemId != null && item.UnitPrice != null);
+        if (soDosProdutos is not null)
+        {
+            // array, e não a coleção genérica: é a forma que o Npgsql traduz para `= ANY(...)`
+            var ids = soDosProdutos.ToArray();
+            itens = itens.Where(item => ids.Contains(item.CatalogItemId!.Value));
+        }
+        return from item in itens
+            join pedido in db.PurchaseOrders on item.OrderId equals pedido.Id
+            where pedido.Status != PurchaseOrderStatus.Cancelled
+            select new CompraDoProduto(item.CatalogItemId!.Value, pedido.CreatedAt, pedido.SupplierId,
+                pedido.SupplierName, pedido.Number, item.UnitPrice!.Value, item.Quantity, item.Family);
+    }
 
     private record CompraDoProduto(
         Guid CatalogItemId, DateTimeOffset Em, Guid SupplierId, string SupplierName,

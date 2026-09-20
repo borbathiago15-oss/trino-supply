@@ -192,6 +192,24 @@ o usuário descobrir no erro do servidor:
   no denominador puxando o score para baixo. Critério **sem dado** também sai da conta:
   fornecedor novo não é punido por ser novo.
 
+**A fila da Central é exatamente o que a pessoa pode decidir.** `ImpedimentoNivel1Async` e
+`ImpedimentoNivel2Async` (em `QuotationService.Alcadas.cs`) são a régua única: a lista do
+nível no centro, o gerente do centro sem lista, o diretor vinculado e a segregação. A decisão
+e `PendingApprovalsAsync` perguntam à mesma função — uma fila com o que a pessoa não pode
+aprovar é uma fila que mente, e foi o que o diretor viu: processos de todos os centros e
+"RFQ-ERR-032" no botão. Quem quer ver a compra da empresa inteira tem o painel.
+
+**O que o InMemory aceita, o Npgsql pode não traduzir.** A suíte roda em EF InMemory, que
+executa qualquer LINQ; o Postgres não. Filtrar, ordenar ou comparar sobre um **record
+projetado no meio da consulta** (`Compras(db).Where(x => ids.Contains(x.CatalogItemId))`)
+passa nos testes e dá 500 em produção — foi a aprovação da diretoria, que monta o pedido e
+pergunta o último preço pago. Regra: filtro e ordenação na **entidade**, projeção **por
+último**, e `Contains` com **array**. `MigrationsTests.Consultas_dos_servicos_traduzem_no_Postgres_real`
+roda as consultas dos caminhos de gravação num Postgres de verdade — consulta nova que só
+roda ao gravar entra lá. E **nenhum `SaveChanges` no meio de uma decisão**: o de
+`EnsureAwardsAsync` gravou o processo como aprovado sem pedido quando o passo seguinte
+falhou, e a segunda tentativa respondeu "não está aguardando aprovação".
+
 ## Segurança que vale para o app inteiro
 
 Não são regras de uma tela: valem para toda resposta e todo upload, e estão no

@@ -246,7 +246,9 @@ public partial class QuotationService
             db.QuotationAwards.Add(award);
             q.Awards.Add(award);
         }
-        await db.SaveChangesAsync(ct);
+        // sem gravar aqui: quem chama grava tudo junto no fim. Um SaveChanges no meio da
+        // aprovação deixava o processo APROVADO sem pedido quando o passo seguinte falhava —
+        // e a segunda tentativa respondia "não está aguardando aprovação da diretoria".
     }
 
     /// <summary>Frete da fatia: proporcional ao valor dos itens que entram nesta O.C.</summary>

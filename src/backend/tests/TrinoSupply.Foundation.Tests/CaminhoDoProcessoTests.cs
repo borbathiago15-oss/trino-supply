@@ -70,35 +70,53 @@ public class CaminhoDoProcessoTests
     }
 
     [Fact]
-    public void Quando_o_unico_aprovador_do_nivel_foi_quem_escolheu_o_fornecedor_e_impasse()
+    public void No_nivel_1_quem_escolheu_o_fornecedor_nao_e_impedido()
     {
-        // o caso real: o administrador é o gerente do centro E escolheu o fornecedor. "Aguardando
-        // Administrador" seria mentira — ele não pode aprovar (RFQ-ERR-030), e ninguém mais está na lista.
+        // o comprador cota, escolhe e dá o Nível 1 do próprio processo: mesmo sendo o único da
+        // lista, não há impasse — a segregação de funções vale no Nível 2
         var q = Processo(QuotationStatus.AwaitingManager);
-        var admin = Guid.NewGuid();
-        q.SelectedBy = admin;
-        var alcadas = new AlcadasDoCentro(["Administrador"], ["Gerson"], [admin], [Guid.NewGuid()]);
+        var comprador = Guid.NewGuid();
+        q.SelectedBy = comprador;
+        var alcadas = new AlcadasDoCentro(["Carla Compradora"], ["Gerson"], [comprador], [Guid.NewGuid()]);
 
         var n1 = Etapa(CaminhoDoProcesso.De(q, ["Ana"], Dia1, alcadas), "nivel1");
 
         Assert.Equal(CaminhoDoProcesso.Atual, n1.Situacao);
-        Assert.Equal("Administrador", n1.Quem);   // o nome continua: é quem está cadastrado
-        Assert.True(n1.Impasse);
-        Assert.False(n1.SemAprovador);            // há gente cadastrada; o problema é outro
+        Assert.Equal("Carla Compradora", n1.Quem);
+        Assert.False(n1.Impasse);
+        Assert.False(n1.SemAprovador);
+    }
+
+    [Fact]
+    public void Quando_o_unico_aprovador_do_nivel_2_foi_quem_escolheu_o_fornecedor_e_impasse()
+    {
+        // o caso real: o administrador é o único do Nível 2 E escolheu o fornecedor. "Aguardando
+        // Administrador" seria mentira — ele não pode dar o Nível 2 (RFQ-ERR-030), e ninguém mais está na lista.
+        var q = Processo(QuotationStatus.AwaitingDirector);
+        var admin = Guid.NewGuid();
+        q.SelectedBy = admin;
+        var alcadas = new AlcadasDoCentro(["Gerson"], ["Administrador"], [Guid.NewGuid()], [admin]);
+
+        var n2 = Etapa(CaminhoDoProcesso.De(q, ["Ana"], Dia1, alcadas), "nivel2");
+
+        Assert.Equal(CaminhoDoProcesso.Atual, n2.Situacao);
+        Assert.Equal("Administrador", n2.Quem);   // o nome continua: é quem está cadastrado
+        Assert.True(n2.Impasse);
+        Assert.False(n2.SemAprovador);            // há gente cadastrada; o problema é outro
     }
 
     [Fact]
     public void Com_mais_alguem_na_lista_nao_ha_impasse_e_sem_ids_nao_se_acusa_ninguem()
     {
-        var q = Processo(QuotationStatus.AwaitingManager);
+        var q = Processo(QuotationStatus.AwaitingDirector);
         var admin = Guid.NewGuid();
         q.SelectedBy = admin;
 
-        var comOutro = new AlcadasDoCentro(["Administrador", "Bruno"], [], [admin, Guid.NewGuid()], []);
-        Assert.False(Etapa(CaminhoDoProcesso.De(q, ["Ana"], Dia1, comOutro), "nivel1").Impasse);
+        var comOutro = new AlcadasDoCentro([], ["Administrador", "Dora"], [], [admin, Guid.NewGuid()]);
+        Assert.False(Etapa(CaminhoDoProcesso.De(q, ["Ana"], Dia1, comOutro), "nivel2").Impasse);
 
-        var semIds = new AlcadasDoCentro(["Administrador"], []);
-        Assert.False(Etapa(CaminhoDoProcesso.De(q, ["Ana"], Dia1, semIds), "nivel1").Impasse);
+        var semIds = new AlcadasDoCentro([], ["Administrador"]);
+        Assert.False(Etapa(CaminhoDoProcesso.De(q, ["Ana"], Dia1, semIds), "nivel2").Impasse);
     }
 
     [Fact]

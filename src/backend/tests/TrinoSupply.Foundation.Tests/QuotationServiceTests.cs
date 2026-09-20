@@ -99,8 +99,8 @@ public class QuotationServiceTests
         // e a fila abre pelo mais antigo, que é o que espera há mais tempo
         Assert.Equal("RFQ-2026-000000", fila[0].Number);
 
-        // quem selecionou o fornecedor não vê nenhum deles (RFQ-ERR-030)
-        Assert.Empty(await w.Rfq.PendingApprovalsAsync(Roles.SupplyManager, Carla.Id));
+        // quem selecionou o fornecedor também os vê: o comprador dá o Nível 1 do próprio processo
+        Assert.Equal(210, (await w.Rfq.PendingApprovalsAsync(Roles.PurchasingOfficer, Carla.Id)).Count);
         // quem não tem alçada nenhuma também não
         Assert.Empty(await w.Rfq.PendingApprovalsAsync(Roles.Requester, Gustavo.Id));
     }
@@ -392,16 +392,43 @@ public class QuotationServiceTests
         Assert.Equal(w.Alfa.Id, sel.WinnerSupplierId);
     }
 
+    /// <summary>
+    /// A segregação de funções vale no Nível 2. No Nível 1 não há segregação — decisão da
+    /// empresa (2026-09): o comprador cota, escolhe e fecha a primeira alçada do próprio
+    /// processo; o que o separa da compra é a segunda alçada, que ele não dá.
+    /// </summary>
     [Fact]
-    public async Task SoD_quem_seleciona_nao_aprova_e_diretor_nao_repete_aprovador()
+    public async Task Comprador_da_o_Nivel_1_da_propria_escolha_e_a_segregacao_fica_no_Nivel_2()
     {
         var w = await BuildAsync();
         var q = await UpToAnalysisAsync(w);
         var winner = q.Proposals.First(p => p.SupplierId == w.Alfa.Id);
-        await w.Rfq.SelectWinnerAsync(Gustavo, q.Id, winner.Id, "Preço", "Menor preço.");
+        await w.Rfq.SelectWinnerAsync(Carla, q.Id, winner.Id, "Preço", "Menor preço.");
 
-        var (_, self) = await w.Rfq.ManagerDecisionAsync(Gustavo, q.Id, "APROVAR", null);
-        Assert.Equal("RFQ-ERR-030", self!.Code); // selecionou → não aprova
+        // quem escolheu dá o Nível 1
+        var (nivel1, self) = await w.Rfq.ManagerDecisionAsync(Carla, q.Id, "APROVAR", null);
+        Assert.Null(self);
+        Assert.Equal(QuotationStatus.AwaitingDirector, nivel1!.Status);
+        Assert.Equal(Carla.Id, nivel1.ManagerApprovedBy);
+
+        // mas não dá o Nível 2: escolheu e deu o Nível 1
+        var (_, sameAsManager) = await w.Rfq.DirectorDecisionAsync(Carla, q.Id, "APROVAR", null);
+        Assert.Equal("RFQ-ERR-030", sameAsManager!.Code);
+
+        // um terceiro fecha a segunda alçada
+        var admin = new Actor(Guid.NewGuid(), "Root Admin", Roles.SystemAdministrator);
+        var (ok, erro) = await w.Rfq.DirectorDecisionAsync(admin, q.Id, "APROVAR", null);
+        Assert.Null(erro);
+        Assert.Equal(QuotationStatus.ApprovedForIssue, ok!.Status);
+    }
+
+    [Fact]
+    public async Task Quem_deu_o_Nivel_1_sem_ter_escolhido_tambem_nao_da_o_Nivel_2()
+    {
+        var w = await BuildAsync();
+        var q = await UpToAnalysisAsync(w);
+        var winner = q.Proposals.First(p => p.SupplierId == w.Alfa.Id);
+        await w.Rfq.SelectWinnerAsync(Carla, q.Id, winner.Id, "Preço", "Menor preço.");
 
         var admin = new Actor(Guid.NewGuid(), "Root Admin", Roles.SystemAdministrator);
         await w.Rfq.ManagerDecisionAsync(admin, q.Id, "APROVAR", null);

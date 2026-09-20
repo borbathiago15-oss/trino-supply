@@ -156,10 +156,20 @@ describe('regras das ações por etapa', () => {
       by, byLabel: 'Carla',
     });
 
-    it('quem escolheu o fornecedor não aprova o Nível 1 da própria escolha', () => {
+    it('quem escolheu o fornecedor dá o Nível 1 da própria escolha: a segregação fica no Nível 2', () => {
       const q = processo({ status: 'AGUARDANDO_GERENTE', selection: escolhidoPor('u1') });
       const a = acoesDisponiveis(q, { ...nivel1, de: 'u1' });
-      expect(a.decidirNivel1).toBe(false);
+      expect(a.decidirNivel1).toBe(true);
+      expect(a.conflitoSegregacao).toBeNull();
+    });
+
+    it('quem escolheu o fornecedor não dá o Nível 2', () => {
+      const q = processo({
+        status: 'AGUARDANDO_DIRETOR', selection: escolhidoPor('u1'),
+        managerApproval: { by: 'u1', byLabel: 'Carla', at: '2026-02-01T10:00:00Z' },
+      });
+      const a = acoesDisponiveis(q, { ...nivel2, de: 'u1' });
+      expect(a.decidirNivel2).toBe(false);
       expect(a.conflitoSegregacao).toMatch(/escolheu o fornecedor.*RFQ-ERR-030/);
     });
 
@@ -542,13 +552,28 @@ describe('tela do processo', () => {
     expect(mapaDeScore).not.toHaveBeenCalled();
   });
 
-  it('quem escolheu o fornecedor vê o motivo no lugar dos botões de aprovar', async () => {
-    eu = { id: 'u1', email: 'carla@t.com', name: 'Carla', role: 'Approver', modules: ['COMPRAS', 'APROVACAO'] };
+  it('a compradora que escolheu o fornecedor vê os botões do Nível 1 do próprio processo', async () => {
+    eu = { id: 'u1', email: 'carla@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['COMPRAS', 'APROVACAO'] };
     vi.mocked(lerProcesso).mockResolvedValue(processo({
       status: 'AGUARDANDO_GERENTE',
       selection: {
         winnerSupplierId: 's1', winnerProposalId: 'p1', criteria: null,
         justification: 'menor preço', by: 'u1', byLabel: 'Carla',
+      },
+    }));
+    abrir();
+
+    expect(await screen.findByTestId('acoes-aprovacao')).toBeInTheDocument();
+    expect(screen.queryByTestId('conflito-segregacao')).not.toBeInTheDocument();
+  });
+
+  it('quem escolheu o fornecedor vê o motivo no lugar dos botões do Nível 2', async () => {
+    eu = { id: 'u1', email: 'dora@t.com', name: 'Dora', role: 'Director', modules: ['COMPRAS', 'APROVACAO'] };
+    vi.mocked(lerProcesso).mockResolvedValue(processo({
+      status: 'AGUARDANDO_DIRETOR',
+      selection: {
+        winnerSupplierId: 's1', winnerProposalId: 'p1', criteria: null,
+        justification: 'menor preço', by: 'u1', byLabel: 'Dora',
       },
     }));
     abrir();

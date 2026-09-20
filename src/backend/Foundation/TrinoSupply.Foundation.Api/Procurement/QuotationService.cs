@@ -71,9 +71,13 @@ public partial class QuotationService(AppDbContext db, TimeProvider clock)
     public static bool CanConduct(string role) =>
         role is Roles.PurchasingOfficer or Roles.SupplyManager or Roles.SystemAdministrator;
 
-    /// <summary>Aprovação gerencial (1ª alçada). Aprovador (Pleno) só decide processos dos CCs que gerencia.</summary>
+    /// <summary>
+    /// Aprovação gerencial (1ª alçada). Aprovador (Pleno) só decide processos dos CCs que gerencia.
+    /// O comprador também dá o Nível 1, em qualquer centro — decisão da empresa (2026-09): no
+    /// formato dela, quem cota fecha a primeira alçada, e a segregação fica no Nível 2.
+    /// </summary>
     public static bool CanApproveAsManager(string role) =>
-        role is Roles.SupplyManager or Roles.SystemAdministrator or Roles.Approver;
+        role is Roles.SupplyManager or Roles.SystemAdministrator or Roles.Approver or Roles.PurchasingOfficer;
 
     /// <summary>Aprovação da diretoria (2ª alçada).</summary>
     public static bool CanApproveAsDirector(string role) =>
@@ -137,12 +141,12 @@ public partial class QuotationService(AppDbContext db, TimeProvider clock)
         var soCentrosQueGerencio = podeNivel1 && role == Roles.Approver;
         var meus = db.CostCenters.Where(c => c.Active && c.ManagerUserId == actorId).Select(c => c.Code.ToUpper());
 
-        // segregação de funções (RFQ-ERR-030): quem selecionou não aprova a própria
-        // escolha, e quem deu o Nível 1 não aparece na fila do Nível 2
+        // segregação de funções (RFQ-ERR-030) só no Nível 2: quem selecionou ou deu o
+        // Nível 1 não aparece na fila do Nível 2. No Nível 1 a própria escolha aparece —
+        // é o comprador fechando a primeira alçada do processo que conduziu.
         var fila = db.Quotations.Where(q =>
             (podeNivel1
              && q.Status == QuotationStatus.AwaitingManager
-             && q.SelectedBy != actorId
              && (!soCentrosQueGerencio || meus.Contains(q.CostCenter.ToUpper())))
             ||
             (podeNivel2

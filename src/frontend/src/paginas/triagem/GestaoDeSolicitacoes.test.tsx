@@ -107,9 +107,12 @@ describe('tela Triagem de Demandas', () => {
     await usuario.selectOptions(screen.getByLabelText('Situação'), 'PENDENTE');
     await waitFor(() => expect(listarDemandas).toHaveBeenCalledWith(
       expect.objectContaining({ situacao: 'PENDENTE' }), expect.anything()));
+    // espera a recarga terminar antes de mexer no próximo filtro: com a máquina carregada, o
+    // select pego antes da re-renderização era um nó solto, e a troca não chegava à tela
+    await screen.findByTestId('tabela-demandas');
 
     const antes = vi.mocked(listarDemandas).mock.calls.length;
-    await usuario.selectOptions(screen.getByLabelText('Tempo na fila'), '3');
+    await usuario.selectOptions(await screen.findByLabelText('Tempo na fila'), '3');
     expect(await screen.findByText('Nenhuma demanda neste filtro. ✔')).toBeInTheDocument();
     expect(vi.mocked(listarDemandas).mock.calls.length).toBe(antes);
   });

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TrinoSupply.Foundation.Api.Infrastructure;
+using TrinoSupply.Foundation.Api.Catalog;
 using TrinoSupply.Foundation.Api.Procurement;
 
 namespace TrinoSupply.Foundation.Api.Analytics;
@@ -10,7 +11,9 @@ public record FiltroRelatorio(DateOnly From, DateOnly To, string? Company, strin
 public record LinhaFamilia(string Family, decimal Value, decimal Quantity, int Orders, double Percent);
 public record LinhaSaving(string Buyer, int Processes, decimal Baseline, decimal Closed, decimal Saving,
     double SavingPercent, decimal Spend, int Orders);
-public record LinhaFornecedor(string Supplier, int Orders, decimal Value, double Percent);
+/// <summary>Fornecedor por spend, com o acumulado e a classe da curva ABC (A até 80%, B até 95%, C o resto).</summary>
+public record LinhaFornecedor(string Supplier, int Orders, decimal Value, double Percent,
+    double Cumulative = 0, string Class = "A");
 public record LinhaOtif(string Supplier, int Measured, double? OnTimePercent, double? InFullPercent, double? OtifPercent);
 public record CompraUrgente(string Number, string? PrNumber, string Supplier, decimal Value,
     DateOnly IssuedOn, string? Requester, string? Reason, string? Impact);
@@ -90,6 +93,38 @@ public record LinhaReferencia(string Order, string Supplier, string Description,
 public record BlocoReferencia(int Orders, int Items, decimal Gain, decimal Loss, decimal Net,
     IReadOnlyList<LinhaReferencia> Rows);
 
+/// <summary>Centro de custo por valor comprado, com o gestor responsável quando o cadastro o tem.</summary>
+public record LinhaCentroDeCusto(string Code, string Name, string? Manager, int Orders, decimal Value, double Percent);
+/// <summary>Quem pediu: solicitações abertas no período e o valor comprado a partir delas.</summary>
+public record LinhaSolicitante(string Requester, int Requisitions, int Orders, decimal Value);
+/// <summary>Materiais × serviços, pelo valor dos itens: família SERVICOS ou cotação do tipo serviço é serviço.</summary>
+public record EscopoDoGasto(decimal Materials, decimal Services, double MaterialsPercent, double ServicesPercent);
+public record OrigemDaDemanda(IReadOnlyList<LinhaCentroDeCusto> CostCenters, IReadOnlyList<LinhaSolicitante> Requesters,
+    EscopoDoGasto Scope);
+
+/// <summary>Quem venceu processos com concorrência (dois ou mais proponentes).</summary>
+public record LinhaVencedor(string Supplier, int Wins, decimal Value);
+/// <summary>
+/// As concorrências do recorte: quantos processos, quantos proponentes em média e quem venceu.
+/// Proponente é quem mandou proposta — convidado que não respondeu não conta como disputa.
+/// </summary>
+public record BlocoBids(int Processes, double? AverageProponents, int WithCompetition, IReadOnlyList<LinhaVencedor> Winners);
+
+/// <summary>Spend por condição comercial, com o prazo em dias quando ele se lê da condição.</summary>
+public record LinhaPagamento(string Term, int Orders, decimal Value, double Percent, int? Days);
+/// <summary>
+/// Prazo médio de pagamento ponderado pelo valor (DPO das negociações): o prazo vem da proposta
+/// vencedora; sem ele, do texto da condição da O.C. Pedido sem prazo legível fica fora da média.
+/// </summary>
+public record BlocoPagamento(double? WeightedDays, int OrdersWithDays, decimal ValueWithDays, IReadOnlyList<LinhaPagamento> Terms);
+
+/// <summary>
+/// Aderência ao fluxo formal: dos pedidos que já passaram do ponto de registrar a O.C. do ERP
+/// (tudo menos a fila em aberto), quantos a têm. A exceção justificada (PO-BR-011) conta como
+/// desvio — auditável, mas desvio.
+/// </summary>
+public record AderenciaDaOc(int Orders, int Formal, decimal Value, decimal FormalValue, double? Percent);
+
 public record RelatorioExecutivo(
     DateOnly From, DateOnly To, FiltroRelatorio Filters, string? CompanyLabel, string? CostCenterLabel,
     string? BuyerLabel, DateTimeOffset GeneratedAt,
@@ -100,7 +135,8 @@ public record RelatorioExecutivo(
     IReadOnlyList<LinhaMes> Months, ReguasDoSaving SavingRulers, PeriodoAnterior Previous,
     IReadOnlyList<TempoDaEtapa> CycleTimes,
     IReadOnlyList<LinhaSavingRateado> SavingByFamily, IReadOnlyList<LinhaSavingRateado> SavingBySupplier,
-    BlocoReferencia Reference);
+    BlocoReferencia Reference,
+    OrigemDaDemanda Demand, BlocoBids Bids, BlocoPagamento Payment, AderenciaDaOc Adherence);
 
 /// <summary>
 /// Relatório executivo de compras: os seis blocos que a diretoria pede sobre um mesmo
@@ -151,12 +187,15 @@ public class RelatorioExecutivoService(AppDbContext db, TimeProvider clock)
         public decimal Baseline { get; set; }
     }
 
-    private sealed record CentroDoRelatorio(string Code, string Name, Guid? CompanyId, bool Active);
+    private sealed record CentroDoRelatorio(string Code, string Name, Guid? CompanyId, bool Active, string? ManagerName = null);
     private sealed record EmpresaDoRelatorio(Guid Id, string LegalName, bool Active);
     private sealed record CotacaoDoRelatorio(Guid Id, Guid SourcePrId, decimal? BaselineValue, decimal? NegotiatedValue,
         decimal? SavingValue, decimal? CompetitionBaselineValue, decimal? CompetitionSaving,
         decimal? BudgetBaselineValue, decimal? BudgetSaving,
-        DateTimeOffset? SelectedAt, DateTimeOffset? ManagerApprovedAt, DateTimeOffset? DirectorApprovedAt);
+        DateTimeOffset? SelectedAt, DateTimeOffset? ManagerApprovedAt, DateTimeOffset? DirectorApprovedAt,
+        QuotationKind Kind = QuotationKind.Purchase, Guid? WinnerSupplierId = null);
+    private sealed record PropostaDoRelatorio(Guid QuotationId, Guid SupplierId, int VersionNumber,
+        int? PaymentDays, string? PaymentTerms);
 
     private async Task<Universo> UniversoAsync(FiltroRelatorio filtro, CancellationToken ct)
     {
@@ -180,7 +219,7 @@ public class RelatorioExecutivoService(AppDbContext db, TimeProvider clock)
                 .ToListAsync(ct))
             .ToDictionary(x => x.Id);
 
-        var centros = await db.CostCenters.Select(c => new CentroDoRelatorio(c.Code, c.Name, c.CompanyId, c.Active)).ToListAsync(ct);
+        var centros = await db.CostCenters.Select(c => new CentroDoRelatorio(c.Code, c.Name, c.CompanyId, c.Active, c.ManagerName)).ToListAsync(ct);
         var ccPorCodigo = centros.ToDictionary(c => c.Code, StringComparer.OrdinalIgnoreCase);
         var empresas = await db.Companies.Select(c => new EmpresaDoRelatorio(c.Id, c.LegalName, c.Active)).ToListAsync(ct);
         var empresaPorId = empresas.ToDictionary(c => c.Id, c => c.LegalName);
@@ -222,10 +261,15 @@ public class RelatorioExecutivoService(AppDbContext db, TimeProvider clock)
         return (await db.Quotations.Where(q => ids.Contains(q.Id))
                 .Select(q => new CotacaoDoRelatorio(q.Id, q.SourcePrId, q.BaselineValue, q.NegotiatedValue, q.SavingValue,
                     q.CompetitionBaselineValue, q.CompetitionSaving, q.BudgetBaselineValue, q.BudgetSaving,
-                    q.SelectedAt, q.ManagerApprovedAt, q.DirectorApprovedAt))
+                    q.SelectedAt, q.ManagerApprovedAt, q.DirectorApprovedAt, q.Kind, q.WinnerSupplierId))
                 .ToListAsync(ct))
             .ToDictionary(x => x.Id);
     }
+
+    private async Task<List<PropostaDoRelatorio>> PropostasDeAsync(IReadOnlyCollection<Guid> cotacaoIds, CancellationToken ct) =>
+        cotacaoIds.Count == 0 ? [] : await db.Proposals.Where(p => cotacaoIds.Contains(p.QuotationId))
+            .Select(p => new PropostaDoRelatorio(p.QuotationId, p.SupplierId, p.VersionNumber, p.PaymentDays, p.PaymentTerms))
+            .ToListAsync(ct);
 
     /// <summary>Cada cotação uma vez, na ordem do primeiro pedido que a fechou.</summary>
     private static IEnumerable<(PurchaseOrder Pedido, CotacaoDoRelatorio Cotacao)> CotacoesUnicas(
@@ -244,6 +288,20 @@ public class RelatorioExecutivoService(AppDbContext db, TimeProvider clock)
     {
         var medidos = pos.Count(o => o.Otif is not null);
         return medidos > 0 ? Math.Round(pos.Count(o => o.Otif == true) * 100.0 / medidos, 1) : null;
+    }
+
+    /// <summary>
+    /// O prazo em dias lido da condição comercial: "à vista" é zero, "30 dias" e "28D" são o número.
+    /// Condição sem número (ou "30/60/90") entra pelo primeiro número — a leitura conservadora — e
+    /// texto sem número nenhum fica sem prazo.
+    /// </summary>
+    public static int? DiasDe(string? condicao)
+    {
+        if (string.IsNullOrWhiteSpace(condicao)) return null;
+        var texto = condicao.Trim().ToLowerInvariant();
+        if (texto.Contains("vista") || texto.Contains("antecip")) return 0;
+        var m = System.Text.RegularExpressions.Regex.Match(texto, @"\d+");
+        return m.Success && int.TryParse(m.Value, out var d) ? d : null;
     }
 
     private static double? MedianaDias(IReadOnlyList<double> dias)
@@ -323,6 +381,14 @@ public class RelatorioExecutivoService(AppDbContext db, TimeProvider clock)
         var fornecedores = pos.GroupBy(o => string.IsNullOrWhiteSpace(o.SupplierName) ? "—" : o.SupplierName)
             .Select(g => new LinhaFornecedor(g.Key, g.Count(), g.Sum(o => o.TotalValue), Pct(g.Sum(o => o.TotalValue))))
             .OrderByDescending(f => f.Value).ToList();
+        // curva ABC: o acumulado diz quantos fornecedores respondem por 80% do gasto
+        decimal acumulado = 0;
+        fornecedores = fornecedores.Select(f =>
+        {
+            acumulado += f.Value;
+            var cum = Math.Round((double)Fatia(acumulado), 1);
+            return f with { Cumulative = cum, Class = cum <= 80 ? "A" : cum <= 95 ? "B" : "C" };
+        }).ToList();
         double? Acumulado(int n) => fornecedores.Count == 0 ? null
             : Math.Round((double)Fatia(fornecedores.Take(n).Sum(f => f.Value)), 1);
         var suppliers = new BlocoFornecedores(fornecedores, fornecedores.Count,
@@ -515,6 +581,75 @@ public class RelatorioExecutivoService(AppDbContext db, TimeProvider clock)
                     x.Item.ReferenceSaving!.Value))
                 .ToList());
 
+        // ---- 12. origem da demanda: quem pediu, de onde, material ou serviço ----------
+        var porCentro = pos.GroupBy(o => CentroDe(o) ?? "—")
+            .Select(g =>
+            {
+                var cc = ccPorCodigo.GetValueOrDefault(g.Key);
+                return new LinhaCentroDeCusto(g.Key, cc?.Name ?? (g.Key == "—" ? "sem solicitação de origem" : g.Key),
+                    cc?.ManagerName, g.Count(), g.Sum(o => o.TotalValue), Pct(g.Sum(o => o.TotalValue)));
+            })
+            .OrderByDescending(c => c.Value).Take(5).ToList();
+        var porSolicitante = pos.Where(o => o.SourcePrId is { } id && prs.ContainsKey(id))
+            .GroupBy(o => string.IsNullOrWhiteSpace(prs[o.SourcePrId!.Value].RequesterLabel) ? "—" : prs[o.SourcePrId!.Value].RequesterLabel!)
+            .Select(g => new LinhaSolicitante(g.Key, g.Select(o => o.SourcePrId).Distinct().Count(), g.Count(), g.Sum(o => o.TotalValue)))
+            .OrderByDescending(x => x.Value).Take(5).ToList();
+        bool EhServico(PurchaseOrder o, PurchaseOrderItem i) =>
+            FamiliaDe(i) == ProductTypes.Servicos
+            || (o.QuotationId is { } qid && cotacoes.TryGetValue(qid, out var qc) && qc.Kind == QuotationKind.Service);
+        var itensDoRecorte = pos.SelectMany(o => o.Items.Select(i => (Pedido: o, Item: i, Valor: (i.UnitPrice ?? 0) * i.Quantity))).ToList();
+        var servicos = itensDoRecorte.Where(x => EhServico(x.Pedido, x.Item)).Sum(x => x.Valor);
+        var materiais = itensDoRecorte.Sum(x => x.Valor) - servicos;
+        var totalItens = materiais + servicos;
+        var demand = new OrigemDaDemanda(porCentro, porSolicitante, new EscopoDoGasto(materiais, servicos,
+            totalItens > 0 ? Math.Round((double)(materiais * 100 / totalItens), 1) : 0,
+            totalItens > 0 ? Math.Round((double)(servicos * 100 / totalItens), 1) : 0));
+
+        // ---- 13. concorrências (BIDs): proponentes por processo e quem venceu ----------
+        // Proponente é quem mandou proposta; convite sem resposta não é disputa. Vencedor de
+        // concorrência é o fornecedor da O.C. de um processo com dois ou mais proponentes.
+        var propostas = await PropostasDeAsync(unicas.Select(x => x.Cotacao.Id).ToList(), ct);
+        var proponentesPorProcesso = propostas.GroupBy(p => p.QuotationId)
+            .ToDictionary(g => g.Key, g => g.Select(p => p.SupplierId).Distinct().Count());
+        var comConcorrencia = unicas.Where(x => proponentesPorProcesso.GetValueOrDefault(x.Cotacao.Id) >= 2).ToList();
+        var vencedores = comConcorrencia
+            .SelectMany(x => pos.Where(o => o.QuotationId == x.Cotacao.Id))
+            .GroupBy(o => string.IsNullOrWhiteSpace(o.SupplierName) ? "—" : o.SupplierName)
+            .Select(g => new LinhaVencedor(g.Key, g.Select(o => o.QuotationId).Distinct().Count(), g.Sum(o => o.TotalValue)))
+            .OrderByDescending(v => v.Value).Take(5).ToList();
+        var bids = new BlocoBids(unicas.Count,
+            unicas.Count > 0 ? Math.Round(unicas.Average(x => proponentesPorProcesso.GetValueOrDefault(x.Cotacao.Id)), 1) : null,
+            comConcorrencia.Count, vencedores);
+
+        // ---- 14. formas e prazos de pagamento --------------------------------------------
+        // O prazo vem da proposta vencedora (a última versão do fornecedor escolhido); sem ela,
+        // do texto da condição gravada na O.C. O DPO é ponderado pelo valor: um pedido de um
+        // milhão a 60 dias pesa mais que dez de mil à vista.
+        var vencedoraPorProcesso = propostas
+            .Where(p => cotacoes.TryGetValue(p.QuotationId, out var qc) && qc.WinnerSupplierId == p.SupplierId)
+            .GroupBy(p => p.QuotationId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(p => p.VersionNumber).First());
+        int? DiasDoPedido(PurchaseOrder o) =>
+            o.QuotationId is { } qid && vencedoraPorProcesso.TryGetValue(qid, out var v)
+                ? v.PaymentDays ?? DiasDe(v.PaymentTerms) ?? DiasDe(o.PaymentTerms)
+                : DiasDe(o.PaymentTerms);
+        var comPrazo = pos.Select(o => (Pedido: o, Dias: DiasDoPedido(o))).Where(x => x.Dias is not null).ToList();
+        var valorComPrazo = comPrazo.Sum(x => x.Pedido.TotalValue);
+        var terms = pos.GroupBy(o => string.IsNullOrWhiteSpace(o.PaymentTerms) ? "não informada" : o.PaymentTerms.Trim())
+            .Select(g => new LinhaPagamento(g.Key, g.Count(), g.Sum(o => o.TotalValue), Pct(g.Sum(o => o.TotalValue)),
+                g.Key == "não informada" ? null : g.Select(DiasDoPedido).FirstOrDefault(d => d is not null)))
+            .OrderByDescending(t => t.Value).ToList();
+        var payment = new BlocoPagamento(
+            valorComPrazo > 0 ? Math.Round((double)(comPrazo.Sum(x => x.Pedido.TotalValue * x.Dias!.Value) / valorComPrazo), 1) : null,
+            comPrazo.Count, valorComPrazo, terms);
+
+        // ---- 15. aderência ao fluxo formal da O.C. ---------------------------------------
+        var julgados = pos.Where(o => !aRegistrar.Contains(o)).ToList();
+        var formais = julgados.Where(o => !string.IsNullOrWhiteSpace(o.ErpNumber)).ToList();
+        var adherence = new AderenciaDaOc(julgados.Count, formais.Count,
+            julgados.Sum(o => o.TotalValue), formais.Sum(o => o.TotalValue),
+            julgados.Count > 0 ? Math.Round(formais.Count * 100.0 / julgados.Count, 1) : null);
+
         // ---- período anterior ---------------------------------------------------
         // A janela imediatamente antes, do mesmo tamanho, com os mesmos filtros. Só os
         // totais: comparação é contexto para o KPI, não um segundo relatório.
@@ -565,6 +700,7 @@ public class RelatorioExecutivoService(AppDbContext db, TimeProvider clock)
         return new RelatorioExecutivo(filtro.From, filtro.To, filtro,
             filtro.Company, centroLabel, compradorLabel, clock.GetUtcNow(),
             kpis, coverage, families, buyers, suppliers, urgent, otif, withoutErp, filterOptions,
-            months, savingRulers, previous, cycleTimes, savingByFamily, savingBySupplier, reference);
+            months, savingRulers, previous, cycleTimes, savingByFamily, savingBySupplier, reference,
+            demand, bids, payment, adherence);
     }
 }

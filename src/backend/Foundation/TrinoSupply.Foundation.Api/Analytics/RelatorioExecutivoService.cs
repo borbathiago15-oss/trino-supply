@@ -69,6 +69,27 @@ public record PeriodoAnterior(DateOnly From, DateOnly To, decimal Spend, int Ord
 /// <summary>Uma etapa do ciclo: quantas vezes foi medida e a mediana em dias.</summary>
 public record TempoDaEtapa(string Stage, string Title, int Measured, double? MedianDays);
 
+/// <summary>
+/// Saving de negociação rateado por família ou por fornecedor. O saving mora no processo;
+/// quando o processo virou mais de uma O.C., ele é dividido entre elas pelo valor de cada
+/// uma — e, dentro da O.C., entre as famílias pelo valor dos itens. Com uma O.C. de uma
+/// família só (o caso comum) o rateio é exato.
+/// </summary>
+public record LinhaSavingRateado(string Label, int Processes, decimal Spend, decimal Saving, double? SavingPercent);
+
+/// <summary>Um item comprado por preço diferente do último pago para o mesmo produto de catálogo.</summary>
+public record LinhaReferencia(string Order, string Supplier, string Description, string? CatalogCode,
+    decimal Quantity, decimal LastPaidUnitPrice, decimal UnitPrice, decimal Saving);
+
+/// <summary>
+/// Saving de referência: o preço fechado contra o <b>último preço pago</b> do mesmo produto de
+/// catálogo, congelado no registro da O.C. Nunca se mistura ao saving de negociação — um mede
+/// a conversa com o fornecedor, o outro mede a história de preço do produto. Ganho e perda saem
+/// separados porque a perda (pagou mais que da última vez) é o que pede ação.
+/// </summary>
+public record BlocoReferencia(int Orders, int Items, decimal Gain, decimal Loss, decimal Net,
+    IReadOnlyList<LinhaReferencia> Rows);
+
 public record RelatorioExecutivo(
     DateOnly From, DateOnly To, FiltroRelatorio Filters, string? CompanyLabel, string? CostCenterLabel,
     string? BuyerLabel, DateTimeOffset GeneratedAt,
@@ -77,7 +98,9 @@ public record RelatorioExecutivo(
     BlocoFornecedores Suppliers, BlocoUrgencia Urgent, IReadOnlyList<LinhaOtif> Otif,
     BlocoSemOc WithoutErp, OpcoesDeFiltro FilterOptions,
     IReadOnlyList<LinhaMes> Months, ReguasDoSaving SavingRulers, PeriodoAnterior Previous,
-    IReadOnlyList<TempoDaEtapa> CycleTimes);
+    IReadOnlyList<TempoDaEtapa> CycleTimes,
+    IReadOnlyList<LinhaSavingRateado> SavingByFamily, IReadOnlyList<LinhaSavingRateado> SavingBySupplier,
+    BlocoReferencia Reference);
 
 /// <summary>
 /// Relatório executivo de compras: os seis blocos que a diretoria pede sobre um mesmo
@@ -119,6 +142,15 @@ public class RelatorioExecutivoService(AppDbContext db, TimeProvider clock)
     private sealed record SolicitacaoDoRelatorio(Guid Id, string Number, string? CostCenter, string? Company,
         string Priority, string? UrgencyReason, string? UrgencyImpact, string? RequesterLabel,
         DateTimeOffset? SubmittedAt, DateTimeOffset CreatedAt);
+    /// <summary>Acumulador do rateio do saving por família ou fornecedor.</summary>
+    private sealed class Rateio
+    {
+        public HashSet<Guid> Processos { get; } = [];
+        public decimal Spend { get; set; }
+        public decimal Saving { get; set; }
+        public decimal Baseline { get; set; }
+    }
+
     private sealed record CentroDoRelatorio(string Code, string Name, Guid? CompanyId, bool Active);
     private sealed record EmpresaDoRelatorio(Guid Id, string LegalName, bool Active);
     private sealed record CotacaoDoRelatorio(Guid Id, Guid SourcePrId, decimal? BaselineValue, decimal? NegotiatedValue,
@@ -422,6 +454,67 @@ public class RelatorioExecutivoService(AppDbContext db, TimeProvider clock)
                     ? Dias(pr.SubmittedAt ?? pr.CreatedAt, o.CreatedAt) : (double?)null)),
         };
 
+        // ---- 10. saving por família e por fornecedor ----------------------------
+        // O saving é do processo. Para chegar à família e ao fornecedor ele é rateado: entre
+        // as O.C.s do processo pelo valor de cada uma, e dentro da O.C. entre as famílias pelo
+        // valor dos itens. Uma O.C. de uma família só — o caso comum — sai exata.
+        var porFamilia = new Dictionary<string, Rateio>();
+        var porFornecedor = new Dictionary<string, Rateio>();
+        static void Acumular(Dictionary<string, Rateio> mapa, string chave, Guid processo,
+            decimal spendParte, decimal savingParte, decimal baselineParte)
+        {
+            if (!mapa.TryGetValue(chave, out var r)) mapa[chave] = r = new Rateio();
+            r.Processos.Add(processo);
+            r.Spend += spendParte; r.Saving += savingParte; r.Baseline += baselineParte;
+        }
+        foreach (var (_, q) in unicas)
+        {
+            var pedidosDoProcesso = pos.Where(o => o.QuotationId == q.Id).ToList();
+            var totalDoProcesso = pedidosDoProcesso.Sum(o => o.TotalValue);
+            foreach (var o in pedidosDoProcesso)
+            {
+                var fatia = totalDoProcesso > 0 ? o.TotalValue / totalDoProcesso : 1m / pedidosDoProcesso.Count;
+                var savingDaOc = (q.SavingValue ?? 0) * fatia;
+                var baselineDaOc = (q.BaselineValue ?? 0) * fatia;
+                Acumular(porFornecedor, string.IsNullOrWhiteSpace(o.SupplierName) ? "—" : o.SupplierName,
+                    q.Id, o.TotalValue, savingDaOc, baselineDaOc);
+
+                var valorDosItens = o.Items.Sum(i => (i.UnitPrice ?? 0) * i.Quantity);
+                foreach (var g in o.Items.GroupBy(FamiliaDe))
+                {
+                    var valor = g.Sum(i => (i.UnitPrice ?? 0) * i.Quantity);
+                    var parte = valorDosItens > 0 ? valor / valorDosItens : 1m / o.Items.Count;
+                    Acumular(porFamilia, g.Key, q.Id, valor, savingDaOc * parte, baselineDaOc * parte);
+                }
+            }
+        }
+        static List<LinhaSavingRateado> Linhas(Dictionary<string, Rateio> mapa) =>
+            mapa.Select(kv => new LinhaSavingRateado(kv.Key, kv.Value.Processos.Count,
+                    Math.Round(kv.Value.Spend, 2), Math.Round(kv.Value.Saving, 2),
+                    Percentual(kv.Value.Saving, kv.Value.Baseline)))
+                .OrderByDescending(l => l.Saving).ThenByDescending(l => l.Spend).ToList();
+        var savingByFamily = Linhas(porFamilia);
+        var savingBySupplier = Linhas(porFornecedor);
+
+        // ---- 11. saving de referência (× último preço pago) -----------------------
+        // Congelado item a item no registro da O.C.; aqui só se soma. Ganho e perda saem
+        // separados: "pagou mais que da última vez" é o que a diretoria quer ver, e um
+        // líquido positivo esconderia isso.
+        var itensComReferencia = pos.SelectMany(o => o.Items
+                .Where(i => i.ReferenceSaving is not null && i.LastPaidUnitPrice is not null)
+                .Select(i => (Pedido: o, Item: i)))
+            .ToList();
+        var ganho = itensComReferencia.Where(x => x.Item.ReferenceSaving > 0).Sum(x => x.Item.ReferenceSaving!.Value);
+        var perda = itensComReferencia.Where(x => x.Item.ReferenceSaving < 0).Sum(x => x.Item.ReferenceSaving!.Value);
+        var reference = new BlocoReferencia(
+            itensComReferencia.Select(x => x.Pedido.Id).Distinct().Count(), itensComReferencia.Count,
+            ganho, perda, ganho + perda,
+            itensComReferencia.OrderBy(x => x.Item.ReferenceSaving).Take(25)      // a perda primeiro
+                .Select(x => new LinhaReferencia(x.Pedido.Number, x.Pedido.SupplierName, x.Item.Description,
+                    x.Item.CatalogCode, x.Item.Quantity, x.Item.LastPaidUnitPrice!.Value, x.Item.UnitPrice ?? 0,
+                    x.Item.ReferenceSaving!.Value))
+                .ToList());
+
         // ---- período anterior ---------------------------------------------------
         // A janela imediatamente antes, do mesmo tamanho, com os mesmos filtros. Só os
         // totais: comparação é contexto para o KPI, não um segundo relatório.
@@ -472,6 +565,6 @@ public class RelatorioExecutivoService(AppDbContext db, TimeProvider clock)
         return new RelatorioExecutivo(filtro.From, filtro.To, filtro,
             filtro.Company, centroLabel, compradorLabel, clock.GetUtcNow(),
             kpis, coverage, families, buyers, suppliers, urgent, otif, withoutErp, filterOptions,
-            months, savingRulers, previous, cycleTimes);
+            months, savingRulers, previous, cycleTimes, savingByFamily, savingBySupplier, reference);
     }
 }

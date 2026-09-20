@@ -123,8 +123,54 @@ public static class RelatorioExecutivoPdf
                         }
                     }, null);
 
-                // 5 — concentração
-                Bloco(col, "5. Concentração por fornecedor",
+                // 5 — saving por família e por fornecedor
+                Bloco(col, "5. Saving por família e por fornecedor",
+                    "O saving é do processo. Quando o processo virou mais de uma O.C., ele é rateado entre elas pelo valor " +
+                    "de cada uma e, dentro da O.C., entre as famílias pelo valor dos itens. Uma O.C. de uma família só sai exata.",
+                    t =>
+                    {
+                        Colunas(t, [null, 40, 80, 80, 44]);
+                        Cabecalhos(t, ["Família / Fornecedor", "Proc.", "Comprado", "Saving", "%"]);
+                        foreach (var l in r.SavingByFamily.Take(20))
+                        {
+                            Celula(t, l.Label);
+                            CelulaNum(t, $"{l.Processes}");
+                            CelulaNum(t, $"{l.Spend:N2}");
+                            CelulaNum(t, $"{l.Saving:N2}");
+                            CelulaNum(t, Pct(l.SavingPercent));
+                        }
+                        foreach (var l in r.SavingBySupplier.Take(20))
+                        {
+                            Celula(t, "fornecedor · " + l.Label);
+                            CelulaNum(t, $"{l.Processes}");
+                            CelulaNum(t, $"{l.Spend:N2}");
+                            CelulaNum(t, $"{l.Saving:N2}");
+                            CelulaNum(t, Pct(l.SavingPercent));
+                        }
+                    }, r.SavingByFamily.Count == 0 ? "Nenhum processo com saving no recorte." : null);
+
+                // 6 — saving de referência
+                Bloco(col, "6. Saving de referência (× último preço pago)",
+                    $"Preço fechado contra o último preço pago do mesmo produto de catálogo, congelado no registro da O.C. " +
+                    $"{r.Reference.Items} item(ns) em {r.Reference.Orders} pedido(s): ganho {r.Reference.Gain:N2} · " +
+                    $"perda {r.Reference.Loss:N2} · líquido {r.Reference.Net:N2}. A perda vem primeiro: é ela que pede ação.",
+                    t =>
+                    {
+                        Colunas(t, [70, null, 40, 60, 60, 70]);
+                        Cabecalhos(t, ["Pedido", "Produto / fornecedor", "Qtd", "Último pago", "Fechado", "Diferença"]);
+                        foreach (var l in r.Reference.Rows)
+                        {
+                            Celula(t, l.Order);
+                            Celula(t, $"{l.Description}{(l.CatalogCode is null ? "" : $" ({l.CatalogCode})")} · {l.Supplier}");
+                            CelulaNum(t, $"{l.Quantity:0.##}");
+                            CelulaNum(t, $"{l.LastPaidUnitPrice:N2}");
+                            CelulaNum(t, $"{l.UnitPrice:N2}");
+                            CelulaNum(t, $"{l.Saving:N2}");
+                        }
+                    }, r.Reference.Items == 0 ? "Nenhum item do recorte tem preço pago anterior para comparar." : null);
+
+                // 7 — concentração
+                Bloco(col, "7. Concentração por fornecedor",
                     $"{r.Suppliers.SupplierCount} fornecedor(es) no recorte · maior fatia {Pct(r.Suppliers.Top1Percent)} · " +
                     $"3 maiores {Pct(r.Suppliers.Top3Percent)} · 5 maiores {Pct(r.Suppliers.Top5Percent)}",
                     t =>
@@ -141,7 +187,7 @@ public static class RelatorioExecutivoPdf
                     }, r.Suppliers.Rows.Count == 0 ? "Nenhum pedido no recorte." : null);
 
                 // 4 — urgência
-                Bloco(col, "6. Peso das compras urgentes",
+                Bloco(col, "8. Peso das compras urgentes",
                     $"{r.Urgent.Orders} pedido(s) vindos de solicitação urgente — {r.Urgent.Value:N2} " +
                     $"({r.Urgent.Percent:0.#}% do período). Urgência exige motivo e impacto na SC.",
                     t =>
@@ -159,7 +205,7 @@ public static class RelatorioExecutivoPdf
                     }, r.Urgent.Orders == 0 ? "Nenhuma compra urgente no recorte." : null);
 
                 // 5 — OTIF
-                Bloco(col, "7. Entrega no prazo (OTIF) por fornecedor",
+                Bloco(col, "9. Entrega no prazo (OTIF) por fornecedor",
                     "Só entram entregas encerradas com data prometida registrada. OTIF = no prazo E completo.",
                     t =>
                     {
@@ -176,7 +222,7 @@ public static class RelatorioExecutivoPdf
                     }, r.Otif.Count == 0 ? "Nenhuma entrega encerrada com data prometida no recorte." : null);
 
                 // 8 — tempo do ciclo
-                Bloco(col, "8. Tempo do ciclo (mediana, em dias)",
+                Bloco(col, "10. Tempo do ciclo (mediana, em dias)",
                     "Cada etapa conta pelo seu próprio relógio e só entra quando as duas marcas existem. " +
                     "Mediana, não média: um processo parado por meses não esconde os outros que andaram em uma semana.",
                     t =>
@@ -192,7 +238,7 @@ public static class RelatorioExecutivoPdf
                     }, null);
 
                 // 6 — sem O.C. do ERP
-                Bloco(col, "9. Compras sem O.C. do ERP",
+                Bloco(col, "11. Compras sem O.C. do ERP",
                     $"{r.WithoutErp.Orders} compra(s) fechada(s) pela exceção — {r.WithoutErp.Value:N2} " +
                     $"({r.WithoutErp.Percent:0.#}% do período). A regra é a O.C. do SENIOR; a justificativa " +
                     "abaixo é a única exceção que libera o fechamento. " +

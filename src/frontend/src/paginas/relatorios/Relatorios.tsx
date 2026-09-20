@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   FILTROS_RELATORIO_VAZIOS, pdfDoRelatorio, relatorioExecutivo,
-  type FiltrosRelatorio, type RelatorioExecutivo,
+  type FiltrosRelatorio, type LinhaSavingRateado, type RelatorioExecutivo,
 } from '@/api/relatorios';
 import { abrirBlob } from '@/api/cliente';
 import { variacao } from '@/api/painel';
@@ -106,6 +106,34 @@ function Reguas({ r }: { r: RelatorioExecutivo }) {
     </div>
   );
 }
+
+/** Uma das duas tabelas do saving rateado — família ou fornecedor — com a mesma forma. */
+function SavingRateado({ titulo, linhas, testid }: { titulo: string; linhas: LinhaSavingRateado[]; testid: string }) {
+  if (!linhas.length) return <Vazio>Nenhum processo com saving no recorte.</Vazio>;
+  return (
+    <div className="overflow-x-auto">
+      <table data-testid={testid}>
+        <thead><tr><th>{titulo}</th><th>Processos</th><th>Comprado</th><th>Saving</th><th>%</th></tr></thead>
+        <tbody>
+          {linhas.map((l) => (
+            <tr key={l.label}>
+              <td>{l.label}</td>
+              <td>{quantidade(l.processes)}</td>
+              <td className="whitespace-nowrap">{moeda(l.spend)}</td>
+              <td className="whitespace-nowrap"><strong>{moeda(l.saving)}</strong></td>
+              <td className="whitespace-nowrap">{pct(l.savingPercent)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Diferença contra o último preço pago: negativa em vermelho, porque é ela que pede ação. */
+const Diferenca = ({ valor }: { valor: number }) => (
+  <strong className={valor < 0 ? 'text-perigo' : valor > 0 ? 'text-ok' : ''}>{moeda(valor)}</strong>
+);
 
 function Blocos({ r }: { r: RelatorioExecutivo }) {
   const a = r.previous;
@@ -234,7 +262,39 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
         <Reguas r={r} />
       </Painel>
 
-      <Bloco titulo="5. Concentração por fornecedor" testid="relatorio-fornecedores"
+      <Painel titulo="5. Saving por família e por fornecedor">
+        <p className="sub mb-3">
+          Onde a negociação rende e onde não rende. O saving é do processo: quando o processo virou mais de uma
+          O.C., ele é rateado entre elas pelo valor de cada uma e, dentro da O.C., entre as famílias pelo valor
+          dos itens. Uma O.C. de uma família só — o caso comum — sai exata. Pedido sem processo de cotação não
+          tem saving a ratear.
+        </p>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <SavingRateado titulo="Família" linhas={r.savingByFamily} testid="relatorio-saving-familia" />
+          <SavingRateado titulo="Fornecedor" linhas={r.savingBySupplier} testid="relatorio-saving-fornecedor" />
+        </div>
+      </Painel>
+
+      <Bloco titulo="6. Saving de referência (× último preço pago)" testid="relatorio-referencia" largura="min-w-[820px]"
+        explicacao={`Preço fechado contra o último preço pago do mesmo produto de catálogo, congelado no registro da O.C. Não se mistura ao saving de negociação: um mede a conversa com o fornecedor, o outro a história de preço do produto. ${quantidade(r.reference.items)} item(ns) em ${quantidade(r.reference.orders)} pedido(s) — ganho ${moeda(r.reference.gain)} · perda ${moeda(r.reference.loss)} · líquido ${moeda(r.reference.net)}. A perda vem primeiro: é ela que pede ação.`}
+        vazio={r.reference.items ? undefined : 'Nenhum item do recorte tem preço pago anterior para comparar.'}>
+        <thead><tr><th>Pedido</th><th>Produto</th><th>Fornecedor</th><th>Qtd</th><th>Último pago</th><th>Fechado</th><th>Diferença</th></tr></thead>
+        <tbody>
+          {r.reference.rows.map((l, i) => (
+            <tr key={`${l.order}-${l.catalogCode ?? l.description}-${i}`}>
+              <td className="whitespace-nowrap">{l.order}</td>
+              <td>{l.description}{l.catalogCode && <div className="sub">{l.catalogCode}</div>}</td>
+              <td>{l.supplier}</td>
+              <td className="whitespace-nowrap">{quantidade(l.quantity)}</td>
+              <td className="whitespace-nowrap">{moeda(l.lastPaidUnitPrice)}</td>
+              <td className="whitespace-nowrap">{moeda(l.unitPrice)}</td>
+              <td className="whitespace-nowrap"><Diferenca valor={l.saving} /></td>
+            </tr>
+          ))}
+        </tbody>
+      </Bloco>
+
+      <Bloco titulo="7. Concentração por fornecedor" testid="relatorio-fornecedores"
         explicacao={`${quantidade(r.suppliers.supplierCount)} fornecedor(es) no recorte · maior fatia ${pct(r.suppliers.top1Percent)} · 3 maiores ${pct(r.suppliers.top3Percent)} · 5 maiores ${pct(r.suppliers.top5Percent)}.`}
         vazio={r.suppliers.rows.length ? undefined : 'Nenhum pedido no recorte.'}>
         <thead><tr><th>Fornecedor</th><th>Pedidos</th><th>Valor</th><th>% do total</th></tr></thead>
@@ -250,7 +310,7 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
         </tbody>
       </Bloco>
 
-      <Bloco titulo="6. Peso das compras urgentes" testid="relatorio-urgentes" largura="min-w-[760px]"
+      <Bloco titulo="8. Peso das compras urgentes" testid="relatorio-urgentes" largura="min-w-[760px]"
         explicacao={`${quantidade(r.urgent.orders)} pedido(s) vindos de solicitação urgente — ${moeda(r.urgent.value)} (${pct(r.urgent.percent)} do período). Urgência exige motivo e impacto declarados na SC.`}
         vazio={r.urgent.orders ? undefined : 'Nenhuma compra urgente no recorte.'}>
         <thead><tr><th>Pedido</th><th>SC</th><th>Fornecedor</th><th>Valor</th><th>Motivo declarado</th></tr></thead>
@@ -269,7 +329,7 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
         </tbody>
       </Bloco>
 
-      <Bloco titulo="7. Entrega no prazo (OTIF) por fornecedor" testid="relatorio-otif"
+      <Bloco titulo="9. Entrega no prazo (OTIF) por fornecedor" testid="relatorio-otif"
         explicacao="Só entram entregas encerradas com data prometida registrada. OTIF = chegou no prazo E completo; entrega em aberto não conta nem a favor nem contra."
         vazio={r.otif.length ? undefined : 'Nenhuma entrega encerrada com data prometida no recorte.'}>
         <thead><tr><th>Fornecedor</th><th>Entregas medidas</th><th>No prazo</th><th>Completo</th><th>OTIF</th></tr></thead>
@@ -286,7 +346,7 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
         </tbody>
       </Bloco>
 
-      <Bloco titulo="8. Tempo do ciclo" testid="relatorio-ciclo" largura="min-w-[480px]"
+      <Bloco titulo="10. Tempo do ciclo" testid="relatorio-ciclo" largura="min-w-[480px]"
         explicacao="Mediana em dias de cada etapa, no recorte. Cada etapa conta pelo seu próprio relógio e só entra quando as duas marcas existem. Mediana, não média: um processo parado por meses não esconde os outros que andaram em uma semana.">
         <thead><tr><th>Etapa</th><th>Medidos</th><th>Mediana</th></tr></thead>
         <tbody>
@@ -302,7 +362,7 @@ function Blocos({ r }: { r: RelatorioExecutivo }) {
         </tbody>
       </Bloco>
 
-      <Bloco titulo="9. Compras sem O.C. do ERP" testid="relatorio-sem-oc" largura="min-w-[760px]"
+      <Bloco titulo="11. Compras sem O.C. do ERP" testid="relatorio-sem-oc" largura="min-w-[760px]"
         explicacao={`${quantidade(r.withoutErp.orders)} compra(s) fechada(s) pela exceção — ${moeda(r.withoutErp.value)} (${pct(r.withoutErp.percent)} do período). A regra é a O.C. do SENIOR; a justificativa abaixo é a única exceção que libera o fechamento. Outros ${quantidade(r.withoutErp.pendingOrders)} pedido(s) (${moeda(r.withoutErp.pendingValue)}) seguem em aberto com a O.C. por registrar — fila, não exceção`
           + (r.withoutErp.closedWithoutReason > 0
             ? `; e ${quantidade(r.withoutErp.closedWithoutReason)} andaram sem O.C. e sem justificativa nenhuma.`
@@ -383,7 +443,7 @@ export function Relatorios() {
           </button>
         }>
         <p className="sub mb-3">
-          Um recorte — período, empresa, centro de custo e comprador — lido por nove ângulos, com o
+          Um recorte — período, empresa, centro de custo e comprador — lido por onze ângulos, com o
           período anterior ao lado de cada número. O PDF sai com o mesmo recorte no cabeçalho.
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">

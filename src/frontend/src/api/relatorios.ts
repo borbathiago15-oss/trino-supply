@@ -97,6 +97,36 @@ export interface TempoDaEtapa {
   medianDays: number | null;
 }
 
+/** Saving de negociação rateado por família ou por fornecedor (ver bloco 5 da tela). */
+export interface LinhaSavingRateado {
+  label: string;
+  processes: number;
+  spend: number;
+  saving: number;
+  savingPercent: number | null;
+}
+
+export interface LinhaReferencia {
+  order: string;
+  supplier: string;
+  description: string;
+  catalogCode: string | null;
+  quantity: number;
+  lastPaidUnitPrice: number;
+  unitPrice: number;
+  saving: number;
+}
+
+/** Saving de referência: preço fechado × último preço pago do mesmo produto. Ganho e perda separados. */
+export interface BlocoReferencia {
+  orders: number;
+  items: number;
+  gain: number;
+  loss: number;
+  net: number;
+  rows: LinhaReferencia[];
+}
+
 export interface RelatorioExecutivo {
   from: string;
   to: string;
@@ -147,6 +177,9 @@ export interface RelatorioExecutivo {
   savingRulers: { negotiation: ReguaDoSaving; competition: ReguaDoSaving; budget: ReguaDoSaving };
   previous: PeriodoAnterior;
   cycleTimes: TempoDaEtapa[];
+  savingByFamily: LinhaSavingRateado[];
+  savingBySupplier: LinhaSavingRateado[];
+  reference: BlocoReferencia;
 }
 
 export interface FiltrosRelatorio {

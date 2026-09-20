@@ -82,6 +82,17 @@ const relatorio = (p: Partial<RelatorioExecutivo> = {}): RelatorioExecutivo => (
     { stage: 'solicitacao_escolha', title: 'Solicitação → escolha do fornecedor', measured: 1, medianDays: 4 },
     { stage: 'oc_recebimento', title: 'O.C. → recebimento', measured: 0, medianDays: null },
   ],
+  savingByFamily: [{ label: 'MATERIAL DE LIMPEZA', processes: 1, spend: 8000, saving: 1600, savingPercent: 16.7 }],
+  savingBySupplier: [{ label: 'Alfa', processes: 1, spend: 8000, saving: 1600, savingPercent: 16.7 }],
+  reference: {
+    orders: 1, items: 2, gain: 200, loss: -100, net: 100,
+    rows: [
+      { order: 'PO-2026-000001', supplier: 'Alfa', description: 'Bota de PVC', catalogCode: 'EPI-002',
+        quantity: 10, lastPaidUnitPrice: 50, unitPrice: 60, saving: -100 },
+      { order: 'PO-2026-000001', supplier: 'Alfa', description: 'Luva nitrílica', catalogCode: 'EPI-001',
+        quantity: 100, lastPaidUnitPrice: 10, unitPrice: 8, saving: 200 },
+    ],
+  },
   ...p,
 });
 
@@ -120,6 +131,22 @@ describe('tela de Relatórios', () => {
     // a régua sem processo diz que não se aplica, em vez de mostrar zero de ganho
     expect(reguas.querySelector('[data-regua="budget"]')).toHaveTextContent('Não se aplica');
     expect(reguas.querySelector('[data-regua="budget"]')).not.toHaveTextContent('R$ 0,00');
+  });
+
+  it('o saving rateado por família e fornecedor, e a referência com a perda em destaque', async () => {
+    vi.mocked(relatorioExecutivo).mockResolvedValue(relatorio());
+    abrir();
+
+    const familia = within(await screen.findByTestId('relatorio-saving-familia'));
+    expect(familia.getByText('MATERIAL DE LIMPEZA').closest('tr')).toHaveTextContent('R$ 1.600,00');
+    expect(within(screen.getByTestId('relatorio-saving-fornecedor')).getByText('Alfa')).toBeInTheDocument();
+
+    const referencia = screen.getByTestId('relatorio-referencia');
+    // a perda vem primeiro e em vermelho: pagou mais que da última vez
+    const primeira = referencia.querySelector('tbody tr')!;
+    expect(primeira).toHaveTextContent('Bota de PVC');
+    expect(within(primeira as HTMLElement).getByText('-R$ 100,00')).toHaveClass('text-perigo');
+    expect(screen.getByText(/ganho R\$ 200,00 · perda -R\$ 100,00 · líquido R\$ 100,00/)).toBeInTheDocument();
   });
 
   it('o tempo do ciclo mostra a mediana da etapa medida e diz quando não há medição', async () => {

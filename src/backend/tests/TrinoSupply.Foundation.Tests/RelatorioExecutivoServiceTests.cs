@@ -469,4 +469,75 @@ public class RelatorioExecutivoServiceTests
         Assert.Equal(9.0, Etapa("solicitacao_oc").MedianDays);      // 1 → 10 de agosto
         Assert.Equal(1, Etapa("solicitacao_oc").Measured);          // PO-2 não tem SC
     }
+
+    [Fact]
+    public async Task Saving_por_familia_e_fornecedor_rateia_o_processo_dividido_pelo_valor_de_cada_OC()
+    {
+        var (db, svc) = Build();
+        var cotacao = new Quotation
+        {
+            Number = "RFQ-1", SourcePrId = Guid.NewGuid(), CreatedAt = Agora,
+            BaselineValue = 12_000m, NegotiatedValue = 10_000m, SavingValue = 2_000m,
+        };
+        db.Quotations.Add(cotacao);
+        db.PurchaseOrders.AddRange(
+            // a compra dividida: 8 mil com a Alfa (limpeza) e 2 mil com a Beta (EPI)
+            Pedido("PO-1", "Alfa", 8_000m, Carla, "Carla Compradora", familia: "MATERIAL DE LIMPEZA", cotacaoId: cotacao.Id),
+            Pedido("PO-2", "Beta", 2_000m, Carla, "Carla Compradora", familia: "EPI", cotacaoId: cotacao.Id),
+            // pedido sem processo: comprado, mas sem saving a ratear
+            Pedido("PO-3", "Gama", 5_000m, Diego, "Diego Comprador", familia: "EPI"));
+        await db.SaveChangesAsync();
+
+        var r = await svc.GerarAsync(Agosto);
+
+        // 80% do saving vai com a O.C. de 8 mil; a % é contra a mesma fatia do baseline
+        var alfa = r.SavingBySupplier.Single(l => l.Label == "Alfa");
+        Assert.Equal(1_600m, alfa.Saving);
+        Assert.Equal(8_000m, alfa.Spend);
+        Assert.Equal(16.7, alfa.SavingPercent);     // 1.600 / 9.600
+        Assert.Equal(400m, r.SavingBySupplier.Single(l => l.Label == "Beta").Saving);
+        // Gama comprou sem processo: não aparece no saving, só na concentração
+        Assert.DoesNotContain(r.SavingBySupplier, l => l.Label == "Gama");
+
+        Assert.Equal(1_600m, r.SavingByFamily.Single(l => l.Label == "MATERIAL DE LIMPEZA").Saving);
+        Assert.Equal(400m, r.SavingByFamily.Single(l => l.Label == "EPI").Saving);
+        // e a soma continua sendo o saving do processo, uma vez
+        Assert.Equal(2_000m, r.SavingByFamily.Sum(l => l.Saving));
+    }
+
+    [Fact]
+    public async Task Saving_de_referencia_separa_ganho_de_perda_e_poe_a_perda_primeiro()
+    {
+        var (db, svc) = Build();
+        var pedido = Pedido("PO-1", "Alfa", 3_000m, Carla, "Carla Compradora");
+        pedido.Items.Clear();
+        pedido.Items.Add(new PurchaseOrderItem
+        {
+            Description = "Luva nitrílica", CatalogCode = "EPI-001", Quantity = 100, UnitPrice = 8m,
+            LastPaidUnitPrice = 10m, ReferenceSaving = 200m, UnitOfMeasure = "PAR",
+        });
+        pedido.Items.Add(new PurchaseOrderItem
+        {
+            Description = "Bota de PVC", CatalogCode = "EPI-002", Quantity = 10, UnitPrice = 60m,
+            LastPaidUnitPrice = 50m, ReferenceSaving = -100m, UnitOfMeasure = "PAR",
+        });
+        pedido.Items.Add(new PurchaseOrderItem
+        {
+            Description = "Item sem histórico", Quantity = 1, UnitPrice = 100m, UnitOfMeasure = "UN",
+        });
+        db.PurchaseOrders.Add(pedido);
+        await db.SaveChangesAsync();
+
+        var r = await svc.GerarAsync(Agosto);
+
+        Assert.Equal(2, r.Reference.Items);          // o item sem último preço não conta
+        Assert.Equal(1, r.Reference.Orders);
+        Assert.Equal(200m, r.Reference.Gain);
+        Assert.Equal(-100m, r.Reference.Loss);
+        Assert.Equal(100m, r.Reference.Net);
+        // a perda vem primeiro: é o que pede ação
+        Assert.Equal("Bota de PVC", r.Reference.Rows[0].Description);
+        Assert.Equal(50m, r.Reference.Rows[0].LastPaidUnitPrice);
+        Assert.Equal(60m, r.Reference.Rows[0].UnitPrice);
+    }
 }

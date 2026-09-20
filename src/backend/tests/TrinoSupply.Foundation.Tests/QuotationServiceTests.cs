@@ -611,6 +611,66 @@ public class QuotationServiceTests
         Assert.Equal("RFQ-ERR-040", esgotado!.Code);
     }
 
+    // ---- Central de Aprovação: o card de decisão e a memória de quem decidiu -------------
+    [Fact]
+    public void Resumo_da_decisao_consolida_as_SCs_de_origem_e_conta_a_espera_pelo_relogio_da_alcada()
+    {
+        var q = new Quotation
+        {
+            Status = QuotationStatus.AwaitingManager,
+            SelectedAt = new DateTimeOffset(2026, 9, 1, 10, 0, 0, TimeSpan.Zero),
+            ManagerApprovedAt = new DateTimeOffset(2026, 9, 3, 10, 0, 0, TimeSpan.Zero),
+        };
+        var scs = new List<FatosDaSc>
+        {
+            new("Ana", "NORMAL", null, null, new DateOnly(2026, 9, 30), 1000m),
+            new("Bruno", "URGENT", "linha parada", "produção para", new DateOnly(2026, 9, 20), 500m),
+            new("Ana", "NORMAL", null, null, null, 200m),
+        };
+        var r = ResumoDaDecisao.Consolidar(q, scs);
+        Assert.Equal("Ana, Bruno", r.RequesterLabel);          // sem repetição
+        Assert.Equal("URGENT", r.Priority);                     // urgente se qualquer uma for
+        Assert.Equal("linha parada", r.UrgencyReason);
+        Assert.Equal(new DateOnly(2026, 9, 20), r.NeededBy);    // a mais próxima
+        Assert.Equal(1700m, r.Budget);                          // todas informaram: soma
+        Assert.Equal(1, r.Level);
+        Assert.Equal(q.SelectedAt, r.WaitingSince);             // Nível 1 espera desde a escolha
+
+        // uma SC sem orçamento tira o orçamento do card: meta parcial não é meta
+        var semMeta = ResumoDaDecisao.Consolidar(q, [scs[0], scs[1] with { Budget = null }]);
+        Assert.Null(semMeta.Budget);
+
+        // Nível 2 conta desde o Nível 1, não desde a escolha do fornecedor
+        q.Status = QuotationStatus.AwaitingDirector;
+        Assert.Equal(q.ManagerApprovedAt, ResumoDaDecisao.Consolidar(q, scs).WaitingSince);
+        Assert.Equal(2, ResumoDaDecisao.Consolidar(q, scs).Level);
+
+        // processo sem SC (não deveria existir) não quebra o card
+        var vazio = ResumoDaDecisao.Consolidar(q, []);
+        Assert.Equal("", vazio.RequesterLabel);
+        Assert.Equal("NORMAL", vazio.Priority);
+        Assert.Null(vazio.NeededBy);
+    }
+
+    [Fact]
+    public async Task Minhas_decisoes_saem_dos_eventos_do_processo_e_so_de_quem_decidiu()
+    {
+        var w = await BuildAsync();
+        var q = await UpToApprovedAsync(w);   // Gustavo deu o Nível 1, Diana o Nível 2
+
+        var deGustavo = await w.Rfq.MinhasDecisoesAsync(Gustavo.Id);
+        var d = Assert.Single(deGustavo);
+        Assert.Equal("GERENTE_APROVOU", d.EventType);
+        Assert.Equal(q.Number, d.Number);
+        Assert.Equal(QuotationStatus.ApprovedForIssue, d.Status);   // a situação de hoje, não a da hora
+        Assert.Equal("Alfa", d.SupplierName);
+        Assert.NotNull(d.TotalValue);
+
+        Assert.Equal("DIRETOR_APROVOU", Assert.Single(await w.Rfq.MinhasDecisoesAsync(Diana.Id)).EventType);
+        // quem só conduziu o processo não tem decisão de alçada a lembrar
+        Assert.Empty(await w.Rfq.MinhasDecisoesAsync(Carla.Id));
+    }
+
     /// <summary>OTIF (V2-P1): a data prometida congela no registro da O.C. e o OTIF deriva da entrega.</summary>
     [Fact]
     public async Task Registro_da_OC_congela_a_data_prometida_para_o_OTIF()

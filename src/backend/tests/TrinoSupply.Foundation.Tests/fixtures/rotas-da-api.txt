@@ -49,6 +49,7 @@ GET /api/v1/purchase-requisitions/
 GET /api/v1/purchase-requisitions/{id:guid}
 GET /api/v1/quotations/
 GET /api/v1/quotations/my-approvals
+GET /api/v1/quotations/my-decisions
 GET /api/v1/quotations/queue
 GET /api/v1/quotations/{id:guid}
 GET /api/v1/quotations/{id:guid}/contract-prices/{supplierId:guid}

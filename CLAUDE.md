@@ -254,6 +254,18 @@ nulo = padrão, e o fallback é **por etapa**: um tipo que só aperta a aprovaç
 exceção** em vez de copiar o número, que a congelaria. SC sem tipo, ou com tipo fora do
 cadastro, cai no padrão — que é o que já valia antes de os tipos existirem.
 
+**Cada papel começa o dia onde o trabalho dele está** (`paginaInicial` em `dominio/papeis.ts`):
+quem aprova abre a Central; o solicitante abre as próprias SCs e não vê o painel do comprador;
+o resto abre o painel. **A Central de Aprovação é um card de decisão, não uma lista.** O que
+sustenta a decisão está no card — quem pediu e por quê, a escolha do comprador **contra a
+proposta mais barata** (`comparacaoDaEscolha`, só propostas vigentes), a justificativa dele,
+orçamento, compliance, contrato, quem deu o Nível 1 e há quanto tempo espera — e os três
+botões decidem ali mesmo pela alçada da etapa (`alcadaDe`). O processo completo é o segundo
+caminho. O resumo vem do servidor (`ResumoDaDecisao`, na rota `my-approvals`): os fatos da SC
+se consolidam como no saving de orçamento (orçamento só quando **todas** as SCs informaram) e
+a espera conta pelo relógio da alçada. "Suas decisões recentes" (`my-decisions`) sai dos
+eventos do processo, o mesmo registro que a auditoria lê.
+
 **Cuidado com a palavra "pedido" (D7).** "Tipo de pedido" no vocabulário do usuário é o tipo
 da **solicitação**; no do sistema, "pedido" é a O.C. O teste do menu pegou o rótulo errado — é
 para isso que ele existe.

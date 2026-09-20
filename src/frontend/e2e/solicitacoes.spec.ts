@@ -101,9 +101,13 @@ test.describe('Solicitações de Compra (React)', () => {
     // a tela sempre responde: ou lista processos, ou diz que não há nenhum
     await expect(page.locator('body')).toContainText(/aguardando a sua aprovação|Nenhuma aprovação pendente/);
 
-    const processos = page.getByTestId('tabela-processos');
-    if (await processos.count()) {
-      const link = processos.getByRole('link', { name: 'Analisar e decidir' }).first();
+    // a decisão se toma no card; o processo completo é o segundo caminho
+    const fila = page.getByTestId('fila-decisao');
+    if (await fila.count()) {
+      const card = fila.locator('li').first();
+      await expect(card.getByTestId('valor-da-compra')).toBeVisible();
+      await expect(card.getByRole('button', { name: 'Aprovar' })).toBeVisible();
+      const link = card.getByRole('link', { name: /Ver processo completo/ });
       await expect(link).toHaveAttribute('href', /\/cotacoes\//);
       await link.click();
       // o processo agora abre no próprio React

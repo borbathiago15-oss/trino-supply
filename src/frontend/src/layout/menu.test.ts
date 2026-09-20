@@ -13,10 +13,10 @@ describe('menu', () => {
     expect(enderecoDe(pedidos)).toBe('/pedidos');
   });
 
-  it('solicitante sem módulo de compras não vê o grupo Compras', () => {
+  it('solicitante vê só as próprias solicitações e o material: nem Compras, nem o painel do comprador', () => {
     const grupos = itensVisiveis({ role: 'Requester', modules: ['SOLICITACOES', 'MATERIAL'] });
-    expect(grupos.map((g) => g.titulo)).toEqual([null, 'Solicitações de Compra', 'Material']);
-    expect(grupos[0].itens.map((i) => (ehSubgrupo(i) ? i.rotulo : i.id))).toEqual(['supply-dash']);
+    expect(grupos.map((g) => g.titulo)).toEqual(['Solicitações de Compra', 'Material']);
+    expect(folhas({ role: 'Requester', modules: ['SOLICITACOES', 'MATERIAL'] }).map((i) => i.id)).not.toContain('supply-dash');
   });
 
   it('os grupos seguem a sequência do processo, e a aprovação fica no topo', () => {
@@ -50,7 +50,7 @@ describe('menu', () => {
   it('quem só enxerga o painel não paga clique: o subgrupo de uma tela vira item simples', () => {
     // sem Insights, Compliance nem Relatórios, "Dashboard" viraria uma gaveta com
     // uma coisa dentro — dois cliques para a tela que a pessoa mais abre
-    const topo = itensVisiveis({ role: 'Requester', modules: ['SOLICITACOES'] })[0].itens;
+    const topo = itensVisiveis({ role: 'Auditor', modules: ['SOLICITACOES'] })[0].itens;
     expect(topo.map((i) => (ehSubgrupo(i) ? i.rotulo : i.id))).toEqual(['supply-dash']);
   });
 

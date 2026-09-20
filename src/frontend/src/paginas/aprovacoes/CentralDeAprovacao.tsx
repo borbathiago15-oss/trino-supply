@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { processosParaMinhaAprovacao, propostaVencedora, ROTULO_RFQ, type ProcessoParaAprovar } from '@/api/cotacoes';
+import {
+  comparacaoDaEscolha, conflitoDeSegregacao, decidir, diasDesde, minhasDecisoes, processosParaMinhaAprovacao,
+  ROTULO_DECISAO, ROTULO_RFQ, type Alcada, type Decisao, type DecisaoRecente, type ProcessoParaAprovar,
+} from '@/api/cotacoes';
 import {
   aprovarMaterial, listarSolicitacoesMaterial, recusarMaterial, type SolicitacaoMaterial,
 } from '@/api/material';
@@ -8,11 +11,12 @@ import {
   aprovacoesPendentes, aprovarSolicitacao, devolverSolicitacao, rejeitarSolicitacao,
   situacaoDaSc, type SolicitacaoCompra,
 } from '@/api/solicitacoes';
-import { Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
+import { Aviso, Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { DialogoMotivo } from '@/componentes/DialogoMotivo';
 import { Nota } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
-import { moeda, quantidade } from '@/util/formato';
+import { useUsuario } from '@/sessao/SessaoProvider';
+import { data, dataHora, moeda, quantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
 import { resumoDosItens } from '@/paginas/solicitacoes/MeusPedidos';
 
@@ -21,7 +25,12 @@ const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message
 /** Endereço do processo, que a fila abre com o número já resolvido. */
 export const linkDoProcesso = (id: string) => `/cotacoes/${id}`;
 
+/** A alçada que o processo espera — é ela que diz qual rota decide. */
+export const alcadaDe = (status: string): Alcada | null =>
+  status === 'AGUARDANDO_GERENTE' ? 'manager' : status === 'AGUARDANDO_DIRETOR' ? 'director' : null;
+
 type Acao =
+  | { tipo: 'decidir'; q: ProcessoParaAprovar; alcada: Alcada; decisao: Decisao }
   | { tipo: 'aprovar-sc'; sc: SolicitacaoCompra }
   | { tipo: 'devolver-sc'; sc: SolicitacaoCompra }
   | { tipo: 'rejeitar-sc'; sc: SolicitacaoCompra }
@@ -30,6 +39,7 @@ type Acao =
 
 export function CentralDeAprovacao() {
   const { avisar } = useToast();
+  const usuario = useUsuario();
   const [acao, setAcao] = useState<Acao | null>(null);
   const [liberado, setLiberado] = useState<Record<string, string>>({});
 
@@ -39,17 +49,13 @@ export function CentralDeAprovacao() {
     materiais: (await listarSolicitacoesMaterial(signal).catch(() => [] as SolicitacaoMaterial[]))
       .filter((r) => r.status === 'AGUARDANDO_APROVACAO'),
     solicitacoes: await aprovacoesPendentes(signal).catch(() => [] as SolicitacaoCompra[]),
+    decididos: await minhasDecisoes(signal).catch(() => [] as DecisaoRecente[]),
   }), []);
 
   const processos = dados?.processos ?? [];
-  /** O que as duas formas da fila mostram — derivado uma vez, desenhado duas. */
-  const fila = processos.map((q) => ({
-    q,
-    marca: ROTULO_RFQ[q.status] ?? { rotulo: q.status, classe: '' },
-    vencedora: propostaVencedora(q),
-  }));
   const materiais = dados?.materiais ?? [];
   const solicitacoes = dados?.solicitacoes ?? [];
+  const decididos = dados?.decididos ?? [];
   const vazia = dados && !processos.length && !materiais.length && !solicitacoes.length;
 
   /** Quantidade liberada de um item: o que o aprovador digitou, ou tudo. */
@@ -62,7 +68,12 @@ export function CentralDeAprovacao() {
     if (!acao) return;
     setAcao(null);
     try {
-      if (acao.tipo === 'aprovar-sc') {
+      if (acao.tipo === 'decidir') {
+        await decidir(acao.q.id, acao.alcada, acao.decisao, texto || null);
+        avisar(acao.decisao === 'APROVAR' ? `${acao.q.number} aprovado.`
+          : acao.decisao === 'AJUSTES' ? `${acao.q.number} devolvido ao comprador para ajustes.`
+          : `${acao.q.number} rejeitado.`);
+      } else if (acao.tipo === 'aprovar-sc') {
         await aprovarSolicitacao(acao.sc.id, texto || null);
         avisar(`Solicitação ${acao.sc.number} aprovada.`);
       } else if (acao.tipo === 'devolver-sc') {
@@ -87,65 +98,27 @@ export function CentralDeAprovacao() {
 
   return (
     <>
-      <Painel titulo="Compras aguardando a sua aprovação">
+      <Painel titulo="Compras aguardando a sua decisão">
         {erro && <Erro>{erro}</Erro>}
         {carregando && !dados && <Carregando />}
-        {dados && !processos.length && <Vazio icone="ok" titulo="Fila limpa">Nenhuma compra aguardando a sua aprovação.</Vazio>}
+        {dados && !processos.length && (
+          <Vazio icone="ok" titulo="Fila limpa">
+            {vazia ? 'Nenhuma aprovação pendente para você agora.' : 'Nenhuma compra aguardando a sua aprovação.'}
+          </Vazio>
+        )}
         {/*
-          Duas formas para os mesmos processos. No celular, cartão: medi a tabela em 900px
-          dentro de uma caixa de 316px, com o botão "Analisar e decidir" em x=784 numa tela
-          de 390px — quem fosse aprovar teria de descobrir que a tabela arrasta de lado.
-          Encolher coluna não resolveu (ainda deu 460px): quatro colunas não cabem em 390px,
-          e insistir na tabela seria brigar com o meio. No notebook, a tabela de sempre.
+          Um card por processo, e o mesmo card no notebook e no celular. O que sustenta a
+          decisão está aqui: quem pediu e por quê, a escolha do comprador contra a mais
+          barata, a justificativa dele, quem já deu o Nível 1 e há quanto tempo espera.
+          O processo completo fica a um clique — é o segundo caminho, não o primeiro.
         */}
         {processos.length > 0 && (
-          <ul className="flex flex-col gap-2 lg:hidden" data-testid="fila-processos-celular">
-            {fila.map(({ q, marca, vencedora }) => (
-              <li key={q.id} className="rounded-lg border border-borda p-3" data-processo={q.number}>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-semibold">{q.number}</span>
-                  <Badge classe={marca.classe}>{marca.rotulo}</Badge>
-                </div>
-                <div className="sub">CC: {q.costCenter}{q.sourcePrNumber ? ` · ${q.sourcePrNumber}` : ''}</div>
-                <div className="mt-2">
-                  {vencedora?.supplierName ?? '—'}
-                  {vencedora?.totalValue != null && (
-                    <strong className="ml-2 whitespace-nowrap">{moeda(vencedora.totalValue)}</strong>
-                  )}
-                </div>
-                <Link className="botao mt-3 block text-center" to={linkDoProcesso(q.id)}>Analisar e decidir</Link>
-              </li>
+          <ul className="flex flex-col gap-3" data-testid="fila-decisao">
+            {processos.map((q) => (
+              <CardDeDecisao key={q.id} q={q} usuarioId={usuario.id}
+                aoDecidir={(alcada, decisao) => setAcao({ tipo: 'decidir', q, alcada, decisao })} />
             ))}
           </ul>
-        )}
-        {processos.length > 0 && (
-          <div className="hidden overflow-x-auto lg:block">
-            <table data-testid="tabela-processos" className="min-w-[900px]">
-              <thead>
-                <tr><th>Processo</th><th>Origem</th><th>Fornecedor escolhido</th><th>Valor</th><th>Etapa</th><th>Ações</th></tr>
-              </thead>
-              <tbody>
-                {fila.map(({ q, marca, vencedora }) => (
-                  <tr key={q.id} data-processo={q.number}>
-                    <td className="whitespace-nowrap">
-                      <span className="font-semibold">{q.number}</span>
-                      <div className="sub">CC: {q.costCenter}</div>
-                    </td>
-                    <td>{q.sourcePrNumber ?? '—'}<div className="sub">{q.justification ?? ''}</div></td>
-                    <td>
-                      {vencedora?.supplierName ?? '—'}
-                      {q.selection?.justification && <div className="sub">{q.selection.justification}</div>}
-                    </td>
-                    <td className="whitespace-nowrap">{vencedora?.totalValue != null ? moeda(vencedora.totalValue) : '—'}</td>
-                    <td><Badge classe={marca.classe}>{marca.rotulo}</Badge></td>
-                    <td className="whitespace-nowrap">
-                      <Link className="botao" to={linkDoProcesso(q.id)}>Analisar e decidir</Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         )}
       </Painel>
 
@@ -227,12 +200,41 @@ export function CentralDeAprovacao() {
         </Painel>
       )}
 
-      {vazia && (
-        <Painel titulo="Nada na sua fila">
-          <Vazio icone="ok" titulo="Sua fila está limpa">Nenhuma aprovação pendente para você agora.</Vazio>
+      {decididos.length > 0 && (
+        <Painel titulo="Suas decisões recentes">
+          <div className="overflow-x-auto">
+            <table data-testid="decisoes-recentes">
+              <thead><tr><th>Quando</th><th>Processo</th><th>Decisão</th><th>Fornecedor</th><th>Valor</th><th>Situação hoje</th></tr></thead>
+              <tbody>
+                {decididos.map((d) => (
+                  <tr key={`${d.quotationId}-${d.occurredAt}`} data-processo={d.number}>
+                    <td className="whitespace-nowrap">{dataHora(d.occurredAt)}</td>
+                    <td><Link className="font-semibold text-marca hover:underline" to={linkDoProcesso(d.quotationId)}>{d.number}</Link></td>
+                    <td>{ROTULO_DECISAO[d.eventType] ?? d.eventType}{d.note && <div className="sub">{d.note}</div>}</td>
+                    <td>{d.supplierName ?? '—'}</td>
+                    <td className="whitespace-nowrap">{d.totalValue != null ? moeda(d.totalValue) : '—'}</td>
+                    <td><Badge classe={(ROTULO_RFQ[d.status] ?? { classe: '' }).classe}>{(ROTULO_RFQ[d.status] ?? { rotulo: d.status }).rotulo}</Badge></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <Nota>Últimos 30 dias. O que você aprovou segue com o comprador; a situação de hoje mostra onde chegou.</Nota>
         </Painel>
       )}
 
+      {acao?.tipo === 'decidir' && acao.decisao === 'APROVAR' && (
+        <DialogoMotivo titulo={`Aprovar ${acao.q.number}`} rotulo="Comentário da aprovação" dica="(opcional)"
+          rotuloConfirmar="Aprovar" aoConfirmar={concluir} aoFechar={() => setAcao(null)} />
+      )}
+      {acao?.tipo === 'decidir' && acao.decisao === 'AJUSTES' && (
+        <DialogoMotivo titulo={`Pedir ajustes em ${acao.q.number}`} rotulo="O que o comprador deve ajustar?" obrigatorio
+          rotuloConfirmar="Solicitar ajustes" aoConfirmar={concluir} aoFechar={() => setAcao(null)} />
+      )}
+      {acao?.tipo === 'decidir' && acao.decisao === 'REJEITAR' && (
+        <DialogoMotivo titulo={`Rejeitar ${acao.q.number}`} rotulo="Motivo da rejeição" obrigatorio perigo
+          rotuloConfirmar="Rejeitar" aoConfirmar={concluir} aoFechar={() => setAcao(null)} />
+      )}
       {acao?.tipo === 'aprovar-sc' && (
         <DialogoMotivo titulo={`Aprovar ${acao.sc.number}`} rotulo="Comentário da aprovação" dica="(opcional)"
           rotuloConfirmar="Aprovar" aoConfirmar={concluir} aoFechar={() => setAcao(null)} />
@@ -254,5 +256,132 @@ export function CentralDeAprovacao() {
           rotuloConfirmar="Recusar" aoConfirmar={concluir} aoFechar={() => setAcao(null)} />
       )}
     </>
+  );
+}
+
+const ROTULO_NIVEL: Record<number, string> = { 1: 'Nível 1 — gestor do centro', 2: 'Nível 2 — diretoria' };
+
+/**
+ * O card de decisão. Cada bloco responde a uma pergunta que o aprovador faria antes de
+ * apertar o botão: quem pediu e por quê; o que o comprador escolheu e por que não a mais
+ * barata; o que o sistema mede (compliance, contrato, orçamento); quem já aprovou.
+ */
+export function CardDeDecisao({ q, usuarioId, aoDecidir }: {
+  q: ProcessoParaAprovar; usuarioId?: string; aoDecidir: (alcada: Alcada, decisao: Decisao) => void;
+}) {
+  const d = q.decisao;
+  const escolha = comparacaoDaEscolha(q);
+  const alcada = alcadaDe(q.status);
+  const conflito = alcada ? conflitoDeSegregacao(q, usuarioId, alcada) : null;
+  const espera = diasDesde(d?.waitingSince ?? q.managerApproval?.at ?? null);
+  const esperaClasse = espera == null ? '' : espera >= 5 ? 'bg-perigo-fundo text-perigo' : espera >= 3 ? 'bg-aviso-fundo text-aviso' : 'bg-slate-100 text-slate-600';
+  const urgente = d?.priority === 'URGENT';
+  const penalidades = d?.compliancePenalties ?? [];
+  const acimaDoOrcamento = d?.budget != null && escolha.total != null && escolha.total > d.budget;
+  const saving = q.saving;
+
+  return (
+    <li data-processo={q.number} data-nivel={d?.level ?? ''} className="rounded-xl border border-borda bg-white p-4 shadow-sm">
+      {/* cabeçalho: o que é, quanto custa, há quanto tempo espera */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[15px] font-bold">{q.number}</span>
+            <Badge classe="bg-marca/10 text-marca">{ROTULO_NIVEL[d?.level ?? (alcada === 'director' ? 2 : 1)]}</Badge>
+            {urgente && <Badge classe="bg-perigo-fundo text-perigo">URGENTE</Badge>}
+            {espera != null && (
+              <Badge classe={esperaClasse}>{espera === 0 ? 'chegou hoje' : `espera há ${espera} dia${espera === 1 ? '' : 's'}`}</Badge>
+            )}
+          </div>
+          <div className="sub mt-0.5">
+            Centro {q.costCenter}{q.sourcePrNumbers.length ? ` · ${q.sourcePrNumbers.join(', ')}` : q.sourcePrNumber ? ` · ${q.sourcePrNumber}` : ''}
+            {' · '}conduzido por {q.createdByLabel ?? '—'}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="rotulo">Valor da compra</div>
+          <div className="text-[22px] font-bold leading-tight text-slate-900" data-testid="valor-da-compra">
+            {escolha.total != null ? moeda(escolha.total) : '—'}
+          </div>
+          {d?.budget != null && (
+            <div className={`text-[12px] ${acimaDoOrcamento ? 'font-semibold text-perigo' : 'text-texto-suave'}`}>
+              {acimaDoOrcamento ? 'acima do' : 'dentro do'} orçamento de {moeda(d.budget)}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 grid gap-3 md:grid-cols-2">
+        {/* quem pediu e por quê */}
+        <div className="rounded-lg bg-slate-50 px-3 py-2">
+          <div className="rotulo">Quem pediu e por quê</div>
+          <div className="text-[13.5px]"><strong>{d?.requesterLabel || '—'}</strong>{d?.neededBy && <span className="sub"> · precisa até {data(d.neededBy)}</span>}</div>
+          <div className="text-[13px]">{q.justification || '—'}</div>
+          {urgente && (d?.urgencyReason || d?.urgencyImpact) && (
+            <div className="mt-1 text-[12.5px] text-perigo">
+              Urgência: {d?.urgencyReason}{d?.urgencyImpact ? ` — se não comprar: ${d.urgencyImpact}` : ''}
+            </div>
+          )}
+          <div className="sub mt-1">
+            {q.items.length} {q.items.length === 1 ? 'item' : 'itens'}
+            {q.items.length > 0 && `: ${q.items.slice(0, 3).map((i) => i.description).join(', ')}${q.items.length > 3 ? '…' : ''}`}
+          </div>
+        </div>
+
+        {/* o que o comprador escolheu */}
+        <div className="rounded-lg bg-slate-50 px-3 py-2">
+          <div className="rotulo">Escolha do comprador</div>
+          <div className="text-[13.5px]"><strong>{escolha.fornecedor ?? '—'}</strong>
+            {escolha.deliveryDays != null && <span className="sub"> · entrega em {escolha.deliveryDays} dia(s)</span>}
+            {escolha.paymentTerms && <span className="sub"> · {escolha.paymentTerms}</span>}
+          </div>
+          <div className="text-[13px]" data-testid="comparacao">
+            {escolha.maisBarata
+              ? <>É <strong className="text-aviso">{quantidade(escolha.acimaPercent)}% acima</strong> da mais barata ({escolha.maisBarata.supplierName}, {moeda(escolha.maisBarata.totalValue)}).</>
+              : escolha.propostas > 1
+                ? <>É a <strong className="text-ok">mais barata</strong> entre {escolha.propostas} propostas.</>
+                : <span className="text-aviso">Proposta única: não houve outra para comparar.</span>}
+          </div>
+          {q.selection?.justification && (
+            <div className="mt-1 text-[12.5px]">
+              <span className="sub">Justificativa{q.selection.criteria ? ` (${q.selection.criteria})` : ''}:</span> {q.selection.justification}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* o que o sistema mede: saving, compliance, contrato, Nível 1 */}
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-[12.5px]" data-testid="medidas">
+        {saving && saving.value > 0 && <Badge classe="bg-ok-fundo text-ok">saving de negociação {moeda(saving.value)}</Badge>}
+        {saving?.competitionValue != null && saving.competitionValue > 0 && <Badge classe="bg-ok-fundo text-ok">concorrência {moeda(saving.competitionValue)}</Badge>}
+        {saving?.budgetValue != null && saving.budgetValue > 0 && <Badge classe="bg-ok-fundo text-ok">abaixo do orçamento {moeda(saving.budgetValue)}</Badge>}
+        {d?.contractNumber && <Badge classe="bg-blue-50 text-blue-800">contrato {d.contractNumber}</Badge>}
+        {d?.complianceScore != null && (
+          <Badge classe={d.complianceScore >= 100 ? 'bg-ok-fundo text-ok' : d.complianceScore >= 70 ? 'bg-aviso-fundo text-aviso' : 'bg-perigo-fundo text-perigo'}>
+            compliance {d.complianceScore}
+          </Badge>
+        )}
+        {penalidades.map((p) => (
+          <span key={p.code} className="text-aviso" title={p.evidence}>· {p.label} (-{Math.abs(p.points)})</span>
+        ))}
+        {q.managerApproval && (
+          <span className="sub">· Nível 1 por {q.managerApproval.byLabel ?? '—'} em {data(q.managerApproval.at)}</span>
+        )}
+      </div>
+
+      {/* a decisão */}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {conflito ? (
+          <Aviso testid="conflito-segregacao">{conflito}</Aviso>
+        ) : alcada && (
+          <>
+            <button type="button" className="botao" onClick={() => aoDecidir(alcada, 'APROVAR')}>Aprovar</button>
+            <button type="button" className="botao-secundario" onClick={() => aoDecidir(alcada, 'AJUSTES')}>Solicitar ajustes</button>
+            <button type="button" className="botao-perigo" onClick={() => aoDecidir(alcada, 'REJEITAR')}>Rejeitar</button>
+          </>
+        )}
+        <Link className="ml-auto text-[13px] font-semibold text-marca hover:underline" to={linkDoProcesso(q.id)}>Ver processo completo →</Link>
+      </div>
+    </li>
   );
 }

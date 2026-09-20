@@ -10,6 +10,36 @@ import { useCarregar } from '@/util/useCarregar';
 
 const ScoreBadge = ({ score }: { score: number }) => <Badge classe={classeDoScore(score)}>{score}</Badge>;
 
+/** A barra sob o score usa a cor cheia da mesma faixa do badge. */
+const corDaBarra = (s: number) => s === 100 ? 'bg-ok-forte' : s >= 70 ? 'bg-aviso-forte' : 'bg-perigo-forte';
+
+/** Score com a barra de progresso embaixo: o número diz quanto, a barra diz quão longe de 100. */
+function Score({ score }: { score: number }) {
+  return (
+    <div className="min-w-[96px]">
+      <ScoreBadge score={score} />
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100" aria-hidden>
+        <div className={'h-1.5 rounded-full ' + corDaBarra(score)} style={{ width: `${Math.max(0, Math.min(100, score))}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/** −20 pts em badge, com o motivo ao lado e a evidência embaixo — em vez do número seco. */
+function Penalidade({ pontos, rotulo, evidencia }: { pontos: number; rotulo: string; evidencia: string }) {
+  return (
+    <div className="mb-1.5 last:mb-0">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        <span className="inline-flex items-center gap-1 rounded border border-perigo-borda bg-perigo-fundo px-2 py-0.5 text-xs font-semibold text-perigo">
+          <strong>−{pontos}</strong> pts
+        </span>
+        <span className="text-slate-600">{rotulo}</span>
+      </div>
+      <div className="sub">{evidencia}</div>
+    </div>
+  );
+}
+
 function Medias({ titulo, marca, linhas }: { titulo: string; marca: string; linhas: MediaCompliance[] }) {
   if (!linhas.length) return <Vazio>Sem dados.</Vazio>;
   return (
@@ -22,7 +52,8 @@ function Medias({ titulo, marca, linhas }: { titulo: string; marca: string; linh
               <td>{g.label}</td>
               <td>{g.count}</td>
               <td className="whitespace-nowrap">
-                <ScoreBadge score={Math.round(g.averageScore)} /> <span className="sub">{g.averageScore}</span>
+                <Score score={Math.round(g.averageScore)} />
+                <span className="sub">{g.averageScore}</span>
               </td>
             </tr>
           ))}
@@ -152,14 +183,11 @@ export function Compliance() {
                         <td>{i.costCenter}</td>
                         <td>{i.buyerLabel}</td>
                         <td className="sub">{ROTULO_RFQ[i.status]?.rotulo ?? i.status}</td>
-                        <td><ScoreBadge score={i.score} /></td>
+                        <td><Score score={i.score} /></td>
                         <td className="min-w-[320px]">
                           {!i.penalties.length && <span className="sub">nenhuma ✔</span>}
                           {i.penalties.map((p) => (
-                            <div key={p.code} className="mb-1 last:mb-0">
-                              <strong className="text-perigo">−{p.points}</strong> {p.label}
-                              <div className="sub">{p.evidence}</div>
-                            </div>
+                            <Penalidade key={p.code} pontos={p.points} rotulo={p.label} evidencia={p.evidence} />
                           ))}
                         </td>
                       </tr>

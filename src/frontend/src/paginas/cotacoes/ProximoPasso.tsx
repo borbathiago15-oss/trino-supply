@@ -81,7 +81,7 @@ export function ProximoPasso({ processo, usuarioId }: { processo: Processo; usua
     <div data-testid="proximo-passo"
       className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-marca/25 bg-marca/5 px-4 py-3">
       <div className="min-w-0">
-        <p className="text-[11.5px] font-bold uppercase tracking-wide text-texto-suave">Próximo passo</p>
+        <p className="rotulo">Próximo passo</p>
         <p className="text-[14px] font-bold">{passo.titulo}</p>
         <p className="mt-0.5 text-[12.5px] text-texto-suave">{passo.detalhe}</p>
       </div>

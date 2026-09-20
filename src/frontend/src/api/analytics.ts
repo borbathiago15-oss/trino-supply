@@ -117,10 +117,11 @@ export interface Achado {
   view: string | null;
 }
 
+/** A severidade do achado é a borda esquerda do cartão; o fundo é sempre branco. */
 export const CLASSE_ACHADO: Record<SeveridadeInsight, string> = {
-  alta: 'border-perigo/30 bg-perigo-fundo',
-  media: 'border-aviso/30 bg-aviso-fundo',
-  info: 'border-borda bg-superficie-suave',
+  alta: 'border-l-perigo-forte',
+  media: 'border-l-aviso-forte',
+  info: 'border-l-slate-300',
 };
 
 export const BADGE_ACHADO: Record<SeveridadeInsight, string> = {

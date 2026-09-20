@@ -19,10 +19,11 @@ export interface Aviso {
   counts?: boolean;
 }
 
+/** A severidade vira a cor da borda esquerda e do ícone; o cartão em si é branco. */
 export const CLASSE_AVISO: Record<Severidade, string> = {
-  alta: 'border-perigo/30 bg-perigo-fundo text-perigo',
-  media: 'border-aviso/30 bg-aviso-fundo text-aviso',
-  info: 'border-borda bg-superficie-suave text-texto',
+  alta: 'border-l-perigo-forte text-perigo',
+  media: 'border-l-aviso-forte text-aviso',
+  info: 'border-l-slate-300 text-slate-500',
 };
 
 export const listarAvisos = async (signal?: AbortSignal) =>

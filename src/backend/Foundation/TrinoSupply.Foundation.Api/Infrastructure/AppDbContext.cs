@@ -43,6 +43,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<RequisitionAttachment> RequisitionAttachments => Set<RequisitionAttachment>();
     public DbSet<PurchaseOrderInvoice> PurchaseOrderInvoices => Set<PurchaseOrderInvoice>();
     public DbSet<PurchaseOrderErpDocument> PurchaseOrderErpDocuments => Set<PurchaseOrderErpDocument>();
+    public DbSet<Acoes.ActionItem> ActionItems => Set<Acoes.ActionItem>();
     public DbSet<Domain.CostCenterApprover> CostCenterApprovers => Set<Domain.CostCenterApprover>();
     public DbSet<CompanyProfile> CompanyProfiles => Set<CompanyProfile>();
     public DbSet<Announcement> Announcements => Set<Announcement>();
@@ -57,6 +58,41 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         modelBuilder.HasSequence<long>("po_number_seq", "procurement").StartsAt(1);  // PO-001 (pedidos)
         modelBuilder.HasSequence<long>("rfq_number_seq", "procurement").StartsAt(1); // RFQ-001 (cotações)
         modelBuilder.HasSequence<long>("bid_number_seq", "procurement").StartsAt(1); // RFQ-001 (BIDs)
+
+        // Plano de ação: tarefa com dono e prazo (5W2H). Vive no schema da fundação porque
+        // não é de compras nem de materiais — qualquer área abre ação.
+        modelBuilder.Entity<Acoes.ActionItem>(e =>
+        {
+            e.ToTable("action_item");
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Id).HasColumnName("id");
+            e.Property(a => a.Number).HasColumnName("number").HasMaxLength(30).IsRequired();
+            e.HasIndex(a => a.Number).IsUnique();
+            e.Property(a => a.Title).HasColumnName("title").HasMaxLength(400).IsRequired();
+            e.Property(a => a.Reason).HasColumnName("reason");
+            e.Property(a => a.Area).HasColumnName("area").HasMaxLength(200);
+            e.Property(a => a.ResponsibleId).HasColumnName("responsible_id");
+            e.Property(a => a.ResponsibleLabel).HasColumnName("responsible_label").HasMaxLength(200).IsRequired();
+            // a pergunta que a tela mais faz é "o que está pendente com fulano"
+            e.HasIndex(a => a.ResponsibleId);
+            e.Property(a => a.StartDate).HasColumnName("start_date");
+            e.Property(a => a.DueDate).HasColumnName("due_date");
+            e.Property(a => a.ExpectedGain).HasColumnName("expected_gain").HasColumnType("numeric(18,2)");
+            e.Property(a => a.RealizedGain).HasColumnName("realized_gain").HasColumnType("numeric(18,2)");
+            e.Property(a => a.ExpectedResult).HasColumnName("expected_result");
+            e.Property(a => a.Kpi).HasColumnName("kpi").HasMaxLength(200);
+            e.Property(a => a.CostCenter).HasColumnName("cost_center").HasMaxLength(60);
+            e.Property(a => a.Status).HasColumnName("status").HasMaxLength(30).IsRequired();
+            e.HasIndex(a => a.Status);
+            e.Property(a => a.Progress).HasColumnName("progress");
+            e.Property(a => a.CompletedAt).HasColumnName("completed_at");
+            e.Property(a => a.StatusReason).HasColumnName("status_reason");
+            e.Property(a => a.CreatedBy).HasColumnName("created_by");
+            e.Property(a => a.CreatedByLabel).HasColumnName("created_by_label").HasMaxLength(200).IsRequired();
+            e.Property(a => a.CreatedAt).HasColumnName("created_at");
+            e.Property(a => a.UpdatedAt).HasColumnName("updated_at");
+            e.Property(a => a.Version).HasColumnName("version");
+        });
 
         modelBuilder.Entity<User>(e =>
         {

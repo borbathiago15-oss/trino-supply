@@ -1,12 +1,14 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
-import type { Produto } from '@/api/catalogo';
+import type { ProdutoParaEscolha } from '@/api/catalogo';
 import { ToastProvider } from '@/componentes/Toast';
-import { familiaDaLinha, itensDoFormulario, itensSemCa, NovaSolicitacao, rotuloDoProduto, SEM_CADASTRO } from './NovaSolicitacao';
+import {
+  itensDoFormulario, itensSemCa, novaLinha, NovaSolicitacao, SEM_CADASTRO, totalDaGrade, type LinhaItem,
+} from './NovaSolicitacao';
 
-vi.mock('@/api/catalogo', () => ({ listarProdutos: vi.fn(), familiasDoCatalogo: vi.fn() }));
+vi.mock('@/api/catalogo', () => ({ produtosParaEscolha: vi.fn(), familiasDoCatalogo: vi.fn() }));
 vi.mock('@/api/centrosCusto', () => ({ listarCentrosCusto: vi.fn() }));
 vi.mock('@/api/empresas', () => ({ listarEmpresas: vi.fn(), perfilDaEmpresa: vi.fn() }));
 vi.mock('@/api/locais', async (importar) => ({
@@ -17,86 +19,91 @@ vi.mock('@/api/solicitacoes', async (importar) => ({
   ...(await importar<typeof import('@/api/solicitacoes')>()),
   criarSolicitacao: vi.fn(), anexarNaSolicitacao: vi.fn(),
 }));
+vi.mock('@/api/tiposDeSolicitacao', () => ({ listarTiposDeSolicitacao: vi.fn() }));
 
-import { familiasDoCatalogo, listarProdutos } from '@/api/catalogo';
+import { familiasDoCatalogo, produtosParaEscolha } from '@/api/catalogo';
 import { listarCentrosCusto } from '@/api/centrosCusto';
 import { listarEmpresas, perfilDaEmpresa } from '@/api/empresas';
 import { listarLocaisDeEntrega } from '@/api/locais';
 import { criarSolicitacao } from '@/api/solicitacoes';
+import { listarTiposDeSolicitacao } from '@/api/tiposDeSolicitacao';
 
-const produto = (p: Partial<Produto>): Produto => ({
-  id: 'p1', code: 'MAT-001', description: 'Cimento CP-II', family: 'CIVIL', unitOfMeasure: 'SC',
-  referencePrice: null, active: true, stockControlled: true, purchasable: true, minimumQty: null,
-  productType: null, productTypeLabel: null, baseCode: null, size: null, imageDocumentId: null,
-  imageFileName: null, compliancePending: false, suppliers: [],
-  ...p,
-});
+/** Um produto simples do catálogo: sem grade, um "tamanho" de size nulo. */
+const cimento: ProdutoParaEscolha = {
+  key: '#p1', baseCode: null, description: 'Cimento CP-II', family: 'CIVIL', unitOfMeasure: 'SC',
+  productType: null, productTypeLabel: null, hasGrade: false, compliancePending: false,
+  sizes: [{ id: 'v-cimento', code: 'MAT-001', size: null, referencePrice: 32, compliancePending: false, imageDocumentId: null }],
+};
 
-const epiSemCa = produto({
-  id: 'p2', code: 'EPI-002', description: 'Bota de segurança', family: 'EPI', unitOfMeasure: 'PAR',
-  productType: 'EPI', productTypeLabel: 'EPI', compliancePending: true,
-});
+/** A bota do 38 ao 40: um produto, três tamanhos — cada um com código e C.A. próprios. */
+const bota: ProdutoParaEscolha = {
+  key: 'EPI|12003', baseCode: '12003', description: 'Bota de segurança', family: 'EPI', unitOfMeasure: 'PAR',
+  productType: 'EPI', productTypeLabel: 'EPI', hasGrade: true, compliancePending: false,
+  sizes: [
+    { id: 'v38', code: '12003-38', size: '38', referencePrice: 89.9, compliancePending: false, imageDocumentId: null },
+    { id: 'v39', code: '12003-39', size: '39', referencePrice: 89.9, compliancePending: false, imageDocumentId: null },
+    { id: 'v40', code: '12003-40', size: '40', referencePrice: 89.9, compliancePending: true, imageDocumentId: null },
+  ],
+};
+
+const comProduto = (p: ProdutoParaEscolha, porTamanho: Record<string, string> = {}, quantidade = '1'): LinhaItem =>
+  ({ ...novaLinha(), escolhido: p, produto: p.description, unidade: p.unitOfMeasure, familia: p.family, porTamanho, quantidade });
 
 const abrir = () => render(
   <MemoryRouter><ToastProvider><NovaSolicitacao /></ToastProvider></MemoryRouter>,
 );
 
-describe('conformidade de EPI na SC (IC-ERR-023)', () => {
-  it('só acusa o item do catálogo que é EPI/EPC sem C.A.', () => {
-    const catalogo = [produto({}), epiSemCa];
-    expect(itensSemCa([{ produto: rotuloDoProduto(produto({})) }], catalogo)).toEqual([]);
-    expect(itensSemCa([{ produto: rotuloDoProduto(epiSemCa) }], catalogo)).toEqual([epiSemCa]);
-    // item descrito à mão não tem cadastro para checar
-    expect(itensSemCa([{ produto: 'bota qualquer' }], catalogo)).toEqual([]);
+describe('itens da SC: catálogo, grade de tamanhos e item de fora', () => {
+  it('a grade vira um item por tamanho pedido, e o tamanho zerado não entra', () => {
+    const itens = itensDoFormulario([comProduto(bota, { v38: '2', v39: '', v40: '0' })]);
+    expect(itens).toEqual([
+      { description: '', catalogItemId: 'v38', unitOfMeasure: 'PAR', quantity: 2, family: null },
+    ]);
+    // dois tamanhos pedidos, dois itens — é o que a compra precisa: cada tamanho tem código próprio
+    expect(itensDoFormulario([comProduto(bota, { v38: '2', v39: '3' })]).map((i) => i.catalogItemId))
+      .toEqual(['v38', 'v39']);
   });
 
-  it('o item digitado à mão continua virando descrição livre, agora com família', () => {
-    expect(itensDoFormulario(
-      [{ chave: 'i1', produto: 'cimento a granel', unidade: 'TN', quantidade: '3', familia: 'CIVIL' }],
-      [produto({})],
-    )).toEqual([{
-      description: 'cimento a granel', catalogItemId: null, unitOfMeasure: 'TN',
-      quantity: 3, family: 'CIVIL',
-    }]);
+  it('produto sem grade usa a quantidade da linha, e sem quantidade não vira item', () => {
+    expect(itensDoFormulario([comProduto(cimento, {}, '4')])).toEqual([
+      { description: '', catalogItemId: 'v-cimento', unitOfMeasure: 'SC', quantity: 4, family: null },
+    ]);
+    expect(itensDoFormulario([comProduto(cimento, {}, '0')])).toEqual([]);
+    // grade sem nenhuma quantidade também não vira item
+    expect(itensDoFormulario([comProduto(bota)])).toEqual([]);
   });
 
-  it('"produto não cadastrado" vira nulo — é ausência declarada, não uma família', () => {
-    // o servidor resolve nulo como DIVERSOS; mandar a marca da tela criaria uma
-    // família chamada "__SEM_CADASTRO__" no relatório de spend
-    const [item] = itensDoFormulario(
-      [{ chave: 'i1', produto: 'peça sob medida', unidade: 'UN', quantidade: '1', familia: SEM_CADASTRO }],
-      [],
-    );
-    expect(item.family).toBeNull();
+  it('o item de fora do catálogo continua virando descrição livre, com a família de quem pede', () => {
+    const livre: LinhaItem = { ...novaLinha(), produto: ' Fita isolante ', unidade: 'RL', quantidade: '3', familia: 'ELETRICA' };
+    expect(itensDoFormulario([livre])).toEqual([
+      { description: 'Fita isolante', catalogItemId: null, unitOfMeasure: 'RL', quantity: 3, family: 'ELETRICA' },
+    ]);
+    // "produto não cadastrado" é ausência declarada, não uma família
+    expect(itensDoFormulario([{ ...livre, familia: SEM_CADASTRO }])[0].family).toBeNull();
+    // linha em branco é descartada
+    expect(itensDoFormulario([novaLinha()])).toEqual([]);
   });
 
-  it('produto do catálogo não leva família da tela: a dele é a do cadastro', () => {
-    // aceitar deixaria o mesmo produto em duas famílias conforme quem digitou
-    const p = produto({});
-    const [item] = itensDoFormulario(
-      [{ chave: 'i1', produto: rotuloDoProduto(p), unidade: '', quantidade: '2', familia: 'LIMPEZA' }],
-      [p],
-    );
-    expect(item.catalogItemId).toBe(p.id);
-    expect(item.family).toBeNull();
+  it('a soma da grade aceita vírgula e ignora o campo vazio', () => {
+    expect(totalDaGrade(comProduto(bota, { v38: '2', v39: '1,5', v40: '' }))).toBe(3.5);
+    expect(totalDaGrade(comProduto(cimento))).toBe(0);
   });
 
-  it('a linha mostra a família do catálogo, travada, e a do solicitante quando é livre', () => {
-    const p = produto({});
-    expect(familiaDaLinha(
-      { chave: 'i1', produto: rotuloDoProduto(p), unidade: '', quantidade: '1', familia: 'LIMPEZA' }, [p],
-    )).toEqual({ valor: p.family, travada: true });
-
-    expect(familiaDaLinha(
-      { chave: 'i2', produto: 'peça sob medida', unidade: '', quantidade: '1', familia: 'CIVIL' }, [p],
-    )).toEqual({ valor: 'CIVIL', travada: false });
+  it('o C.A. é cobrado do tamanho pedido, não do produto inteiro (IC-ERR-023)', () => {
+    // o 40 está sem C.A.: só acusa quando alguém pede o 40
+    expect(itensSemCa([comProduto(bota, { v38: '2' })])).toEqual([]);
+    expect(itensSemCa([comProduto(bota, { v40: '1' })])).toEqual([
+      { descricao: 'Bota de segurança', tipo: 'EPI', code: '12003-40' },
+    ]);
+    // item de fora do catálogo não tem C.A. a cobrar
+    expect(itensSemCa([{ ...novaLinha(), produto: 'Fita' }])).toEqual([]);
   });
 });
 
 describe('tela Inclusão de SC', () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.mocked(listarProdutos).mockResolvedValue([produto({}), epiSemCa]);
+    vi.mocked(produtosParaEscolha).mockResolvedValue([cimento, bota]);
     vi.mocked(familiasDoCatalogo).mockResolvedValue(['CIVIL', 'EPI']);
     vi.mocked(listarCentrosCusto).mockResolvedValue([
       { id: 'cc1', code: 'BAH-001', name: 'Obra Bahia' } as never,
@@ -104,38 +111,105 @@ describe('tela Inclusão de SC', () => {
     vi.mocked(listarEmpresas).mockResolvedValue([]);
     vi.mocked(perfilDaEmpresa).mockResolvedValue(null as never);
     vi.mocked(listarLocaisDeEntrega).mockResolvedValue([]);
+    vi.mocked(listarTiposDeSolicitacao).mockResolvedValue({ items: [] } as never);
   });
 
-  it('escolher um EPI sem C.A. avisa na linha e barra o envio', async () => {
+  /** Abre o seletor, busca e escolhe o produto — o caminho que a tela passou a ter. */
+  const escolherNoCatalogo = async (usuario: ReturnType<typeof userEvent.setup>, descricao: string) => {
+    await usuario.click(await screen.findByRole('button', { name: 'Buscar no catálogo' }));
+    const dialogo = within(await screen.findByRole('dialog'));
+    await usuario.selectOptions(dialogo.getByLabelText('Família'), 'EPI');
+    await usuario.click(await dialogo.findByRole('button', { name: new RegExp(descricao) }));
+  };
+
+  it('a busca só acontece com família ou termo: o catálogo inteiro não é listado', async () => {
     const usuario = userEvent.setup();
     abrir();
+    await usuario.click(await screen.findByRole('button', { name: 'Buscar no catálogo' }));
 
-    const campo = await screen.findByLabelText('Produto');
-    await usuario.type(campo, rotuloDoProduto(epiSemCa));
+    const dialogo = within(screen.getByRole('dialog'));
+    expect(dialogo.getByText(/Escolha a família ou digite ao menos duas letras/)).toBeInTheDocument();
+    expect(produtosParaEscolha).not.toHaveBeenCalled();
 
-    const aviso = await screen.findByTestId('linha-sem-ca');
-    expect(aviso).toHaveTextContent('IC-ERR-023');
-    expect(aviso).toHaveTextContent('Bota de segurança');
+    await usuario.selectOptions(dialogo.getByLabelText('Família'), 'EPI');
+    await waitFor(() => expect(produtosParaEscolha).toHaveBeenCalledWith(
+      expect.objectContaining({ familia: 'EPI' }), expect.anything()));
+    expect(await dialogo.findByTestId('produtos-encontrados')).toHaveTextContent('Bota de segurança');
+    // o produto com grade diz quantos tamanhos tem, antes do clique
+    expect(dialogo.getByText(/3 tamanho\(s\): 38, 39, 40/)).toBeInTheDocument();
+  });
 
-    // o resto do formulário fica válido, para o envio chegar até a regra
-    await usuario.type(screen.getByLabelText('Quantidade'), '2');
-    await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'obra parada');
+  it('a bota escolhida abre a grade, e cada tamanho pedido vira um item da SC', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(criarSolicitacao).mockResolvedValue({ id: 'sc1', number: 'PR-2026-000001' } as never);
+    abrir();
+    await escolherNoCatalogo(usuario, 'Bota de segurança');
+
+    const grade = within(await screen.findByTestId('grade-de-tamanhos'));
+    // o 40 está sem C.A.: o campo dele nem aceita quantidade
+    expect(grade.getByLabelText('Tamanho 40 de Bota de segurança')).toBeDisabled();
+    await usuario.type(grade.getByLabelText('Tamanho 38 de Bota de segurança'), '2');
+    await usuario.type(grade.getByLabelText('Tamanho 39 de Bota de segurança'), '3');
+    expect(screen.getByTestId('total-da-grade')).toHaveTextContent('Total: 5 PAR');
+
+    await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'reposição de EPI');
     await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
-
     await usuario.click(screen.getByRole('button', { name: /Criar rascunho da SC/ }));
-    expect(await screen.findByTestId('toast')).toHaveTextContent('IC-ERR-023');
-    expect(criarSolicitacao).not.toHaveBeenCalled();
+
+    await waitFor(() => expect(criarSolicitacao).toHaveBeenCalledWith(expect.objectContaining({
+      items: [
+        { description: '', catalogItemId: 'v38', unitOfMeasure: 'PAR', quantity: 2, family: null },
+        { description: '', catalogItemId: 'v39', unitOfMeasure: 'PAR', quantity: 3, family: null },
+      ],
+    })));
   });
 
-  it('item regular do catálogo não mostra aviso e traz a unidade', async () => {
+  it('produto sem grade não mostra tamanhos, e a família vem do cadastro', async () => {
     const usuario = userEvent.setup();
     abrir();
+    await escolherNoCatalogo(usuario, 'Cimento CP-II');
 
-    const campo = await screen.findByLabelText('Produto');
-    await usuario.type(campo, rotuloDoProduto(produto({})));
+    expect(screen.queryByTestId('grade-de-tamanhos')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Quantidade de Cimento CP-II')).toHaveValue(1);
+    expect(screen.getByText(/do cadastro do produto/)).toHaveTextContent('CIVIL');
+    // escolhido do catálogo, a linha não pede mais descrição livre
+    expect(screen.queryByLabelText('Produto')).not.toBeInTheDocument();
+  });
 
-    expect(screen.queryByTestId('linha-sem-ca')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Unidade')).toHaveValue('SC');
+  it('o item fora do catálogo continua sendo digitado, com unidade, quantidade e família', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(criarSolicitacao).mockResolvedValue({ id: 'sc1', number: 'PR-2026-000001' } as never);
+    abrir();
+
+    await usuario.type(await screen.findByLabelText('Produto'), 'Fita isolante');
+    await usuario.type(screen.getByLabelText('Unidade'), 'RL');
+    await usuario.clear(screen.getByLabelText('Quantidade'));
+    await usuario.type(screen.getByLabelText('Quantidade'), '3');
+    await usuario.selectOptions(screen.getByLabelText(/Família de Fita isolante/), 'CIVIL');
+    await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'manutenção');
+    await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
+    await usuario.click(screen.getByRole('button', { name: /Criar rascunho da SC/ }));
+
+    await waitFor(() => expect(criarSolicitacao).toHaveBeenCalledWith(expect.objectContaining({
+      items: [{ description: 'Fita isolante', catalogItemId: null, unitOfMeasure: 'RL', quantity: 3, family: 'CIVIL' }],
+    })));
+  });
+
+  it('pedir o tamanho sem C.A. avisa na linha e barra o envio (IC-ERR-023)', async () => {
+    const usuario = userEvent.setup();
+    // aqui toda a grade está sem C.A.: o seletor já recusa o produto inteiro
+    vi.mocked(produtosParaEscolha).mockResolvedValue([{
+      ...bota, compliancePending: true,
+      sizes: bota.sizes.map((v) => ({ ...v, compliancePending: true })),
+    }]);
+    abrir();
+    await usuario.click(await screen.findByRole('button', { name: 'Buscar no catálogo' }));
+    const dialogo = within(screen.getByRole('dialog'));
+    await usuario.selectOptions(dialogo.getByLabelText('Família'), 'EPI');
+
+    const botao = await dialogo.findByRole('button', { name: /Bota de segurança/ });
+    expect(botao).toBeDisabled();
+    expect(botao).toHaveTextContent('IC-ERR-023');
   });
 
   it('o essencial vem primeiro e o resto fica recolhido em "Mais detalhes"', async () => {
@@ -156,8 +230,7 @@ describe('tela Inclusão de SC', () => {
     vi.mocked(criarSolicitacao).mockResolvedValue({ id: 'sc1', number: 'PR-2026-000001' } as never);
     abrir();
 
-    await usuario.type(await screen.findByLabelText('Produto'), rotuloDoProduto(produto({})));
-    await usuario.type(screen.getByLabelText('Quantidade'), '2');
+    await usuario.type(await screen.findByLabelText('Produto'), 'Fita isolante');
     await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'reposição de obra');
     await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
     await usuario.type(screen.getByLabelText(/Orçamento previsto/), '1200');
@@ -173,8 +246,7 @@ describe('tela Inclusão de SC', () => {
     vi.mocked(criarSolicitacao).mockResolvedValue({ id: 'sc1', number: 'PR-2026-000001' } as never);
     abrir();
 
-    await usuario.type(await screen.findByLabelText('Produto'), rotuloDoProduto(produto({})));
-    await usuario.type(screen.getByLabelText('Quantidade'), '2');
+    await usuario.type(await screen.findByLabelText('Produto'), 'Fita isolante');
     await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'reposição de obra');
     await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
 

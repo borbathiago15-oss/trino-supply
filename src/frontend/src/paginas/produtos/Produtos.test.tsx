@@ -12,6 +12,7 @@ vi.mock('@/api/catalogo', async (importar) => ({
   tiposDeProduto: vi.fn(),
   buscarProdutos: vi.fn(),
   criarProduto: vi.fn(),
+  criarGradeDeTamanhos: vi.fn(),
   atualizarProduto: vi.fn(),
 }));
 vi.mock('@/api/familias', () => ({ listarFamilias: vi.fn() }));
@@ -24,7 +25,9 @@ vi.mock('@/componentes/Miniatura', () => ({
 let usuarioAtual: Usuario;
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => usuarioAtual }));
 
-import { atualizarProduto, buscarProdutos, resumoCatalogo, tiposDeProduto } from '@/api/catalogo';
+import {
+  atualizarProduto, buscarProdutos, criarGradeDeTamanhos, criarProduto, resumoCatalogo, tiposDeProduto,
+} from '@/api/catalogo';
 import { listarFamilias } from '@/api/familias';
 import { listarFornecedores } from '@/api/fornecedores';
 
@@ -116,6 +119,45 @@ describe('<Produtos />', () => {
     await userEvent.type(screen.getByLabelText('Nome do fornecedor fora do cadastro'), 'Alfa EPIs');
     await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
     expect(await screen.findByTestId('toast')).toHaveTextContent('EPI e EPC exigem o C.A.');
+  });
+
+  it('a grade de tamanhos cadastra um produto por tamanho, de uma vez', async () => {
+    // antes, bota do 38 ao 40 eram três cadastros à mão, com três códigos inventados
+    vi.mocked(criarGradeDeTamanhos).mockResolvedValue([
+      produto({ id: 'a', code: '12003-38' }), produto({ id: 'b', code: '12003-39' }),
+      produto({ id: 'c', code: '12003-40' }),
+    ]);
+    montar();
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ Novo produto' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: '+ Novo produto' }));
+
+    await userEvent.type(screen.getByLabelText(/^Código/), '12003');
+    await userEvent.type(screen.getByLabelText('Descrição'), 'Bota de segurança');
+    await userEvent.selectOptions(screen.getByLabelText('Família'), 'EPI');
+    await userEvent.type(screen.getByLabelText(/^Tamanhos/), '38, 39, 40');
+    // a tela diz o que vai cadastrar antes do clique
+    expect(screen.getByText(/12003-38/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
+    await waitFor(() => expect(criarGradeDeTamanhos).toHaveBeenCalledWith(expect.objectContaining({
+      baseCode: '12003', description: 'Bota de segurança', family: 'EPI', sizes: ['38, 39, 40'],
+    })));
+    expect(criarProduto).not.toHaveBeenCalled();
+    expect(screen.getAllByTestId('toast').at(-1)).toHaveTextContent('3 tamanho(s) cadastrado(s)');
+  });
+
+  it('sem tamanhos, o cadastro continua sendo de um produto só', async () => {
+    vi.mocked(criarProduto).mockResolvedValue(produto({ code: 'LMP-001' }));
+    montar();
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ Novo produto' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: '+ Novo produto' }));
+
+    await userEvent.type(screen.getByLabelText('Descrição'), 'Detergente neutro');
+    await userEvent.selectOptions(screen.getByLabelText('Família'), 'EPI');
+    await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
+
+    await waitFor(() => expect(criarProduto).toHaveBeenCalled());
+    expect(criarGradeDeTamanhos).not.toHaveBeenCalled();
   });
 
   it('inativar manda apenas a mudança de situação', async () => {

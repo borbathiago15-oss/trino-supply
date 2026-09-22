@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
-  atualizarProduto, buscarProdutos, criarProduto, enviarFoto, resumoCatalogo, tiposDeProduto,
-  type Produto, type ResumoCatalogo, type TipoDeProduto,
+  atualizarProduto, buscarProdutos, criarGradeDeTamanhos, criarProduto, enviarFoto, GRADES_DE_TAMANHO,
+  resumoCatalogo, tiposDeProduto, type Produto, type ResumoCatalogo, type TipoDeProduto,
 } from '@/api/catalogo';
 import { listarFamilias, type Familia } from '@/api/familias';
 import { listarFornecedores, type Fornecedor } from '@/api/fornecedores';
@@ -23,7 +23,7 @@ import { PainelImportacao } from './PainelImportacao';
 /** A tela mostra um bloco por vez: o acervo tem milhares de itens. */
 export const POR_PAGINA = 50;
 
-const VAZIO = { codigo: '', familia: '', descricao: '', unidade: '', preco: '', tipo: '' };
+const VAZIO = { codigo: '', familia: '', descricao: '', unidade: '', preco: '', tipo: '', tamanhos: '' };
 type Formulario = typeof VAZIO;
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
@@ -104,6 +104,8 @@ export function Produtos() {
     setForm({
       codigo: p.code, familia: p.family, descricao: p.description, unidade: p.unitOfMeasure ?? '',
       preco: p.referencePrice != null ? String(p.referencePrice) : '', tipo: p.productType ?? '',
+      // editar é de um produto só: a grade cadastra vários e não se aplica aqui
+      tamanhos: '',
     });
     setFornecedoresDoItem(p.suppliers.map(daFornecedorDoProduto));
     setFoto(null); setImportando(false); setFormAberto(true);
@@ -139,11 +141,21 @@ export function Produtos() {
         if (foto) await enviarFoto(editando.id, foto);
         avisar('Produto atualizado.');
         fechar();
+      } else if (form.tamanhos.trim()) {
+        // grade: um produto por tamanho, todos com o mesmo código-base. A bota do 38 ao 44
+        // deixa de ser sete cadastros à mão, com sete códigos inventados por quem digita
+        const criados = await criarGradeDeTamanhos({
+          ...corpo, baseCode: form.codigo || null, sizes: [form.tamanhos],
+        });
+        if (foto) for (const item of criados) await enviarFoto(item.id, foto);
+        avisar(`${criados.length} tamanho(s) cadastrado(s): ${criados.map((i) => i.code).join(', ')}.`);
+        // a família fica: cadastrar vários produtos da mesma família é o caso comum
+        setForm({ ...VAZIO, familia: form.familia });
+        setFornecedoresDoItem([]); setFoto(null);
       } else {
         const criado = await criarProduto({ ...corpo, code: form.codigo || null });
         if (foto) await enviarFoto(criado.id, foto);
         avisar(`Produto ${criado.code} adicionado ao catálogo.`);
-        // a família fica: cadastrar vários produtos da mesma família é o caso comum
         setForm({ ...VAZIO, familia: form.familia });
         setFornecedoresDoItem([]); setFoto(null);
       }
@@ -298,6 +310,32 @@ export function Produtos() {
                 <input id="prod-preco" type="number" min={0} step="0.01" placeholder="opcional" {...campo('preco')} />
               </Campo>
             </Grade2>
+
+            {/* Grade de tamanhos: produto que tem numeração (bota, luva, fardamento) é
+                cadastrado uma vez e vira um item por tamanho — cada um com código, preço e
+                C.A. próprios, porque é assim que a compra acontece. Na SC eles aparecem
+                juntos, e o solicitante só informa a quantidade de cada tamanho. */}
+            {!editando && (
+              <Campo id="prod-tamanhos" rotulo="Tamanhos" className="mt-3"
+                dica="(opcional — produto com numeração: bota, luva, fardamento)">
+                <input id="prod-tamanhos" placeholder="ex.: P, M, G  ou  38, 39, 40" {...campo('tamanhos')} />
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  <button type="button" className="botao-secundario"
+                    onClick={() => setForm((f) => ({ ...f, tamanhos: GRADES_DE_TAMANHO.letras }))}>Letras (PP…XXG)</button>
+                  <button type="button" className="botao-secundario"
+                    onClick={() => setForm((f) => ({ ...f, tamanhos: GRADES_DE_TAMANHO.numeros }))}>Numéricos (34…46)</button>
+                  <button type="button" className="botao-secundario"
+                    onClick={() => setForm((f) => ({ ...f, tamanhos: '' }))}>Sem tamanhos</button>
+                </div>
+                {!!form.tamanhos.trim() && (
+                  <Nota>
+                    Vai cadastrar um produto por tamanho, com o código-base{' '}
+                    <strong>{form.codigo.trim().toUpperCase() || '(gerado pela família)'}</strong> —
+                    ex.: {(form.codigo.trim().toUpperCase() || 'MAT-001')}-{form.tamanhos.split(/[,;/]/)[0].trim().toUpperCase()}.
+                  </Nota>
+                )}
+              </Campo>
+            )}
 
             <Campo id="prod-foto" className="mt-3" rotulo="Foto do produto"
               dica="(PNG, JPG ou WEBP — aparece como miniatura na lista)">

@@ -282,6 +282,10 @@ public record ItemSupplierRequest(string? SupplierName, string? TaxId, string? C
 public record CreateCatalogItemRequest(string? Code, string Description, string Family, string? UnitOfMeasure,
     decimal? ReferencePrice, bool? StockControlled, decimal? MinimumQty, List<ItemSupplierRequest>? Suppliers,
     bool? Purchasable, string? ProductType);
+/// <summary>Cadastro da grade de tamanhos: um produto por tamanho, todos com o mesmo código-base.</summary>
+public record CreateSizeGradeRequest(string? BaseCode, string Description, string Family, string? UnitOfMeasure,
+    decimal? ReferencePrice, List<string>? Sizes, bool? StockControlled, decimal? MinimumQty,
+    List<ItemSupplierRequest>? Suppliers, bool? Purchasable, string? ProductType);
 public record UpdateCatalogItemRequest(string? Description, string? Family, string? UnitOfMeasure,
     decimal? ReferencePrice, bool? Active, bool? StockControlled, decimal? MinimumQty, bool? ClearMinimum,
     List<ItemSupplierRequest>? Suppliers, bool? Purchasable, string? ProductType);

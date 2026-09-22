@@ -47,6 +47,83 @@ public class CatalogServiceTests
         Assert.Equal("IC-ERR-010", dup!.Code);
     }
 
+    // ---- grade de tamanhos e seletor de quem pede ----------------------------
+    [Fact]
+    public async Task Grade_cadastra_um_produto_por_tamanho_com_o_mesmo_codigo_base()
+    {
+        var (catalog, _, _) = Build();
+
+        var (itens, erro) = await catalog.CriarGradeAsync(Gestor.Id, "12003", "Bota de segurança", "EPI", "PAR", 89.90m,
+            ["40, 38, 39"], productType: ProductTypes.Epi);
+
+        Assert.Null(erro);
+        Assert.Equal(["12003-38", "12003-39", "12003-40"], itens.Select(i => i.Code).ToList());
+        Assert.All(itens, i => Assert.Equal("12003", i.BaseCode));
+        Assert.All(itens, i => Assert.Equal("EPI", i.Family));
+        Assert.All(itens, i => Assert.Equal(89.90m, i.ReferencePrice));
+        Assert.Equal("Bota de segurança — Tam. 38", itens[0].Description);
+        Assert.Equal(["38", "39", "40"], itens.Select(i => i.Size).ToList());
+    }
+
+    [Fact]
+    public async Task Grade_sem_tamanho_e_com_codigo_repetido_e_recusada_inteira()
+    {
+        var (catalog, _, db) = Build();
+        await catalog.CreateAsync(Gestor.Id, "12003-M", "Camisa antiga", "FARDAMENTO", "UN", null);
+
+        var (_, semTamanho) = await catalog.CriarGradeAsync(Gestor.Id, "9000", "Camisa", "FARDAMENTO", "UN", null, []);
+        Assert.Equal("IC-ERR-017", semTamanho!.Code);
+
+        var (_, repetido) = await catalog.CriarGradeAsync(Gestor.Id, "12003", "Camisa", "FARDAMENTO", "UN", null, ["P, M, G"]);
+        Assert.Equal("IC-ERR-010", repetido!.Code);
+        Assert.Contains("12003-M", repetido.Message);
+        // meia grade cadastrada seria pior que nenhuma: nada entrou
+        Assert.Equal(1, await db.CatalogItems.CountAsync());
+    }
+
+    [Fact]
+    public async Task Seletor_junta_os_tamanhos_num_produto_so_e_a_busca_traz_a_grade_inteira()
+    {
+        var (catalog, _, _) = Build();
+        await catalog.CriarGradeAsync(Gestor.Id, "12003", "Bota de segurança", "EPI", "PAR", 89.90m, ["38, 39, 40"]);
+        await catalog.CreateAsync(Gestor.Id, "LMP-001", "Detergente neutro", "MATERIAL DE LIMPEZA", "UN", 3.50m);
+
+        var tudo = await catalog.ParaEscolhaAsync(null, null);
+        Assert.Equal(2, tudo.Count);                                  // dois produtos, não quatro itens
+        var bota = tudo.Single(p => p.BaseCode == "12003");
+        Assert.Equal("Bota de segurança", bota.Description);          // a descrição sem o tamanho
+        Assert.Equal(["38", "39", "40"], bota.Sizes.Select(v => v.Size).ToList());
+        Assert.True(bota.TemGrade);
+
+        var detergente = tudo.Single(p => p.BaseCode is null);
+        Assert.False(detergente.TemGrade);
+        Assert.Null(Assert.Single(detergente.Sizes).Size);
+
+        // procurar um tamanho traz o produto inteiro: achar o 39 e esconder o 40 obrigaria a buscar de novo
+        var porTamanho = await catalog.ParaEscolhaAsync(null, "12003-39");
+        Assert.Equal(["38", "39", "40"], Assert.Single(porTamanho).Sizes.Select(v => v.Size).ToList());
+        // e o filtro por família continua valendo
+        Assert.Equal("EPI", Assert.Single(await catalog.ParaEscolhaAsync("EPI", null)).Family);
+    }
+
+    [Fact]
+    public async Task Seletor_marca_o_tamanho_sem_CA_e_ignora_o_inativo()
+    {
+        var (catalog, _, _) = Build();
+        var (itens, _) = await catalog.CriarGradeAsync(Gestor.Id, "12003", "Bota", "EPI", "PAR", null, ["38, 39, 40"],
+            productType: ProductTypes.Epi);
+        // o C.A. é do par produto+fornecedor: informar num tamanho não libera os outros
+        await catalog.UpdateAsync(itens[0].Id, null, null, null, null, active: null, suppliers:
+            [new ItemSupplierInput("Alfa EPIs", null, null, null, null, null, null, "CA-12345")]);
+        await catalog.UpdateAsync(itens[2].Id, null, null, null, null, active: false);
+
+        var bota = Assert.Single(await catalog.ParaEscolhaAsync("EPI", null));
+        Assert.Equal(["38", "39"], bota.Sizes.Select(v => v.Size).ToList());   // o 40 inativo saiu
+        Assert.False(bota.Sizes[0].CompliancePending);                         // o 38 tem C.A.
+        Assert.True(bota.Sizes[1].CompliancePending);                          // o 39 não
+        Assert.False(bota.CompliancePending);                                  // o produto ainda pode ser pedido
+    }
+
     [Fact]
     public async Task Listagem_por_familia_retorna_somente_ativos_para_solicitantes()
     {

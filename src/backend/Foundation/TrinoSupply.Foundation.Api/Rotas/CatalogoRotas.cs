@@ -278,6 +278,45 @@ public static class CatalogoRotas
                 : Results.Json(new { data = CatalogView(item!), correlationId = CorrelationId(ctx) }, statusCode: 201);
         });
 
+        // grade de tamanhos: um produto por tamanho, de uma vez (bota do 38 ao 44)
+        catalogGroup.MapPost("/grade", async (CreateSizeGradeRequest body, CatalogService svc, ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            if (!CatalogService.CanMaintain(RoleOf(p)))
+                return Error(ctx, 403, "IC-ERR-001", "Somente o gestor de suprimentos ou o administrador mantêm o catálogo.");
+            if (!ModulesOf(p).Contains(AppModules.Produtos))
+                return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para o cadastro de produtos.");
+            var suppliers = body.Suppliers?.Select(x => new ItemSupplierInput(
+                x.SupplierName ?? "", x.TaxId, x.Contact, x.SupplierItemCode, x.LastPrice, x.Notes, x.SupplierId,
+                x.CaNumber)).ToList();
+            var (itens, error) = await svc.CriarGradeAsync(ActorId(p), body.BaseCode, body.Description, body.Family,
+                body.UnitOfMeasure, body.ReferencePrice, body.Sizes ?? [], body.StockControlled ?? true,
+                body.MinimumQty, suppliers, body.Purchasable ?? true, body.ProductType);
+            return error is not null
+                ? Error(ctx, error.Code == "IC-ERR-010" ? 409 : 400, error.Code, error.Message)
+                : Results.Json(new { data = new { items = itens.Select(CatalogView) }, correlationId = CorrelationId(ctx) },
+                    statusCode: 201);
+        });
+
+        // o catálogo como quem pede enxerga: um produto por linha, com a grade de tamanhos junto
+        catalogGroup.MapGet("/picker", async (CatalogService svc, HttpContext ctx, string? family, string? q) =>
+        {
+            var itens = await svc.ParaEscolhaAsync(family, q);
+            return Ok(new
+            {
+                items = itens.Select(i => new
+                {
+                    key = i.Key, baseCode = i.BaseCode, description = i.Description, family = i.Family,
+                    unitOfMeasure = i.UnitOfMeasure, productType = i.ProductType, productTypeLabel = i.ProductTypeLabel,
+                    hasGrade = i.TemGrade, compliancePending = i.CompliancePending,
+                    sizes = i.Sizes.Select(v => new
+                    {
+                        id = v.Id, code = v.Code, size = v.Size, referencePrice = v.ReferencePrice,
+                        compliancePending = v.CompliancePending, imageDocumentId = v.ImageDocumentId,
+                    }),
+                }),
+            }, ctx);
+        });
+
         catalogGroup.MapPatch("/{id:guid}", async (Guid id, UpdateCatalogItemRequest body, CatalogService svc, ClaimsPrincipal p, HttpContext ctx) =>
         {
             var role = p.FindFirstValue(ClaimTypes.Role) ?? "";

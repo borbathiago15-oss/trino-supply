@@ -30,6 +30,7 @@ GET /api/v1/inventory/movements
 GET /api/v1/items/
 GET /api/v1/items/batch-view
 GET /api/v1/items/families
+GET /api/v1/items/picker
 GET /api/v1/items/summary
 GET /api/v1/items/{id:guid}/price-history
 GET /api/v1/material-requisitions/
@@ -91,6 +92,7 @@ POST /api/v1/inventory/entries
 POST /api/v1/inventory/issues
 POST /api/v1/inventory/locations
 POST /api/v1/items/
+POST /api/v1/items/grade
 POST /api/v1/items/import
 POST /api/v1/items/{id:guid}/image
 POST /api/v1/material-requisitions/
@@ -109,9 +111,9 @@ POST /api/v1/product-families/
 POST /api/v1/purchase-orders/
 POST /api/v1/purchase-orders/{id:guid}/cancel
 POST /api/v1/purchase-orders/{id:guid}/deliveries
+POST /api/v1/purchase-orders/{id:guid}/erp-documents/{docId:guid}/attachment
 POST /api/v1/purchase-orders/{id:guid}/erp-order
 POST /api/v1/purchase-orders/{id:guid}/erp-order/attachment
-POST /api/v1/purchase-orders/{id:guid}/erp-documents/{docId:guid}/attachment
 POST /api/v1/purchase-orders/{id:guid}/invoices
 POST /api/v1/purchase-orders/{id:guid}/invoices/{invoiceId:guid}/attachment
 POST /api/v1/purchase-orders/{id:guid}/receive

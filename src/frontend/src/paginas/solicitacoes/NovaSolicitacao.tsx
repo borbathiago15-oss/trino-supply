@@ -1,18 +1,37 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { familiasDoCatalogo, listarProdutos, type Produto } from '@/api/catalogo';
+import { familiasDoCatalogo, type ProdutoParaEscolha, type TamanhoDoProduto } from '@/api/catalogo';
 import { listarCentrosCusto, type CentroCusto } from '@/api/centrosCusto';
 import { listarEmpresas, perfilDaEmpresa } from '@/api/empresas';
 import { listarLocaisDeEntrega, rotuloDoLocal, type LocalEntrega } from '@/api/locais';
 import { listarTiposDeSolicitacao } from '@/api/tiposDeSolicitacao';
 import { anexarNaSolicitacao, criarSolicitacao, ROTULO_PRIORIDADE, type ItemNovo, type Prioridade } from '@/api/solicitacoes';
-import { Aviso, Painel } from '@/componentes/basicos';
+import { Aviso, Badge, Painel } from '@/componentes/basicos';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
 import { hojeIso } from '@/util/formato';
+import { quantidade as formatarQuantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
+import { SeletorDeProduto } from './SeletorDeProduto';
 
-interface LinhaItem { chave: string; produto: string; unidade: string; quantidade: string; familia: string }
+/**
+ * Uma linha de item da SC. Ela é uma de duas coisas:
+ *
+ * - **produto do catálogo** (`escolhido`), com quantidade única ou uma quantidade por
+ *   tamanho quando o produto tem grade — a bota do 38 ao 44 é uma linha, não sete;
+ * - **item fora do catálogo**, descrito à mão, com a família dita por quem pede.
+ */
+export interface LinhaItem {
+  chave: string;
+  /** Descrição digitada — só vale para o item fora do catálogo. */
+  produto: string;
+  unidade: string;
+  quantidade: string;
+  familia: string;
+  escolhido: ProdutoParaEscolha | null;
+  /** Quantidade por tamanho, pelo id da variante. Vazio = nenhum tamanho pedido ainda. */
+  porTamanho: Record<string, string>;
+}
 
 /**
  * Opção da lista de famílias que diz "este produto não está no catálogo". Não é uma
@@ -24,7 +43,10 @@ interface LinhaItem { chave: string; produto: string; unidade: string; quantidad
 export const SEM_CADASTRO = '__SEM_CADASTRO__';
 
 let sequencia = 0;
-const novaLinha = (): LinhaItem => ({ chave: 'i' + ++sequencia, produto: '', unidade: '', quantidade: '1', familia: '' });
+export const novaLinha = (): LinhaItem => ({
+  chave: 'i' + ++sequencia, produto: '', unidade: '', quantidade: '1', familia: '',
+  escolhido: null, porTamanho: {},
+});
 
 const VAZIO = {
   justificativa: '', local: '', prioridade: 'NORMAL' as Prioridade, necessidade: '',
@@ -33,52 +55,66 @@ const VAZIO = {
 };
 type Formulario = typeof VAZIO;
 
-/** O campo do produto aceita escolher do catálogo ("CÓDIGO — descrição") ou descrever. */
-export const rotuloDoProduto = (p: Produto) => `${p.code} — ${p.description}`;
+/** Quanto se pediu de um tamanho. Campo vazio é zero, e não "um". */
+export const quantidadeDoTamanho = (l: LinhaItem, v: TamanhoDoProduto) =>
+  parseFloat((l.porTamanho[v.id] ?? '').replace(',', '.')) || 0;
+
+/** Soma da grade — é o número que a linha mostra e o que diz se a linha tem pedido. */
+export const totalDaGrade = (l: LinhaItem) =>
+  (l.escolhido?.sizes ?? []).reduce((soma, v) => soma + quantidadeDoTamanho(l, v), 0);
 
 /**
- * Itens do catálogo escolhidos nas linhas que são EPI/EPC sem C.A. em nenhum
- * fornecedor. O servidor recusa a SC inteira (IC-ERR-023, NR-06) — a tela avisa
- * na linha para a pendência não aparecer só no envio.
+ * Tamanhos pedidos que não podem ser solicitados: EPI/EPC sem C.A. em nenhum fornecedor.
+ * O servidor recusa a SC inteira (IC-ERR-023, NR-06) — a tela avisa na linha para a
+ * pendência não aparecer só no envio.
  */
-export function itensSemCa(linhas: { produto: string }[], catalogo: Produto[]): Produto[] {
-  return linhas
-    .map((l) => catalogo.find((p) => rotuloDoProduto(p) === l.produto.trim()))
-    .filter((p): p is Produto => !!p && p.compliancePending);
+export function itensSemCa(linhas: LinhaItem[]): { descricao: string; tipo: string; code: string }[] {
+  return linhas.flatMap((l) => {
+    const p = l.escolhido;
+    if (!p) return [];
+    const pedidos = p.hasGrade
+      ? p.sizes.filter((v) => quantidadeDoTamanho(l, v) > 0)
+      : p.sizes.slice(0, 1).filter(() => (parseFloat(l.quantidade) || 0) > 0);
+    return pedidos.filter((v) => v.compliancePending).map((v) => ({
+      descricao: p.description, tipo: p.productTypeLabel ?? 'EPI/EPC', code: v.code,
+    }));
+  });
 }
 
 /**
- * Linhas do formulário viram itens da API: escolhido do catálogo vira vínculo,
- * digitado à mão vira descrição livre. Linha sem produto é descartada.
+ * Linhas do formulário viram itens da API. O produto com grade **expande**: cada tamanho
+ * com quantidade vira um item, ligado ao produto daquele tamanho — que é o que a compra
+ * precisa, porque a bota 38 e a 39 têm código, preço e C.A. próprios.
  *
- * A família só acompanha o item <b>não cadastrado</b>: com produto do catálogo ela é a
- * do cadastro, e mandá-la daqui abriria a porta para o mesmo produto ficar em duas
- * famílias conforme quem digitou. "Produto não cadastrado" vira nulo — é ausência
- * declarada, e o servidor a resolve como DIVERSOS.
+ * A família só acompanha o item <b>fora do catálogo</b>: com produto cadastrado ela é a do
+ * cadastro, e mandá-la daqui abriria a porta para o mesmo produto ficar em duas famílias
+ * conforme quem digitou. "Produto não cadastrado" vira nulo — é ausência declarada, e o
+ * servidor a resolve como DIVERSOS.
  */
-export function itensDoFormulario(linhas: LinhaItem[], catalogo: Produto[]): ItemNovo[] {
-  return linhas
-    .map((l) => {
-      const doCatalogo = catalogo.find((p) => rotuloDoProduto(p) === l.produto.trim());
-      const familia = l.familia && l.familia !== SEM_CADASTRO ? l.familia : null;
-      return {
-        description: doCatalogo ? '' : l.produto.trim(),
-        catalogItemId: doCatalogo?.id ?? null,
-        unitOfMeasure: l.unidade || null,
-        quantity: parseFloat(l.quantidade) || 0,
-        family: doCatalogo ? null : familia,
-      };
-    })
-    .filter((i) => i.description || i.catalogItemId);
-}
-
-/**
- * A família que a linha mostra. Produto do catálogo exibe a dele, e o campo fica travado:
- * quem escolhe a família de um produto cadastrado é o cadastro, não quem pede.
- */
-export function familiaDaLinha(l: LinhaItem, catalogo: Produto[]): { valor: string; travada: boolean } {
-  const doCatalogo = catalogo.find((p) => rotuloDoProduto(p) === l.produto.trim());
-  return doCatalogo ? { valor: doCatalogo.family ?? '', travada: true } : { valor: l.familia, travada: false };
+export function itensDoFormulario(linhas: LinhaItem[]): ItemNovo[] {
+  return linhas.flatMap((l): ItemNovo[] => {
+    const p = l.escolhido;
+    if (p?.hasGrade) {
+      return p.sizes
+        .map((v) => ({ v, qtd: quantidadeDoTamanho(l, v) }))
+        .filter(({ qtd }) => qtd > 0)
+        .map(({ v, qtd }) => ({
+          description: '', catalogItemId: v.id, unitOfMeasure: p.unitOfMeasure, quantity: qtd, family: null,
+        }));
+    }
+    const qtd = parseFloat(l.quantidade) || 0;
+    if (p) {
+      return qtd > 0
+        ? [{ description: '', catalogItemId: p.sizes[0].id, unitOfMeasure: p.unitOfMeasure, quantity: qtd, family: null }]
+        : [];
+    }
+    const descricao = l.produto.trim();
+    if (!descricao) return [];
+    return [{
+      description: descricao, catalogItemId: null, unitOfMeasure: l.unidade || null, quantity: qtd,
+      family: l.familia && l.familia !== SEM_CADASTRO ? l.familia : null,
+    }];
+  });
 }
 
 export function NovaSolicitacao() {
@@ -88,6 +124,8 @@ export function NovaSolicitacao() {
   const [linhas, setLinhas] = useState<LinhaItem[]>([novaLinha()]);
   const [anexos, setAnexos] = useState<File[]>([]);
   const [salvando, setSalvando] = useState(false);
+  /** Chave da linha que está escolhendo produto no catálogo. */
+  const [seletor, setSeletor] = useState<string | null>(null);
 
   const { dados } = useCarregar(async (signal) => {
     const empresas = await listarEmpresas(false, signal).catch(() => []);
@@ -96,7 +134,6 @@ export function NovaSolicitacao() {
     const nomes = empresas.length ? empresas.map((e) => e.legalName) : [padrao?.legalName].filter(Boolean) as string[];
     if (nomes.length === 1) setForm((f) => (f.empresa ? f : { ...f, empresa: nomes[0] }));
     return {
-      catalogo: await listarProdutos(signal).catch(() => [] as Produto[]),
       familias: await familiasDoCatalogo(signal).catch(() => [] as string[]),
       locais: await listarLocaisDeEntrega(signal).catch(() => [] as LocalEntrega[]),
       centros: await listarCentrosCusto(false, signal).catch(() => [] as CentroCusto[]),
@@ -107,7 +144,7 @@ export function NovaSolicitacao() {
   }, []);
 
   const urgente = form.prioridade === 'URGENT';
-  const semCa = itensSemCa(linhas, dados?.catalogo ?? []);
+  const semCa = itensSemCa(linhas);
   const campo = (k: keyof Formulario) => ({
     value: form[k] as string,
     onChange: (ev: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: ev.target.value })),
@@ -116,11 +153,16 @@ export function NovaSolicitacao() {
   function editarLinha(chave: string, campos: Partial<LinhaItem>) {
     setLinhas((ls) => ls.map((l) => (l.chave === chave ? { ...l, ...campos } : l)));
   }
-  /** Escolher do catálogo já traz a unidade do produto. */
-  function escolherProduto(chave: string, valor: string) {
-    const p = (dados?.catalogo ?? []).find((x) => rotuloDoProduto(x) === valor.trim());
-    editarLinha(chave, p ? { produto: valor, unidade: p.unitOfMeasure } : { produto: valor });
+  /** O produto escolhido traz unidade e família; a grade começa vazia, sem quantidade chutada. */
+  function escolherProduto(chave: string, p: ProdutoParaEscolha) {
+    editarLinha(chave, {
+      escolhido: p, produto: p.description, unidade: p.unitOfMeasure, familia: p.family,
+      porTamanho: {}, quantidade: p.hasGrade ? '' : '1',
+    });
+    setSeletor(null);
   }
+  const editarTamanho = (l: LinhaItem, v: TamanhoDoProduto, valor: string) =>
+    editarLinha(l.chave, { porTamanho: { ...l.porTamanho, [v.id]: valor } });
   function removerLinha(chave: string) {
     if (linhas.length === 1) { avisar('A SC precisa de ao menos um item.', 'erro'); return; }
     setLinhas((ls) => ls.filter((l) => l.chave !== chave));
@@ -128,10 +170,10 @@ export function NovaSolicitacao() {
 
   async function enviar(ev: FormEvent) {
     ev.preventDefault();
-    const items = itensDoFormulario(linhas, dados?.catalogo ?? []);
+    const items = itensDoFormulario(linhas);
     if (!items.length) { avisar('A SC precisa de ao menos um item.', 'erro'); return; }
     if (semCa.length) {
-      avisar(`${semCa[0].description} é ${semCa[0].productTypeLabel ?? 'EPI/EPC'} sem C.A. cadastrado `
+      avisar(`${semCa[0].descricao} (${semCa[0].code}) é ${semCa[0].tipo} sem C.A. cadastrado `
         + '— informe o C.A. no fornecedor antes de solicitar (IC-ERR-023).', 'erro');
       return;
     }
@@ -168,52 +210,114 @@ export function NovaSolicitacao() {
         <h3 className="mb-2 text-[14px] font-bold">Itens</h3>
         <div className="flex flex-col gap-3">
           {linhas.map((l) => {
-            const pendente = itensSemCa([l], dados?.catalogo ?? [])[0];
-            const familia = familiaDaLinha(l, dados?.catalogo ?? []);
+            const p = l.escolhido;
+            const pendente = itensSemCa([l])[0];
+            const total = totalDaGrade(l);
             return (
-            <div key={l.chave} className="rounded-lg border border-borda p-3" data-linha-item>
-              <Grade2>
-                <Campo rotulo="Produto" dica="(escolha do catálogo ou descreva)">
-                  <input aria-label="Produto" list="produtos-catalogo" required minLength={3}
-                    placeholder="digite para buscar no catálogo ou descreva o item"
-                    value={l.produto} onChange={(e) => escolherProduto(l.chave, e.target.value)} />
-                </Campo>
+            <div key={l.chave} className="rounded-lg border border-borda p-3" data-linha-item data-produto={p?.baseCode ?? undefined}>
+              {/* Produto do catálogo: escolhido na busca, e não digitado num campo de
+                  sugestões com o acervo inteiro dentro — era ele que obrigava a rolar a
+                  tela atrás da bota. Fora do catálogo, o campo de texto continua. */}
+              {p ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-semibold">{p.description}</div>
+                    <div className="sub">
+                      {p.baseCode ?? p.sizes[0].code} · {p.family} · {p.unitOfMeasure}
+                      {p.productTypeLabel && ` · ${p.productTypeLabel}`}
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button type="button" className="botao-secundario" onClick={() => setSeletor(l.chave)}>Trocar produto</button>
+                    <button type="button" className="botao-perigo" onClick={() => removerLinha(l.chave)}>Excluir</button>
+                  </div>
+                </div>
+              ) : (
                 <Grade2>
-                  <Campo rotulo="Unid.">
-                    <input aria-label="Unidade" placeholder="UN" value={l.unidade}
-                      onChange={(e) => editarLinha(l.chave, { unidade: e.target.value })} />
+                  <Campo rotulo="Produto" dica="(busque no catálogo ou descreva)">
+                    <div className="flex gap-2">
+                      <input aria-label="Produto" required minLength={3}
+                        placeholder="descreva o item, se não estiver no catálogo"
+                        value={l.produto} onChange={(e) => editarLinha(l.chave, { produto: e.target.value })} />
+                      <button type="button" className="botao-secundario whitespace-nowrap"
+                        onClick={() => setSeletor(l.chave)}>Buscar no catálogo</button>
+                    </div>
                   </Campo>
                   <Grade2>
-                    <Campo rotulo="Qtde">
-                      <input type="number" min="0.01" step="0.01" required aria-label="Quantidade"
-                        value={l.quantidade} onChange={(e) => editarLinha(l.chave, { quantidade: e.target.value })} />
+                    <Campo rotulo="Unid.">
+                      <input aria-label="Unidade" placeholder="UN" value={l.unidade}
+                        onChange={(e) => editarLinha(l.chave, { unidade: e.target.value })} />
                     </Campo>
-                    <div className="flex items-end">
-                      <button type="button" className="botao-perigo w-full" onClick={() => removerLinha(l.chave)}>Excluir</button>
-                    </div>
+                    <Grade2>
+                      <Campo rotulo="Qtde">
+                        <input type="number" min="0.01" step="0.01" required aria-label="Quantidade"
+                          value={l.quantidade} onChange={(e) => editarLinha(l.chave, { quantidade: e.target.value })} />
+                      </Campo>
+                      <div className="flex items-end">
+                        <button type="button" className="botao-perigo w-full" onClick={() => removerLinha(l.chave)}>Excluir</button>
+                      </div>
+                    </Grade2>
                   </Grade2>
                 </Grade2>
-              </Grade2>
+              )}
+
+              {/* A grade: um campo por tamanho, e cada tamanho com quantidade vira um item
+                  da SC. É o que evita cadastrar a mesma bota sete vezes para pedir sete
+                  numerações — cada tamanho já é um produto, com código e C.A. próprios. */}
+              {p?.hasGrade && (
+                <div className="mt-3" data-testid="grade-de-tamanhos">
+                  <p className="rotulo mb-1.5">Quantidade por tamanho</p>
+                  <div className="flex flex-wrap gap-2">
+                    {p.sizes.map((v) => (
+                      <label key={v.id} data-tamanho={v.size}
+                        className={`flex w-[92px] flex-col gap-1 rounded-lg border px-2 py-1.5 ${v.compliancePending ? 'border-perigo/40 bg-perigo-fundo' : 'border-borda'}`}
+                        title={v.compliancePending ? `${v.code}: sem C.A. (IC-ERR-023)` : v.code}>
+                        <span className="text-[12px] font-semibold">{v.size}</span>
+                        <input type="number" min="0" step="1" className="!px-2 !py-1"
+                          aria-label={`Tamanho ${v.size} de ${p.description}`}
+                          disabled={v.compliancePending} placeholder="0"
+                          value={l.porTamanho[v.id] ?? ''} onChange={(e) => editarTamanho(l, v, e.target.value)} />
+                      </label>
+                    ))}
+                  </div>
+                  <p className="sub mt-1.5" data-testid="total-da-grade">
+                    {total > 0
+                      ? `Total: ${formatarQuantidade(total)} ${p.unitOfMeasure} — um item da SC por tamanho pedido.`
+                      : 'Informe a quantidade de cada tamanho que você precisa.'}
+                  </p>
+                </div>
+              )}
+
+              {p && !p.hasGrade && (
+                <Grade2 className="mt-3">
+                  <Campo rotulo="Quantidade">
+                    <input type="number" min="0.01" step="0.01" required aria-label={`Quantidade de ${p.description}`}
+                      value={l.quantidade} onChange={(e) => editarLinha(l.chave, { quantidade: e.target.value })} />
+                  </Campo>
+                  <div />
+                </Grade2>
+              )}
+
               {/* A família é por item, não por SC: uma solicitação pode misturar EPI e
                   material de escritório, e é a família que diz para qual lote de compra
                   cada linha vai. Produto do catálogo mostra a dele, travada — quem
                   escolhe a família de um produto cadastrado é o cadastro. */}
-              <Campo rotulo="Família do produto" className="mt-3"
-                dica={familia.travada ? '(do cadastro do produto)' : '(escolha ou marque como não cadastrado)'}>
-                <select aria-label={`Família de ${l.produto || 'item ' + l.chave}`}
-                  value={familia.valor} disabled={familia.travada}
-                  onChange={(e) => editarLinha(l.chave, { familia: e.target.value })}>
-                  <option value="">Escolha a família…</option>
-                  {familia.travada && familia.valor
-                    && !(dados?.familias ?? []).includes(familia.valor)
-                    && <option value={familia.valor}>{familia.valor}</option>}
-                  {(dados?.familias ?? []).map((f) => <option key={f} value={f}>{f}</option>)}
-                  {!familia.travada && <option value={SEM_CADASTRO}>Produto não cadastrado</option>}
-                </select>
-              </Campo>
+              {p ? (
+                <p className="sub mt-2">Família <Badge classe="bg-slate-100 text-slate-600">{p.family}</Badge> — do cadastro do produto.</p>
+              ) : (
+                <Campo rotulo="Família do produto" className="mt-3" dica="(escolha ou marque como não cadastrado)">
+                  <select aria-label={`Família de ${l.produto || 'item ' + l.chave}`}
+                    value={l.familia} onChange={(e) => editarLinha(l.chave, { familia: e.target.value })}>
+                    <option value="">Escolha a família…</option>
+                    {(dados?.familias ?? []).map((f) => <option key={f} value={f}>{f}</option>)}
+                    <option value={SEM_CADASTRO}>Produto não cadastrado</option>
+                  </select>
+                </Campo>
+              )}
+
               {pendente && (
                 <Aviso testid="linha-sem-ca">
-                  <strong>{pendente.description}</strong> é {pendente.productTypeLabel ?? 'EPI/EPC'} e está sem C.A.
+                  <strong>{pendente.descricao}</strong> ({pendente.code}) é {pendente.tipo} e está sem C.A.
                   em nenhum fornecedor — informe o C.A. no cadastro antes de solicitar (IC-ERR-023).
                 </Aviso>
               )}
@@ -221,9 +325,6 @@ export function NovaSolicitacao() {
             );
           })}
         </div>
-        <datalist id="produtos-catalogo">
-          {(dados?.catalogo ?? []).map((p) => <option key={p.id} value={rotuloDoProduto(p)} />)}
-        </datalist>
         <button type="button" className="botao-secundario mt-3" onClick={() => setLinhas((ls) => [...ls, novaLinha()])}>
           + Adicionar item
         </button>
@@ -330,6 +431,11 @@ export function NovaSolicitacao() {
         </button>
         <Nota>A SC nasce como rascunho: você revisa em “Minhas Solicitações (SC)” e envia quando estiver pronta.</Nota>
       </form>
+
+      {seletor && (
+        <SeletorDeProduto familias={dados?.familias ?? []} aoFechar={() => setSeletor(null)}
+          aoEscolher={(p) => escolherProduto(seletor, p)} />
+      )}
     </Painel>
   );
 }

@@ -35,6 +35,61 @@ export interface Produto {
   suppliers: FornecedorDoProduto[];
 }
 
+/** Um tamanho do produto: item de catálogo com código, preço e C.A. próprios. */
+export interface TamanhoDoProduto {
+  id: string;
+  code: string;
+  /** Nulo no produto que não tem grade. */
+  size: string | null;
+  referencePrice: number | null;
+  compliancePending: boolean;
+  imageDocumentId: string | null;
+}
+
+/**
+ * O catálogo como quem pede enxerga: um produto por linha, com a grade de tamanhos junto.
+ * A bota do 38 ao 44 é um produto com sete tamanhos, e não sete produtos parecidos.
+ */
+export interface ProdutoParaEscolha {
+  key: string;
+  baseCode: string | null;
+  description: string;
+  family: string;
+  unitOfMeasure: string;
+  productType: string | null;
+  productTypeLabel: string | null;
+  hasGrade: boolean;
+  /** Nenhum tamanho pode ser pedido: EPI/EPC sem C.A. em fornecedor nenhum (IC-ERR-023). */
+  compliancePending: boolean;
+  sizes: TamanhoDoProduto[];
+}
+
+export async function produtosParaEscolha(
+  { familia, q }: { familia?: string; q?: string }, signal?: AbortSignal,
+): Promise<ProdutoParaEscolha[]> {
+  const params = new URLSearchParams();
+  if (familia) params.set('family', familia);
+  if (q?.trim()) params.set('q', q.trim());
+  const { items } = await api<{ items: ProdutoParaEscolha[] }>(`${base}/picker?${params}`, { signal });
+  return (items ?? []).map((p) => ({ ...p, sizes: p.sizes ?? [] }));
+}
+
+/** Cadastro da grade: um produto por tamanho, todos com o mesmo código-base. */
+export interface DadosDaGrade {
+  baseCode: string | null;
+  description: string;
+  family: string;
+  unitOfMeasure: string | null;
+  referencePrice: number | null;
+  /** Os tamanhos da grade, como o cadastro digitou ("P, M, G" ou "38, 39, 40"). */
+  sizes: string[];
+  productType: string | null;
+  suppliers: Omit<FornecedorDoProduto, 'id'>[];
+}
+
+export const criarGradeDeTamanhos = async (dados: DadosDaGrade) =>
+  (await api<{ items: Produto[] }>(`${base}/grade`, { method: 'POST', body: dados })).items.map(normalizar);
+
 export interface TipoDeProduto { key: string; label: string; requiresCa: boolean }
 
 export interface ResumoCatalogo {

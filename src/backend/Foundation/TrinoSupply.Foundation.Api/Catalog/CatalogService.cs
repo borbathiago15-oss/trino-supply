@@ -228,6 +228,122 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
     }
 
     /// <summary>Guarda a foto do produto (documento já gravado em StoredDocument).</summary>
+    /// <summary>
+    /// Cadastra a <b>grade de tamanhos</b> de um produto: um item por tamanho, todos com o
+    /// mesmo <see cref="CatalogItem.BaseCode"/>. É o cadastro de quem tem bota do 38 ao 44 —
+    /// antes só a importação por planilha fazia isso, e pela tela a pessoa cadastrava a mesma
+    /// bota sete vezes, à mão, com sete códigos que ela mesma tinha de inventar.
+    ///
+    /// <para>
+    /// Cada tamanho continua sendo um produto de verdade, com código, preço e C.A. próprios:
+    /// é o que a compra precisa (o C.A. da bota 38 é do par produto-fornecedor) e é o que
+    /// mantém o histórico de preço por tamanho. O que a grade dá é o cadastro de uma vez.
+    /// </para>
+    /// </summary>
+    public async Task<(IReadOnlyList<CatalogItem> itens, UserError? error)> CriarGradeAsync(
+        Guid actorId, string? codigoBase, string description, string family, string? unit, decimal? referencePrice,
+        IReadOnlyList<string> tamanhos, bool stockControlled = true, decimal? minimumQty = null,
+        IReadOnlyList<ItemSupplierInput>? suppliers = null, bool purchasable = true,
+        string? productType = null, CancellationToken ct = default)
+    {
+        var grade = tamanhos.SelectMany(t => Tamanhos.Normalizar(t)).Distinct().OrderBy(Tamanhos.Ordem).ToList();
+        if (grade.Count == 0)
+            return ([], new("IC-ERR-017", "Informe os tamanhos da grade (ex.: P, M, G ou 38, 39, 40)."));
+
+        family = family.Trim().ToUpperInvariant();
+        if (description.Trim().Length < 3) return ([], new("IC-ERR-013", "Descreva o item (mín. 3 caracteres)."));
+        if (family.Length < 3) return ([], new("IC-ERR-014", "Informe a família do item (ex.: EPI)."));
+        if (referencePrice is < 0) return ([], new("IC-ERR-015", "O preço de referência não pode ser negativo."));
+        if (minimumQty is < 0) return ([], new("IC-ERR-016", "O estoque mínimo não pode ser negativo."));
+        if (await FamilyErrorAsync(family, ct) is { } familyError) return ([], familyError);
+        var (typeKey, typeError) = NormalizeType(productType);
+        if (typeError is not null) return ([], typeError);
+
+        var baseCode = (codigoBase ?? "").Trim().ToUpperInvariant();
+        if (baseCode.Length == 0) baseCode = await GenerateCodeAsync(family, ct);
+        else if (baseCode.Length < 2) return ([], new("IC-ERR-012", "O código do item precisa ter ao menos 2 caracteres."));
+
+        // a grade inteira é conferida antes de gravar: meia grade cadastrada obrigaria a
+        // pessoa a descobrir, tamanho a tamanho, o que entrou e o que faltou
+        var codigos = grade.ToDictionary(t => t, t => Tamanhos.CodigoDaVariante(baseCode, t));
+        var repetidos = await db.CatalogItems.Where(i => codigos.Values.Contains(i.Code))
+            .Select(i => i.Code).ToListAsync(ct);
+        if (repetidos.Count > 0)
+            return ([], new("IC-ERR-010", $"Já existe produto com o código: {string.Join(", ", repetidos.Order())}."));
+
+        var now = clock.GetUtcNow();
+        var itens = grade.Select(tamanho => new CatalogItem
+        {
+            Code = codigos[tamanho],
+            Description = Tamanhos.DescricaoDaVariante(description, tamanho),
+            Family = family,
+            UnitOfMeasure = string.IsNullOrWhiteSpace(unit) ? "UN" : unit.Trim().ToUpperInvariant(),
+            ReferencePrice = referencePrice,
+            StockControlled = stockControlled,
+            Purchasable = purchasable,
+            MinimumQty = minimumQty,
+            ProductType = typeKey,
+            BaseCode = baseCode,
+            Size = tamanho,
+            CreatedAt = now,
+            UpdatedAt = now,
+            CreatedBy = actorId,
+            Suppliers = (suppliers ?? []).Where(f => !string.IsNullOrWhiteSpace(f.SupplierName))
+                .Select(f => new CatalogItemSupplier
+                {
+                    SupplierName = f.SupplierName.Trim(), TaxId = Digits(f.TaxId), Contact = f.Contact?.Trim(),
+                    SupplierItemCode = f.SupplierItemCode?.Trim(), LastPrice = f.LastPrice, CaNumber = f.CaNumber?.Trim(),
+                    Notes = f.Notes?.Trim(), SupplierId = f.SupplierId, CreatedAt = now,
+                }).ToList(),
+        }).ToList();
+
+        db.CatalogItems.AddRange(itens);
+        await db.SaveChangesAsync(ct);
+        return (itens, null);
+    }
+
+    /// <summary>
+    /// O catálogo como quem <b>pede</b> enxerga: um produto por linha, com os tamanhos dele
+    /// juntos. A tela da SC listava o acervo inteiro num campo de sugestões, e a bota do 38
+    /// ao 44 eram sete linhas quase idênticas para rolar — agora é uma linha com a grade.
+    ///
+    /// <para>
+    /// A busca traz o produto <b>inteiro</b>: quem procura "bota" acha a grade completa, e
+    /// quem procura "12003-40" também — achar um tamanho e esconder os outros obrigaria a
+    /// buscar de novo para pedir o par que falta.
+    /// </para>
+    /// </summary>
+    public async Task<List<ProdutoParaEscolha>> ParaEscolhaAsync(
+        string? family, string? q, CancellationToken ct = default)
+    {
+        var achados = await ListAsync(family, q, includeInactive: false, ct: ct);
+        var bases = achados.Where(i => i.BaseCode is not null).Select(i => i.BaseCode!).Distinct().ToList();
+        if (bases.Count > 0)
+        {
+            var irmaos = await db.CatalogItems.Include(i => i.Suppliers)
+                .Where(i => i.Active && i.BaseCode != null && bases.Contains(i.BaseCode)).ToListAsync(ct);
+            achados = achados.UnionBy(irmaos, i => i.Id).ToList();
+        }
+
+        return achados
+            .GroupBy(i => i.BaseCode is null ? $"#{i.Id}" : $"{i.Family}|{i.BaseCode}")
+            .Select(g =>
+            {
+                var variantes = g.OrderBy(i => Tamanhos.Ordem(i.Size)).ToList();
+                var primeiro = variantes[0];
+                return new ProdutoParaEscolha(
+                    g.Key, primeiro.BaseCode, Tamanhos.DescricaoBase(primeiro.Description, primeiro.Size),
+                    primeiro.Family, primeiro.UnitOfMeasure, primeiro.ProductType,
+                    primeiro.ProductType is null ? null : ProductTypes.LabelOf(primeiro.ProductType),
+                    variantes.Select(i => new VarianteParaEscolha(
+                        i.Id, i.Code, i.Size, i.ReferencePrice,
+                        ProductTypes.RequiresCa(i.ProductType) && !i.Suppliers.Any(s => !string.IsNullOrWhiteSpace(s.CaNumber)),
+                        i.ImageDocumentId)).ToList());
+            })
+            .OrderBy(p => p.Family).ThenBy(p => p.Description)
+            .ToList();
+    }
+
     public async Task<(CatalogItem? item, UserError? error)> AttachImageAsync(
         Guid id, Guid documentId, string fileName, CancellationToken ct = default)
     {
@@ -358,4 +474,22 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
 }
 
 public record CatalogFamilyCount(string Family, int Count);
+
+/// <summary>Um tamanho do produto — item de catálogo com código, preço e C.A. próprios.</summary>
+public record VarianteParaEscolha(
+    Guid Id, string Code, string? Size, decimal? ReferencePrice, bool CompliancePending, Guid? ImageDocumentId);
+
+/// <summary>
+/// Um produto na hora de pedir: a descrição sem o tamanho e a grade junto. Produto sem grade
+/// vem com um tamanho só, de <c>Size</c> nulo — a tela trata os dois casos do mesmo jeito.
+/// </summary>
+public record ProdutoParaEscolha(
+    string Key, string? BaseCode, string Description, string Family, string UnitOfMeasure,
+    string? ProductType, string? ProductTypeLabel, IReadOnlyList<VarianteParaEscolha> Sizes)
+{
+    /// <summary>Produto com grade: mais de um tamanho, ou um tamanho declarado.</summary>
+    public bool TemGrade => Sizes.Count > 1 || Sizes.Any(v => v.Size is not null);
+    /// <summary>Nenhum tamanho pode ser pedido: EPI/EPC sem C.A. em fornecedor nenhum (IC-ERR-023).</summary>
+    public bool CompliancePending => Sizes.All(v => v.CompliancePending);
+}
 public record CatalogSummary(int Total, int Active, int Inactive, int CompliancePending, IReadOnlyList<CatalogFamilyCount> Families);

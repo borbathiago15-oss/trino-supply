@@ -97,6 +97,16 @@ o usuário descobrir no erro do servidor:
   as O.C.s já registradas ficam. A regra vive em `Procurement/OcDoErp.cs`, chamada pelos dois
   caminhos.
 - **IC-ERR-023** — EPI/EPC só circula com C.A. válido no par produto-fornecedor.
+- **Tamanho é produto, e a grade é o cadastro dele de uma vez.** A bota 38 e a 39 têm código,
+  preço e C.A. próprios — são compras diferentes —, então cada tamanho é um `CatalogItem`, e o
+  que os mantém juntos é o `BaseCode`. `Catalog/Tamanhos.cs` é a convenção: código `12003-38`,
+  descrição com `— Tam. 38`, e a **ordem da grade** (letra pela sequência de vestuário, número
+  pelo valor, o resto no fim) — ordem alfabética daria "G, GG, M, P". `CriarGradeAsync` cadastra
+  a grade inteira ou nenhuma: meia grade obrigaria a descobrir, tamanho a tamanho, o que
+  faltou. Na SC, `ParaEscolhaAsync` devolve **um produto por linha com os tamanhos juntos** —
+  e a busca traz a grade **inteira** mesmo quando o termo achou um tamanho só, porque achar o
+  39 e esconder o 40 obrigaria a buscar de novo. A tela expande na volta: cada tamanho com
+  quantidade vira um item da SC. O C.A. é cobrado **do tamanho pedido**, não do produto.
 - **A adjudicação é por escopo, e o escopo pode ser o item.** `QuotationAward.QuotationItemId`
   nulo quer dizer a família inteira — é o que toda adjudicação antiga significa e continua
   significando. Preenchido, é aquele item: o papel com um fornecedor e a caneta com outro,
@@ -299,7 +309,10 @@ com Alfa, aguardando o faturamento. Chega até 28/09"). Sai da mesma consulta qu
 mostram o motivo; devolvida devolve a bola ao solicitante (`precisaDoSolicitante`) e os botões
 viram "Corrigir" e "Reenviar". Centro sem aprovador cadastrado é dito na frase, não escondido
 em "aguardando ninguém". O formulário de nova SC pergunta o essencial primeiro (itens,
-justificativa, centro, data, prioridade) e recolhe o resto em "Mais detalhes".
+justificativa, centro, data, prioridade) e recolhe o resto em "Mais detalhes". **O produto se
+escolhe buscando, não rolando**: o campo de sugestões com o acervo inteiro dentro virou um
+seletor que pede família ou duas letras antes de consultar (`SeletorDeProduto`), e o item fora
+do catálogo continua sendo digitado na própria linha.
 
 **A diretoria tem página própria (`/diretoria`), e o relatório abre em três frases.** A Visão da
 diretoria põe na ordem em que um diretor pergunta: cinco números com tendência (gasto, saving,

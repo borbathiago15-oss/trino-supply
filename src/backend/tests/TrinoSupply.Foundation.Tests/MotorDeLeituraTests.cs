@@ -20,8 +20,9 @@ public class MotorDeLeituraTests
             Phase = fase, Indicator = "Avarias/mês", Unit = "un",
             Baseline = baseline, GoalValue = meta, ResultValue = resultado,
             GoalDeadline = prazo, StartDate = Hoje.AddDays(-10),
-            ToolName = ferramenta, ToolData = dados,
             CreatedAt = new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero),
+            Tools = ferramenta is null ? []
+                : [new CycleTool { ToolType = ferramenta, ToolData = dados }],
         };
 
     private static ActionItem Acao(string status, DateOnly? prazo = null, string? causa = null) => new()
@@ -31,7 +32,7 @@ public class MotorDeLeituraTests
     };
 
     private static LeituraDoCiclo Ler(ImprovementCycle c, params ActionItem[] acoes) =>
-        MotorDeLeitura.Ler(c, FerramentaDeCausa.Normalizar(c.ToolName, c.ToolData), acoes, Hoje);
+        MotorDeLeitura.Ler(c, CicloDeMelhoriaService.Analises(c), acoes, Hoje);
 
     // ---- indicador -----------------------------------------------------------
 

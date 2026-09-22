@@ -154,4 +154,76 @@ public class FerramentaDeCausaTests
         Assert.NotNull(a.Aviso);
         Assert.Empty(a.Causas);
     }
+
+    // ---- as três que faltavam para igualar o Trino Intelligence ---------------
+
+    [Fact]
+    public void O_5W2H_organiza_a_execucao_e_nao_elege_causa()
+    {
+        // é o oposto de priorizar: a causa já está clara, e aqui se organiza o como
+        var a = Ler(FerramentaDeCausa.CincoWDoisH, """
+        {"linhas":[{"oque":"Afixar o limite","porque":"Ninguém sabe o teto","onde":"Doca 2",
+                    "quando":"10/10","quem":"Ana","como":"Cartaz A3","quanto":"R$ 120"}]}
+        """);
+        var linha = Assert.Single(a.Linhas!);
+        Assert.Equal("Afixar o limite", linha.OQue);
+        Assert.Equal("Ana", linha.Quem);
+        Assert.Empty(a.Vitais);
+    }
+
+    [Fact]
+    public void O_5W2H_aceita_o_formato_do_Trino_Intelligence()
+    {
+        var a = Ler(FerramentaDeCausa.CincoWDoisH,
+            """{"rows":[{"what":"Treinar a doca","who":"Bruno","how_much":"R$ 0"}]}""");
+        var linha = Assert.Single(a.Linhas!);
+        Assert.Equal("Treinar a doca", linha.OQue);
+        Assert.Equal("R$ 0", linha.Quanto);
+    }
+
+    [Fact]
+    public void O_Kaizen_guarda_o_antes_o_depois_e_o_resultado()
+    {
+        var a = Ler(FerramentaDeCausa.Kaizen, """
+        {"antes":"Palete solto","depois":"Palete cintado",
+         "melhorias":["Cinta plástica","Cartaz"],"resultados":"Zero avaria em 30 dias"}
+        """);
+        Assert.Equal("Palete solto", a.Antes);
+        Assert.Equal("Palete cintado", a.Depois);
+        Assert.Equal(2, a.Ideias.Count);
+        Assert.Equal("Zero avaria em 30 dias", a.Resultado);
+        Assert.Empty(a.Vitais);
+    }
+
+    [Fact]
+    public void O_Fluxograma_poe_o_atual_ao_lado_do_proposto()
+    {
+        // a comparação é a informação: um fluxo sozinho não diz o que muda
+        var a = Ler(FerramentaDeCausa.Fluxograma,
+            """{"atual":["Recebe","Empilha"],"proposto":["Recebe","Confere","Empilha"]}""");
+        Assert.Equal(["Recebe", "Empilha"], a.FluxoAtual);
+        Assert.Equal(["Recebe", "Confere", "Empilha"], a.FluxoProposto);
+    }
+
+    [Fact]
+    public void O_fluxograma_aceita_a_lista_de_objetos_do_Trino_Intelligence()
+    {
+        var a = Ler(FerramentaDeCausa.Fluxograma,
+            """{"current":[{"step":"Recebe"}],"proposed":[{"step":"Confere"}]}""");
+        Assert.Equal(["Recebe"], a.FluxoAtual);
+        Assert.Equal(["Confere"], a.FluxoProposto);
+    }
+
+    [Fact]
+    public void As_oito_ferramentas_tem_nome_e_para_que_serve()
+    {
+        // a ferramenta errada para o problema é o que faz a análise virar formulário
+        // preenchido sem serventia — a tela mostra para que serve na hora de escolher
+        Assert.Equal(8, FerramentaDeCausa.Todas.Length);
+        foreach (var t in FerramentaDeCausa.Todas)
+        {
+            Assert.NotEqual(t, FerramentaDeCausa.Rotulo(t));
+            Assert.NotEmpty(FerramentaDeCausa.ParaQue(t));
+        }
+    }
 }

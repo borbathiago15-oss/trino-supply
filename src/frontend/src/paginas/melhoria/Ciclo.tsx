@@ -2,7 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import { abrirBlob } from '@/api/cliente';
 import {
-  a3DoCiclo, abrirCiclo, encerrarCiclo, EncerramentoPendente, reabrirCiclo, salvarCiclo,
+  a3DoCiclo, abrirCiclo, encerrarCiclo, EncerramentoPendente, listarCiclos, reabrirCiclo,
+  removerFerramenta, salvarCiclo, salvarFerramenta,
   type AcaoDoCiclo, type CicloCompleto, type DadosDoCiclo, type Leitura, type Sinal,
 } from '@/api/melhoria';
 import { Badge, Carregando, Dado, Erro, Painel, Vazio } from '@/componentes/basicos';
@@ -227,18 +228,11 @@ function Conteudo({ completo, recarregar, avisar }: {
           <Dado rotulo="Causa raiz">{completo.plan.rootCause ?? '—'}</Dado>
           <Dado rotulo="Meta">{completo.plan.goalDescription ?? '—'}</Dado>
         </Grade2>
-        {completo.analysis && (
-          <div className="mt-4">
-            <h3 className="text-[13.5px] font-bold">{completo.analysis.name}</h3>
-            <FerramentaRenderizada analise={completo.analysis} />
-            {completo.reading.causas.some((x) => x.vital && x.acoes === 0) && (
-              <Nota>
-                <Vital /> sem ação apontando para ela — a leitura acima diz qual.
-              </Nota>
-            )}
-          </div>
-        )}
       </Painel>
+
+      {/* as ferramentas moram num painel próprio: são várias, e é a diferença que mais
+          importa — o Ishikawa levanta, o Pareto prioriza, o 5W2H organiza a execução */}
+      <Ferramentas completo={completo} recarregar={recarregar} avisar={avisar} />
 
       <Painel titulo="Do — as ações que atacam a causa">
         <ListaDeAcoes acoes={completo.actions} />
@@ -305,5 +299,123 @@ function Conteudo({ completo, recarregar, avisar }: {
         </Dialogo>
       )}
     </>
+  );
+}
+
+
+/**
+ * As ferramentas da folha. <b>Várias convivem</b>: obrigar a escolher uma faria a análise
+ * contar meia história — e era essa a distância para o Trino Intelligence.
+ *
+ * <p>
+ * Cada uma é preenchida em JSON, e a tela guarda o texto como está: o servidor é quem
+ * normaliza, ordena e marca o vital. Validar aqui daria dois donos para a mesma régua.
+ * </p>
+ */
+function Ferramentas({ completo, recarregar, avisar }: {
+  completo: CicloCompleto;
+  recarregar: () => void;
+  avisar: (texto: string, tom?: 'ok' | 'erro') => void;
+}) {
+  const c = completo.cycle;
+  const [editando, setEditando] = useState<string | null>(null);
+  const [texto, setTexto] = useState('');
+  const [nova, setNova] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  const opcoes = useCarregar((signal) => listarCiclos({}, signal), []);
+  const catalogo = opcoes.dados?.options.tools ?? [];
+  const usadas = new Set(completo.tools.map((t) => t.tool));
+  const disponiveis = catalogo.filter((t) => !usadas.has(t.key));
+
+  async function guardar(tool: string, data: string | null) {
+    setSalvando(true);
+    try {
+      await salvarFerramenta(c.id, tool, data);
+      avisar('Ferramenta salva.');
+      setEditando(null);
+      recarregar();
+    } catch (e) { avisar(mensagem(e, 'Falha ao salvar a ferramenta.'), 'erro'); }
+    finally { setSalvando(false); }
+  }
+
+  async function tirar(tool: string) {
+    try {
+      await removerFerramenta(c.id, tool);
+      avisar('Ferramenta retirada da folha.');
+      recarregar();
+    } catch (e) { avisar(mensagem(e, 'Falha ao retirar a ferramenta.'), 'erro'); }
+  }
+
+  const rotulo = (chave: string) =>
+    catalogo.find((t) => t.key === chave)?.label ?? chave;
+
+  return (
+    <Painel titulo="Ferramentas de análise" acoes={
+      disponiveis.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <select aria-label="Ferramenta a acrescentar" value={nova}
+            onChange={(e) => setNova(e.target.value)}>
+            <option value="">Acrescentar…</option>
+            {disponiveis.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+          </select>
+          <button type="button" className="botao" disabled={!nova || salvando}
+            onClick={() => { void guardar(nova, '{}'); setNova(''); }}>Acrescentar</button>
+        </div>
+      )
+    }>
+      {completo.analyses.length === 0 && (
+        <Vazio>
+          Nenhuma ferramenta ainda. Uma análise de verdade costuma usar mais de uma — o
+          Ishikawa para levantar, o Pareto para priorizar, o 5W2H para organizar a execução.
+        </Vazio>
+      )}
+      {nova && (
+        <Nota>{catalogo.find((t) => t.key === nova)?.hint}</Nota>
+      )}
+      {completo.analyses.map((a) => {
+        const guardada = completo.tools.find((t) => t.tool === a.key);
+        return (
+          <section key={a.key} className="mt-4 border-t border-borda pt-3 first:mt-0 first:border-0 first:pt-0"
+            data-ferramenta={a.key}>
+            <header className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-[13.5px] font-bold">{a.name}</h3>
+              <div className="flex gap-1.5">
+                <button type="button" className="botao-secundario"
+                  onClick={() => {
+                    setEditando(editando === a.key ? null : a.key);
+                    setTexto(guardada?.data ?? '{}');
+                  }}>{editando === a.key ? 'Fechar' : 'Preencher'}</button>
+                <button type="button" className="botao-perigo"
+                  onClick={() => void tirar(a.key)}>Retirar</button>
+              </div>
+            </header>
+            <FerramentaRenderizada analise={a} />
+            {editando === a.key && (
+              <div className="mt-3">
+                <Campo id={`ft-${a.key}`} rotulo="Dados da ferramenta"
+                  dica="o servidor é quem ordena e marca o vital">
+                  <textarea id={`ft-${a.key}`} rows={6} className="font-mono text-[12px]"
+                    value={texto} onChange={(e) => setTexto(e.target.value)} />
+                </Campo>
+                <button type="button" className="botao mt-2" disabled={salvando}
+                  onClick={() => void guardar(a.key, texto)}>Salvar ferramenta</button>
+              </div>
+            )}
+          </section>
+        );
+      })}
+      {completo.reading.causas.some((x) => x.vital && x.acoes === 0) && (
+        <Nota>
+          <Vital /> sem ação apontando para ela — a leitura acima diz qual.
+        </Nota>
+      )}
+      {completo.tools.some((t) => !completo.analyses.some((a) => a.key === t.tool)) && (
+        <Nota>Alguma ferramenta gravada não pôde ser lida: {
+          completo.tools.filter((t) => !completo.analyses.some((a) => a.key === t.tool))
+            .map((t) => rotulo(t.tool)).join(', ')
+        }.</Nota>
+      )}
+    </Painel>
   );
 }

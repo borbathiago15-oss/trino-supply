@@ -384,19 +384,25 @@ public record LicoesDoPlanoRequest(string? WhatWorked, string? WhatFailed, strin
 public record CicloRequest(
     string? Title, string? Scope, string? Region, Guid? SectorId, string? Areas, string? Priority,
     Guid? OwnerId, DateOnly? StartDate, DateOnly? EndDate,
-    string? Problem, string? CurrentSituation, string? ToolName, string? ToolData,
+    string? Problem, string? CurrentSituation,
     string? CauseAnalysis, string? RootCause, string? GoalDescription, string? Indicator,
     decimal? Baseline, decimal? GoalValue, string? Unit, DateOnly? GoalDeadline,
     DateOnly? CheckedOn, decimal? ResultValue, string? CheckAnalysis,
     string? Standardization, string? Lessons, bool? NewCycle,
-    string? Phase = null, List<string>? CostCenters = null)
+    string? Phase = null, List<string>? CostCenters = null,
+    string? Leader = null, string? Mentor = null, string? Participants = null,
+    decimal? AnnualSaving = null)
 {
     public TrinoSupply.Foundation.Api.Melhoria.DadosDoCiclo Dados() => new(
         Title ?? "", Scope ?? "", Region, SectorId, Areas, Priority, OwnerId, StartDate, EndDate,
-        Problem, CurrentSituation, ToolName, ToolData, CauseAnalysis, RootCause, GoalDescription,
+        Problem, CurrentSituation, CauseAnalysis, RootCause, GoalDescription,
         Indicator, Baseline, GoalValue, Unit, GoalDeadline, CheckedOn, ResultValue, CheckAnalysis,
-        Standardization, Lessons, NewCycle, Phase, CostCenters);
+        Standardization, Lessons, NewCycle, Phase, CostCenters,
+        Leader, Mentor, Participants, AnnualSaving);
 }
+
+/// <summary>A ferramenta preenchida. Uma por tipo no ciclo; salvar de novo corrige a que existe.</summary>
+public record FerramentaDoCicloRequest(string Tool, string? Data);
 
 /// <summary>
 /// <c>GoalMet</c> é <b>nulável de propósito</b>: sem o campo, o encerramento é recusado. Um

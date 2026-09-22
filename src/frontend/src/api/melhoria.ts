@@ -47,6 +47,11 @@ export interface Causa {
   detail: string | null;
 }
 
+export interface LinhaDoPlano {
+  what: string; why: string | null; where: string | null; when: string | null;
+  who: string | null; how: string | null; howMuch: string | null;
+}
+
 export interface Analise {
   key: string;
   name: string;
@@ -58,7 +63,16 @@ export interface Analise {
   groups: { key: string; label: string; items: string[] }[];
   ideas: string[];
   causes: Causa[];
+  /** 5W2H */
+  rows: LinhaDoPlano[];
+  /** Kaizen */
+  before: string | null; after: string | null; result: string | null;
+  /** Fluxograma */
+  currentFlow: string[]; proposedFlow: string[];
 }
+
+/** A ferramenta como está gravada — é o que o formulário edita. */
+export interface FerramentaDoCiclo { tool: string; data: string | null; seq: number }
 
 export interface AcaoDoCiclo {
   id: string; number: string; title: string;
@@ -92,15 +106,20 @@ export interface CicloCompleto {
   cycle: Ciclo;
   plan: {
     problem: string | null; currentSituation: string | null;
-    toolName: string | null; toolData: string | null;
     causeAnalysis: string | null; rootCause: string | null; goalDescription: string | null;
   };
   check: { checkedOn: string | null; checkAnalysis: string | null };
   act: { standardization: string | null; lessons: string | null; newCycle: boolean };
   sectorName: string | null;
+  leader: string | null;
+  mentor: string | null;
+  participants: string | null;
+  annualSaving: number | null;
+  /** Várias ferramentas convivem na mesma folha — é a diferença que mais importa. */
+  tools: FerramentaDoCiclo[];
+  analyses: Analise[];
   watchers: { userId: string; label: string }[];
   costCenters: string[];
-  analysis: Analise | null;
   actions: AcaoDoCiclo[];
   reading: Leitura;
 }
@@ -108,7 +127,7 @@ export interface CicloCompleto {
 export interface OpcoesDoModulo {
   phases: { key: string; label: string }[];
   scopes: { key: string; label: string }[];
-  tools: { key: string; label: string }[];
+  tools: { key: string; label: string; hint: string }[];
 }
 
 const base = '/api/v1/improvement-cycles';
@@ -137,8 +156,9 @@ export type DadosDoCiclo = Partial<{
   areas: string | null; priority: string; ownerId: string | null;
   startDate: string | null; endDate: string | null;
   problem: string | null; currentSituation: string | null;
-  toolName: string | null; toolData: string | null;
   causeAnalysis: string | null; rootCause: string | null; goalDescription: string | null;
+  leader: string | null; mentor: string | null; participants: string | null;
+  annualSaving: number | null;
   indicator: string | null; baseline: number | null; goalValue: number | null;
   unit: string | null; goalDeadline: string | null;
   checkedOn: string | null; resultValue: number | null; checkAnalysis: string | null;
@@ -187,6 +207,13 @@ export async function encerrarCiclo(
     throw e;
   }
 }
+
+/** Guarda uma ferramenta preenchida. Uma por tipo; salvar de novo corrige a que existe. */
+export const salvarFerramenta = (id: string, tool: string, data: string | null) =>
+  api<{ tools: FerramentaDoCiclo[] }>(`${base}/${id}/tools`, { method: 'PUT', body: { tool, data } });
+
+export const removerFerramenta = (id: string, tool: string) =>
+  api<{ tools: FerramentaDoCiclo[] }>(`${base}/${id}/tools/${tool}`, { method: 'DELETE' });
 
 export const reabrirCiclo = (id: string, phase?: string) =>
   api<Ciclo>(`${base}/${id}/reopen`, { method: 'POST', body: { phase: phase ?? null } });

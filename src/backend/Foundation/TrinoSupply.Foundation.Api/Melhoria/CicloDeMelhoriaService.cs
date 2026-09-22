@@ -12,12 +12,14 @@ public record FiltroDeCiclos(string? Busca = null, string? Fase = null, string? 
 public record DadosDoCiclo(
     string Title, string Scope, string? Region, Guid? SectorId, string? Areas, string? Priority,
     Guid? OwnerId, DateOnly? StartDate, DateOnly? EndDate,
-    string? Problem, string? CurrentSituation, string? ToolName, string? ToolData,
+    string? Problem, string? CurrentSituation,
     string? CauseAnalysis, string? RootCause, string? GoalDescription, string? Indicator,
     decimal? Baseline, decimal? GoalValue, string? Unit, DateOnly? GoalDeadline,
     DateOnly? CheckedOn, decimal? ResultValue, string? CheckAnalysis,
     string? Standardization, string? Lessons, bool? NewCycle,
-    string? Phase = null, IReadOnlyList<string>? CostCenters = null);
+    string? Phase = null, IReadOnlyList<string>? CostCenters = null,
+    string? Leader = null, string? Mentor = null, string? Participants = null,
+    decimal? AnnualSaving = null);
 
 /// <param name="MetaAtingida">Nulo é recusado: o veredito é dito, não deduzido.</param>
 /// <param name="ConfirmaPendencias">O segundo passo, quando sobrou ação em aberto.</param>
@@ -25,7 +27,7 @@ public record PedidoDeEncerramento(bool? MetaAtingida, string? Motivo, bool Conf
 
 /// <summary>O ciclo com tudo o que a tela de detalhe mostra, já lido.</summary>
 public record CicloCompleto(
-    ImprovementCycle Ciclo, AnaliseDeCausa? Analise, IReadOnlyList<ActionItem> Acoes,
+    ImprovementCycle Ciclo, IReadOnlyList<AnaliseDeCausa> Analises, IReadOnlyList<ActionItem> Acoes,
     LeituraDoCiclo Leitura, string? SetorNome);
 
 public record PlacarDosCiclos(int Total, int Plan, int Do, int Check, int Act, int Encerrados,
@@ -189,6 +191,7 @@ public class CicloDeMelhoriaService(AppDbContext db, TimeProvider clock)
     {
         var visiveis = await VisiveisAsync(await EuAsync(ator, ct), ct);
         var ciclo = await visiveis.Include(c => c.Watchers).Include(c => c.CostCenters)
+            .Include(c => c.Tools)
             .SingleOrDefaultAsync(c => c.Id == id, ct);
         if (ciclo is null) return null;
         return await CompletarAsync(ciclo, ct);
@@ -197,12 +200,12 @@ public class CicloDeMelhoriaService(AppDbContext db, TimeProvider clock)
     private async Task<CicloCompleto> CompletarAsync(ImprovementCycle ciclo, CancellationToken ct)
     {
         var acoes = await AcoesDoCicloAsync(ciclo.Id, ct);
-        var analise = FerramentaDeCausa.Normalizar(ciclo.ToolName, ciclo.ToolData);
+        var analises = Analises(ciclo);
         var hoje = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
         var setor = ciclo.SectorId is { } sid
             ? await db.Sectors.Where(s => s.Id == sid).Select(s => s.Name).SingleOrDefaultAsync(ct)
             : null;
-        return new(ciclo, analise, acoes, MotorDeLeitura.Ler(ciclo, analise, acoes, hoje), setor);
+        return new(ciclo, analises, acoes, MotorDeLeitura.Ler(ciclo, analises, acoes, hoje), setor);
     }
 
     // ---- escrita -------------------------------------------------------------
@@ -259,7 +262,7 @@ public class CicloDeMelhoriaService(AppDbContext db, TimeProvider clock)
         Actor ator, Guid id, DadosDoCiclo d, CancellationToken ct = default)
     {
         var eu = await EuAsync(ator, ct);
-        var ciclo = await db.ImprovementCycles.Include(c => c.CostCenters)
+        var ciclo = await db.ImprovementCycles.Include(c => c.CostCenters).Include(c => c.Tools)
             .SingleOrDefaultAsync(c => c.Id == id, ct);
         if (ciclo is null) return (null, new("PDCA-ERR-404", "Ciclo não encontrado."));
 
@@ -308,9 +311,6 @@ public class CicloDeMelhoriaService(AppDbContext db, TimeProvider clock)
     {
         c.Problem = Limpo(d.Problem) ?? c.Problem;
         c.CurrentSituation = Limpo(d.CurrentSituation) ?? c.CurrentSituation;
-        if (Limpo(d.ToolName) is { } t && FerramentaDeCausa.Todas.Contains(t.ToUpperInvariant()))
-            c.ToolName = t.ToUpperInvariant();
-        if (d.ToolData is not null) c.ToolData = Limpo(d.ToolData);
         c.CauseAnalysis = Limpo(d.CauseAnalysis) ?? c.CauseAnalysis;
         c.RootCause = Limpo(d.RootCause) ?? c.RootCause;
         c.GoalDescription = Limpo(d.GoalDescription) ?? c.GoalDescription;
@@ -328,9 +328,89 @@ public class CicloDeMelhoriaService(AppDbContext db, TimeProvider clock)
         c.Lessons = Limpo(d.Lessons) ?? c.Lessons;
         if (d.NewCycle is { } n) c.NewCycle = n;
 
-        if (string.IsNullOrWhiteSpace(c.RootCause)
-            && FerramentaDeCausa.Normalizar(c.ToolName, c.ToolData)?.CausaRaiz is { } raiz)
+        c.Leader = Limpo(d.Leader) ?? c.Leader;
+        c.Mentor = Limpo(d.Mentor) ?? c.Mentor;
+        c.Participants = Limpo(d.Participants) ?? c.Participants;
+        if (d.AnnualSaving is not null) c.AnnualSaving = d.AnnualSaving;
+
+        PreencherCausaRaiz(c);
+    }
+
+    /// <summary>
+    /// A causa raiz dos 5 Porquês preenche a do ciclo <b>se ninguém escreveu outra</b>. É o
+    /// mesmo dado, e digitá-lo duas vezes é convite a divergir.
+    /// </summary>
+    private static void PreencherCausaRaiz(ImprovementCycle c)
+    {
+        if (!string.IsNullOrWhiteSpace(c.RootCause)) return;
+        var porques = c.Tools.FirstOrDefault(t => t.ToolType == FerramentaDeCausa.CincoPorques);
+        if (porques is null) return;
+        if (FerramentaDeCausa.Normalizar(porques.ToolType, porques.ToolData)?.CausaRaiz is { } raiz)
             c.RootCause = raiz;
+    }
+
+    /// <summary>Todas as ferramentas do ciclo, já normalizadas e na ordem em que foram usadas.</summary>
+    public static IReadOnlyList<AnaliseDeCausa> Analises(ImprovementCycle c) =>
+        [.. c.Tools.OrderBy(t => t.Seq)
+            .Select(t => FerramentaDeCausa.Normalizar(t.ToolType, t.ToolData))
+            .Where(a => a is not null).Select(a => a!)];
+
+    // ---- as ferramentas da folha ---------------------------------------------
+
+    /// <summary>
+    /// Guarda uma ferramenta preenchida. <b>Uma por tipo</b>: dois Paretos no mesmo ciclo
+    /// dariam duas respostas para "qual é a causa vital", e a tela mostraria a que carregasse
+    /// primeiro. Salvar de novo corrige a que existe.
+    /// </summary>
+    public async Task<(ImprovementCycle? ciclo, UserError? erro)> SalvarFerramentaAsync(
+        Guid id, string tipo, string? dados, CancellationToken ct = default)
+    {
+        var ciclo = await db.ImprovementCycles.Include(c => c.Tools)
+            .SingleOrDefaultAsync(c => c.Id == id, ct);
+        if (ciclo is null) return (null, new("PDCA-ERR-404", "Ciclo não encontrado."));
+
+        var chave = (tipo ?? "").Trim().ToUpperInvariant();
+        if (!FerramentaDeCausa.Todas.Contains(chave))
+            return (null, new("PDCA-ERR-015", "Ferramenta de análise inválida."));
+
+        var agora = clock.GetUtcNow();
+        var ferramenta = ciclo.Tools.FirstOrDefault(t => t.ToolType == chave);
+        if (ferramenta is null)
+        {
+            ferramenta = new CycleTool
+            {
+                CycleId = ciclo.Id, ToolType = chave,
+                Seq = ciclo.Tools.Count == 0 ? 1 : ciclo.Tools.Max(t => t.Seq) + 1,
+            };
+            // só pelo DbSet: o EF põe a ferramenta de volta na navegação do pai rastreado,
+            // e adicioná-la aqui também a deixaria duas vezes na folha
+            db.CycleTools.Add(ferramenta);
+        }
+        ferramenta.ToolData = Limpo(dados);
+        ferramenta.UpdatedAt = agora;
+
+        PreencherCausaRaiz(ciclo);
+        ciclo.UpdatedAt = agora;
+        await db.SaveChangesAsync(ct);
+        return (ciclo, null);
+    }
+
+    public async Task<(ImprovementCycle? ciclo, UserError? erro)> RemoverFerramentaAsync(
+        Guid id, string tipo, CancellationToken ct = default)
+    {
+        var ciclo = await db.ImprovementCycles.Include(c => c.Tools)
+            .SingleOrDefaultAsync(c => c.Id == id, ct);
+        if (ciclo is null) return (null, new("PDCA-ERR-404", "Ciclo não encontrado."));
+
+        var chave = (tipo ?? "").Trim().ToUpperInvariant();
+        var ferramenta = ciclo.Tools.FirstOrDefault(t => t.ToolType == chave);
+        if (ferramenta is null) return (null, new("PDCA-ERR-016", "Este ciclo não usa essa ferramenta."));
+
+        db.CycleTools.Remove(ferramenta);
+        ciclo.Tools.Remove(ferramenta);
+        ciclo.UpdatedAt = clock.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+        return (ciclo, null);
     }
 
     // ---- encerramento (§4) ---------------------------------------------------

@@ -48,6 +48,13 @@ public static class MelhoriaRotas
         {
             key = a.Chave, name = a.Nome, problem = a.Problema, effect = a.Efeito,
             rootCause = a.CausaRaiz, warning = a.Aviso,
+            rows = (a.Linhas ?? []).Select(l => new
+            {
+                what = l.OQue, why = l.PorQue, where = l.Onde, when = l.Quando,
+                who = l.Quem, how = l.Como, howMuch = l.Quanto,
+            }),
+            before = a.Antes, after = a.Depois, result = a.Resultado,
+            currentFlow = a.FluxoAtual ?? [], proposedFlow = a.FluxoProposto ?? [],
             steps = a.Degraus.Select(d => new { number = d.Numero, question = d.Pergunta, answer = d.Resposta }),
             groups = a.Grupos.Select(g => new { key = g.Chave, label = g.Rotulo, items = g.Itens }),
             ideas = a.Ideias,
@@ -81,7 +88,10 @@ public static class MelhoriaRotas
                 {
                     phases = FaseDoCiclo.Todas.Select(f => new { key = f, label = FaseDoCiclo.Rotulo(f) }),
                     scopes = EscopoDoCiclo.Todos.Select(e => new { key = e, label = EscopoDoCiclo.Rotulo(e) }),
-                    tools = FerramentaDeCausa.Todas.Select(t => new { key = t, label = FerramentaDeCausa.Rotulo(t) }),
+                    tools = FerramentaDeCausa.Todas.Select(t => new
+                    {
+                        key = t, label = FerramentaDeCausa.Rotulo(t), hint = FerramentaDeCausa.ParaQue(t),
+                    }),
                 },
             }, ctx);
         });
@@ -101,16 +111,21 @@ public static class MelhoriaRotas
                 plan = new
                 {
                     problem = c.Problem, currentSituation = c.CurrentSituation,
-                    toolName = c.ToolName, toolData = c.ToolData,
                     causeAnalysis = c.CauseAnalysis, rootCause = c.RootCause,
                     goalDescription = c.GoalDescription,
                 },
                 check = new { checkedOn = c.CheckedOn, checkAnalysis = c.CheckAnalysis },
                 act = new { standardization = c.Standardization, lessons = c.Lessons, newCycle = c.NewCycle },
                 sectorName = completo.SetorNome,
+                leader = c.Leader, mentor = c.Mentor, participants = c.Participants,
+                annualSaving = c.AnnualSaving,
                 watchers = c.Watchers.Select(w => new { userId = w.UserId, label = w.UserLabel }),
                 costCenters = c.CostCenters.Select(x => x.CostCenter),
-                analysis = completo.Analise is { } a ? Analise(a) : null,
+                // várias ferramentas convivem na mesma folha: obrigar a escolher uma faria
+                // a análise contar meia história
+                tools = c.Tools.OrderBy(t => t.Seq)
+                    .Select(t => new { tool = t.ToolType, data = t.ToolData, seq = t.Seq }),
+                analyses = completo.Analises.Select(Analise),
                 actions = completo.Acoes.Select(x => Acao(x, hoje)),
                 reading = completo.Leitura,
             }, ctx);
@@ -166,6 +181,28 @@ public static class MelhoriaRotas
                 pending = pendentes.Select(a => Acao(a, hoje)),
                 correlationId = CorrelationId(ctx),
             }, statusCode: 409);
+        });
+
+        // a ferramenta tem rota própria: ela é preenchida, não descrita, e salvar a folha
+        // inteira a cada tecla do Ishikawa seria mandar o ciclo todo de volta
+        ciclos.MapPut("/{id:guid}/tools", async (Guid id, FerramentaDoCicloRequest body,
+            CicloDeMelhoriaService svc, HttpContext ctx, CancellationToken ct) =>
+        {
+            var (ciclo, erro) = await svc.SalvarFerramentaAsync(id, body.Tool, body.Data, ct);
+            return erro is not null
+                ? Error(ctx, erro.Code == "PDCA-ERR-404" ? 404 : 400, erro.Code, erro.Message)
+                : Ok(new { tools = ciclo!.Tools.OrderBy(t => t.Seq)
+                    .Select(t => new { tool = t.ToolType, data = t.ToolData, seq = t.Seq }) }, ctx);
+        });
+
+        ciclos.MapDelete("/{id:guid}/tools/{tool}", async (Guid id, string tool,
+            CicloDeMelhoriaService svc, HttpContext ctx, CancellationToken ct) =>
+        {
+            var (ciclo, erro) = await svc.RemoverFerramentaAsync(id, tool, ct);
+            return erro is not null
+                ? Error(ctx, erro.Code == "PDCA-ERR-404" ? 404 : 400, erro.Code, erro.Message)
+                : Ok(new { tools = ciclo!.Tools.OrderBy(t => t.Seq)
+                    .Select(t => new { tool = t.ToolType, data = t.ToolData, seq = t.Seq }) }, ctx);
         });
 
         ciclos.MapPost("/{id:guid}/reopen", async (Guid id, ReabrirCicloRequest? body,

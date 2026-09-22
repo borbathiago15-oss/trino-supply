@@ -1,5 +1,6 @@
 DELETE /api/v1/action-plans/{id:guid}/risks/{riskId:guid}
 DELETE /api/v1/announcements/{id:guid}
+DELETE /api/v1/improvement-cycles/{id:guid}/tools/{tool}
 DELETE /api/v1/purchase-requisitions/{id:guid}
 DELETE /api/v1/purchase-requisitions/{id:guid}/attachments/{attachmentId:guid}
 DELETE /api/v1/purchase-requisitions/{id:guid}/items/{itemId:guid}
@@ -174,6 +175,7 @@ PUT /api/v1/action-plans/{id:guid}/lessons
 PUT /api/v1/action-plans/{id:guid}/risks
 PUT /api/v1/action-plans/{id:guid}/root-cause
 PUT /api/v1/company
+PUT /api/v1/improvement-cycles/{id:guid}/tools
 PUT /api/v1/improvement-cycles/{id:guid}/watchers
 PUT /api/v1/quotations/{id:guid}/suppliers/{supplierId:guid}/deadline
 PUT /api/v1/score-weights/

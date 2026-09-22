@@ -85,6 +85,12 @@ export const MENU: GrupoMenu[] = [
       { id: 'insights', rotulo: 'Insights & Executivo', rota: '/insights', modulo: 'INSIGHTS', mostrar: (u) => podeVerCompliance(u) && u.role !== 'Director' },
       { id: 'compliance', rotulo: 'Compliance', rota: '/compliance', modulo: 'COMPLIANCE', mostrar: podeVerCompliance },
       { id: 'reports', rotulo: 'Relatórios', rota: '/relatorios', mostrar: podeVerRelatorios },
+      // O cockpit é a mesma Torre vista da parede da sala, e o gesto é o mesmo destes
+      // aqui: olhar o que aconteceu. Ele ficou no grupo Compras e isso o escondia duas
+      // vezes — o grupo pede o módulo COMPRAS e some inteiro para o diretor, que é
+      // justamente quem mais olha a parede. Fora do AppLayout, abre em aba nova.
+      { id: 'cockpit', rotulo: 'Cockpit (Modo TV)', rota: '/cockpit', novaAba: true,
+        mostrar: (u) => podeComprar(u) || podeVerCompliance(u) },
     ]},
     // A Central é de quem aprova alguma coisa — SC, Nível 1 ou Nível 2 — e o direito vem do
     // papel, como no servidor (que não pede módulo para decidir). O diretor chegava lá só pelo
@@ -112,11 +118,6 @@ export const MENU: GrupoMenu[] = [
     // atendente. Ela tem tela própria, no grupo Material.
     { id: 'control-tower', rotulo: 'Torre de Controle', rota: '/torre',
       mostrar: (u) => podeComprar(u) || podeVerCompliance(u) || u.role === 'Auditor' },
-    // o cockpit é a mesma Torre vista da parede da sala. Ele mora fora do AppLayout —
-    // sem menu e sem cabeçalho —, mas precisa de uma porta no menu: sem ela, só chegava
-    // quem soubesse digitar /cockpit, e a tela nasceu invisível
-    { id: 'cockpit', rotulo: 'Cockpit (Modo TV)', rota: '/cockpit', novaAba: true,
-      mostrar: (u) => podeComprar(u) || podeVerCompliance(u) },
     { rotulo: 'Cotações', filhos: [
       { id: 'rfq-queue', rotulo: 'Abrir Cotação', rota: '/cotacoes/abrir', mostrar: podeVerCotacao },
       { id: 'quotations', rotulo: 'Processos de Cotação', rota: '/cotacoes', mostrar: podeVerCotacao },

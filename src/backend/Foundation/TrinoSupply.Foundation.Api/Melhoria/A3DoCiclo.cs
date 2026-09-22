@@ -72,6 +72,8 @@ public static class A3DoCiclo
                         x.Span($"{ciclo.Code}  ·  {EscopoDoCiclo.Rotulo(ciclo.Scope)}").FontSize(8);
                         if (completo.SetorNome is { } s) x.Span($"  ·  {s}").FontSize(8);
                         x.Span($"  ·  dono: {ciclo.OwnerLabel ?? "—"}").FontSize(8);
+                        if (ciclo.Leader is { } lider) x.Span($"  ·  líder: {lider}").FontSize(8);
+                        if (ciclo.Mentor is { } mentor) x.Span($"  ·  mentor: {mentor}").FontSize(8);
                     });
                 });
                 r.ConstantItem(150).AlignRight().Column(t =>
@@ -110,15 +112,20 @@ public static class A3DoCiclo
             Bloco(col, "Problema", ciclo.Problem);
             Bloco(col, "Situação atual", ciclo.CurrentSituation);
 
-            if (completo.Analise is { } a)
+            // todas as ferramentas da folha, na ordem em que a análise as usou: obrigar a
+            // escolher uma faria o A3 contar meia história
+            foreach (var a in completo.Analises)
             {
                 col.Item().Text(a.Nome).Bold().FontSize(9);
-                if (a.Aviso is { } aviso) col.Item().Text(aviso).FontSize(8).Italic();
-                else if (a.Degraus.Count > 0) Degraus(col, a);
-                else if (a.Grupos.Count > 0) Grupos(col, a);
-                else if (a.Causas.Count > 0) Causas(col, a);
-                else if (a.Ideias.Count > 0)
+                if (a.Aviso is { } aviso) { col.Item().Text(aviso).FontSize(8).Italic(); continue; }
+                if (a.Degraus.Count > 0) Degraus(col, a);
+                if (a.Grupos.Count > 0) Grupos(col, a);
+                if (a.Causas.Count > 0) Causas(col, a);
+                if (a.Ideias.Count > 0)
                     foreach (var i in a.Ideias) col.Item().Text($"• {i}").FontSize(8);
+                if (a.Linhas is { Count: > 0 } linhas) Plano5W2H(col, linhas);
+                if (a.Antes is not null || a.Depois is not null) Kaizen(col, a);
+                if (a.FluxoAtual is { Count: > 0 } || a.FluxoProposto is { Count: > 0 }) Fluxo(col, a);
             }
 
             Bloco(col, "Causa raiz", ciclo.RootCause);
@@ -142,6 +149,52 @@ public static class A3DoCiclo
                 x.Span($"{d.Pergunta} ").FontSize(8).Light();
                 x.Span(d.Resposta).FontSize(8);
             });
+    }
+
+    private static void Plano5W2H(ColumnDescriptor col, IReadOnlyList<LinhaDoPlano> linhas)
+    {
+        foreach (var l in linhas)
+            col.Item().Text(x =>
+            {
+                x.Span(l.OQue).SemiBold().FontSize(8);
+                var resto = new[]
+                {
+                    l.Quem is null ? null : $"quem: {l.Quem}",
+                    l.Quando is null ? null : $"quando: {l.Quando}",
+                    l.Onde is null ? null : $"onde: {l.Onde}",
+                    l.Como is null ? null : $"como: {l.Como}",
+                    l.Quanto is null ? null : $"quanto: {l.Quanto}",
+                }.Where(v => v is not null);
+                if (resto.Any()) x.Span("  (" + string.Join(" · ", resto) + ")").FontSize(7.5f);
+            });
+    }
+
+    private static void Kaizen(ColumnDescriptor col, AnaliseDeCausa a)
+    {
+        col.Item().Row(r =>
+        {
+            r.RelativeItem().Text(x => { x.Span("Antes: ").SemiBold().FontSize(8); x.Span(a.Antes ?? "—").FontSize(8); });
+            r.RelativeItem().Text(x => { x.Span("Depois: ").SemiBold().FontSize(8); x.Span(a.Depois ?? "—").FontSize(8); });
+        });
+        if (a.Resultado is { } res)
+            col.Item().Text(x => { x.Span("Resultado: ").SemiBold().FontSize(8); x.Span(res).FontSize(8); });
+    }
+
+    private static void Fluxo(ColumnDescriptor col, AnaliseDeCausa a)
+    {
+        col.Item().Row(r =>
+        {
+            r.RelativeItem().Text(x =>
+            {
+                x.Span("Fluxo atual: ").SemiBold().FontSize(8);
+                x.Span(string.Join(" → ", a.FluxoAtual ?? [])).FontSize(8);
+            });
+            r.RelativeItem().Text(x =>
+            {
+                x.Span("Proposto: ").SemiBold().FontSize(8);
+                x.Span(string.Join(" → ", a.FluxoProposto ?? [])).FontSize(8);
+            });
+        });
     }
 
     private static void Grupos(ColumnDescriptor col, AnaliseDeCausa a)

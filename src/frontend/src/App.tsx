@@ -43,6 +43,7 @@ import { paginaInicial } from '@/dominio/papeis';
 import { Carregando } from '@/componentes/basicos';
 import { LimiteErro } from '@/componentes/LimiteErro';
 import { Cockpit } from '@/paginas/cockpit/Cockpit';
+import { PlanoDeAcaoTela } from '@/paginas/acoes/PlanoDeAcao';
 
 /**
  * Só deixa passar com usuário; sem sessão, manda para o login guardando o destino.
@@ -106,6 +107,7 @@ export function Rotas() {
           <Route path="/estoque/atendimentos" element={<PainelDeAtendimentos />} />
           <Route path="/gestao-solicitacoes" element={<GestaoDeSolicitacoes />} />
           <Route path="/torre" element={<TorreDeControle />} />
+          <Route path="/plano-acao" element={<PlanoDeAcaoTela />} />
           <Route path="/painel" element={<DashboardSuprimentos />} />
           <Route path="/insights" element={<Insights />} />
           <Route path="/diretoria" element={<VisaoDaDiretoria />} />

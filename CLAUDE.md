@@ -297,6 +297,25 @@ porque não são óbvias:
   inventar um registro vazio daria um KPI que não conta nada. A regra vive em
   `TorreDeControleService.ExcecaoDe`, e a linha mostra **o motivo**, não só a marca.
 
+**O cockpit da TV é uma vista da Torre, não uma segunda conta.** `/cockpit` é tela de parede
+da sala de suprimentos: sem menu, sem cabeçalho do app, fora do `AppLayout` — ninguém navega
+nela e cada pixel é área de leitura. Etapa, atraso, exceção e prazo saem das **mesmas funções**
+que a Torre do comprador usa (`ProcessStatus.Of`, `EtapaDe`, `ExcecaoDe`, `PrazoDaEtapaService`),
+e há teste que compara os dois números: a TV fica na sala onde o comprador trabalha, e se a
+parede dissesse "8 atrasados" com a Torre dele dizendo 6, as duas perderiam a autoridade no
+mesmo instante. Por isso a conta **não** é agregação SQL pura — etapa e exceção não existem em
+coluna, e agregá-las em SQL seria reimplementar as regras num segundo lugar.
+Quatro decisões que a tela de parede impõe e a de mesa não: **o risco é união, não soma** (o item
+atrasado *e* com prazo estourado é um só — somar daria mais itens em risco que o backlog inteiro);
+**o gargalo da esteira é o item mais antigo da etapa**, não a média, que esconderia justamente o
+que está parado há três dias; **OTIF sem entrega medida é nulo e aparece como traço**, porque 0%
+diria "todo mundo atrasou"; e **a falha de uma atualização mantém os números na parede**, com um
+aviso discreto, em vez de apagar o painel por causa de um timeout. A rotação de unidades abre pela
+**visão geral** — quem passa e olha três segundos precisa ver a empresa, não a unidade da vez — e
+com uma unidade só não gira, que mostraria o mesmo número duas vezes. `MetaSavingMensal` é
+constante com dono declarado, como `PrazoDaEtapaService.Padrao`: é ponto de partida até alguém
+configurar a da empresa.
+
 **Aviso e contagem são coisas diferentes, e as duas ficam.** A Central de Avisos é
 **derivada**: conta o que está aberto e o número muda sozinho quando o trabalho anda — serve
 para "o que há para eu fazer agora". `UserNotice` é o outro lado: **fato datado, com dono e

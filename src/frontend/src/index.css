@@ -34,3 +34,11 @@
   .badge { @apply inline-block rounded-full border px-2.5 py-0.5 text-[12px] font-semibold whitespace-nowrap; }
   .badge { border-color: color-mix(in srgb, currentColor 22%, transparent); }
 }
+
+/* Rolagem contínua das listas do cockpit (TV). Sem barra: ninguém toca nessa tela.
+   A animação vai só até -50% porque a lista é renderizada uma vez e o laço volta ao
+   topo — rolar além disso deixaria um vazio branco passando pela parede. */
+@keyframes rolar {
+  0%, 8% { transform: translateY(0); }
+  92%, 100% { transform: translateY(-50%); }
+}

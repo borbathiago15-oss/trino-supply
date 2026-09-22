@@ -263,3 +263,85 @@ export function destinoDaAcao(i: LinhaDaTorre): string | null {
   // tela de triagem, que hoje só lista material e devolveria uma lista sem esta SC.
   return null;
 }
+
+// ---- Cockpit da TV (War Room) ---------------------------------------------
+
+/**
+ * O cockpit é uma **vista** da Torre, não outra conta: os mesmos números, ditos para
+ * quem está a cinco metros da tela. É por isso que ele vive neste arquivo.
+ */
+export interface CockpitKpis {
+  itensAtrasados: number;
+  taxaRiscoPct: number;
+  backlogTotalItens: number;
+  backlogTotalValor: number;
+  slaSemanalPct: number;
+  metaSlaPct: number;
+  savingMesTotal: number;
+  metaSavingMes: number;
+  /** Nulo quando nenhuma entrega foi medida no período — 0% diria "todos atrasaram". */
+  otifGeralPct: number | null;
+  otifMedidos: number;
+}
+
+export type Gargalo = 'NORMAL' | 'ATENCAO' | 'CRITICO';
+
+export interface NoDaEsteira {
+  etapa: string;
+  rotulo: string;
+  quantidade: number;
+  /** Espera do item mais antigo da etapa; a média esconderia o item parado há três dias. */
+  horasNaFila: number;
+  gargalo: Gargalo;
+}
+
+export type TipoDeAlerta = 'ATRASO_CRITICO' | 'COTACAO_VENCENDO' | 'PROPOSTA_UNICA' | 'OC_PENDENTE';
+
+export interface ExcecaoDoCockpit {
+  id: string;
+  tipoAlerta: TipoDeAlerta;
+  codigoReferencia: string;
+  descricaoItem: string;
+  unidadeCentroCusto: string;
+  tempoRestanteOuAtraso: string;
+  responsavelNome: string;
+  /** Gravidade: menor sobe. É o que faz o urgente novo assumir o topo sozinho. */
+  ordem: number;
+}
+
+export interface BurndownDoComprador {
+  compradorNome: string;
+  atendidosHoje: number;
+  totalHoje: number;
+  pendenciasCriticas: number;
+}
+
+export type StatusDaDescarga = 'NO_PRAZO' | 'ATRASADO' | 'DESCARREGANDO';
+
+export interface DescargaDoDia {
+  numeroNfe: string;
+  fornecedorNome: string;
+  horarioPrevisto: string;
+  statusEntrega: StatusDaDescarga;
+}
+
+export interface CockpitDados {
+  sincronizadoEm: string;
+  /** A unidade deste recorte; nulo é a visão geral. */
+  unidade: string | null;
+  /** Todas as unidades que existem — a TV gira entre elas. */
+  unidades: string[];
+  kpis: CockpitKpis;
+  pipeline: NoDaEsteira[];
+  excecoesCriticas: ExcecaoDoCockpit[];
+  burndownCompradores: BurndownDoComprador[];
+  agendaDocaHoje: DescargaDoDia[];
+}
+
+/** De quanto em quanto tempo a parede se atualiza. */
+export const INTERVALO_DO_COCKPIT = 30_000;
+
+export const obterCockpit = (unidade?: string | null, signal?: AbortSignal) =>
+  api<CockpitDados>(
+    `/api/v1/control-tower/cockpit${unidade ? `?unidade=${encodeURIComponent(unidade)}` : ''}`,
+    { signal });

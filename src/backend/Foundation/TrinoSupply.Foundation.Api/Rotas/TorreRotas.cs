@@ -43,5 +43,16 @@ public static class TorreRotas
             return Ok(await svc.ConsultarAsync(filtro, ct), ctx);
         }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole())
             .AddEndpointFilter(RequireModules(AppModules.Compras));
+
+        // O cockpit da TV da sala. Mesma autorização da Torre, porque é a mesma informação
+        // vista de longe — quem não pode abrir a Torre não pode ler a parede dela.
+        app.MapGet("/api/v1/control-tower/cockpit", async (TorreDeControleService svc,
+            ClaimsPrincipal p, HttpContext ctx, string? unidade, CancellationToken ct) =>
+        {
+            if (!TorreDeControleService.CanView(RoleOf(p)))
+                return Error(ctx, 403, "TC-ERR-900", "Seu papel não acessa a Torre de Controle.");
+            return Ok(await svc.CockpitAsync(unidade, ct), ctx);
+        }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole())
+            .AddEndpointFilter(RequireModules(AppModules.Compras));
     }
 }

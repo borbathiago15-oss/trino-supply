@@ -42,6 +42,7 @@ import { SessaoProvider, useSessao } from '@/sessao/SessaoProvider';
 import { paginaInicial } from '@/dominio/papeis';
 import { Carregando } from '@/componentes/basicos';
 import { LimiteErro } from '@/componentes/LimiteErro';
+import { Cockpit } from '@/paginas/cockpit/Cockpit';
 
 /**
  * Só deixa passar com usuário; sem sessão, manda para o login guardando o destino.
@@ -73,6 +74,9 @@ export function Rotas() {
       <Route element={<Protegida />}>
         {/* fora do AppLayout: com a senha provisória o menu não deve nem aparecer */}
         <Route path="/trocar-senha" element={<TrocarSenha />} />
+        {/* o cockpit da TV também fica fora do layout: é tela de parede, sem menu
+            nem cabeçalho — ninguém navega nela, e cada pixel é área de leitura */}
+        <Route path="/cockpit" element={<Cockpit />} />
         <Route element={<AppLayout />}>
           <Route index element={<Inicio />} />
           <Route path="/pedidos" element={<PedidosLista />} />

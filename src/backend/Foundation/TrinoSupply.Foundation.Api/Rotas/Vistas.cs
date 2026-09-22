@@ -27,6 +27,18 @@ public static class Vistas
         _ => "CANCELADO",
     };
 
+    /// <summary>
+    /// `PurchaseOrder.Families` é um CSV na entidade — a busca de pedidos usa ILIKE sobre ele —,
+    /// mas o contrato da API é lista, e a tela faz `families.join(', ')`. Mandar a string crua
+    /// derrubou `/pedidos` inteira no primeiro pedido com duas famílias: `"EPI, UNIFORME"` passa
+    /// no `?? []` do cliente (não é nulo) e morre no `.join`, que string não tem. A conversão
+    /// vive aqui, na vista, e não na entidade, para a busca continuar consultando o texto.
+    /// </summary>
+    public static string[] FamiliasDoPedido(string? csv) =>
+        string.IsNullOrWhiteSpace(csv)
+            ? []
+            : csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
     public static object PoView(PurchaseOrder o, IReadOnlyList<string>? inactiveCatalogCodes = null) => new
     {
         inactiveCatalogCodes,
@@ -35,7 +47,7 @@ public static class Vistas
         supplierId = o.SupplierId, supplierName = o.SupplierName,
         sourcePrNumber = o.SourcePrNumber, quotationNumber = o.QuotationNumber,
         paymentTerms = o.PaymentTerms, deliveryDays = o.DeliveryDays, freightValue = o.FreightValue,
-        families = o.Families,
+        families = FamiliasDoPedido(o.Families),
         notes = o.Notes, totalValue = o.TotalValue,
         issuedByLabel = o.IssuedByLabel, receivedByLabel = o.ReceivedByLabel, receivedAt = o.ReceivedAt,
         cancelReason = o.CancelReason, createdAt = o.CreatedAt,

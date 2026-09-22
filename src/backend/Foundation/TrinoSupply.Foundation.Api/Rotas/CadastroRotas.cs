@@ -28,6 +28,7 @@ public static class CadastroRotas
             companyId = c.CompanyId,
             managerUserId = c.ManagerUserId, managerName = c.ManagerName,
             clientName = c.ClientName, active = c.Active,
+            receivesMaterial = c.ReceivesMaterial,
             level1ValueLimit = c.Level1ValueLimit, level2ValueLimit = c.Level2ValueLimit,
             // alçadas do centro: qualquer pessoa do nível resolve a etapa
             level1 = c.Approvers.Where(a => a.Level == ApprovalLevels.Level1)
@@ -62,7 +63,7 @@ public static class CadastroRotas
         {
             if (!CostCenterService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.CentrosCusto))
                 return Error(ctx, 403, "CC-ERR-900", "Seu usuário não mantém centros de custo.");
-            var (cc, error) = await svc.CreateAsync(ActorId(p), body.Code, body.Name, body.Region, body.ManagerUserId, body.ClientName, body.CompanyId, body.Level1UserIds, body.Level2UserIds, body.Level1ValueLimit, body.Level2ValueLimit);
+            var (cc, error) = await svc.CreateAsync(ActorId(p), body.Code, body.Name, body.Region, body.ManagerUserId, body.ClientName, body.CompanyId, body.Level1UserIds, body.Level2UserIds, body.Level1ValueLimit, body.Level2ValueLimit, body.ReceivesMaterial == true);
             return error is not null ? Error(ctx, 400, error.Code, error.Message)
                 : Results.Json(new { data = CcView(cc!), correlationId = CorrelationId(ctx) }, statusCode: 201);
         });
@@ -71,7 +72,7 @@ public static class CadastroRotas
         {
             if (!CostCenterService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.CentrosCusto))
                 return Error(ctx, 403, "CC-ERR-900", "Seu usuário não mantém centros de custo.");
-            var (cc, error) = await svc.UpdateAsync(id, body.Name, body.Region, body.ManagerUserId, body.ClientName, body.Active, body.CompanyId, body.Level1UserIds, body.Level2UserIds, body.Level1ValueLimit, body.Level2ValueLimit, body.ClearValueLimits == true);
+            var (cc, error) = await svc.UpdateAsync(id, body.Name, body.Region, body.ManagerUserId, body.ClientName, body.Active, body.CompanyId, body.Level1UserIds, body.Level2UserIds, body.Level1ValueLimit, body.Level2ValueLimit, body.ClearValueLimits == true, body.ReceivesMaterial);
             return error is not null ? Error(ctx, error.Code == "CC-ERR-404" ? 404 : 400, error.Code, error.Message)
                 : Ok(CcView(cc!), ctx);
         });

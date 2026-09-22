@@ -12,6 +12,8 @@ export interface CentroCusto {
   managerUserId: string | null;
   managerName: string | null;
   clientName: string | null;
+  /** O centro também é endereço de entrega: aparece no "Local de entrega" da SC. */
+  receivesMaterial: boolean;
   active: boolean;
   level1ValueLimit: number | null;
   level2ValueLimit: number | null;
@@ -31,6 +33,7 @@ export interface DadosCentroCusto {
   level2ValueLimit: number | null;
   /** Apagar os dois campos remove os limites em vez de mantê-los. */
   clearValueLimits: boolean;
+  receivesMaterial: boolean;
 }
 
 const base = '/api/v1/cost-centers';

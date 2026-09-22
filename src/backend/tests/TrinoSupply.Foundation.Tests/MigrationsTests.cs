@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
+using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Infrastructure;
 using TrinoSupply.Foundation.Api.Procurement;
-using TrinoSupply.Foundation.Api.Domain;
 
 namespace TrinoSupply.Foundation.Tests;
 
@@ -64,5 +64,8 @@ public sealed class MigrationsTests : IAsyncLifetime
         Assert.Empty(await rfq.PendingApprovalsAsync(Roles.Director, Guid.NewGuid()));
         Assert.Empty(await rfq.PendingApprovalsAsync(Roles.Approver, Guid.NewGuid()));
         Assert.Empty(await rfq.MinhasDecisoesAsync(Guid.NewGuid()));
+
+        // duas consultas juntadas em memória: o Concat delas no LINQ não teria tradução
+        Assert.Empty(await LocaisDeEntrega.ListarAsync(db));
     }
 }

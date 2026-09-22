@@ -247,13 +247,11 @@ public static class CatalogoRotas
                 : Ok(FamilyView(family!), ctx);
         });
 
-        // locais de entrega para os formulários de SC (sem dados de estoque; aberto a papéis internos)
+        // Locais de entrega para os formulários de SC (sem dados de estoque; aberto a papéis internos).
+        // A regra de quais cadastros entram na lista vive em Domain/LocaisDeEntrega.
         app.MapGet("/api/v1/delivery-locations", async (AppDbContext db, HttpContext ctx) =>
-            Ok(new
-            {
-                items = await db.StorageLocations.Where(l => l.Active).OrderBy(l => l.Code)
-                    .Select(l => new { id = l.Id, code = l.Code, name = l.Name }).ToListAsync(),
-            }, ctx)).RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
+            Ok(new { items = await LocaisDeEntrega.ListarAsync(db) }, ctx))
+            .RequireAuthorization().AddEndpointFilter(RejectSupplierRole());
 
         // grade da Solicitação em Lote: saldo, previsão de entrada, consumo médio e cobertura por produto
         catalogGroup.MapGet("/batch-view", async (TrinoSupply.Foundation.Api.Analytics.AnalyticsService svc,

@@ -24,7 +24,7 @@ public class CostCenterService(AppDbContext db, TimeProvider clock)
     public async Task<(CostCenter? cc, UserError? error)> CreateAsync(
         Guid actorId, string? code, string name, string? region, Guid? managerUserId, string? client,
         Guid? companyId = null, IReadOnlyList<Guid>? level1 = null, IReadOnlyList<Guid>? level2 = null,
-        decimal? level1ValueLimit = null, decimal? level2ValueLimit = null,
+        decimal? level1ValueLimit = null, decimal? level2ValueLimit = null, bool receivesMaterial = false,
         CancellationToken ct = default)
     {
         if (LimitError(level1ValueLimit) is { } l1e) return (null, l1e);
@@ -60,6 +60,7 @@ public class CostCenterService(AppDbContext db, TimeProvider clock)
             Level1ValueLimit = level1ValueLimit,
             Level2ValueLimit = level2ValueLimit,
             ClientName = Clean(client),
+            ReceivesMaterial = receivesMaterial,
             CreatedAt = now,
             UpdatedAt = now,
             CreatedBy = actorId,
@@ -122,6 +123,7 @@ public class CostCenterService(AppDbContext db, TimeProvider clock)
         Guid id, string? name, string? region, Guid? managerUserId, string? client, bool? active,
         Guid? companyId = null, IReadOnlyList<Guid>? level1 = null, IReadOnlyList<Guid>? level2 = null,
         decimal? level1ValueLimit = null, decimal? level2ValueLimit = null, bool clearValueLimits = false,
+        bool? receivesMaterial = null,
         CancellationToken ct = default)
     {
         if (LimitError(level1ValueLimit) is { } l1e) return (null, l1e);
@@ -147,6 +149,7 @@ public class CostCenterService(AppDbContext db, TimeProvider clock)
             cc.ManagerName = manager.Name;
         }
         if (client is not null) cc.ClientName = Clean(client);
+        if (receivesMaterial is not null) cc.ReceivesMaterial = receivesMaterial.Value;
         if (active is not null) cc.Active = active.Value;
         if (await ReplaceApproversAsync(cc, level1, level2, ct) is { } approverError) return (null, approverError);
         cc.UpdatedAt = clock.GetUtcNow();

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { familiasDoCatalogo, type ProdutoParaEscolha, type TamanhoDoProduto } from '@/api/catalogo';
 import { listarCentrosCusto, type CentroCusto } from '@/api/centrosCusto';
 import { listarEmpresas, perfilDaEmpresa } from '@/api/empresas';
-import { listarLocaisDeEntrega, rotuloDoLocal, type LocalEntrega } from '@/api/locais';
+import { listarLocaisDeEntrega, locaisPorTipo, rotuloDoLocal, type LocalEntrega } from '@/api/locais';
 import { listarTiposDeSolicitacao } from '@/api/tiposDeSolicitacao';
 import { anexarNaSolicitacao, criarSolicitacao, ROTULO_PRIORIDADE, type ItemNovo, type Prioridade } from '@/api/solicitacoes';
 import { Aviso, Badge, Painel } from '@/componentes/basicos';
@@ -378,8 +378,12 @@ export function NovaSolicitacao() {
             <Campo id="sc-local" rotulo="Local de Entrega">
               <select id="sc-local" {...campo('local')}>
                 <option value="">Selecione…</option>
-                {(dados?.locais ?? []).map((l) => (
-                  <option key={l.id} value={rotuloDoLocal(l)}>{rotuloDoLocal(l)}</option>
+                {locaisPorTipo(dados?.locais ?? []).map((g) => (
+                  <optgroup key={g.kind} label={g.rotulo}>
+                    {g.locais.map((l) => (
+                      <option key={l.id} value={rotuloDoLocal(l)}>{rotuloDoLocal(l)}</option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
             </Campo>

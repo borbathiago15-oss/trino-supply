@@ -35,6 +35,7 @@ public static class Servicos
         servicos.AddScoped<SupplierService>();
         servicos.AddScoped<PurchaseOrderService>();
         servicos.AddScoped<CostCenterService>();
+        servicos.AddScoped<SectorService>();
         servicos.AddScoped<CompanyService>();
         servicos.AddScoped<QuotationService>();
         servicos.AddScoped<TriageService>();

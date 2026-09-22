@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { listarCentrosCusto, type CentroCusto } from '@/api/centrosCusto';
+import { listarSetores, type Setor } from '@/api/setores';
 import {
   atualizarUsuario, criarUsuario, listarUsuarios, redefinirSenha, TAMANHO_MINIMO_SENHA,
   type DadosUsuario, type UsuarioCadastro,
@@ -16,7 +17,7 @@ import { useUsuario } from '@/sessao/SessaoProvider';
 import { rolarPara } from '@/util/rolar';
 import { useCarregar } from '@/util/useCarregar';
 
-const VAZIO = { nome: '', email: '', papel: '' as Papel | '', senha: '', diretor: '', gestor: '' };
+const VAZIO = { nome: '', email: '', papel: '' as Papel | '', senha: '', diretor: '', gestor: '', setor: '' };
 type Formulario = typeof VAZIO;
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
@@ -76,6 +77,7 @@ export function Usuarios() {
     async (signal) => ({
       usuarios: await listarUsuarios(signal),
       centros: await listarCentrosCusto(false, signal).catch(() => [] as CentroCusto[]),
+      setores: await listarSetores(false, signal).catch(() => [] as Setor[]),
     }),
     [],
   );
@@ -85,11 +87,13 @@ export function Usuarios() {
   const diretores = useMemo(() => diretoresPossiveis(lista), [lista]);
   const gestores = useMemo(() => gestoresPossiveis(lista), [lista]);
   const nomeDiretor = (id: string | null) => lista.find((u) => u.id === id)?.name ?? '—';
+  const setores = useMemo(() => dados?.setores ?? [], [dados]);
+  const nomeSetor = (id: string | null) => setores.find((s) => s.id === id)?.name ?? '—';
 
   function editar(u: UsuarioCadastro) {
     setEditando(u);
     setForm({ nome: u.name, email: u.email, papel: u.role, senha: '', diretor: u.directorId ?? '',
-      gestor: u.supplyManagerId ?? '' });
+      gestor: u.supplyManagerId ?? '', setor: u.sectorId ?? '' });
     setModulos(u.modules);
     setCentros(u.costCenters);
     rolarPara('form-usuario');
@@ -111,12 +115,14 @@ export function Usuarios() {
       // papel que não pede o vínculo nunca o grava: trocar de Comprador para outro papel
       // deixaria para trás um responsável que não responde por mais nada
       supplyManagerId: pedeGestorResponsavel(form.papel) ? form.gestor || null : null,
+      // o setor vale para qualquer papel: é onde a pessoa trabalha, não o que ela decide
+      sectorId: form.setor || null,
     };
     setSalvando(true);
     try {
       if (editando) {
         await atualizarUsuario(editando.id, { ...comum, clearDirector: !form.diretor,
-          clearSupplyManager: !comum.supplyManagerId });
+          clearSupplyManager: !comum.supplyManagerId, clearSector: !comum.sectorId });
         avisar('Usuário atualizado. Autorizações valem a partir do próximo login.');
         cancelar();
       } else {
@@ -189,6 +195,7 @@ export function Usuarios() {
                       {u.costCenters.join(' · ') || '—'}
                       {u.directorId && <div>Diretor: {nomeDiretor(u.directorId)}</div>}
                       {u.supplyManagerId && <div>Gestor: {nomeDiretor(u.supplyManagerId)}</div>}
+                      {u.sectorId && <div>Setor: {nomeSetor(u.sectorId)}</div>}
                     </td>
                     <td>
                       <BadgeAtivo ativo={u.active} />
@@ -285,6 +292,19 @@ export function Usuarios() {
               ))}
             </select>
           </Campo>
+
+          {/* o setor é de qualquer papel: diz onde a pessoa trabalha, não o que ela aprova */}
+          {setores.length > 0 && (
+            <Campo id="usu-setor" className="mt-5" rotulo="Setor"
+              dica="(onde a pessoa trabalha — não é centro de custo)">
+              <select id="usu-setor" {...campo('setor')}>
+                <option value="">Sem setor vinculado</option>
+                {setores.map((s) => (
+                  <option key={s.id} value={s.id}>{s.code} — {s.name}</option>
+                ))}
+              </select>
+            </Campo>
+          )}
 
           {/* só o comprador tem este vínculo: é a compra dele que o gestor fecha no Nível 2 */}
           {pedeGestorResponsavel(form.papel) && (

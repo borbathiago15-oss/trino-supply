@@ -24,6 +24,12 @@ public class User
     /// comprador sem responsável cadastrado não trava a fila, vai para o Nível 2 do centro.
     /// </summary>
     public Guid? SupplyManagerId { get; set; }
+    /// <summary>
+    /// Setor a que a pessoa pertence. Quem tem setor <b>não escolhe</b> o setor de um ciclo
+    /// de melhoria: é o dela. Deixar escolher abriria a porta de pendurar trabalho no setor
+    /// alheio, e a visibilidade por setor deixaria de querer dizer alguma coisa.
+    /// </summary>
+    public Guid? SectorId { get; set; }
     public bool Active { get; set; } = true;
     /// <summary>
     /// Senha provisória: quem cadastrou o usuário escolheu a senha, então ela precisa

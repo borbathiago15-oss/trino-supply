@@ -127,6 +127,19 @@ o usuário descobrir no erro do servidor:
   e a busca traz a grade **inteira** mesmo quando o termo achou um tamanho só, porque achar o
   39 e esconder o 40 obrigaria a buscar de novo. A tela expande na volta: cada tamanho com
   quantidade vira um item da SC. O C.A. é cobrado **do tamanho pedido**, não do produto.
+- **O setor é quem trabalha; o centro de custo é onde o dinheiro cai.** São dimensões
+  diferentes e nenhuma substitui a outra: um setor atende vários centros e um centro é
+  atendido por vários setores. `Sector` existe para o módulo de melhoria — o ciclo de um
+  setor precisa aparecer para o colega do mesmo setor, e sem a entidade essa regra não tem
+  como ser escrita. O código é identidade e **não muda** depois de gravado (pessoas e ciclos
+  já o carregam); o nome se corrige; setor fora de uso se **inativa**, nunca se apaga. Setor
+  inativo **não se vincula** a usuário (`IAM-ERR-023`): inativar é a forma de tirar um setor
+  de circulação, e deixá-lo entrar pela porta do vínculo desfaria a decisão do cadastro. O
+  vínculo (`User.SectorId`) vale para **qualquer papel** — diz onde a pessoa trabalha, não o
+  que ela aprova —, ao contrário do gestor responsável, que só o comprador tem. Manter o
+  cadastro é de quem mantém dimensão organizacional: o módulo é o `CENTROS_CUSTO` que já
+  existe, e inventar um módulo novo para duas telas irmãs só daria mais uma caixa para o
+  administrador esquecer de marcar.
 - **O local de entrega tem dois cadastros, e o centro de custo é um deles.** A lista só trazia
   os almoxarifados do estoque, e por isso toda SC parecia ir para a Sede. Mas quem paga e quem
   recebe são perguntas diferentes: a SC é do "Novo Atacarejo PB" e o material desce no

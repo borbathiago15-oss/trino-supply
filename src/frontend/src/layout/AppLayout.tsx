@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { LimiteErro } from '@/componentes/LimiteErro';
 import { Sidebar } from './Sidebar';
 import { ModalDeComunicados } from '@/componentes/Comunicados';
 import { AvisosProvider } from '@/sessao/AvisosProvider';
@@ -61,7 +62,16 @@ export function AppLayout() {
               <button type="button" className="botao-perigo !py-1.5" onClick={async () => { await sair(); navegar('/login', { replace: true }); }}>Sair</button>
             </div>
           </div>
-          <Outlet />
+          {/*
+            O erro de uma tela para naquela tela. Antes o limite vivia só na raiz do App e
+            levava junto o menu e o cabeçalho: quem caía em /pedidos ficava numa página
+            branca com uma faixa vermelha, sem como navegar para lugar nenhum a não ser
+            recarregando. A `key` é a rota porque limite de erro do React não se recupera
+            sozinho — sem ela, o erro de uma tela continuaria na tela seguinte.
+          */}
+          <LimiteErro key={pathname}>
+            <Outlet />
+          </LimiteErro>
         </main>
       </div>
     </AvisosProvider>

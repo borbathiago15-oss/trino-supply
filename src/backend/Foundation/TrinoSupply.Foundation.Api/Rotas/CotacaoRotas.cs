@@ -154,12 +154,25 @@ public static class CotacaoRotas
 
         // idem: a lista de processos também busca e pagina no servidor (PO-BR-012)
         rfq.MapGet("/", async (QuotationService svc, ClaimsPrincipal p, HttpContext ctx,
-            string? q, string? status, int? tamanho) =>
+            string? q, string? status, int? tamanho,
+            DateOnly? from, DateOnly? to, string? costCenter, Guid? createdBy,
+            CancellationToken ct) =>
         {
             if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");
             QuotationStatus? situacao = Enum.TryParse<QuotationStatus>(status, true, out var st) ? st : null;
-            var (itens, total) = await svc.ListAsync(q, situacao, tamanho ?? 100);
-            return Ok(new { items = itens.Select(x => QuotationView(x)), total, tamanho = itens.Count }, ctx);
+            var (itens, total) = await svc.ListAsync(q, situacao, tamanho ?? 100, from, to, costCenter, createdBy, ct);
+            // as opções vêm junto da lista: uma segunda chamada só para preencher as caixas
+            // faria a tela abrir com filtro vazio e povoar depois, piscando na frente de quem usa
+            var (centros, autores) = await svc.OpcoesDaListaAsync(ct);
+            return Ok(new
+            {
+                items = itens.Select(x => QuotationView(x)), total, tamanho = itens.Count,
+                filterOptions = new
+                {
+                    costCenters = centros,
+                    createdBy = autores.Select(a => new { id = a.Id, label = a.Label }),
+                },
+            }, ctx);
         });
 
         // Central de Aprovação: processos de compra aguardando a MINHA alçada, já com preços

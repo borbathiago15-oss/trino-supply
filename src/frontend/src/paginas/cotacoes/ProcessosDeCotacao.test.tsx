@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import type { Processo } from '@/api/cotacoes';
 import { processo } from '@/test/cotacoes';
-import { origemDe, ProcessosDeCotacao, vencedorDe } from './ProcessosDeCotacao';
+import { filtrosAtivos, origemDe, ProcessosDeCotacao, vencedorDe } from './ProcessosDeCotacao';
 
 vi.mock('@/api/cotacoes', async (importar) => ({
   ...(await importar<typeof import('@/api/cotacoes')>()),
@@ -15,7 +15,11 @@ import { listarProcessos } from '@/api/cotacoes';
 
 const abrir = () => render(<MemoryRouter><ProcessosDeCotacao /></MemoryRouter>);
 
-const pagina = (itens: Processo[], total = itens.length) => ({ itens, total });
+const pagina = (itens: Processo[], total = itens.length, opcoes = OPCOES) => ({ itens, total, opcoes });
+const OPCOES = {
+  costCenters: ['CC-01', 'PER-001'],
+  createdBy: [{ id: 'u1', label: 'Carla Compradora' }, { id: 'u2', label: 'Caio Comprador' }],
+};
 
 describe('leituras da lista', () => {
   it('o vencedor sai da seleção, quando já houve escolha', () => {
@@ -31,8 +35,63 @@ describe('leituras da lista', () => {
   });
 });
 
+describe('filtrosAtivos', () => {
+  const nenhum = { busca: '', situacao: '', de: '', ate: '', centroCusto: '', abertoPor: '' };
+  it('sem recorte, a tela diz "ainda não há", e não "nada neste filtro"', () => {
+    expect(filtrosAtivos(nenhum)).toBe(false);
+    expect(filtrosAtivos({ ...nenhum, busca: '   ' })).toBe(false);
+  });
+  it('qualquer um dos seis recortes conta', () => {
+    expect(filtrosAtivos({ ...nenhum, centroCusto: 'CC-01' })).toBe(true);
+    expect(filtrosAtivos({ ...nenhum, abertoPor: 'u1' })).toBe(true);
+    expect(filtrosAtivos({ ...nenhum, de: '2026-01-01' })).toBe(true);
+    expect(filtrosAtivos({ ...nenhum, ate: '2026-01-31' })).toBe(true);
+  });
+});
+
 describe('tela Processos de cotação', () => {
   beforeEach(() => vi.resetAllMocks());
+
+  it('os três recortes novos vão para o servidor', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(listarProcessos).mockResolvedValue(pagina([processo({})]));
+    abrir();
+    await screen.findByTestId('tabela-processos');
+
+    await usuario.selectOptions(screen.getByLabelText('Centro de custo'), 'CC-01');
+    await waitFor(() => expect(listarProcessos).toHaveBeenCalledWith(
+      expect.objectContaining({ centroCusto: 'CC-01' }), expect.anything()));
+
+    await usuario.selectOptions(screen.getByLabelText('Aberto por'), 'u1');
+    await waitFor(() => expect(listarProcessos).toHaveBeenCalledWith(
+      expect.objectContaining({ abertoPor: 'u1' }), expect.anything()));
+
+    await usuario.type(screen.getByLabelText('Aberto de'), '2026-01-01');
+    await waitFor(() => expect(listarProcessos).toHaveBeenCalledWith(
+      expect.objectContaining({ de: '2026-01-01' }), expect.anything()));
+  });
+
+  it('as opções dos filtros vêm com a lista, sem uma segunda chamada', async () => {
+    vi.mocked(listarProcessos).mockResolvedValue(pagina([processo({})]));
+    abrir();
+    await screen.findByTestId('tabela-processos');
+    // a tela abre com as caixas já preenchidas, em vez de povoar depois piscando
+    expect(screen.getByRole('option', { name: 'PER-001' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Carla Compradora' })).toBeInTheDocument();
+  });
+
+  it('limpar só aparece quando há o que limpar, e devolve tudo ao servidor', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(listarProcessos).mockResolvedValue(pagina([processo({})]));
+    abrir();
+    await screen.findByTestId('tabela-processos');
+    expect(screen.queryByRole('button', { name: 'Limpar' })).not.toBeInTheDocument();
+
+    await usuario.selectOptions(screen.getByLabelText('Centro de custo'), 'CC-01');
+    await usuario.click(await screen.findByRole('button', { name: 'Limpar' }));
+    await waitFor(() => expect(listarProcessos).toHaveBeenCalledWith(
+      expect.objectContaining({ centroCusto: '', abertoPor: '', de: '', ate: '' }), expect.anything()));
+  });
 
   it('mostra a situação com o rótulo do time, não o código da API', async () => {
     vi.mocked(listarProcessos).mockResolvedValue(pagina([

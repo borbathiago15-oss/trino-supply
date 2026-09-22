@@ -69,16 +69,35 @@ function FilaDeDecisao({ fila }: { fila: ProcessoParaAprovar[] }) {
  * a fila de decisão e os achados. Tudo o que está aqui existe noutra tela — esta só põe
  * na ordem em que um diretor pergunta: como está, o que espera por mim, o que chama atenção.
  */
+/**
+ * O que a frase do rodapé diz que está sendo contado. Os rótulos vêm do relatório — ele
+ * já os monta para o cabeçalho do PDF —, e não do que está selecionado na tela: filtro
+ * escolhido e resposta recebida podem divergir por um instante, e nesse instante a frase
+ * descreveria um recorte que os números ainda não têm.
+ */
+export function rotuloDoRecorte(r: RelatorioExecutivo): string {
+  const partes = [
+    r.costCenterLabel ?? 'todos os centros',
+    r.buyerLabel ? `comprador ${r.buyerLabel}` : null,
+  ].filter(Boolean);
+  return partes.join(', ');
+}
+
 export function VisaoDaDiretoria() {
   const [periodo, setPeriodo] = useState<Periodo>('mes');
+  // os dois recortes nascem em "todos": a tela abre simples, como foi desenhada, e
+  // quem precisa de detalhe desce um nível — em vez de escolher antes de saber o que quer
+  const [centroCusto, setCentroCusto] = useState('');
+  const [comprador, setComprador] = useState('');
   const { dados, erro, carregando } = useCarregar(async (signal) => {
     const { de, ate } = intervaloDoPeriodo(periodo);
     return {
-      relatorio: await relatorioExecutivo({ ...FILTROS_RELATORIO_VAZIOS, de, ate }, signal),
+      relatorio: await relatorioExecutivo(
+        { ...FILTROS_RELATORIO_VAZIOS, de, ate, centroCusto, comprador }, signal),
       fila: await processosParaMinhaAprovacao(signal).catch(() => [] as ProcessoParaAprovar[]),
       achados: await relatorioDeInsights(periodo === 'ano' ? 12 : 3, signal).then((r) => r.insights).catch(() => [] as Achado[]),
     };
-  }, [periodo]);
+  }, [periodo, centroCusto, comprador]);
 
   const r: RelatorioExecutivo | undefined = dados?.relatorio;
   const fila = dados?.fila ?? [];
@@ -92,14 +111,31 @@ export function VisaoDaDiretoria() {
   return (
     <>
       <Painel titulo="Como está a compra da empresa" acoes={
-        <div role="group" aria-label="Período" className="flex gap-1 rounded-lg border border-borda bg-white p-1">
-          {PERIODOS.map((p) => (
-            <button key={p.chave} type="button" aria-pressed={periodo === p.chave} data-periodo={p.chave}
-              onClick={() => setPeriodo(p.chave)}
-              className={`rounded-md px-3 py-1 text-[13px] font-semibold ${periodo === p.chave ? 'bg-marca text-white' : 'text-texto-suave hover:bg-slate-50'}`}>
-              {p.rotulo}
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <div role="group" aria-label="Período" className="flex gap-1 rounded-lg border border-borda bg-white p-1">
+            {PERIODOS.map((p) => (
+              <button key={p.chave} type="button" aria-pressed={periodo === p.chave} data-periodo={p.chave}
+                onClick={() => setPeriodo(p.chave)}
+                className={`rounded-md px-3 py-1 text-[13px] font-semibold ${periodo === p.chave ? 'bg-marca text-white' : 'text-texto-suave hover:bg-slate-50'}`}>
+                {p.rotulo}
+              </button>
+            ))}
+          </div>
+          {/* as opções saem do próprio relatório: lista montada à parte divergiria do que ele conta */}
+          <select aria-label="Centro de custo" className="!w-[200px] !py-1.5 !text-[13px]"
+            value={centroCusto} onChange={(e) => setCentroCusto(e.target.value)}>
+            <option value="">Todos os centros</option>
+            {(r?.filterOptions.costCenters ?? []).map((c) => (
+              <option key={c.code} value={c.code}>{c.code} — {c.name}</option>
+            ))}
+          </select>
+          <select aria-label="Comprador" className="!w-[180px] !py-1.5 !text-[13px]"
+            value={comprador} onChange={(e) => setComprador(e.target.value)}>
+            <option value="">Todos os compradores</option>
+            {(r?.filterOptions.buyers ?? []).map((b) => (
+              <option key={b.id} value={b.id}>{b.label}</option>
+            ))}
+          </select>
         </div>
       }>
         {erro && <Erro>{erro}</Erro>}
@@ -127,7 +163,7 @@ export function VisaoDaDiretoria() {
               {resumoExecutivo(r).map((frase) => <li key={frase}>{frase}</li>)}
             </ol>
             <p className="sub mt-3">
-              Recorte: todas as empresas e centros, {r.from.split('-').reverse().join('/')} a {r.to.split('-').reverse().join('/')}.{' '}
+              Recorte: {rotuloDoRecorte(r)}, {r.from.split('-').reverse().join('/')} a {r.to.split('-').reverse().join('/')}.{' '}
               <Link to="/relatorios" className="font-semibold text-marca hover:underline">Relatórios completos →</Link>
             </p>
           </>

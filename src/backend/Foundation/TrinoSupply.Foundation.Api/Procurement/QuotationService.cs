@@ -101,14 +101,31 @@ public partial class QuotationService(AppDbContext db, TimeProvider clock)
     /// vieram: buscar sobre uma lista truncada responde "nada encontrado" para
     /// processo que existe (PO-BR-012).
     /// </summary>
+    /// <param name="de">Aberto a partir desta data (inclusive).</param>
+    /// <param name="ate">Aberto até esta data (inclusive — o dia inteiro conta).</param>
+    /// <param name="centroCusto">Código do centro; o processo guarda o do momento da SC.</param>
+    /// <param name="abertoPor">Quem abriu o processo.</param>
     public async Task<(List<Quotation> itens, int total)> ListAsync(
         string? busca = null, QuotationStatus? situacao = null,
-        int tamanho = 100, CancellationToken ct = default)
+        int tamanho = 100, DateOnly? de = null, DateOnly? ate = null,
+        string? centroCusto = null, Guid? abertoPor = null, CancellationToken ct = default)
     {
         var termo = busca?.Trim();
         var query = db.Quotations.AsQueryable();
 
         if (situacao is { } s) query = query.Where(q => q.Status == s);
+        // período pela abertura do processo, que é a data que a lista ordena e mostra;
+        // filtrar por outra data traria linhas que contradizem a coluna ao lado
+        if (de is { } inicio)
+            query = query.Where(q => q.CreatedAt >= new DateTimeOffset(inicio.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero));
+        if (ate is { } fim)
+            query = query.Where(q => q.CreatedAt < new DateTimeOffset(fim.AddDays(1).ToDateTime(TimeOnly.MinValue), TimeSpan.Zero));
+        if (!string.IsNullOrWhiteSpace(centroCusto))
+        {
+            var cc = centroCusto.Trim();
+            query = query.Where(q => q.CostCenter == cc);
+        }
+        if (abertoPor is { } autor) query = query.Where(q => q.CreatedBy == autor);
         if (!string.IsNullOrEmpty(termo))
             query = query.Where(q =>
                 EF.Functions.ILike(q.Number, $"%{termo}%")
@@ -126,6 +143,31 @@ public partial class QuotationService(AppDbContext db, TimeProvider clock)
             .OrderByDescending(q => q.CreatedAt)
             .Take(Math.Clamp(tamanho, 1, TamanhoMaximoDePagina)).ToListAsync(ct);
         return (itens, total);
+    }
+
+    /// <summary>
+    /// O que oferecer nos filtros da lista: os centros e as pessoas que <b>de fato</b> abriram
+    /// processo. Oferecer o cadastro inteiro encheria a caixa de opção que não devolve nada —
+    /// o usuário escolheria um centro e receberia lista vazia sem entender por quê.
+    ///
+    /// <para>
+    /// Filtro e ordenação na entidade e projeção por último: o `Distinct` sobre record projetado
+    /// o InMemory aceita e o Npgsql recusa, e seria erro que só aparece em produção.
+    /// </para>
+    /// </summary>
+    public async Task<(List<string> centros, List<OpcaoPessoa> autores)> OpcoesDaListaAsync(
+        CancellationToken ct = default)
+    {
+        var centros = await db.Quotations
+            .Where(q => q.CostCenter != "").Select(q => q.CostCenter)
+            .Distinct().OrderBy(c => c).Take(300).ToListAsync(ct);
+
+        var autores = await db.Quotations
+            .Where(q => q.CreatedByLabel != "")
+            .Select(q => new { q.CreatedBy, q.CreatedByLabel })
+            .Distinct().OrderBy(x => x.CreatedByLabel).Take(300).ToListAsync(ct);
+
+        return (centros, [.. autores.Select(x => new OpcaoPessoa(x.CreatedBy, x.CreatedByLabel))]);
     }
 
     /// <summary>

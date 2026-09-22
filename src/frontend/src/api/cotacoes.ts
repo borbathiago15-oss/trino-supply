@@ -436,21 +436,54 @@ const normalizar = (q: Processo): Processo => ({
   caminho: q.caminho ?? [],
 });
 
-export interface PaginaDeProcessos { itens: Processo[]; total: number }
+export interface OpcoesDeProcessos {
+  costCenters: string[];
+  createdBy: { id: string; label: string }[];
+}
 
-/** Busca e situação no servidor; `total` é quantos existem, não quantos vieram. */
+export interface PaginaDeProcessos {
+  itens: Processo[];
+  total: number;
+  opcoes: OpcoesDeProcessos;
+}
+
+export interface FiltrosDeProcessos {
+  busca?: string;
+  situacao?: string;
+  tamanho?: number;
+  /** Período de abertura do processo, em ISO. */
+  de?: string;
+  ate?: string;
+  centroCusto?: string;
+  /** Quem abriu o processo. */
+  abertoPor?: string;
+}
+
+/**
+ * Todos os recortes são do servidor; `total` é quantos existem, não quantos vieram.
+ * Peneirar no navegador sobre uma lista já truncada responderia "nada encontrado"
+ * para processo que existe (PO-BR-012).
+ */
 export async function listarProcessos(
-  { busca, situacao, tamanho }: { busca?: string; situacao?: string; tamanho?: number } = {},
+  { busca, situacao, tamanho, de, ate, centroCusto, abertoPor }: FiltrosDeProcessos = {},
   signal?: AbortSignal,
 ): Promise<PaginaDeProcessos> {
   const params = new URLSearchParams();
   if (busca?.trim()) params.set('q', busca.trim());
   if (situacao) params.set('status', situacao);
   if (tamanho) params.set('tamanho', String(tamanho));
+  if (de) params.set('from', de);
+  if (ate) params.set('to', ate);
+  if (centroCusto) params.set('costCenter', centroCusto);
+  if (abertoPor) params.set('createdBy', abertoPor);
   const consulta = params.toString();
-  const r = await api<{ items: Processo[]; total: number }>(
+  const r = await api<{ items: Processo[]; total: number; filterOptions?: OpcoesDeProcessos }>(
     `${base}/${consulta ? `?${consulta}` : ''}`, { signal });
-  return { itens: (r.items ?? []).map(normalizar), total: r.total ?? 0 };
+  return {
+    itens: (r.items ?? []).map(normalizar),
+    total: r.total ?? 0,
+    opcoes: { costCenters: r.filterOptions?.costCenters ?? [], createdBy: r.filterOptions?.createdBy ?? [] },
+  };
 }
 
 export const lerProcesso = async (id: string, signal?: AbortSignal) =>

@@ -27,39 +27,75 @@ export function vencedorDe(q: Processo): string | null {
 }
 
 /** Origem do processo: uma SC, ou o agrupamento de várias. */
+/**
+ * Se há algum recorte aplicado. Serve para o texto do vazio dizer a verdade — "nenhum
+ * processo neste filtro" quando há filtro, "nenhum processo ainda" quando não há — e para
+ * o botão de limpar só aparecer quando existe o que limpar.
+ */
+export const filtrosAtivos = (f: {
+  busca: string; situacao: string; de: string; ate: string; centroCusto: string; abertoPor: string;
+}) => f.busca.trim().length > 0 || !!f.situacao || !!f.de || !!f.ate || !!f.centroCusto || !!f.abertoPor;
+
 export const origemDe = (q: Processo) =>
   q.sourcePrNumbers.length ? q.sourcePrNumbers : (q.sourcePrNumber ? [q.sourcePrNumber] : []);
 
 export function ProcessosDeCotacao() {
   const [busca, setBusca] = useState('');
   const [situacao, setSituacao] = useState('');
+  const [centroCusto, setCentroCusto] = useState('');
+  const [abertoPor, setAbertoPor] = useState('');
+  const [de, setDe] = useState('');
+  const [ate, setAte] = useState('');
   const [tamanho, setTamanho] = useState(POR_PAGINA);
 
-  // a busca e o filtro são do servidor: peneirar no navegador esconderia o que
+  // a busca e os filtros são do servidor: peneirar no navegador esconderia o que
   // não coube na página, e a tela diria "nada encontrado" para processo que existe
   const termo = useDebounce(busca);
   const { dados, erro, carregando } = useCarregar(
-    (signal) => listarProcessos({ busca: termo, situacao, tamanho }, signal),
-    [termo, situacao, tamanho],
+    (signal) => listarProcessos({ busca: termo, situacao, tamanho, de, ate, centroCusto, abertoPor }, signal),
+    [termo, situacao, tamanho, de, ate, centroCusto, abertoPor],
   );
 
   const lista = dados?.itens ?? [];
   const total = dados?.total ?? 0;
-  const filtrando = termo.trim().length > 0 || situacao !== '';
+  const opcoes = dados?.opcoes ?? { costCenters: [], createdBy: [] };
+  const filtrando = filtrosAtivos({ busca: termo, situacao, de, ate, centroCusto, abertoPor });
   const mudarFiltro = (aplicar: () => void) => { setTamanho(POR_PAGINA); aplicar(); };
+  const limparFiltros = () => mudarFiltro(() => {
+    setBusca(''); setSituacao(''); setCentroCusto(''); setAbertoPor(''); setDe(''); setAte('');
+  });
 
   return (
     <Painel titulo="Processos de cotação" acoes={
-      <>
+      <div className="flex flex-wrap items-center gap-2">
         <input aria-label="Buscar" placeholder="Buscar por processo, SC, item, fornecedor ou CC"
           className="!w-[300px]" value={busca}
           onChange={(e) => mudarFiltro(() => setBusca(e.target.value))} />
-        <select id="rfq-situacao" aria-label="Situação do processo" className="!w-[260px]"
+        <select id="rfq-situacao" aria-label="Situação do processo" className="!w-[220px]"
           value={situacao} onChange={(e) => mudarFiltro(() => setSituacao(e.target.value))}>
           <option value="">Todos</option>
           {SITUACOES_FILTRO.map((s) => <option key={s.valor} value={s.valor}>{s.rotulo}</option>)}
         </select>
-      </>
+        {/* as opções saem dos processos que existem: oferecer o cadastro inteiro encheria
+            a caixa de centro que nunca abriu cotação e devolveria lista vazia */}
+        <select aria-label="Centro de custo" className="!w-[180px]"
+          value={centroCusto} onChange={(e) => mudarFiltro(() => setCentroCusto(e.target.value))}>
+          <option value="">Todos os centros</option>
+          {opcoes.costCenters.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        <select aria-label="Aberto por" className="!w-[180px]"
+          value={abertoPor} onChange={(e) => mudarFiltro(() => setAbertoPor(e.target.value))}>
+          <option value="">Todos os usuários</option>
+          {opcoes.createdBy.map((u) => <option key={u.id} value={u.id}>{u.label}</option>)}
+        </select>
+        <input type="date" aria-label="Aberto de" className="!w-[150px]" value={de}
+          onChange={(e) => mudarFiltro(() => setDe(e.target.value))} />
+        <input type="date" aria-label="Aberto até" className="!w-[150px]" value={ate}
+          onChange={(e) => mudarFiltro(() => setAte(e.target.value))} />
+        {filtrando && (
+          <button type="button" className="botao-secundario !py-1.5" onClick={limparFiltros}>Limpar</button>
+        )}
+      </div>
     }>
       {erro && <Erro>{erro}</Erro>}
       {carregando && !dados && <Carregando />}

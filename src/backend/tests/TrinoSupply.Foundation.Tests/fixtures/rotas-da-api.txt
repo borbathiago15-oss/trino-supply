@@ -26,6 +26,8 @@ GET /api/v1/cost-centers/
 GET /api/v1/dashboard
 GET /api/v1/delivery-locations
 GET /api/v1/documents/{id:guid}
+GET /api/v1/improvement-cycles/
+GET /api/v1/improvement-cycles/{id:guid}
 GET /api/v1/inventory/balances
 GET /api/v1/inventory/locations
 GET /api/v1/inventory/movements
@@ -74,6 +76,7 @@ PATCH /api/v1/action-items/{id:guid}
 PATCH /api/v1/announcements/{id:guid}
 PATCH /api/v1/companies/{id:guid}
 PATCH /api/v1/cost-centers/{id:guid}
+PATCH /api/v1/improvement-cycles/{id:guid}
 PATCH /api/v1/items/{id:guid}
 PATCH /api/v1/payment-methods/{id:guid}
 PATCH /api/v1/payment-terms/{id:guid}
@@ -95,6 +98,10 @@ POST /api/v1/auth/logout
 POST /api/v1/auth/refresh
 POST /api/v1/companies/
 POST /api/v1/cost-centers/
+POST /api/v1/improvement-cycles/
+POST /api/v1/improvement-cycles/{id:guid}/close
+POST /api/v1/improvement-cycles/{id:guid}/reopen
+POST /api/v1/improvement-cycles/{id:guid}/scope
 POST /api/v1/inventory/entries
 POST /api/v1/inventory/issues
 POST /api/v1/inventory/locations
@@ -157,6 +164,7 @@ POST /api/v1/triage/priority
 POST /api/v1/users/
 POST /api/v1/users/{id:guid}/reset-password
 PUT /api/v1/company
+PUT /api/v1/improvement-cycles/{id:guid}/watchers
 PUT /api/v1/quotations/{id:guid}/suppliers/{supplierId:guid}/deadline
 PUT /api/v1/score-weights/
 PUT /api/v1/stage-sla/

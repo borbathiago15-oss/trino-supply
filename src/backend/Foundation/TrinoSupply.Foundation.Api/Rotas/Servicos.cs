@@ -48,6 +48,7 @@ public static class Servicos
         servicos.AddScoped<EscalonamentoDoPrazoService>();
         servicos.AddScoped<TorreDeControleService>();
         servicos.AddScoped<Acoes.PlanoDeAcaoService>();
+        servicos.AddScoped<Melhoria.CicloDeMelhoriaService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Comunicados.AnnouncementService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Analytics.AnalyticsService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Analytics.RelatorioExecutivoService>();

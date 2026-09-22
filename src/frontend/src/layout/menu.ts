@@ -132,8 +132,11 @@ export const MENU: GrupoMenu[] = [
   // Fora da sequência do processo de propósito: o plano de ação não é etapa de compra.
   // Qualquer área abre ação, e quem entra é quem o administrador autorizou no cadastro —
   // por isso ele não aparece em padrão de papel nenhum e o grupo depende só do módulo.
-  { titulo: 'Melhoria', modulo: 'PLANO_ACAO', itens: [
-    { id: 'acao-plano', rotulo: 'Plano de Ação', rota: '/plano-acao', mostrar: sempre },
+  // o grupo não tem módulo próprio: cada tela tem o seu, e quem recebe um dos dois vê o
+  // grupo com a tela que lhe cabe. Gate no grupo esconderia o PDCA de quem só tem o PDCA
+  { titulo: 'Melhoria', itens: [
+    { id: 'acao-plano', rotulo: 'Plano de Ação', rota: '/plano-acao', modulo: 'PLANO_ACAO', mostrar: sempre },
+    { id: 'pdca', rotulo: 'Ciclos de Melhoria', rota: '/melhoria', modulo: 'PDCA', mostrar: sempre },
   ]},
   { titulo: 'Cadastros', mostrar: naoDiretor, itens: [
     { rotulo: 'Produtos', filhos: [

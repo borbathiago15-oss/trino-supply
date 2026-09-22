@@ -2,7 +2,16 @@ import { EVENTO_SESSAO_EXPIRADA, sessao } from './sessao';
 
 /** Erro da API no formato `{ error: { code, message } }`, com o status HTTP. */
 export class ErroApi extends Error {
-  constructor(message: string, public readonly status: number, public readonly code?: string) {
+  /**
+   * `corpo` é o JSON que veio com a recusa. Quase toda rota só manda mensagem e código, mas
+   * algumas mandam o que a tela precisa para o passo seguinte — o encerramento do ciclo de
+   * melhoria devolve a lista de ações em aberto, e sem ela a tela pediria a confirmação sem
+   * dizer de quê.
+   */
+  constructor(
+    message: string, public readonly status: number, public readonly code?: string,
+    public readonly corpo?: unknown,
+  ) {
     super(message);
     this.name = 'ErroApi';
   }
@@ -97,7 +106,7 @@ export async function api<T = unknown>(caminho: string, opcoes: OpcoesRequisicao
     const padrao = res.status === 401 ? MENSAGEM_EXPIROU
       : res.status >= 500 ? 'O servidor não respondeu a esta operação. Tente novamente em instantes.'
       : 'Falha na operação.';
-    throw new ErroApi(json?.error?.message || padrao, res.status, json?.error?.code);
+    throw new ErroApi(json?.error?.message || padrao, res.status, json?.error?.code, json);
   }
   return (json.data ?? json) as T;
 }

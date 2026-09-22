@@ -72,6 +72,7 @@ public class TabelaDeRotasTests
         app.MapPesosDoScore();
         app.MapPrazosDasEtapas();
         app.MapPlanoDeAcao();
+        app.MapMelhoria();
         app.MapAvisosDoUsuario();
 
         return ((IEndpointRouteBuilder)app).DataSources

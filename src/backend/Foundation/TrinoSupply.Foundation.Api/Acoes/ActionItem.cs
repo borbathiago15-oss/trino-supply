@@ -63,6 +63,19 @@ public class ActionItem
     /// <summary>Centro de custo a que a ação pertence; nulo é ação da casa, sem centro.</summary>
     public string? CostCenter { get; set; }
 
+    /// <summary>
+    /// O ciclo de melhoria que originou a ação, quando houve um. <b>Nulo é o caso comum</b>:
+    /// a ação vive por si, e o ciclo é um ponteiro opcional — não a razão de ela existir.
+    /// </summary>
+    public Guid? CycleId { get; set; }
+
+    /// <summary>
+    /// Qual causa esta ação ataca — o texto da causa que a ferramenta apontou. É o elo que
+    /// permite o sinal <i>"causa vital sem ação"</i>: sem ele, um ciclo com dez ações e a
+    /// causa principal intocada pareceria um ciclo em dia.
+    /// </summary>
+    public string? RootCauseRef { get; set; }
+
     public string Status { get; set; } = StatusDaAcao.Pendente;
     /// <summary>0 a 100. Ação concluída é 100, sempre — ver <c>PlanoDeAcaoService</c>.</summary>
     public int Progress { get; set; }

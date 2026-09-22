@@ -62,16 +62,34 @@ public class CicloDeMelhoriaTests
             null, null, null, null, null, null, null, null, null, null, null, null,
             null, null, null, null, null, null, fase, centros);
 
+    /// <summary>
+    /// Uma ação do ciclo. Ela não aponta mais para o ciclo: vive dentro de um <b>plano</b>, e
+    /// é o plano que diz de qual ciclo nasceu. O ajudante cria o plano na primeira chamada e
+    /// o reaproveita nas seguintes, que é como o ciclo se comporta de verdade.
+    /// </summary>
     private static async Task<ActionItem> AcaoAsync(
         AppDbContext db, Guid cicloId, Guid dono, string status = StatusDaAcao.Pendente,
         DateOnly? prazo = null, string? causa = null)
     {
+        var plano = await db.ActionPlans.FirstOrDefaultAsync(p => p.CycleId == cicloId);
+        if (plano is null)
+        {
+            plano = new ActionPlan
+            {
+                Code = "AP-2026-" + Guid.NewGuid().ToString("N")[..3],
+                Title = "Plano do ciclo", CycleId = cicloId, CreatedByLabel = "Quem criou",
+                CreatedAt = Agora, UpdatedAt = Agora,
+            };
+            db.ActionPlans.Add(plano);
+            await db.SaveChangesAsync();
+        }
+        var planoId = plano.Id;
         var a = new ActionItem
         {
             Number = "AC-2026-" + Guid.NewGuid().ToString("N")[..6],
             Title = "Afixar o limite de empilhamento",
             ResponsibleId = dono, ResponsibleLabel = "Dono", CreatedByLabel = "Quem criou",
-            CycleId = cicloId, Status = status, DueDate = prazo, RootCauseRef = causa,
+            PlanId = planoId, Status = status, DueDate = prazo, RootCauseRef = causa,
             CreatedAt = Agora, UpdatedAt = Agora,
         };
         db.ActionItems.Add(a);

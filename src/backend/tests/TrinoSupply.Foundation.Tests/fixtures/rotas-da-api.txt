@@ -1,9 +1,11 @@
+DELETE /api/v1/action-plans/{id:guid}/risks/{riskId:guid}
 DELETE /api/v1/announcements/{id:guid}
 DELETE /api/v1/purchase-requisitions/{id:guid}
 DELETE /api/v1/purchase-requisitions/{id:guid}/attachments/{attachmentId:guid}
 DELETE /api/v1/purchase-requisitions/{id:guid}/items/{itemId:guid}
 DELETE /api/v1/suppliers/{id:guid}/documents/{docId:guid}
-GET /api/v1/action-items/
+GET /api/v1/action-plans/
+GET /api/v1/action-plans/{id:guid}
 GET /api/v1/analytics/compliance
 GET /api/v1/analytics/insights
 GET /api/v1/analytics/report
@@ -73,7 +75,8 @@ GET /api/v1/triage/
 GET /api/v1/triage/responsibles
 GET /api/v1/users/
 GET /api/v1/users/pickers
-PATCH /api/v1/action-items/{id:guid}
+PATCH /api/v1/action-plans/items/{itemId:guid}
+PATCH /api/v1/action-plans/{id:guid}
 PATCH /api/v1/announcements/{id:guid}
 PATCH /api/v1/companies/{id:guid}
 PATCH /api/v1/cost-centers/{id:guid}
@@ -88,8 +91,11 @@ PATCH /api/v1/sectors/{id:guid}
 PATCH /api/v1/suppliers/{id:guid}
 PATCH /api/v1/suppliers/{id:guid}/homologation
 PATCH /api/v1/users/{id:guid}
-POST /api/v1/action-items/
-POST /api/v1/action-items/{id:guid}/status
+POST /api/v1/action-plans/
+POST /api/v1/action-plans/items/{itemId:guid}/status
+POST /api/v1/action-plans/{id:guid}/close
+POST /api/v1/action-plans/{id:guid}/items
+POST /api/v1/action-plans/{id:guid}/reopen
 POST /api/v1/announcements/
 POST /api/v1/announcements/{id:guid}/dismiss
 POST /api/v1/announcements/{id:guid}/image
@@ -164,6 +170,9 @@ POST /api/v1/triage/assign-batch
 POST /api/v1/triage/priority
 POST /api/v1/users/
 POST /api/v1/users/{id:guid}/reset-password
+PUT /api/v1/action-plans/{id:guid}/lessons
+PUT /api/v1/action-plans/{id:guid}/risks
+PUT /api/v1/action-plans/{id:guid}/root-cause
 PUT /api/v1/company
 PUT /api/v1/improvement-cycles/{id:guid}/watchers
 PUT /api/v1/quotations/{id:guid}/suppliers/{supplierId:guid}/deadline

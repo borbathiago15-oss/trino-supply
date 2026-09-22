@@ -64,10 +64,14 @@ public class ActionItem
     public string? CostCenter { get; set; }
 
     /// <summary>
-    /// O ciclo de melhoria que originou a ação, quando houve um. <b>Nulo é o caso comum</b>:
-    /// a ação vive por si, e o ciclo é um ponteiro opcional — não a razão de ela existir.
+    /// O plano a que a ação pertence. <b>Toda ação tem plano</b> — é o desenho do Trino
+    /// Intelligence: a ação solta não diz qual problema resolve nem quanto vale, e era isso
+    /// que fazia a lista de ações parecer uma lista de tarefas.
     /// </summary>
-    public Guid? CycleId { get; set; }
+    public Guid PlanId { get; set; }
+
+    /// <summary>A ordem dentro do plano — a sequência em que as ações foram pensadas.</summary>
+    public int Seq { get; set; } = 1;
 
     /// <summary>
     /// Qual causa esta ação ataca — o texto da causa que a ferramenta apontou. É o elo que
@@ -75,6 +79,18 @@ public class ActionItem
     /// causa principal intocada pareceria um ciclo em dia.
     /// </summary>
     public string? RootCauseRef { get; set; }
+
+    /// <summary>Área de apoio — quem ajuda, sem ser o dono.</summary>
+    public string? SupportArea { get; set; }
+    /// <summary>BAIXA | MEDIA | ALTA.</summary>
+    public string Complexity { get; set; } = "MEDIA";
+    /// <summary>BAIXA | MEDIA | ALTA | MUITO_ALTA.</summary>
+    public string RiskLevel { get; set; } = "BAIXA";
+    /// <summary>De que esta ação depende para começar.</summary>
+    public string? Dependencies { get; set; }
+    /// <summary>A prova do que foi feito.</summary>
+    public string? Evidence { get; set; }
+    public string? Comments { get; set; }
 
     public string Status { get; set; } = StatusDaAcao.Pendente;
     /// <summary>0 a 100. Ação concluída é 100, sempre — ver <c>PlanoDeAcaoService</c>.</summary>

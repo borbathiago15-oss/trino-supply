@@ -45,6 +45,11 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<PurchaseOrderInvoice> PurchaseOrderInvoices => Set<PurchaseOrderInvoice>();
     public DbSet<PurchaseOrderErpDocument> PurchaseOrderErpDocuments => Set<PurchaseOrderErpDocument>();
     public DbSet<Acoes.ActionItem> ActionItems => Set<Acoes.ActionItem>();
+    public DbSet<Acoes.ActionPlan> ActionPlans => Set<Acoes.ActionPlan>();
+    public DbSet<Acoes.ActionPlanResponsible> ActionPlanResponsibles => Set<Acoes.ActionPlanResponsible>();
+    public DbSet<Acoes.PlanRisk> PlanRisks => Set<Acoes.PlanRisk>();
+    public DbSet<Acoes.PlanRootCause> PlanRootCauses => Set<Acoes.PlanRootCause>();
+    public DbSet<Acoes.PlanLesson> PlanLessons => Set<Acoes.PlanLesson>();
     public DbSet<Melhoria.ImprovementCycle> ImprovementCycles => Set<Melhoria.ImprovementCycle>();
     public DbSet<Melhoria.CycleWatcher> CycleWatchers => Set<Melhoria.CycleWatcher>();
     public DbSet<Melhoria.CycleCostCenter> CycleCostCenters => Set<Melhoria.CycleCostCenter>();
@@ -145,6 +150,128 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => x.CostCenter);
         });
 
+        modelBuilder.Entity<Acoes.ActionPlan>(e =>
+        {
+            e.ToTable("action_plan");
+            e.HasKey(p => p.Id);
+            e.Property(p => p.Id).HasColumnName("id");
+            e.Property(p => p.Code).HasColumnName("code").HasMaxLength(30).IsRequired();
+            e.HasIndex(p => p.Code).IsUnique();
+            e.Property(p => p.Title).HasColumnName("title").HasMaxLength(400).IsRequired();
+            e.Property(p => p.Description).HasColumnName("description");
+            e.Property(p => p.CostCenter).HasColumnName("cost_center").HasMaxLength(60);
+            e.Property(p => p.Areas).HasColumnName("areas").HasMaxLength(400);
+            e.Property(p => p.OtherArea).HasColumnName("other_area").HasMaxLength(120);
+            e.Property(p => p.Priority).HasColumnName("priority").HasMaxLength(20).IsRequired();
+            e.Property(p => p.StartDate).HasColumnName("start_date");
+            e.Property(p => p.DueDate).HasColumnName("due_date");
+            e.Property(p => p.Completion).HasColumnName("completion");
+            e.Property(p => p.Problem).HasColumnName("problem");
+            e.Property(p => p.BusinessReason).HasColumnName("business_reason");
+            e.Property(p => p.Category).HasColumnName("category").HasMaxLength(60);
+            e.Property(p => p.Sponsor).HasColumnName("sponsor").HasMaxLength(200);
+            e.Property(p => p.ManagerName).HasColumnName("manager_name").HasMaxLength(200);
+            e.Property(p => p.OperationalImpact).HasColumnName("operational_impact");
+            e.Property(p => p.FinancialImpact).HasColumnName("financial_impact");
+            e.Property(p => p.KpiAffected).HasColumnName("kpi_affected").HasMaxLength(200);
+            e.Property(p => p.TargetGoal).HasColumnName("target_goal");
+            e.Property(p => p.Criticality).HasColumnName("criticality").HasMaxLength(20).IsRequired();
+            e.Property(p => p.Complexity).HasColumnName("complexity").HasMaxLength(20).IsRequired();
+            e.Property(p => p.RoiExpected).HasColumnName("roi_expected").HasColumnType("numeric(18,2)");
+            e.Property(p => p.SavingExpected).HasColumnName("saving_expected").HasColumnType("numeric(18,2)");
+            e.Property(p => p.SavingRealized).HasColumnName("saving_realized").HasColumnType("numeric(18,2)");
+            e.Property(p => p.InvestmentPlanned).HasColumnName("investment_planned").HasColumnType("numeric(18,2)");
+            e.Property(p => p.InvestmentActual).HasColumnName("investment_actual").HasColumnType("numeric(18,2)");
+            e.Property(p => p.Cancelled).HasColumnName("cancelled");
+            e.Property(p => p.CancelReason).HasColumnName("cancel_reason");
+            e.Property(p => p.Life).HasColumnName("life").HasMaxLength(20).IsRequired();
+            e.HasIndex(p => p.Life);
+            e.Property(p => p.ClosedById).HasColumnName("closed_by_id");
+            e.Property(p => p.ClosedByLabel).HasColumnName("closed_by_label").HasMaxLength(200);
+            e.Property(p => p.ClosedAt).HasColumnName("closed_at");
+            e.Property(p => p.EvidenceNote).HasColumnName("evidence_note");
+            e.Property(p => p.CycleId).HasColumnName("cycle_id");
+            e.HasIndex(p => p.CycleId);
+            // o gatilho automático não abre o mesmo plano duas vezes
+            e.Property(p => p.AutoKey).HasColumnName("auto_key").HasMaxLength(160);
+            e.HasIndex(p => p.AutoKey);
+            e.Property(p => p.CreatedBy).HasColumnName("created_by");
+            e.Property(p => p.CreatedByLabel).HasColumnName("created_by_label").HasMaxLength(200).IsRequired();
+            e.Property(p => p.CreatedAt).HasColumnName("created_at");
+            e.Property(p => p.UpdatedAt).HasColumnName("updated_at");
+            e.Property(p => p.Version).HasColumnName("version");
+            // cascata em tudo o que só existe por causa do plano
+            e.HasMany(p => p.Responsibles).WithOne().HasForeignKey(r => r.PlanId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(p => p.Items).WithOne().HasForeignKey(i => i.PlanId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(p => p.Risks).WithOne().HasForeignKey(r => r.PlanId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(p => p.RootCauses).WithOne().HasForeignKey(r => r.PlanId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(p => p.Lessons).WithOne().HasForeignKey(l => l.PlanId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Acoes.ActionPlanResponsible>(e =>
+        {
+            e.ToTable("action_plan_responsible");
+            e.HasKey(r => r.Id);
+            e.Property(r => r.Id).HasColumnName("id");
+            e.Property(r => r.PlanId).HasColumnName("plan_id");
+            e.Property(r => r.UserId).HasColumnName("user_id");
+            e.Property(r => r.UserLabel).HasColumnName("user_label").HasMaxLength(200).IsRequired();
+            e.HasIndex(r => new { r.PlanId, r.UserId }).IsUnique();
+            e.HasIndex(r => r.UserId);
+        });
+
+        modelBuilder.Entity<Acoes.PlanRisk>(e =>
+        {
+            e.ToTable("plan_risk");
+            e.HasKey(r => r.Id);
+            e.Property(r => r.Id).HasColumnName("id");
+            e.Property(r => r.PlanId).HasColumnName("plan_id");
+            e.HasIndex(r => r.PlanId);
+            e.Property(r => r.Description).HasColumnName("description").IsRequired();
+            e.Property(r => r.Probability).HasColumnName("probability").HasMaxLength(20).IsRequired();
+            e.Property(r => r.Impact).HasColumnName("impact").HasMaxLength(20).IsRequired();
+            e.Property(r => r.Mitigation).HasColumnName("mitigation");
+            e.Property(r => r.ResponsibleId).HasColumnName("responsible_id");
+            e.Property(r => r.ResponsibleLabel).HasColumnName("responsible_label").HasMaxLength(200);
+            e.Property(r => r.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
+            e.Property(r => r.CreatedAt).HasColumnName("created_at");
+        });
+
+        modelBuilder.Entity<Acoes.PlanRootCause>(e =>
+        {
+            e.ToTable("plan_root_cause");
+            e.HasKey(r => r.Id);
+            e.Property(r => r.Id).HasColumnName("id");
+            e.Property(r => r.PlanId).HasColumnName("plan_id");
+            e.HasIndex(r => r.PlanId);
+            e.Property(r => r.Method).HasColumnName("method").HasMaxLength(40).IsRequired();
+            e.Property(r => r.ContentJson).HasColumnName("content_json");
+            e.Property(r => r.MainCause).HasColumnName("main_cause");
+            e.Property(r => r.CreatedAt).HasColumnName("created_at");
+            e.Property(r => r.UpdatedAt).HasColumnName("updated_at");
+        });
+
+        modelBuilder.Entity<Acoes.PlanLesson>(e =>
+        {
+            e.ToTable("plan_lesson");
+            e.HasKey(l => l.Id);
+            e.Property(l => l.Id).HasColumnName("id");
+            e.Property(l => l.PlanId).HasColumnName("plan_id");
+            e.HasIndex(l => l.PlanId);
+            e.Property(l => l.WhatWorked).HasColumnName("what_worked");
+            e.Property(l => l.WhatFailed).HasColumnName("what_failed");
+            e.Property(l => l.Lessons).HasColumnName("lessons");
+            e.Property(l => l.BestPractice).HasColumnName("best_practice");
+            e.Property(l => l.NextSteps).HasColumnName("next_steps");
+            e.Property(l => l.Recommendation).HasColumnName("recommendation");
+            e.Property(l => l.CreatedAt).HasColumnName("created_at");
+        });
+
         modelBuilder.Entity<Acoes.ActionItem>(e =>
         {
             e.ToTable("action_item");
@@ -166,9 +293,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(a => a.ExpectedResult).HasColumnName("expected_result");
             e.Property(a => a.Kpi).HasColumnName("kpi").HasMaxLength(200);
             e.Property(a => a.CostCenter).HasColumnName("cost_center").HasMaxLength(60);
-            e.Property(a => a.CycleId).HasColumnName("cycle_id");
-            e.HasIndex(a => a.CycleId);
+            e.Property(a => a.PlanId).HasColumnName("plan_id");
+            e.HasIndex(a => a.PlanId);
+            e.Property(a => a.Seq).HasColumnName("seq");
             e.Property(a => a.RootCauseRef).HasColumnName("root_cause_ref").HasMaxLength(400);
+            e.Property(a => a.SupportArea).HasColumnName("support_area").HasMaxLength(200);
+            e.Property(a => a.Complexity).HasColumnName("complexity").HasMaxLength(20).IsRequired();
+            e.Property(a => a.RiskLevel).HasColumnName("risk_level").HasMaxLength(20).IsRequired();
+            e.Property(a => a.Dependencies).HasColumnName("dependencies");
+            e.Property(a => a.Evidence).HasColumnName("evidence");
+            e.Property(a => a.Comments).HasColumnName("comments");
             e.Property(a => a.Status).HasColumnName("status").HasMaxLength(30).IsRequired();
             e.HasIndex(a => a.Status);
             e.Property(a => a.Progress).HasColumnName("progress");

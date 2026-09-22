@@ -349,7 +349,13 @@ export function TorreDeControle() {
         </div>
       )}
 
-      <Painel titulo="Filtros">
+      {/* a porta do Modo TV. O cockpit é tela de parede e fica fora do menu, mas sem um
+          caminho a partir daqui ele só abria para quem soubesse digitar a URL — e tela
+          que ninguém acha é tela que ninguém usa */}
+      <Painel titulo="Filtros" acoes={
+        <a className="botao-secundario" href="/cockpit" target="_blank" rel="noopener"
+          title="Abre o cockpit em tela cheia, para a TV da sala">Modo TV ↗</a>
+      }>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Campo id="tc-busca" rotulo="Buscar" dica="(SC, produto ou código)">
             <input id="tc-busca" placeholder="PR-2026-000123, luva…" {...campo('busca')}

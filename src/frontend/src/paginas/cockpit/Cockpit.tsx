@@ -77,7 +77,13 @@ export function Cockpit() {
       {/* NÍVEL 1 — barra de estado */}
       <header className="flex items-center justify-between pb-4">
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold tracking-tight">Trino Supply</h1>
+          {/* a marca na parede: quem entra na sala tem de saber de quem é o painel antes
+              de ler qualquer número. É o mesmo arquivo do menu, que já nasceu para fundo
+              escuro — e o alt mantém o título da tela para quem lê por leitor de tela */}
+          <h1 className="m-0">
+            <img src="/assets/brand/trino-supply-mark.png" width={420} height={108}
+              alt="Trino Supply" className="h-9 w-auto" />
+          </h1>
           <PulsoAoVivo vivo={!erro} />
           {/* qual recorte está na parede agora — sem isso, quem chega lê o número
               da unidade da vez achando que é o da empresa inteira */}

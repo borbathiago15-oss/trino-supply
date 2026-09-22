@@ -194,3 +194,29 @@ describe('menu', () => {
     expect(folhas.filter((f) => /pedido/i.test(f.rotulo)).map((f) => f.id)).toEqual(['buy-orders']);
   });
 });
+
+// O cockpit nasceu sem porta: não estava no menu nem na Torre, e só abria para quem
+// soubesse digitar /cockpit. Tela que ninguém acha é tela que ninguém usa — este teste
+// é o que impede a porta de sumir de novo.
+describe('a porta do cockpit', () => {
+  const comprador: Perfil = { role: 'PurchasingOfficer', modules: ['COMPRAS'] };
+
+  it('o comprador acha o cockpit pelo menu', () => {
+    const compras = itensVisiveis(comprador).find((g) => g.titulo === 'Compras');
+    const itens = (compras?.itens ?? []).flatMap((i) => ('filhos' in i ? i.filhos : [i]));
+    expect(itens.map((i) => i.id)).toContain('cockpit');
+  });
+
+  it('e ele abre em aba nova, porque a tela não tem menu para voltar', () => {
+    const compras = itensVisiveis(comprador).find((g) => g.titulo === 'Compras');
+    const itens = (compras?.itens ?? []).flatMap((i) => ('filhos' in i ? i.filhos : [i]));
+    expect(itens.find((i) => i.id === 'cockpit')?.novaAba).toBe(true);
+  });
+
+  it('o solicitante não vê o cockpit: a parede é da área de compras', () => {
+    const solicitante: Perfil = { role: 'Requester', modules: ['SOLICITACOES'] };
+    const ids = itensVisiveis(solicitante).flatMap((g) =>
+      g.itens.flatMap((i) => ('filhos' in i ? i.filhos : [i]))).map((i) => i.id);
+    expect(ids).not.toContain('cockpit');
+  });
+});

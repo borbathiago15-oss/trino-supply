@@ -106,6 +106,15 @@ describe('<Cockpit />', () => {
     expect(screen.getByTestId('unidade-na-tela')).not.toHaveTextContent('recortes');
   });
 
+  // quem entra na sala tem de saber de quem é o painel antes de ler qualquer número —
+  // e o cockpit ficou sem a marca até alguém notar da porta
+  it('a parede mostra a marca, e não só o nome escrito', async () => {
+    render(<Cockpit />);
+    const marca = await screen.findByAltText('Trino Supply');
+    expect(marca.tagName).toBe('IMG');
+    expect(marca.closest('h1')).not.toBeNull();
+  });
+
   it('enquanto não há dados, diz que está conectando', () => {
     vi.mocked(obterCockpit).mockReturnValue(new Promise(() => {}));
     render(<Cockpit />);

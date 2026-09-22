@@ -12,9 +12,17 @@ const classeItem = (ativo: boolean, recuo: number) =>
 function Folha({ item, recuo, ativo, pendente }: {
   item: ItemMenu; recuo: number; ativo: boolean; pendente?: number;
 }) {
+  // a tela que vive fora do AppLayout abre em aba nova: dentro da mesma, o usuário
+  // cairia numa tela sem menu e sem caminho de volta
+  const Alvo = item.novaAba
+    ? ({ children, className, ...resto }: React.ComponentProps<'a'>) =>
+        <a href={item.rota} target="_blank" rel="noopener" className={className} {...resto}>{children}</a>
+    : ({ children, ...resto }: React.ComponentProps<'a'>) =>
+        <Link to={item.rota} {...resto}>{children}</Link>;
+
   return (
-    <Link to={item.rota} className={classeItem(ativo, recuo)} aria-current={ativo ? 'page' : undefined}>
-      <span>{item.rotulo}</span>
+    <Alvo className={classeItem(ativo, recuo)} aria-current={ativo ? 'page' : undefined}>
+      <span>{item.rotulo}{item.novaAba && ' ↗'}</span>
       {!!pendente && (
         <span data-testid={`pendencia-${item.id}`} aria-label={`${pendente} pendente(s)`}
           className={'ml-2 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold '
@@ -22,7 +30,7 @@ function Folha({ item, recuo, ativo, pendente }: {
           {pendente > 99 ? '99+' : pendente}
         </span>
       )}
-    </Link>
+    </Alvo>
   );
 }
 

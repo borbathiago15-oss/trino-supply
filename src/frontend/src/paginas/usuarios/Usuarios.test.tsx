@@ -38,7 +38,7 @@ const inativo = usuario({ email: 'joao@t.com', name: 'João Inativo', active: fa
 const centros: CentroCusto[] = [{
   id: 'cc1', code: 'BAH-001', name: 'PepsiCo Simões Filho', region: 'BAHIA', companyId: null,
   managerUserId: null, managerName: null, clientName: null, active: true,
-  level1ValueLimit: null, level2ValueLimit: null, level1: [], level2: [],
+  receivesMaterial: false, level1ValueLimit: null, level2ValueLimit: null, level1: [], level2: [],
 }];
 
 describe('regras da tela de usuários', () => {

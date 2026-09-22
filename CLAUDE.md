@@ -107,6 +107,18 @@ o usuário descobrir no erro do servidor:
   e a busca traz a grade **inteira** mesmo quando o termo achou um tamanho só, porque achar o
   39 e esconder o 40 obrigaria a buscar de novo. A tela expande na volta: cada tamanho com
   quantidade vira um item da SC. O C.A. é cobrado **do tamanho pedido**, não do produto.
+- **O local de entrega tem dois cadastros, e o centro de custo é um deles.** A lista só trazia
+  os almoxarifados do estoque, e por isso toda SC parecia ir para a Sede. Mas quem paga e quem
+  recebe são perguntas diferentes: a SC é do "Novo Atacarejo PB" e o material desce no
+  "Whirlpool PB". `CostCenter.ReceivesMaterial` é a resposta da segunda, e é **do centro, não da
+  regional** — dois centros no mesmo endereço podem responder diferente, que é justamente o caso
+  que fez a regra existir. `Domain/LocaisDeEntrega.cs` junta os dois cadastros num lugar só, e o
+  `kind` de cada local é o que deixa a tela agrupar: sem ele "Whirlpool PB" e "Almoxarifado Sede"
+  desceriam na mesma lista como se fossem a mesma coisa. São **duas consultas juntadas em
+  memória** e não um `Concat` de LINQ, que sobre entidades diferentes não traduz no Npgsql. O que
+  a SC grava continua sendo o texto `CÓDIGO — Nome`, igual para os dois tipos — nada a montante
+  precisou mudar. O padrão é **não** receber: um centro que nunca recebeu material não vira
+  endereço de entrega por causa de uma migration.
 - **A adjudicação é por escopo, e o escopo pode ser o item.** `QuotationAward.QuotationItemId`
   nulo quer dizer a família inteira — é o que toda adjudicação antiga significa e continua
   significando. Preenchido, é aquele item: o papel com um fornecedor e a caneta com outro,

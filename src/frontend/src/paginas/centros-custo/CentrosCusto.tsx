@@ -38,6 +38,7 @@ export function CentrosCusto() {
   const [form, setForm] = useState<Formulario>(VAZIO);
   const [nivel1, setNivel1] = useState<string[]>([]);
   const [nivel2, setNivel2] = useState<string[]>([]);
+  const [recebe, setRecebe] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
   const { dados, erro, carregando, recarregar } = useCarregar(
@@ -63,9 +64,12 @@ export function CentrosCusto() {
     });
     setNivel1(c.level1.map((a) => a.userId));
     setNivel2(c.level2.map((a) => a.userId));
+    setRecebe(c.receivesMaterial);
     rolarPara('form-cc');
   }
-  const cancelar = () => { setEditando(null); setForm(VAZIO); setNivel1([]); setNivel2([]); };
+  const cancelar = () => {
+    setEditando(null); setForm(VAZIO); setNivel1([]); setNivel2([]); setRecebe(false);
+  };
 
   function corpo(): DadosCentroCusto {
     const valor = (v: string) => (v ? parseFloat(v) : null);
@@ -80,6 +84,7 @@ export function CentrosCusto() {
       level1ValueLimit: valor(form.limite1),
       level2ValueLimit: valor(form.limite2),
       clearValueLimits: !form.limite1 && !form.limite2,
+      receivesMaterial: recebe,
     };
   }
 
@@ -143,7 +148,8 @@ export function CentrosCusto() {
               <thead>
                 <tr>
                   <th>Código</th><th>Nome</th><th>Regional</th><th>Gerente</th><th>Nível 1</th><th>Nível 2</th>
-                  <th>Limites</th><th>CNPJ de compras</th><th>Cliente</th><th>Situação</th>{mantem && <th>Ações</th>}
+                  <th>Limites</th><th>CNPJ de compras</th><th>Cliente</th><th>Recebe material</th>
+                  <th>Situação</th>{mantem && <th>Ações</th>}
                 </tr>
               </thead>
               <tbody>
@@ -165,6 +171,7 @@ export function CentrosCusto() {
                     </td>
                     <td className="sub">{nomeEmpresa(c.companyId)}</td>
                     <td>{c.clientName || '—'}</td>
+                    <td className="sub">{c.receivesMaterial ? 'Sim — é local de entrega' : 'Não'}</td>
                     <td><BadgeAtivo ativo={c.active} /></td>
                     {mantem && (
                       <td className="whitespace-nowrap">
@@ -218,6 +225,16 @@ export function CentrosCusto() {
             <Campo id="cc-cliente" rotulo="Cliente" className="mt-3">
               <input id="cc-cliente" placeholder="opcional — cliente/contrato atendido" {...campo('cliente')} />
             </Campo>
+
+            <label className="mt-3 !mb-0 flex items-center gap-2 !text-[13px] !font-normal !text-texto">
+              <input id="cc-recebe" type="checkbox" className="!w-auto"
+                checked={recebe} onChange={(ev) => setRecebe(ev.target.checked)} />
+              Este centro <strong>recebe material</strong> — aparece no Local de entrega da solicitação
+            </label>
+            <Nota>
+              Marque quando o material é entregue no endereço deste centro. Dois centros no mesmo endereço
+              podem ter respostas diferentes: a SC é do centro que paga, a entrega vai para o que recebe.
+            </Nota>
 
             <p className="mb-1 mt-5 text-[12.5px] font-semibold text-texto-suave">
               Quem aprova neste centro <span className="font-normal">(marque as pessoas; qualquer uma delas resolve a etapa)</span>

@@ -11,13 +11,14 @@ vi.mock('@/api/centrosCusto', async (importar) => ({
   ...(await importar<typeof import('@/api/centrosCusto')>()),
   listarCentrosCusto: vi.fn(),
   atualizarCentroCusto: vi.fn(),
+  criarCentroCusto: vi.fn(),
 }));
 vi.mock('@/api/usuarios', () => ({ listarUsuariosPicker: vi.fn() }));
 vi.mock('@/api/empresas', () => ({ listarEmpresas: vi.fn() }));
 let usuarioAtual: Usuario;
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => usuarioAtual }));
 
-import { atualizarCentroCusto, listarCentrosCusto } from '@/api/centrosCusto';
+import { atualizarCentroCusto, criarCentroCusto, listarCentrosCusto } from '@/api/centrosCusto';
 import { listarUsuariosPicker } from '@/api/usuarios';
 import { listarEmpresas } from '@/api/empresas';
 
@@ -30,7 +31,7 @@ const usuarios: UsuarioPicker[] = [
 const centro: CentroCusto = {
   id: 'cc1', code: 'BAH-001', name: 'PepsiCo Simões Filho', region: 'BAHIA',
   companyId: 'emp1', managerUserId: 'ap1', managerName: 'Ana Aprovadora', clientName: 'PepsiCo',
-  active: true, level1ValueLimit: 50000, level2ValueLimit: null,
+  active: true, receivesMaterial: false, level1ValueLimit: 50000, level2ValueLimit: null,
   level1: [{ userId: 'ap1', name: 'Ana Aprovadora' }], level2: [],
 };
 
@@ -78,6 +79,35 @@ describe('<CentrosCusto />', () => {
     expect(screen.getByLabelText(/Ana Aprovadora/)).toBeChecked();
     expect(screen.getByLabelText(/Davi Diretor/)).not.toBeChecked();
     expect(screen.getByLabelText('Nível 1 (R$)')).toHaveValue(50000);
+  });
+
+  it('a coluna diz se o centro recebe material', async () => {
+    vi.mocked(listarCentrosCusto).mockResolvedValue([
+      centro, { ...centro, id: 'cc2', code: 'PBA-002', name: 'Whirlpool PB', receivesMaterial: true },
+    ]);
+    montar();
+    await waitFor(() => expect(screen.getByTestId('tabela-centros-custo')).toBeInTheDocument());
+    expect(screen.getByText('Sim — é local de entrega')).toBeInTheDocument();
+    expect(screen.getByText('Não')).toBeInTheDocument();
+  });
+
+  it('editar carrega a marca de quem recebe material', async () => {
+    vi.mocked(listarCentrosCusto).mockResolvedValue([{ ...centro, receivesMaterial: true }]);
+    montar();
+    await waitFor(() => expect(screen.getByTestId('tabela-centros-custo')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'Editar' }));
+    expect(screen.getByLabelText(/recebe material/)).toBeChecked();
+  });
+
+  it('marcar que o centro recebe material vai no corpo do cadastro', async () => {
+    vi.mocked(criarCentroCusto).mockResolvedValue(centro);
+    montar();
+    await waitFor(() => expect(screen.getByTestId('tabela-centros-custo')).toBeInTheDocument());
+    await userEvent.type(screen.getByLabelText('Nome'), 'Whirlpool PB');
+    await userEvent.click(screen.getByLabelText(/recebe material/));
+    await userEvent.click(screen.getByRole('button', { name: 'Cadastrar centro de custo' }));
+    await waitFor(() => expect(criarCentroCusto).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Whirlpool PB', receivesMaterial: true })));
   });
 
   it('inativar manda apenas a mudança de situação', async () => {

@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { familiasDoCatalogo, gradeDeLote, type LinhaDeLote } from '@/api/catalogo';
 import { listarCentrosCusto, type CentroCusto } from '@/api/centrosCusto';
-import { listarLocaisDeEntrega, rotuloDoLocal, type LocalEntrega } from '@/api/locais';
+import { listarLocaisDeEntrega, locaisPorTipo, rotuloDoLocal, type LocalEntrega } from '@/api/locais';
 import { criarSolicitacao, ROTULO_PRIORIDADE, type Prioridade } from '@/api/solicitacoes';
 import { Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { Campo, Grade2 } from '@/componentes/formulario';
@@ -81,8 +81,12 @@ export function SolicitacaoEmLote() {
           <Campo id="lote-local" rotulo="Local de Entrega">
             <select id="lote-local" {...campo('local')}>
               <option value="">Selecione…</option>
-              {(apoio.dados?.locais ?? []).map((l) => (
-                <option key={l.id} value={rotuloDoLocal(l)}>{rotuloDoLocal(l)}</option>
+              {locaisPorTipo(apoio.dados?.locais ?? []).map((g) => (
+                <optgroup key={g.kind} label={g.rotulo}>
+                  {g.locais.map((l) => (
+                    <option key={l.id} value={rotuloDoLocal(l)}>{rotuloDoLocal(l)}</option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           </Campo>

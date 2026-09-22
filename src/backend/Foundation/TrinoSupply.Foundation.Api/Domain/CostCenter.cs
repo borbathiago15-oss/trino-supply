@@ -20,6 +20,12 @@ public class CostCenter
     public decimal? Level1ValueLimit { get; set; }
     public decimal? Level2ValueLimit { get; set; }
     public string? ClientName { get; set; }                 // cliente/contrato atendido
+    /// <summary>
+    /// O centro também é um endereço de entrega: aparece no "Local de entrega" da SC, ao lado
+    /// do almoxarifado. Dois centros no mesmo endereço podem ter respostas diferentes — um
+    /// recebe, o outro não —, por isso a marca é do centro e não da regional.
+    /// </summary>
+    public bool ReceivesMaterial { get; set; }
     public bool Active { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

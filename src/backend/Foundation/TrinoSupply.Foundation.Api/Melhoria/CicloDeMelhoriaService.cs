@@ -76,9 +76,16 @@ public class CicloDeMelhoriaService(AppDbContext db, TimeProvider clock)
         // o Npgsql traduz — Contains sobre subconsulta projetada passa no InMemory e dá 500 lá
         var acompanha = await db.CycleWatchers.Where(w => w.UserId == eu.Id)
             .Select(w => w.CycleId).Distinct().ToArrayAsync(ct);
-        var porAcao = await db.ActionItems
-            .Where(a => a.ResponsibleId == eu.Id && a.CycleId != null)
-            .Select(a => a.CycleId!.Value).Distinct().ToArrayAsync(ct);
+        // "responsável por alguma ação do ciclo" passa pelo plano: a ação vive dentro dele,
+        // e o ponteiro do ciclo mora no plano. Quem responde pelo plano inteiro também entra
+        var meusPlanos = await db.ActionItems.Where(a => a.ResponsibleId == eu.Id)
+            .Select(a => a.PlanId).Distinct().ToArrayAsync(ct);
+        var planosQueLidero = await db.ActionPlanResponsibles.Where(r => r.UserId == eu.Id)
+            .Select(r => r.PlanId).Distinct().ToArrayAsync(ct);
+        var porAcao = await db.ActionPlans
+            .Where(x => x.CycleId != null
+                && (meusPlanos.Contains(x.Id) || planosQueLidero.Contains(x.Id)))
+            .Select(x => x.CycleId!.Value).Distinct().ToArrayAsync(ct);
 
         Guid[] porCentro = [];
         Guid[] equipe = [];
@@ -158,12 +165,17 @@ public class CicloDeMelhoriaService(AppDbContext db, TimeProvider clock)
         var comPendencia = 0;
         if (encerrados.Length > 0)
         {
+            var planos = await db.ActionPlans
+                .Where(x => x.CycleId != null && encerrados.Contains(x.CycleId!.Value))
+                .Select(x => new { x.Id, x.CycleId }).ToListAsync(ct);
+            var idsDosPlanos = planos.Select(x => x.Id).ToArray();
             var abertas = await db.ActionItems
-                .Where(a => a.CycleId != null && encerrados.Contains(a.CycleId!.Value))
-                .Select(a => new { a.CycleId, a.Status }).ToListAsync(ct);
+                .Where(a => idsDosPlanos.Contains(a.PlanId))
+                .Select(a => new { a.PlanId, a.Status }).ToListAsync(ct);
+            var doCiclo = planos.ToDictionary(x => x.Id, x => x.CycleId);
             comPendencia = abertas
                 .Where(a => a.Status != StatusDaAcao.Concluida && a.Status != StatusDaAcao.Cancelada)
-                .Select(a => a.CycleId).Distinct().Count();
+                .Select(a => doCiclo[a.PlanId]).Distinct().Count();
         }
         return new(itens.Count,
             itens.Count(c => c.Phase == FaseDoCiclo.Plan),
@@ -184,8 +196,7 @@ public class CicloDeMelhoriaService(AppDbContext db, TimeProvider clock)
 
     private async Task<CicloCompleto> CompletarAsync(ImprovementCycle ciclo, CancellationToken ct)
     {
-        var acoes = await db.ActionItems.Where(a => a.CycleId == ciclo.Id)
-            .OrderBy(a => a.DueDate == null).ThenBy(a => a.DueDate).ToListAsync(ct);
+        var acoes = await AcoesDoCicloAsync(ciclo.Id, ct);
         var analise = FerramentaDeCausa.Normalizar(ciclo.ToolName, ciclo.ToolData);
         var hoje = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
         var setor = ciclo.SectorId is { } sid
@@ -352,7 +363,7 @@ public class CicloDeMelhoriaService(AppDbContext db, TimeProvider clock)
             return (null, new("PDCA-ERR-040",
                 $"Diga por que o ciclo está sendo encerrado, em pelo menos {MinimoDoMotivo} caracteres."), []);
 
-        var acoes = await db.ActionItems.Where(a => a.CycleId == id).ToListAsync(ct);
+        var acoes = await AcoesDoCicloAsync(id, ct);
         var pendentes = acoes.Where(PlanoDeAcao.Aberta).ToList();
         if (pendentes.Count > 0 && !p.ConfirmaPendencias)
             return (null, new("PDCA-ERR-041",
@@ -441,7 +452,11 @@ public class CicloDeMelhoriaService(AppDbContext db, TimeProvider clock)
             return (null, 0, new("PDCA-ERR-052",
                 "Com mais de um centro de destino não há para onde mandar cada ação: mova o ciclo para um centro só, ou ajuste as ações antes."));
 
-        var acoes = await db.ActionItems.Where(a => a.CycleId == id).ToListAsync(ct);
+        // o plano vai junto: ele é quem aponta para o ciclo, e deixá-lo no centro antigo
+        // faria a ação mudar de dono sem o plano mudar
+        var planos = await db.ActionPlans.Where(x => x.CycleId == id).ToListAsync(ct);
+        foreach (var plano in planos) plano.CostCenter = destino;
+        var acoes = await AcoesDoCicloAsync(id, ct);
         foreach (var a in acoes) a.CostCenter = destino;
 
         ciclo.Scope = novo;
@@ -518,6 +533,20 @@ public class CicloDeMelhoriaService(AppDbContext db, TimeProvider clock)
         // só pelo DbSet: o EF põe o filho de volta na navegação do pai rastreado, e adicioná-lo
         // aqui também o deixaria duas vezes na lista que a resposta devolve
         foreach (var n in novos) conjunto.Add(n);
+    }
+
+    /// <summary>
+    /// As ações do ciclo — as dos planos que apontam para ele. A ação não aponta mais para o
+    /// ciclo: ela vive dentro de um plano, e é o plano que diz de qual ciclo nasceu.
+    /// </summary>
+    private async Task<List<ActionItem>> AcoesDoCicloAsync(Guid cicloId, CancellationToken ct)
+    {
+        var planos = await db.ActionPlans.Where(p => p.CycleId == cicloId)
+            .Select(p => p.Id).ToArrayAsync(ct);
+        if (planos.Length == 0) return [];
+        return await db.ActionItems.Where(a => planos.Contains(a.PlanId))
+            .OrderBy(a => a.DueDate == null).ThenBy(a => a.DueDate).ThenBy(a => a.Seq)
+            .ToListAsync(ct);
     }
 
     /// <summary>

@@ -253,67 +253,48 @@ o usuário descobrir no erro do servidor:
   no denominador puxando o score para baixo. Critério **sem dado** também sai da conta:
   fornecedor novo não é punido por ser novo.
 
-**Ação suspensa não está atrasada, e o plano de ação é módulo por si.** `Acoes/` guarda a
-tarefa com dono, prazo e 5W2H — a fundação que o módulo de PDCA supõe pronta. A regra que não
-se afrouxa: **suspensa é parada por decisão**, e o relógio não corre contra quem foi mandado
-parar (`PlanoDeAcao.Atrasada`). Contá-la como atraso transformaria decisão da gestão em falha
-da equipe, e é o tipo de número que faz o time parar de confiar no painel inteiro — ela continua
-**aberta**, só não corre. O **responsável é chave estrangeira**, nunca texto: com nome digitado à
-mão, dois "João Silva" e um "J. Silva" viram três pessoas e "o que está pendente com o João"
-deixa de ter resposta. **Suspender e cancelar exigem motivo** (`AC-ERR-014`), por rota própria —
-misturar isso na edição comum deixaria a ação parar sem ninguém assumir a decisão. E o
-**progresso segue a situação**, não o número digitado: "concluída, 40%" não quer dizer nada.
-O acesso é o módulo `PLANO_ACAO`, que o administrador concede, e ele **não entra em padrão de
-papel nenhum** de propósito: é ferramenta de qualquer área, não de um cargo.
+**O plano de ação é o projeto; a ação é o como.** `Acoes/` guarda o `ActionPlan` e, **dentro
+dele**, os `ActionItem` — é o desenho do Trino Intelligence, que a operação já conhece. A ação
+solta não contava a história: "trocar o filme do palete" não diz qual problema resolve, quanto
+custa nem o que se aprendeu. Por isso **toda ação tem plano** (`PlanId` obrigatório), e o plano
+carrega o problema, o porquê, os responsáveis (vários — um plano de verdade atravessa áreas),
+os riscos, a causa raiz, as lições e o dinheiro.
 
-**O ciclo de melhoria (PDCA) trata a causa; o plano de ação trata a tarefa.** `Melhoria/` é o
-ciclo, e as ações dele são os **mesmos** `ActionItem` apontando para ele (`CycleId`) — duplicar
-o modelo daria dois lugares para olhar o mesmo trabalho. Quatro regras não se afrouxam:
+- **Ação suspensa não está atrasada.** Ela está parada por decisão, e o relógio não corre contra
+  quem foi mandado parar (`PlanoDeAcao.Atrasada`). Contá-la como atraso transformaria decisão da
+  gestão em falha da equipe — e é o tipo de número que faz o time parar de confiar no painel
+  inteiro. Ela continua **aberta**, só não corre. **Suspender e cancelar exigem motivo**
+  (`AC-ERR-014`), por rota própria.
+- **O responsável é chave estrangeira**, nunca texto. No Trino Intelligence ele é `String(200)`,
+  e a própria documentação de lá lista isso como o erro a não repetir: dois "João Silva" e um
+  "J. Silva" viram três pessoas, e "o que está pendente com o João" deixa de ter resposta.
+- **A situação do plano é derivada, e a ordem importa**: cancelado vence tudo, concluído vence
+  atrasado, atrasado vence "em andamento". Fosse outra ordem, um plano cancelado apareceria como
+  atrasado e a lista cobraria trabalho que ninguém mais vai fazer.
+- **Encerrar é decisão, não consequência do progresso.** Um plano a 100% continua ativo até
+  alguém dizer que acabou, e um a 40% pode fechar — com quem decidiu, quando e a **evidência**.
+  **Plano encerrado não se edita** (`AP-ERR-020`): deixá-lo aceitar edição faria o registro do
+  encerramento mentir sobre o que estava fechado. Reabrir é do gestor ou do administrador, e
+  apaga quem encerrou — mas **não** a evidência, que é o registro do que foi feito.
+- **A severidade do risco é probabilidade × impacto**, calculada e nunca escolhida: dois riscos
+  marcados "alto" que significam coisas diferentes é o que faz a matriz deixar de servir para
+  priorizar.
+- **Sem investimento o ROI é nulo, não zero.** Dividir por zero daria um número que parece ótimo
+  e não quer dizer nada — e é o tipo de número que vai para a apresentação antes de alguém
+  conferir. O **progresso dos itens** (média) e o **`Completion` digitado** convivem: respondem
+  perguntas diferentes, e divergir é informação, não erro.
+- O acesso é o módulo `PLANO_ACAO`, que o administrador concede, e ele **não entra em padrão de
+  papel nenhum** de propósito: é ferramenta de qualquer área, não de um cargo.
 
-- **Uma função normaliza a ferramenta de causa** (`FerramentaDeCausa.Normalizar`), e tela,
-  leitura e relatório leem dela. Duas leituras do mesmo JSON dariam dois números para a mesma
-  análise, e a tela que mostrasse o errado seria a que o usuário acreditou. **Pareto e GUT
-  ordenam e calculam no servidor**: quem ordena decide qual é a causa vital, e isso não pode
-  depender de em qual tela se olha. O Pareto marca como vital o item cujo acumulado **antes
-  dele** é menor que 80% — pelo acumulado depois, o item que *cruza* os 80% ficaria de fora e
-  a conta nunca fecharia. O GUT **não elege ninguém** com o maior produto abaixo de 27: o
-  maior de uma lista fraca não é prioridade. A causa raiz dos 5 Porquês preenche a do ciclo se
-  ninguém escreveu outra — é o mesmo dado, e digitá-lo duas vezes é convite a divergir.
-- **A leitura automática é uma função** (`MotorDeLeitura.Ler`) e não inventa nada: diz em
-  português o que os campos afirmam, e onde falta dado diz que falta — "0% de avanço" e
-  "ninguém mediu ainda" são notícias diferentes. O sinal que dá valor ao módulo é **causa
-  vital sem ação**; o elo com a ação é o texto da causa comparado sem acento, caixa nem
-  pontuação, senão o sinal acenderia com a ação já escrita.
-- **Prazo vencido não encerra nada.** Encerrar é veredito de uma pessoa e exige **três**
-  coisas: se a meta foi atingida (`PDCA-ERR-043` — dito, não deduzido do indicador, que pode
-  nem ter sido medido), o motivo em texto (`PDCA-ERR-040`) e, havendo ação em aberto, a
-  confirmação explícita **com a lista do que sobrou** anexada ao motivo (`PDCA-ERR-041`). O
-  ciclo **pode** fechar com pendência — às vezes é a decisão certa; o que não pode é fechar
-  sem ninguém assumir isso, e a leitura marca a contradição em vez de escondê-la. Mudar a fase
-  para "encerrado" pela edição comum é **recusado** (`PDCA-ERR-044`): era o clique na trilha
-  que fechava o ciclo sem registrar quem decidiu. **Reabrir apaga o veredito** — quem, quando e
-  por quê não valem mais.
-- **Trocar o escopo leva as ações junto**, e só com destino **sem ambiguidade** (um centro, ou
-  nenhum). As ações nasceram apontando para o centro antigo e ficariam lá, contando no painel
-  do centro errado; com dois destinos não há para onde mandar cada uma, e escolher por elas
-  seria inventar o dado (`PDCA-ERR-052`).
-
-**A visibilidade do ciclo é um predicado só** (`CicloDeMelhoriaService.VisiveisAsync`), que a
-lista e a abertura consultam igual — e quem não enxerga recebe 404, não 403. Enxerga quem criou,
-quem é dono, quem foi marcado em "quem mais acompanha", quem responde por alguma ação e quem é
-do **setor** do ciclo; o Gestor de Suprimentos soma os centros vinculados a ele e o que a equipe
-dele abriu. Três ausências são deliberadas: **centro vinculado não abre ciclo** para perfil
-operacional (o ciclo de um centro pode tratar de assunto que não é de todo mundo), **"gestão"
-não é público** (o plano da casa entrava na lista de qualquer um só por não ter centro), e a
-visibilidade **sobe, não desce** — o ciclo do gestor só aparece para quem ele marcou. Quem
-conduz (dono, criador, admin) é quem marca o acompanhamento, porque para os demais **essa lista
-é o acesso**; e quem tem setor **não escolhe** o setor do ciclo: é o dele.
+**O ciclo de melhoria aponta para o plano, não para a ação.** `ActionPlan.CycleId` é o elo — no
+Trino Intelligence a análise de causa aponta para o plano, e é isso que faz "as ações do ciclo"
+querer dizer uma coisa só. Mudar o escopo do ciclo leva **o plano e as ações** juntos.
 
 **Filho de associação entra pelo `DbSet`, não só pela navegação.** As entidades deste projeto
 nascem com `Id` preenchido, e o EF lê chave não vazia em filho anexado pela navegação de um pai
-já rastreado como "já existe" — o registro ia como *update* de linha que nunca esteve lá. A
-inclusão passa pelo conjunto (`CicloDeMelhoriaService.Trocar`), e a navegação se preenche
-sozinha pelo *fixup*: adicioná-la também deixaria o filho duas vezes na resposta.
+já rastreado como "já existe" — o registro ia ao banco como *update* de linha que nunca esteve
+lá. A navegação se preenche sozinha pelo *fixup*: adicioná-la também deixaria o filho duas vezes
+na resposta.
 
 **`TabelaDeRotasTests` monta a própria tabela.** Grupo de rotas novo precisa ser mapeado **lá
 também**, e não só no `Program.cs` — senão o inventário passa sem cobrir nada dele, que foi o que

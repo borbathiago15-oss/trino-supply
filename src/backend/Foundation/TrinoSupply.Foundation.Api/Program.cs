@@ -322,13 +322,61 @@ public record UpdateSupplierRequest(string? TradeName, string? Email, string? Ph
 public record PoItemRequest(string Description, decimal Quantity, string? UnitOfMeasure, decimal? UnitPrice, Guid? CatalogItemId);
 public record CreatePurchaseOrderRequest(Guid SupplierId, string? Notes, List<PoItemRequest>? Items, Guid? SourcePrId);
 public record ReceiveOrderRequest(Guid LocationId);
+/// <summary>
+/// O plano inteiro num corpo só — criar e editar usam o mesmo. O formulário é um, e a tela
+/// não tem de saber qual campo pertence a qual aba para poder salvá-lo.
+/// </summary>
+public record PlanoRequest(
+    string? Title, string? Description, string? CostCenter,
+    List<string>? Areas, string? OtherArea, string? Priority,
+    DateOnly? StartDate, DateOnly? DueDate, int? Completion,
+    string? Problem, string? BusinessReason, string? Category, string? Sponsor,
+    string? ManagerName, string? OperationalImpact, string? FinancialImpact,
+    string? KpiAffected, string? TargetGoal, string? Criticality, string? Complexity,
+    decimal? RoiExpected, decimal? SavingExpected, decimal? SavingRealized,
+    decimal? InvestmentPlanned, decimal? InvestmentActual,
+    List<Guid>? ResponsibleIds = null, Guid? CycleId = null,
+    bool? Cancelled = null, string? CancelReason = null)
+{
+    public TrinoSupply.Foundation.Api.Acoes.DadosDoPlano Dados() => new(
+        Title, Description, CostCenter, Areas, OtherArea, Priority, StartDate, DueDate, Completion,
+        Problem, BusinessReason, Category, Sponsor, ManagerName, OperationalImpact, FinancialImpact,
+        KpiAffected, TargetGoal, Criticality, Complexity, RoiExpected, SavingExpected, SavingRealized,
+        InvestmentPlanned, InvestmentActual, ResponsibleIds, CycleId, Cancelled, CancelReason);
+}
+
+public record EncerrarPlanoRequest(string? EvidenceNote);
+
 public record CriarAcaoRequest(string Title, Guid ResponsibleId, DateOnly? StartDate, DateOnly? DueDate,
     string? Reason, string? Area, string? ExpectedResult, string? Kpi, decimal? ExpectedGain, string? CostCenter,
-    Guid? CycleId = null, string? RootCauseRef = null);
+    string? RootCauseRef = null, string? SupportArea = null, string? Complexity = null,
+    string? RiskLevel = null, string? Dependencies = null, string? Evidence = null,
+    string? Comments = null, int? Seq = null)
+{
+    public TrinoSupply.Foundation.Api.Acoes.DadosDaAcao Dados() => new(
+        Title, ResponsibleId, StartDate, DueDate, Reason, Area, ExpectedResult, Kpi,
+        ExpectedGain, CostCenter, RootCauseRef, SupportArea, Complexity, RiskLevel,
+        Dependencies, Evidence, Comments, Seq);
+}
+
 public record AtualizarAcaoRequest(string? Title, Guid? ResponsibleId, DateOnly? StartDate, DateOnly? DueDate,
     string? Reason, string? Area, string? ExpectedResult, string? Kpi, decimal? ExpectedGain,
-    decimal? RealizedGain, string? CostCenter, Guid? CycleId = null, string? RootCauseRef = null);
+    decimal? RealizedGain, string? CostCenter, string? RootCauseRef = null, string? SupportArea = null,
+    string? Complexity = null, string? RiskLevel = null, string? Dependencies = null,
+    string? Evidence = null, string? Comments = null, int? Seq = null)
+{
+    public TrinoSupply.Foundation.Api.Acoes.DadosDaAcao Dados() => new(
+        Title ?? "", ResponsibleId ?? Guid.Empty, StartDate, DueDate, Reason, Area, ExpectedResult,
+        Kpi, ExpectedGain, CostCenter, RootCauseRef, SupportArea, Complexity, RiskLevel,
+        Dependencies, Evidence, Comments, Seq);
+}
+
 public record MudarStatusDaAcaoRequest(string Status, string? Reason, int? Progress);
+public record RiscoDoPlanoRequest(Guid? Id, string? Description, string? Probability, string? Impact,
+    string? Mitigation, Guid? ResponsibleId, string? Status);
+public record CausaRaizDoPlanoRequest(string? Method, string? ContentJson, string? MainCause);
+public record LicoesDoPlanoRequest(string? WhatWorked, string? WhatFailed, string? Lessons,
+    string? BestPractice, string? NextSteps, string? Recommendation);
 /// <summary>
 /// O ciclo inteiro num corpo só — criar e editar usam o mesmo, e é de propósito: o formulário
 /// é um só e a tela não tem de saber qual campo pertence a qual fase para poder salvá-lo.

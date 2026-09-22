@@ -21,7 +21,7 @@ public static class AvisoDoUsuarioRotas
         avisos.AddEndpointFilter(RejectSupplierRole());
 
         avisos.MapGet("/", async (AvisoDoUsuarioService svc, EscalonamentoDoPrazoService escalonamento,
-            ClaimsPrincipal p, HttpContext ctx, bool? unreadOnly) =>
+            Melhoria.AvisoDoCicloService ciclos, ClaimsPrincipal p, HttpContext ctx, bool? unreadOnly) =>
         {
             var eu = ActorId(p);
             if (eu == Guid.Empty) return Error(ctx, 403, "AV-ERR-900", "Sessão sem usuário.");
@@ -31,6 +31,10 @@ public static class AvisoDoUsuarioRotas
             // mais que pode falhar em silêncio. A deduplicação impede o aviso de renascer
             // a cada visita
             if (RoleOf(p) == Roles.SupplyManager) await escalonamento.AvaliarAsync();
+
+            // o ciclo de melhoria avisa o próprio dono, e por isso vale para qualquer papel:
+            // ciclo parado e Check vencido são fatos dele, não da fila de outra pessoa
+            await ciclos.AvaliarAsync(eu);
 
             var itens = await svc.DaPessoaAsync(eu, unreadOnly == true);
             return Ok(new

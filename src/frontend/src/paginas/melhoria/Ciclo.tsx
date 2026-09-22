@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
+import { abrirBlob } from '@/api/cliente';
 import {
-  abrirCiclo, encerrarCiclo, EncerramentoPendente, reabrirCiclo, salvarCiclo,
+  a3DoCiclo, abrirCiclo, encerrarCiclo, EncerramentoPendente, reabrirCiclo, salvarCiclo,
   type AcaoDoCiclo, type CicloCompleto, type DadosDoCiclo, type Leitura, type Sinal,
 } from '@/api/melhoria';
 import { Badge, Carregando, Dado, Erro, Painel, Vazio } from '@/componentes/basicos';
@@ -157,6 +158,12 @@ function Conteudo({ completo, recarregar, avisar }: {
     } finally { setSalvando(false); }
   }
 
+  async function baixarA3() {
+    try {
+      abrirBlob(await a3DoCiclo(c.id));
+    } catch (e) { avisar(mensagem(e, 'Falha ao gerar o A3 do ciclo.'), 'erro'); }
+  }
+
   async function reabrir() {
     try {
       await reabrirCiclo(c.id);
@@ -168,9 +175,13 @@ function Conteudo({ completo, recarregar, avisar }: {
   return (
     <>
       <Painel titulo={`${c.code} — ${c.title}`} acoes={
-        encerrado
-          ? <button type="button" className="botao-secundario" onClick={reabrir}>Reabrir</button>
-          : <button type="button" className="botao" onClick={() => setEncerrando(true)}>Encerrar ciclo</button>
+        <>
+          {/* o A3 é o ciclo em uma folha, para a reunião — e sai da mesma leitura da tela */}
+          <button type="button" className="botao-secundario" onClick={() => void baixarA3()}>A3</button>
+          {encerrado
+            ? <button type="button" className="botao-secundario" onClick={reabrir}>Reabrir</button>
+            : <button type="button" className="botao" onClick={() => setEncerrando(true)}>Encerrar ciclo</button>}
+        </>
       }>
         <div className="flex flex-wrap items-center gap-2">
           <Badge classe={encerrado ? 'bg-slate-100 text-slate-600' : 'bg-marca/10 text-marca'}>

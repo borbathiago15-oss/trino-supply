@@ -28,6 +28,7 @@ GET /api/v1/delivery-locations
 GET /api/v1/documents/{id:guid}
 GET /api/v1/improvement-cycles/
 GET /api/v1/improvement-cycles/{id:guid}
+GET /api/v1/improvement-cycles/{id:guid}/a3
 GET /api/v1/inventory/balances
 GET /api/v1/inventory/locations
 GET /api/v1/inventory/movements

@@ -116,6 +116,17 @@ public static class MelhoriaRotas
             }, ctx);
         });
 
+        // o A3 sai da mesma leitura que a tela mostra. Papel e tela dizendo números
+        // diferentes parariam a reunião para descobrir em qual acreditar
+        ciclos.MapGet("/{id:guid}/a3", async (Guid id, CicloDeMelhoriaService svc, TimeProvider clock,
+            ClaimsPrincipal p, HttpContext ctx, CancellationToken ct) =>
+        {
+            var completo = await svc.AbrirAsync(BuildActor(p)!, id, ct);
+            if (completo is null) return Error(ctx, 404, "PDCA-ERR-404", "Ciclo não encontrado.");
+            var pdf = A3DoCiclo.Gerar(completo, DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime));
+            return Results.File(pdf, "application/pdf", $"{completo.Ciclo.Code}-A3.pdf");
+        });
+
         ciclos.MapPost("/", async (CicloRequest body, CicloDeMelhoriaService svc,
             ClaimsPrincipal p, HttpContext ctx, CancellationToken ct) =>
         {

@@ -12,6 +12,11 @@ export interface ItemMenu {
   rota: string;
   modulo?: Modulo;
   mostrar?: (u: Perfil) => boolean;
+  /**
+   * Abre em aba nova. É para a tela que vive <b>fora</b> do AppLayout: navegar para ela
+   * dentro da mesma aba deixaria o usuário numa tela sem menu e sem volta.
+   */
+  novaAba?: boolean;
 }
 export interface SubgrupoMenu { rotulo: string; filhos: ItemMenu[] }
 export interface GrupoMenu {
@@ -107,6 +112,11 @@ export const MENU: GrupoMenu[] = [
     // atendente. Ela tem tela própria, no grupo Material.
     { id: 'control-tower', rotulo: 'Torre de Controle', rota: '/torre',
       mostrar: (u) => podeComprar(u) || podeVerCompliance(u) || u.role === 'Auditor' },
+    // o cockpit é a mesma Torre vista da parede da sala. Ele mora fora do AppLayout —
+    // sem menu e sem cabeçalho —, mas precisa de uma porta no menu: sem ela, só chegava
+    // quem soubesse digitar /cockpit, e a tela nasceu invisível
+    { id: 'cockpit', rotulo: 'Cockpit (Modo TV)', rota: '/cockpit', novaAba: true,
+      mostrar: (u) => podeComprar(u) || podeVerCompliance(u) },
     { rotulo: 'Cotações', filhos: [
       { id: 'rfq-queue', rotulo: 'Abrir Cotação', rota: '/cotacoes/abrir', mostrar: podeVerCotacao },
       { id: 'quotations', rotulo: 'Processos de Cotação', rota: '/cotacoes', mostrar: podeVerCotacao },

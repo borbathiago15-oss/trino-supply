@@ -1,4 +1,4 @@
-import { api } from './cliente';
+import { api, baixar } from './cliente';
 
 /** As quatro fases, mais o encerramento — que é veredito, não fase do trabalho. */
 export type Fase = 'PLAN' | 'DO' | 'CHECK' | 'ACT' | 'ENCERRADO';
@@ -127,6 +127,10 @@ export const listarCiclos = (
 
 export const abrirCiclo = (id: string, signal?: AbortSignal) =>
   api<CicloCompleto>(`${base}/${id}`, { signal });
+
+/** O A3 em uma folha paisagem, gerado da mesma leitura que a tela mostra. */
+export const a3DoCiclo = (id: string) =>
+  baixar(`${base}/${id}/a3`, 'Falha ao gerar o A3 do ciclo.');
 
 export type DadosDoCiclo = Partial<{
   title: string; scope: string; region: string | null; sectorId: string | null;

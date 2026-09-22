@@ -115,13 +115,15 @@ export const MENU: GrupoMenu[] = [
     { id: 'contracts', rotulo: 'Contratos', rota: '/contratos', modulo: 'CONTRATOS', mostrar: (u) => podeComprar(u) || ehAdmin(u) },
     { id: 'scorecard', rotulo: 'Scorecard de Fornecedores', rota: '/scorecard', mostrar: (u) => podeComprar(u) || podeVerCompliance(u) },
   ]},
-  { titulo: 'Material', modulo: 'MATERIAL', mostrar: naoDiretor, itens: [
+  // o diretor também pede material (2026-09): o grupo aparece para ele com as duas telas de
+  // quem pede; a triagem continua de quem tria e do almoxarifado
+  { titulo: 'Material', modulo: 'MATERIAL', itens: [
     { id: 'mr-new', rotulo: 'Solicitar Material', rota: '/material/nova', mostrar: podePedirMaterial },
     { id: 'mr-mine', rotulo: 'Minhas Solicitações de Material', rota: '/material', mostrar: sempre },
     // saiu do grupo Compras: o que ela tria é pedido ao almoxarifado, não compra —
     // e era ficar ao lado da Torre que fazia as duas parecerem a mesma fila
     { id: 'triage', rotulo: 'Triagem de Material', rota: '/gestao-solicitacoes',
-      mostrar: (u) => podeTriar(u) || podeAlmoxarifado(u) },
+      mostrar: (u) => u.role !== 'Director' && (podeTriar(u) || podeAlmoxarifado(u)) },
   ]},
   { titulo: 'Estoque', modulo: 'ESTOQUE', mostrar: naoDiretor, itens: [
     { id: 'wh-queue', rotulo: 'Fila de Atendimento', rota: '/estoque/fila', mostrar: podeAlmoxarifado },

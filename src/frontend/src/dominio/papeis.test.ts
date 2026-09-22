@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  paginaInicial, podeAprovarDiretor, podeAprovarGerente, podeConfirmarEntrega, podeCriarSc, podeGerirPedidos, podeVerPedidos, temModulo,
+  paginaInicial, podeAprovarDiretor, podeAprovarGerente, podeConfirmarEntrega, podeCriarSc, podeGerirPedidos, podePedirMaterial, podeVerPedidos, temModulo,
 } from './papeis';
 
 describe('papéis', () => {
@@ -31,6 +31,10 @@ describe('papéis', () => {
   it('o comprador solicita e dá o Nível 1; o Nível 2 continua da diretoria', () => {
     // decisão da empresa (2026-09): quem cota abre a SC em qualquer centro e fecha a primeira alçada
     expect(podeCriarSc({ role: 'PurchasingOfficer' })).toBe(true);
+    expect(podeCriarSc({ role: 'Director' })).toBe(true);   // o diretor também solicita (2026-09)
+    expect(podePedirMaterial({ role: 'Director' })).toBe(true);
+    expect(podePedirMaterial({ role: 'Approver' })).toBe(false);
+    expect(podeCriarSc({ role: 'Auditor' })).toBe(false);
     expect(podeAprovarGerente({ role: 'PurchasingOfficer' })).toBe(true);
     expect(podeAprovarDiretor({ role: 'PurchasingOfficer' })).toBe(false);
   });

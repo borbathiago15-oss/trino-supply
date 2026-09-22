@@ -75,7 +75,7 @@ public static class AppModules
         Roles.WarehouseOperator => [Estoque],
         Roles.WarehouseSupervisor => [Estoque, Produtos],
         Roles.SupplyManager => [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, CentrosCusto, Compliance, Insights],
-        Roles.Director => [Solicitacoes, Aprovacao, Compras, Compliance, Insights],
+        Roles.Director => [Solicitacoes, Aprovacao, Material, Compras, Compliance, Insights],
         Roles.Auditor => [Solicitacoes, Estoque, Compras, Compliance, Insights],
         _ => [],
     };

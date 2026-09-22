@@ -20,8 +20,9 @@ public record MaterialItemInput(Guid CatalogItemId, decimal Quantity);
 // que escondia avisos novos no build (SEC-D).
 public class MaterialRequisitionService(AppDbContext db, CatalogService catalog, TimeProvider clock)
 {
+    /// <summary>Quem pede material ao almoxarifado. O diretor também (2026-09), como na SC.</summary>
     public static bool CanRequest(string role) =>
-        role is Roles.Requester or Roles.SupplyManager or Roles.SystemAdministrator;
+        role is Roles.Requester or Roles.SupplyManager or Roles.SystemAdministrator or Roles.Director;
 
     public static bool CanFulfill(string role) => InventoryService.CanOperate(role);
 

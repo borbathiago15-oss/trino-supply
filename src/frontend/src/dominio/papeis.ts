@@ -25,7 +25,7 @@ export const MODULOS_PADRAO: Record<Papel, Modulo[]> = {
   WarehouseOperator: ['ESTOQUE'],
   WarehouseSupervisor: ['ESTOQUE', 'PRODUTOS'],
   SupplyManager: ['SOLICITACOES', 'APROVACAO', 'MATERIAL', 'ESTOQUE', 'COMPRAS', 'PRODUTOS', 'FORNECEDORES', 'CENTROS_CUSTO'],
-  Director: ['SOLICITACOES', 'APROVACAO', 'COMPRAS'],
+  Director: ['SOLICITACOES', 'APROVACAO', 'MATERIAL', 'COMPRAS'],
   Auditor: ['SOLICITACOES', 'ESTOQUE', 'COMPRAS'],
 };
 
@@ -48,10 +48,14 @@ const entre = (u: Perfil, ...papeis: Papel[]) => papeis.includes(u.role);
 export const ehAdmin = (u: Perfil) => u.role === 'SystemAdministrator';
 export const temModulo = (u: Perfil, m: Modulo) => ehAdmin(u) || (u.modules ?? []).includes(m);
 
-/** O comprador também solicita, em qualquer centro — decisão da empresa (2026-09). */
-export const podeCriarSc = (u: Perfil) => entre(u, 'Requester', 'SupplyManager', 'SystemAdministrator', 'PurchasingOfficer');
+/**
+ * O comprador também solicita, em qualquer centro — decisão da empresa (2026-09). O diretor
+ * também: o Nível 1 da SC dele é do comprador ou da lista do centro, e o Nível 2 ele mesmo dá.
+ */
+export const podeCriarSc = (u: Perfil) => entre(u, 'Requester', 'SupplyManager', 'SystemAdministrator', 'PurchasingOfficer', 'Director');
 export const podeDecidirSc = (u: Perfil) => entre(u, 'Approver', 'SupplyManager', 'SystemAdministrator');
-export const podePedirMaterial = (u: Perfil) => entre(u, 'Requester', 'SupplyManager', 'SystemAdministrator');
+/** O diretor também pede material ao almoxarifado (2026-09), como na SC. */
+export const podePedirMaterial = (u: Perfil) => entre(u, 'Requester', 'SupplyManager', 'SystemAdministrator', 'Director');
 export const podeAlmoxarifado = (u: Perfil) => temModulo(u, 'ESTOQUE')
   || entre(u, 'WarehouseOperator', 'WarehouseSupervisor', 'SupplyManager', 'SystemAdministrator');
 export const podeComprar = (u: Perfil) => entre(u, 'PurchasingOfficer', 'SupplyManager', 'SystemAdministrator');

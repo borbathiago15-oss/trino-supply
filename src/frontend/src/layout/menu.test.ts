@@ -101,11 +101,13 @@ describe('menu', () => {
     const todos = ['SOLICITACOES', 'APROVACAO', 'MATERIAL', 'ESTOQUE', 'COMPRAS', 'PRODUTOS', 'FORNECEDORES',
       'CENTROS_CUSTO', 'USUARIOS', 'CONTRATOS', 'COMPLIANCE', 'INSIGHTS'] as const;
     const grupos = itensVisiveis({ role: 'Director', modules: [...todos] });
-    expect(grupos.map((g) => g.titulo)).toEqual([null, 'Solicitações de Compra']);
+    expect(grupos.map((g) => g.titulo)).toEqual([null, 'Solicitações de Compra', 'Material']);
     const ids = folhas({ role: 'Director', modules: [...todos] }).map((i) => i.id);
     expect(ids).toContain('pr-approvals');
     expect(ids).toContain('reports');
     expect(ids).toContain('pr-mine');
+    expect(ids).toContain('pr-new-unit');   // o diretor também solicita
+    expect(ids).toContain('mr-new');        // e pede material; a triagem não é dele
     // a visão da diretoria substitui o painel do comprador e o Insights para esse papel
     expect(ids[0]).toBe('director-view');
     for (const fora of ['supply-dash', 'insights', 'control-tower', 'quotations', 'rfq-queue', 'buy-orders', 'scorecard', 'triage', 'wh-queue', 'products'])

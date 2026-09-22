@@ -13,8 +13,13 @@ public interface IPrNumberGenerator
 public record Actor(Guid Id, string Label, string Role)
 {
     public bool IsAdmin => Role == Roles.SystemAdministrator;
-    /// <summary>O comprador também solicita, em qualquer centro (não tem vínculo de centro a respeitar).</summary>
-    public bool CanCreate => Role is Roles.Requester or Roles.SupplyManager or Roles.PurchasingOfficer || IsAdmin;
+    /// <summary>
+    /// O comprador também solicita, em qualquer centro (não tem vínculo de centro a respeitar).
+    /// O diretor também solicita (decisão da empresa, 2026-09): o Nível 1 da SC dele é do
+    /// comprador ou da lista do centro, e o Nível 2 ele mesmo dá — a segregação (RFQ-ERR-030)
+    /// separa quem escolhe e quem aprova, não quem pede.
+    /// </summary>
+    public bool CanCreate => Role is Roles.Requester or Roles.SupplyManager or Roles.PurchasingOfficer or Roles.Director || IsAdmin;
     public bool CanDecide => Role is Roles.Approver or Roles.SupplyManager || IsAdmin;
     public bool SeesAll => Role is Roles.Approver or Roles.SupplyManager or Roles.Auditor or Roles.PurchasingOfficer || IsAdmin;
     public bool CanAccessModule => CanCreate || CanDecide || Role is Roles.Auditor or Roles.PurchasingOfficer;
@@ -231,10 +236,10 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         return (pr, null); // EVT-001 RequisitionCreated (outbox: incremento futuro)
     }
 
-    /// <summary>Júnior/Pleno com centros vinculados só solicitam dos seus centros (PR-ERR-021).</summary>
+    /// <summary>Solicitante, aprovador e diretor com centros vinculados só solicitam dos seus centros (PR-ERR-021).</summary>
     private async Task<UserError?> CheckCcLinkAsync(Actor actor, string costCenter, CancellationToken ct)
     {
-        if (actor.Role is not (Roles.Requester or Roles.Approver)) return null;
+        if (actor.Role is not (Roles.Requester or Roles.Approver or Roles.Director)) return null;
         var linked = await db.Users.Where(u => u.Id == actor.Id).Select(u => u.CostCenters).SingleOrDefaultAsync(ct);
         if (string.IsNullOrWhiteSpace(linked)) return null;
         var codes = linked.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);

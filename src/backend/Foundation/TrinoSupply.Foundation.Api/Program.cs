@@ -247,9 +247,10 @@ public record LoginRequest(string Email, string Password);
 public record RefreshRequest(string RefreshToken);
 public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 public record CreateUserRequest(string Email, string Name, string Role, string Password, List<string>? Modules,
-    List<string>? CostCenters, Guid? DirectorId);
+    List<string>? CostCenters, Guid? DirectorId, Guid? SupplyManagerId = null);
 public record UpdateUserRequest(string? Name, string? Role, bool? Active, List<string>? Modules,
-    List<string>? CostCenters, Guid? DirectorId, bool? ClearDirector);
+    List<string>? CostCenters, Guid? DirectorId, bool? ClearDirector,
+    Guid? SupplyManagerId = null, bool? ClearSupplyManager = null);
 public record ResetPasswordRequest(string NewPassword);
 /// <summary>
 /// Item pedido na SC. <c>Family</c> é a família escolhida pelo solicitante e só vale para

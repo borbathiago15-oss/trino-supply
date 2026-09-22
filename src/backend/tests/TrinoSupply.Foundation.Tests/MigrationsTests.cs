@@ -67,5 +67,10 @@ public sealed class MigrationsTests : IAsyncLifetime
 
         // duas consultas juntadas em memória: o Concat delas no LINQ não teria tradução
         Assert.Empty(await LocaisDeEntrega.ListarAsync(db));
+
+        // roda na aprovação do Nível 1, que é gravação: `Contains` com array sobre a entidade
+        var vazia = new Quotation { Number = "RFQ-0", CostCenter = "CC-01" };
+        Assert.Equal(CaminhoDoNivel2.Padrao,
+            (await AlcadaDoComprador.RotaAsync(db, vazia, Guid.NewGuid())).Caminho);
     }
 }

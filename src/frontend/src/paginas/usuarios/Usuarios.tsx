@@ -16,13 +16,24 @@ import { useUsuario } from '@/sessao/SessaoProvider';
 import { rolarPara } from '@/util/rolar';
 import { useCarregar } from '@/util/useCarregar';
 
-const VAZIO = { nome: '', email: '', papel: '' as Papel | '', senha: '', diretor: '' };
+const VAZIO = { nome: '', email: '', papel: '' as Papel | '', senha: '', diretor: '', gestor: '' };
 type Formulario = typeof VAZIO;
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
 /** Quem pode ser diretor responsável de outro usuário. */
 export const diretoresPossiveis = (usuarios: UsuarioCadastro[]) =>
   usuarios.filter((u) => u.active && (u.role === 'Director' || u.role === 'SystemAdministrator'));
+
+/**
+ * Quem pode ser o gestor responsável pela 2ª alçada das compras de um comprador.
+ * Só Gestor de Suprimentos: é o papel que a regra do servidor aceita (IAM-ERR-020), e
+ * oferecer outro aqui faria a tela propor o que a gravação recusa.
+ */
+export const gestoresPossiveis = (usuarios: UsuarioCadastro[]) =>
+  usuarios.filter((u) => u.active && u.role === 'SupplyManager');
+
+/** O vínculo só faz sentido para o comprador: é a compra dele que o gestor fecha. */
+export const pedeGestorResponsavel = (papel: Papel | '') => papel === 'PurchasingOfficer';
 
 /** Papéis oferecidos no cadastro, sem os que hoje são resolvidos por módulo. */
 export const papeisOferecidos = (papeis: Papel[]) => papeis.filter((p) => !PAPEIS_OCULTOS.includes(p));
@@ -72,11 +83,13 @@ export function Usuarios() {
   const lista = useMemo(() => dados?.usuarios.items ?? [], [dados]);
   const papeis = useMemo(() => papeisOferecidos(dados?.usuarios.roles ?? []), [dados]);
   const diretores = useMemo(() => diretoresPossiveis(lista), [lista]);
+  const gestores = useMemo(() => gestoresPossiveis(lista), [lista]);
   const nomeDiretor = (id: string | null) => lista.find((u) => u.id === id)?.name ?? '—';
 
   function editar(u: UsuarioCadastro) {
     setEditando(u);
-    setForm({ nome: u.name, email: u.email, papel: u.role, senha: '', diretor: u.directorId ?? '' });
+    setForm({ nome: u.name, email: u.email, papel: u.role, senha: '', diretor: u.directorId ?? '',
+      gestor: u.supplyManagerId ?? '' });
     setModulos(u.modules);
     setCentros(u.costCenters);
     rolarPara('form-usuario');
@@ -95,11 +108,15 @@ export function Usuarios() {
     const comum: DadosUsuario = {
       name: form.nome, role: form.papel, modules: modulos, costCenters: centros,
       directorId: form.diretor || null,
+      // papel que não pede o vínculo nunca o grava: trocar de Comprador para outro papel
+      // deixaria para trás um responsável que não responde por mais nada
+      supplyManagerId: pedeGestorResponsavel(form.papel) ? form.gestor || null : null,
     };
     setSalvando(true);
     try {
       if (editando) {
-        await atualizarUsuario(editando.id, { ...comum, clearDirector: !form.diretor });
+        await atualizarUsuario(editando.id, { ...comum, clearDirector: !form.diretor,
+          clearSupplyManager: !comum.supplyManagerId });
         avisar('Usuário atualizado. Autorizações valem a partir do próximo login.');
         cancelar();
       } else {
@@ -171,6 +188,7 @@ export function Usuarios() {
                     <td className="sub">
                       {u.costCenters.join(' · ') || '—'}
                       {u.directorId && <div>Diretor: {nomeDiretor(u.directorId)}</div>}
+                      {u.supplyManagerId && <div>Gestor: {nomeDiretor(u.supplyManagerId)}</div>}
                     </td>
                     <td>
                       <BadgeAtivo ativo={u.active} />
@@ -267,6 +285,19 @@ export function Usuarios() {
               ))}
             </select>
           </Campo>
+
+          {/* só o comprador tem este vínculo: é a compra dele que o gestor fecha no Nível 2 */}
+          {pedeGestorResponsavel(form.papel) && (
+            <Campo id="usu-gestor" className="mt-5" rotulo="Gestor responsável"
+              dica="(2ª alçada das compras que este comprador solicita)">
+              <select id="usu-gestor" {...campo('gestor')}>
+                <option value="">Sem gestor vinculado — a 2ª alçada vai para a diretoria</option>
+                {gestores.map((g) => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+            </Campo>
+          )}
 
           <div className="mt-4 flex flex-wrap gap-2">
             <button type="submit" className="botao" disabled={salvando}>

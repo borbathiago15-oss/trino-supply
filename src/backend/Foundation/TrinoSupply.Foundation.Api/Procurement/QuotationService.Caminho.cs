@@ -33,6 +33,7 @@ public partial class QuotationService
             if (diretor is not null) alcadas = alcadas with { Nivel2 = [diretor.Name], Ids2 = [diretor.Id] };
         }
 
-        return CaminhoDoProcesso.De(q, solicitantes, pedidaEm, alcadas);
+        var rota = await AlcadaDoComprador.RotaAsync(db, q, q.ManagerApprovedBy, ct);
+        return CaminhoDoProcesso.De(q, solicitantes, pedidaEm, alcadas, rota);
     }
 }

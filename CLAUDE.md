@@ -67,6 +67,26 @@ o usuário descobrir no erro do servidor:
   deles (PR-ERR-021), como o solicitante. O mesmo vale para **material** ao almoxarifado
   (`MaterialRequisitionService.CanRequest`, `podePedirMaterial`); o módulo Material entra no
   padrão do diretor, e usuário já cadastrado precisa dele marcado em Usuários.
+- **A compra que a própria área de compras pede não termina na diretoria.** Decisão da empresa
+  (2026-09), em `Procurement/AlcadaDoComprador.cs`: a compra do **Gestor de Suprimentos**, que já
+  deu o Nível 1, **não tem Nível 2** — a mesma decisão aprova o processo e o pedido nasce ali,
+  pronto para a O.C.; a compra de um **comprador** tem como Nível 2 o **gestor responsável por
+  ele** (`User.SupplyManagerId`), e não o diretor. Todo o resto segue a régua de sempre.
+  Três coisas seguram a regra. **"Compra própria" vale só quando todas as SCs de origem são de
+  quem deu o Nível 1** — bastasse uma, juntar a SC de um solicitante à do gestor no mesmo
+  processo apagaria a segunda assinatura da compra alheia junto com a dele. **Sem responsável
+  cadastrado cai no padrão**, que é crivo mais alto e não menor: travar a fila seria pior, e
+  afrouxá-la em silêncio seria inaceitável. E o gestor **não herda** a 2ª alçada de centro sem
+  lista só por ter entrado em `CanApproveAsDirector` — a alçada dele é a compra dos compradores
+  dele, e `ImpedimentoNivel2Async` é quem separa os dois casos, para a fila da Central continuar
+  sendo exatamente o que a pessoa decide.
+  **A dispensa não inventa um aprovador**: `DirectorApprovedBy` fica **nulo**, e é por esse nulo
+  que todo o resto a reconhece. Foi o que obrigou a acertar três leitores que assumiam a segunda
+  assinatura — o funil de tempo de ciclo (contava a etapa só com `DirectorApprovedAt`, e sumiria
+  com a compra dispensada em vez de medi-la), o PDF da O.C. (imprimia "Diretoria:  ()", que parece
+  assinatura que faltou coletar) e o caminho do processo (mostrava o Nível 2 pendente para sempre,
+  cobrando o que a regra não pede — agora a etapa é `dispensada`, que é diferente de pendente e de
+  feita).
 - **RFQ-ERR-040/041** — a O.C. nunca é emitida pelo sistema. Ela é fechada no ERP
   SENIOR e aqui só se registra o número, depois das duas aprovações.
 - **PO-BR-011** — **sem O.C. gerada no ERP, a compra não fecha.** A única exceção

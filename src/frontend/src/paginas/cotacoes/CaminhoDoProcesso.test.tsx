@@ -20,6 +20,28 @@ const caminho: EtapaDoCaminho[] = [
   etapa({ chave: 'oc', titulo: 'Registro da O.C. do ERP', situacao: 'pendente' }),
 ];
 
+describe('Nível 2 dispensado (compra do Gestor de Suprimentos)', () => {
+  const dispensado = etapa({
+    chave: 'nivel2', titulo: 'Aprovação de Nível 2', situacao: 'dispensada',
+    quem: 'dispensado — compra do próprio Gestor de Suprimentos', em: '2026-09-04T12:00:00Z',
+  });
+
+  it('a etapa diz que não se aplica, em vez de ficar aguardando alguém', () => {
+    expect(legenda(dispensado)).toBe('dispensado — compra do próprio Gestor de Suprimentos');
+    expect(legenda(dispensado)).not.toContain('aguardando');
+  });
+
+  it('a etapa continua na lista, com marca própria', () => {
+    montar([...caminho.slice(0, 3), dispensado, caminho[4]]);
+    const linha = screen.getByText('Aprovação de Nível 2').closest('li');
+    expect(linha).toHaveAttribute('data-situacao', 'dispensada');
+  });
+
+  it('dispensada não é o mesmo que pendente sem ninguém', () => {
+    expect(legenda(etapa({ situacao: 'pendente', quem: null }))).toBe('a seguir');
+  });
+});
+
 describe('caminho do processo', () => {
   it('diz quem pediu, de quem está esperando agora e quem aprova depois', () => {
     montar(caminho);

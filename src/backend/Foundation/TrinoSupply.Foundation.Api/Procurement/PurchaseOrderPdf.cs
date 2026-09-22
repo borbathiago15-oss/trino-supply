@@ -154,7 +154,11 @@ public static class PurchaseOrderPdf
                             t.Span("Aprovações:  ").SemiBold();
                             t.Span($"Seleção: {quotation.SelectedByLabel} ({quotation.SelectedAt:dd/MM/yyyy})   ·   " +
                                    $"Gerência: {quotation.ManagerApprovedByLabel} ({quotation.ManagerApprovedAt:dd/MM/yyyy})   ·   " +
-                                   $"Diretoria: {quotation.DirectorApprovedByLabel} ({quotation.DirectorApprovedAt:dd/MM/yyyy})");
+                                   // sem Nível 2 (AlcadaDoComprador) o documento diz isso, em vez de
+                                   // imprimir "Diretoria:  ()" e parecer assinatura que faltou coletar
+                                   (quotation.DirectorApprovedAt is null
+                                       ? "Diretoria: dispensada (compra do Gestor de Suprimentos)"
+                                       : $"Diretoria: {quotation.DirectorApprovedByLabel} ({quotation.DirectorApprovedAt:dd/MM/yyyy})"));
                         });
                 });
 

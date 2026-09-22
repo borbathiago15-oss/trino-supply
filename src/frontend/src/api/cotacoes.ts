@@ -368,7 +368,8 @@ export interface GanhoNegociado {
 export interface EtapaDoCaminho {
   chave: string;
   titulo: string;
-  situacao: 'feita' | 'atual' | 'pendente' | 'encerrada';
+  /** `dispensada`: etapa que este processo não tem — hoje só o Nível 2 da compra do gestor. */
+  situacao: 'feita' | 'atual' | 'pendente' | 'encerrada' | 'dispensada';
   /** Quem fez (feita) ou de quem se espera (atual e pendente). */
   quem: string | null;
   /** Quando foi feita, ou desde quando se espera. */

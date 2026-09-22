@@ -75,9 +75,10 @@ public static class AppModules
     public const string Compliance = "COMPLIANCE";       // compliance score e controles (V2-P2)
     public const string Insights = "INSIGHTS";           // insights determinísticos + visão executiva (V2-P3)
     public const string PlanoAcao = "PLANO_ACAO";        // plano de ação: tarefa com dono e prazo (5W2H)
+    public const string Pdca = "PDCA";                   // ciclo de melhoria: onde se trata a causa
 
     public static readonly string[] All =
-        [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, CentrosCusto, Usuarios, Contratos, Compliance, Insights, PlanoAcao];
+        [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, CentrosCusto, Usuarios, Contratos, Compliance, Insights, PlanoAcao, Pdca];
 
     /// <summary>Padrão por papel, aplicado quando o cadastro não define módulos.</summary>
     public static string[] DefaultsFor(string role) => role switch

@@ -266,6 +266,55 @@ misturar isso na edição comum deixaria a ação parar sem ninguém assumir a d
 O acesso é o módulo `PLANO_ACAO`, que o administrador concede, e ele **não entra em padrão de
 papel nenhum** de propósito: é ferramenta de qualquer área, não de um cargo.
 
+**O ciclo de melhoria (PDCA) trata a causa; o plano de ação trata a tarefa.** `Melhoria/` é o
+ciclo, e as ações dele são os **mesmos** `ActionItem` apontando para ele (`CycleId`) — duplicar
+o modelo daria dois lugares para olhar o mesmo trabalho. Quatro regras não se afrouxam:
+
+- **Uma função normaliza a ferramenta de causa** (`FerramentaDeCausa.Normalizar`), e tela,
+  leitura e relatório leem dela. Duas leituras do mesmo JSON dariam dois números para a mesma
+  análise, e a tela que mostrasse o errado seria a que o usuário acreditou. **Pareto e GUT
+  ordenam e calculam no servidor**: quem ordena decide qual é a causa vital, e isso não pode
+  depender de em qual tela se olha. O Pareto marca como vital o item cujo acumulado **antes
+  dele** é menor que 80% — pelo acumulado depois, o item que *cruza* os 80% ficaria de fora e
+  a conta nunca fecharia. O GUT **não elege ninguém** com o maior produto abaixo de 27: o
+  maior de uma lista fraca não é prioridade. A causa raiz dos 5 Porquês preenche a do ciclo se
+  ninguém escreveu outra — é o mesmo dado, e digitá-lo duas vezes é convite a divergir.
+- **A leitura automática é uma função** (`MotorDeLeitura.Ler`) e não inventa nada: diz em
+  português o que os campos afirmam, e onde falta dado diz que falta — "0% de avanço" e
+  "ninguém mediu ainda" são notícias diferentes. O sinal que dá valor ao módulo é **causa
+  vital sem ação**; o elo com a ação é o texto da causa comparado sem acento, caixa nem
+  pontuação, senão o sinal acenderia com a ação já escrita.
+- **Prazo vencido não encerra nada.** Encerrar é veredito de uma pessoa e exige **três**
+  coisas: se a meta foi atingida (`PDCA-ERR-043` — dito, não deduzido do indicador, que pode
+  nem ter sido medido), o motivo em texto (`PDCA-ERR-040`) e, havendo ação em aberto, a
+  confirmação explícita **com a lista do que sobrou** anexada ao motivo (`PDCA-ERR-041`). O
+  ciclo **pode** fechar com pendência — às vezes é a decisão certa; o que não pode é fechar
+  sem ninguém assumir isso, e a leitura marca a contradição em vez de escondê-la. Mudar a fase
+  para "encerrado" pela edição comum é **recusado** (`PDCA-ERR-044`): era o clique na trilha
+  que fechava o ciclo sem registrar quem decidiu. **Reabrir apaga o veredito** — quem, quando e
+  por quê não valem mais.
+- **Trocar o escopo leva as ações junto**, e só com destino **sem ambiguidade** (um centro, ou
+  nenhum). As ações nasceram apontando para o centro antigo e ficariam lá, contando no painel
+  do centro errado; com dois destinos não há para onde mandar cada uma, e escolher por elas
+  seria inventar o dado (`PDCA-ERR-052`).
+
+**A visibilidade do ciclo é um predicado só** (`CicloDeMelhoriaService.VisiveisAsync`), que a
+lista e a abertura consultam igual — e quem não enxerga recebe 404, não 403. Enxerga quem criou,
+quem é dono, quem foi marcado em "quem mais acompanha", quem responde por alguma ação e quem é
+do **setor** do ciclo; o Gestor de Suprimentos soma os centros vinculados a ele e o que a equipe
+dele abriu. Três ausências são deliberadas: **centro vinculado não abre ciclo** para perfil
+operacional (o ciclo de um centro pode tratar de assunto que não é de todo mundo), **"gestão"
+não é público** (o plano da casa entrava na lista de qualquer um só por não ter centro), e a
+visibilidade **sobe, não desce** — o ciclo do gestor só aparece para quem ele marcou. Quem
+conduz (dono, criador, admin) é quem marca o acompanhamento, porque para os demais **essa lista
+é o acesso**; e quem tem setor **não escolhe** o setor do ciclo: é o dele.
+
+**Filho de associação entra pelo `DbSet`, não só pela navegação.** As entidades deste projeto
+nascem com `Id` preenchido, e o EF lê chave não vazia em filho anexado pela navegação de um pai
+já rastreado como "já existe" — o registro ia como *update* de linha que nunca esteve lá. A
+inclusão passa pelo conjunto (`CicloDeMelhoriaService.Trocar`), e a navegação se preenche
+sozinha pelo *fixup*: adicioná-la também deixaria o filho duas vezes na resposta.
+
 **`TabelaDeRotasTests` monta a própria tabela.** Grupo de rotas novo precisa ser mapeado **lá
 também**, e não só no `Program.cs` — senão o inventário passa sem cobrir nada dele, que foi o que
 aconteceu com as quatro rotas do plano de ação.

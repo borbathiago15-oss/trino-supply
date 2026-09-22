@@ -222,6 +222,7 @@ app.MapPagamentos();
 app.MapPesosDoScore();
 app.MapPrazosDasEtapas();
 app.MapPlanoDeAcao();
+app.MapMelhoria();
 app.MapAvisosDoUsuario();
 
 // ---- Dashboards analíticos ---------------------------------------------------
@@ -322,11 +323,42 @@ public record PoItemRequest(string Description, decimal Quantity, string? UnitOf
 public record CreatePurchaseOrderRequest(Guid SupplierId, string? Notes, List<PoItemRequest>? Items, Guid? SourcePrId);
 public record ReceiveOrderRequest(Guid LocationId);
 public record CriarAcaoRequest(string Title, Guid ResponsibleId, DateOnly? StartDate, DateOnly? DueDate,
-    string? Reason, string? Area, string? ExpectedResult, string? Kpi, decimal? ExpectedGain, string? CostCenter);
+    string? Reason, string? Area, string? ExpectedResult, string? Kpi, decimal? ExpectedGain, string? CostCenter,
+    Guid? CycleId = null, string? RootCauseRef = null);
 public record AtualizarAcaoRequest(string? Title, Guid? ResponsibleId, DateOnly? StartDate, DateOnly? DueDate,
     string? Reason, string? Area, string? ExpectedResult, string? Kpi, decimal? ExpectedGain,
-    decimal? RealizedGain, string? CostCenter);
+    decimal? RealizedGain, string? CostCenter, Guid? CycleId = null, string? RootCauseRef = null);
 public record MudarStatusDaAcaoRequest(string Status, string? Reason, int? Progress);
+/// <summary>
+/// O ciclo inteiro num corpo só — criar e editar usam o mesmo, e é de propósito: o formulário
+/// é um só e a tela não tem de saber qual campo pertence a qual fase para poder salvá-lo.
+/// </summary>
+public record CicloRequest(
+    string? Title, string? Scope, string? Region, Guid? SectorId, string? Areas, string? Priority,
+    Guid? OwnerId, DateOnly? StartDate, DateOnly? EndDate,
+    string? Problem, string? CurrentSituation, string? ToolName, string? ToolData,
+    string? CauseAnalysis, string? RootCause, string? GoalDescription, string? Indicator,
+    decimal? Baseline, decimal? GoalValue, string? Unit, DateOnly? GoalDeadline,
+    DateOnly? CheckedOn, decimal? ResultValue, string? CheckAnalysis,
+    string? Standardization, string? Lessons, bool? NewCycle,
+    string? Phase = null, List<string>? CostCenters = null)
+{
+    public TrinoSupply.Foundation.Api.Melhoria.DadosDoCiclo Dados() => new(
+        Title ?? "", Scope ?? "", Region, SectorId, Areas, Priority, OwnerId, StartDate, EndDate,
+        Problem, CurrentSituation, ToolName, ToolData, CauseAnalysis, RootCause, GoalDescription,
+        Indicator, Baseline, GoalValue, Unit, GoalDeadline, CheckedOn, ResultValue, CheckAnalysis,
+        Standardization, Lessons, NewCycle, Phase, CostCenters);
+}
+
+/// <summary>
+/// <c>GoalMet</c> é <b>nulável de propósito</b>: sem o campo, o encerramento é recusado. Um
+/// booleano comum viraria "não atingida" para todo corpo que esquecesse de mandá-lo, e o
+/// veredito passaria a ser o silêncio de quem chamou a rota.
+/// </summary>
+public record EncerrarCicloRequest(bool? GoalMet, string? Reason, bool? ConfirmPending);
+public record ReabrirCicloRequest(string? Phase);
+public record MudarEscopoRequest(string Scope, List<string>? CostCenters);
+public record AcompanhantesRequest(List<Guid>? UserIds);
 public record SetorRequest(string Name, string? Code = null);
 public record AtualizarSetorRequest(string? Name, bool? Active);
 public record CreateCostCenterRequest(string? Code, string Name, string? Region, Guid? ManagerUserId, string? ClientName, Guid? CompanyId, IReadOnlyList<Guid>? Level1UserIds = null, IReadOnlyList<Guid>? Level2UserIds = null, decimal? Level1ValueLimit = null, decimal? Level2ValueLimit = null, bool? ReceivesMaterial = null);

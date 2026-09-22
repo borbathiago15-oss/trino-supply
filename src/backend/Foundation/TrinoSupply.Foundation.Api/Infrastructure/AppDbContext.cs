@@ -45,6 +45,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<PurchaseOrderInvoice> PurchaseOrderInvoices => Set<PurchaseOrderInvoice>();
     public DbSet<PurchaseOrderErpDocument> PurchaseOrderErpDocuments => Set<PurchaseOrderErpDocument>();
     public DbSet<Acoes.ActionItem> ActionItems => Set<Acoes.ActionItem>();
+    public DbSet<Melhoria.ImprovementCycle> ImprovementCycles => Set<Melhoria.ImprovementCycle>();
+    public DbSet<Melhoria.CycleWatcher> CycleWatchers => Set<Melhoria.CycleWatcher>();
+    public DbSet<Melhoria.CycleCostCenter> CycleCostCenters => Set<Melhoria.CycleCostCenter>();
     public DbSet<Domain.CostCenterApprover> CostCenterApprovers => Set<Domain.CostCenterApprover>();
     public DbSet<CompanyProfile> CompanyProfiles => Set<CompanyProfile>();
     public DbSet<Announcement> Announcements => Set<Announcement>();
@@ -62,6 +65,86 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
         // Plano de ação: tarefa com dono e prazo (5W2H). Vive no schema da fundação porque
         // não é de compras nem de materiais — qualquer área abre ação.
+        modelBuilder.Entity<Melhoria.ImprovementCycle>(e =>
+        {
+            e.ToTable("improvement_cycle");
+            e.HasKey(c => c.Id);
+            e.Property(c => c.Id).HasColumnName("id");
+            e.Property(c => c.Code).HasColumnName("code").HasMaxLength(30).IsRequired();
+            e.HasIndex(c => c.Code).IsUnique();
+            e.Property(c => c.Title).HasColumnName("title").HasMaxLength(400).IsRequired();
+            e.Property(c => c.Scope).HasColumnName("scope").HasMaxLength(20).IsRequired();
+            e.Property(c => c.Region).HasColumnName("region").HasMaxLength(120);
+            e.Property(c => c.SectorId).HasColumnName("sector_id");
+            e.HasIndex(c => c.SectorId);
+            e.Property(c => c.Areas).HasColumnName("areas").HasMaxLength(500);
+            e.Property(c => c.Priority).HasColumnName("priority").HasMaxLength(20).IsRequired();
+            e.Property(c => c.Problem).HasColumnName("problem");
+            e.Property(c => c.CurrentSituation).HasColumnName("current_situation");
+            e.Property(c => c.ToolName).HasColumnName("tool_name").HasMaxLength(40);
+            e.Property(c => c.ToolData).HasColumnName("tool_data");
+            e.Property(c => c.CauseAnalysis).HasColumnName("cause_analysis");
+            e.Property(c => c.RootCause).HasColumnName("root_cause");
+            e.Property(c => c.GoalDescription).HasColumnName("goal_description");
+            e.Property(c => c.Indicator).HasColumnName("indicator").HasMaxLength(200);
+            e.Property(c => c.Baseline).HasColumnName("baseline").HasColumnType("numeric(18,4)");
+            e.Property(c => c.GoalValue).HasColumnName("goal_value").HasColumnType("numeric(18,4)");
+            e.Property(c => c.Unit).HasColumnName("unit").HasMaxLength(20);
+            e.Property(c => c.GoalDeadline).HasColumnName("goal_deadline");
+            e.Property(c => c.CheckedOn).HasColumnName("checked_on");
+            e.Property(c => c.ResultValue).HasColumnName("result_value").HasColumnType("numeric(18,4)");
+            e.Property(c => c.CheckAnalysis).HasColumnName("check_analysis");
+            e.Property(c => c.GoalMet).HasColumnName("goal_met");
+            e.Property(c => c.Standardization).HasColumnName("standardization");
+            e.Property(c => c.Lessons).HasColumnName("lessons");
+            e.Property(c => c.NewCycle).HasColumnName("new_cycle");
+            e.Property(c => c.Phase).HasColumnName("phase").HasMaxLength(20).IsRequired();
+            e.HasIndex(c => c.Phase);
+            e.Property(c => c.OwnerId).HasColumnName("owner_id");
+            e.Property(c => c.OwnerLabel).HasColumnName("owner_label").HasMaxLength(200);
+            e.Property(c => c.StartDate).HasColumnName("start_date");
+            e.Property(c => c.EndDate).HasColumnName("end_date");
+            e.Property(c => c.ClosedAt).HasColumnName("closed_at");
+            e.Property(c => c.ClosedById).HasColumnName("closed_by_id");
+            e.Property(c => c.ClosedByLabel).HasColumnName("closed_by_label").HasMaxLength(200);
+            e.Property(c => c.ClosedReason).HasColumnName("closed_reason");
+            e.Property(c => c.CreatedBy).HasColumnName("created_by");
+            e.Property(c => c.CreatedByLabel).HasColumnName("created_by_label").HasMaxLength(200).IsRequired();
+            e.Property(c => c.CreatedAt).HasColumnName("created_at");
+            e.Property(c => c.UpdatedAt).HasColumnName("updated_at");
+            e.Property(c => c.Version).HasColumnName("version");
+            // CASCATA, e não por gosto: sem ela, apagar ciclos em massa deixa linha órfã na
+            // associação, e o defeito só aparece meses depois, dependente de ordem
+            e.HasMany(c => c.Watchers).WithOne().HasForeignKey(w => w.CycleId)
+                .OnDelete(DeleteBehavior.Cascade);
+            e.HasMany(c => c.CostCenters).WithOne().HasForeignKey(x => x.CycleId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Melhoria.CycleWatcher>(e =>
+        {
+            e.ToTable("improvement_cycle_watcher");
+            e.HasKey(w => w.Id);
+            e.Property(w => w.Id).HasColumnName("id");
+            e.Property(w => w.CycleId).HasColumnName("cycle_id");
+            e.Property(w => w.UserId).HasColumnName("user_id");
+            e.Property(w => w.UserLabel).HasColumnName("user_label").HasMaxLength(200).IsRequired();
+            // o mesmo par não entra duas vezes, e a consulta de visibilidade usa o índice
+            e.HasIndex(w => new { w.CycleId, w.UserId }).IsUnique();
+            e.HasIndex(w => w.UserId);
+        });
+
+        modelBuilder.Entity<Melhoria.CycleCostCenter>(e =>
+        {
+            e.ToTable("improvement_cycle_cost_center");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasColumnName("id");
+            e.Property(x => x.CycleId).HasColumnName("cycle_id");
+            e.Property(x => x.CostCenter).HasColumnName("cost_center").HasMaxLength(60).IsRequired();
+            e.HasIndex(x => new { x.CycleId, x.CostCenter }).IsUnique();
+            e.HasIndex(x => x.CostCenter);
+        });
+
         modelBuilder.Entity<Acoes.ActionItem>(e =>
         {
             e.ToTable("action_item");
@@ -83,6 +166,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(a => a.ExpectedResult).HasColumnName("expected_result");
             e.Property(a => a.Kpi).HasColumnName("kpi").HasMaxLength(200);
             e.Property(a => a.CostCenter).HasColumnName("cost_center").HasMaxLength(60);
+            e.Property(a => a.CycleId).HasColumnName("cycle_id");
+            e.HasIndex(a => a.CycleId);
+            e.Property(a => a.RootCauseRef).HasColumnName("root_cause_ref").HasMaxLength(400);
             e.Property(a => a.Status).HasColumnName("status").HasMaxLength(30).IsRequired();
             e.HasIndex(a => a.Status);
             e.Property(a => a.Progress).HasColumnName("progress");

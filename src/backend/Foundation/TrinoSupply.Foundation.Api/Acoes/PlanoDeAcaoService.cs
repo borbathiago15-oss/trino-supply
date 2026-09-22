@@ -9,12 +9,13 @@ namespace TrinoSupply.Foundation.Api.Acoes;
 public record FiltroDeAcoes(
     string? Busca = null, string? Status = null, Guid? ResponsavelId = null,
     string? CentroCusto = null, bool? Atrasadas = null,
-    DateOnly? De = null, DateOnly? Ate = null);
+    DateOnly? De = null, DateOnly? Ate = null, Guid? CicloId = null);
 
 public record DadosDaAcao(
     string Title, Guid ResponsibleId, DateOnly? StartDate, DateOnly? DueDate,
     string? Reason, string? Area, string? ExpectedResult, string? Kpi,
-    decimal? ExpectedGain, string? CostCenter);
+    decimal? ExpectedGain, string? CostCenter,
+    Guid? CycleId = null, string? RootCauseRef = null);
 
 public record PaginaDeAcoes(
     IReadOnlyList<ActionItem> Itens, PlacarDasAcoes Placar,
@@ -54,6 +55,7 @@ public class PlanoDeAcaoService(AppDbContext db, TimeProvider clock)
             var cc = f.CentroCusto.Trim();
             consulta = consulta.Where(a => a.CostCenter == cc);
         }
+        if (f.CicloId is { } ciclo) consulta = consulta.Where(a => a.CycleId == ciclo);
         if (f.De is { } de) consulta = consulta.Where(a => a.DueDate != null && a.DueDate >= de);
         if (f.Ate is { } ate) consulta = consulta.Where(a => a.DueDate != null && a.DueDate <= ate);
         if (!string.IsNullOrWhiteSpace(f.Busca))
@@ -129,6 +131,7 @@ public class PlanoDeAcaoService(AppDbContext db, TimeProvider clock)
             Reason = Limpo(d.Reason), Area = Limpo(d.Area),
             ExpectedResult = Limpo(d.ExpectedResult), Kpi = Limpo(d.Kpi),
             ExpectedGain = d.ExpectedGain, CostCenter = Limpo(d.CostCenter)?.ToUpperInvariant(),
+            CycleId = d.CycleId, RootCauseRef = Limpo(d.RootCauseRef),
             CreatedBy = ator.Id, CreatedByLabel = ator.Label,
             CreatedAt = agora, UpdatedAt = agora,
         };
@@ -195,6 +198,8 @@ public class PlanoDeAcaoService(AppDbContext db, TimeProvider clock)
         if (d.ExpectedGain is not null) acao.ExpectedGain = d.ExpectedGain;
         if (ganhoRealizado is not null) acao.RealizedGain = ganhoRealizado;
         if (Limpo(d.CostCenter) is { } cc) acao.CostCenter = cc.ToUpperInvariant();
+        if (d.CycleId is not null) acao.CycleId = d.CycleId;
+        if (Limpo(d.RootCauseRef) is { } causa) acao.RootCauseRef = causa;
         acao.UpdatedAt = clock.GetUtcNow();
         acao.Version += 1;
         await db.SaveChangesAsync(ct);

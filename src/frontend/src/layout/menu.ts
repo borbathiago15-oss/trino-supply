@@ -129,6 +129,12 @@ export const MENU: GrupoMenu[] = [
     { id: 'wh-queue', rotulo: 'Fila de Atendimento', rota: '/estoque/fila', mostrar: podeAlmoxarifado },
     { id: 'wh-panel', rotulo: 'Painel de Atendimentos', rota: '/estoque/atendimentos', mostrar: podeAlmoxarifado },
   ]},
+  // Fora da sequência do processo de propósito: o plano de ação não é etapa de compra.
+  // Qualquer área abre ação, e quem entra é quem o administrador autorizou no cadastro —
+  // por isso ele não aparece em padrão de papel nenhum e o grupo depende só do módulo.
+  { titulo: 'Melhoria', modulo: 'PLANO_ACAO', itens: [
+    { id: 'acao-plano', rotulo: 'Plano de Ação', rota: '/plano-acao', mostrar: sempre },
+  ]},
   { titulo: 'Cadastros', mostrar: naoDiretor, itens: [
     { rotulo: 'Produtos', filhos: [
       { id: 'products', rotulo: 'Cadastro de Produtos', rota: '/produtos', modulo: 'PRODUTOS', mostrar: sempre },

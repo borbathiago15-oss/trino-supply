@@ -240,6 +240,23 @@ o usuário descobrir no erro do servidor:
   no denominador puxando o score para baixo. Critério **sem dado** também sai da conta:
   fornecedor novo não é punido por ser novo.
 
+**Ação suspensa não está atrasada, e o plano de ação é módulo por si.** `Acoes/` guarda a
+tarefa com dono, prazo e 5W2H — a fundação que o módulo de PDCA supõe pronta. A regra que não
+se afrouxa: **suspensa é parada por decisão**, e o relógio não corre contra quem foi mandado
+parar (`PlanoDeAcao.Atrasada`). Contá-la como atraso transformaria decisão da gestão em falha
+da equipe, e é o tipo de número que faz o time parar de confiar no painel inteiro — ela continua
+**aberta**, só não corre. O **responsável é chave estrangeira**, nunca texto: com nome digitado à
+mão, dois "João Silva" e um "J. Silva" viram três pessoas e "o que está pendente com o João"
+deixa de ter resposta. **Suspender e cancelar exigem motivo** (`AC-ERR-014`), por rota própria —
+misturar isso na edição comum deixaria a ação parar sem ninguém assumir a decisão. E o
+**progresso segue a situação**, não o número digitado: "concluída, 40%" não quer dizer nada.
+O acesso é o módulo `PLANO_ACAO`, que o administrador concede, e ele **não entra em padrão de
+papel nenhum** de propósito: é ferramenta de qualquer área, não de um cargo.
+
+**`TabelaDeRotasTests` monta a própria tabela.** Grupo de rotas novo precisa ser mapeado **lá
+também**, e não só no `Program.cs` — senão o inventário passa sem cobrir nada dele, que foi o que
+aconteceu com as quatro rotas do plano de ação.
+
 **A fila da Central é exatamente o que a pessoa pode decidir.** `ImpedimentoNivel1Async` e
 `ImpedimentoNivel2Async` (em `QuotationService.Alcadas.cs`) são a régua única: a lista do
 nível no centro, o gerente do centro sem lista, o diretor vinculado e a segregação. A decisão

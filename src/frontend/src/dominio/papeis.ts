@@ -5,7 +5,8 @@ export type Papel =
 
 export type Modulo =
   | 'SOLICITACOES' | 'APROVACAO' | 'MATERIAL' | 'ESTOQUE' | 'COMPRAS' | 'PRODUTOS'
-  | 'FORNECEDORES' | 'CENTROS_CUSTO' | 'USUARIOS' | 'CONTRATOS' | 'COMPLIANCE' | 'INSIGHTS';
+  | 'FORNECEDORES' | 'CENTROS_CUSTO' | 'USUARIOS' | 'CONTRATOS' | 'COMPLIANCE' | 'INSIGHTS'
+  | 'PLANO_ACAO';
 
 export const ROTULO_MODULO: Record<Modulo, string> = {
   SOLICITACOES: 'Solicitações de Compra', APROVACAO: 'Central de Aprovação',
@@ -14,6 +15,9 @@ export const ROTULO_MODULO: Record<Modulo, string> = {
   FORNECEDORES: 'Cadastro de Fornecedores', CENTROS_CUSTO: 'Centros de Custo',
   USUARIOS: 'Cadastro de Usuários', CONTRATOS: 'Contratos de Parceria',
   COMPLIANCE: 'Compliance', INSIGHTS: 'Insights & Executivo',
+  // o plano de ação não entra em padrão de papel nenhum, de propósito: é ferramenta de
+  // trabalho de qualquer área, e quem decide quem a usa é o administrador, no cadastro
+  PLANO_ACAO: 'Plano de Ação',
 };
 
 /** Autorizações sugeridas ao escolher o papel de um usuário novo. */

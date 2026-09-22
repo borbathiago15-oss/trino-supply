@@ -68,9 +68,10 @@ public static class AppModules
     public const string Contratos = "CONTRATOS";         // painel de contratos de parceria (V2-P2)
     public const string Compliance = "COMPLIANCE";       // compliance score e controles (V2-P2)
     public const string Insights = "INSIGHTS";           // insights determinísticos + visão executiva (V2-P3)
+    public const string PlanoAcao = "PLANO_ACAO";        // plano de ação: tarefa com dono e prazo (5W2H)
 
     public static readonly string[] All =
-        [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, CentrosCusto, Usuarios, Contratos, Compliance, Insights];
+        [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, CentrosCusto, Usuarios, Contratos, Compliance, Insights, PlanoAcao];
 
     /// <summary>Padrão por papel, aplicado quando o cadastro não define módulos.</summary>
     public static string[] DefaultsFor(string role) => role switch

@@ -22,7 +22,7 @@ describe('menu', () => {
   it('os grupos seguem a sequência do processo, e a aprovação fica no topo', () => {
     const grupos = itensVisiveis({ role: 'SystemAdministrator', modules: [] });
     expect(grupos.map((g) => g.titulo))
-      .toEqual([null, 'Solicitações de Compra', 'Compras', 'Material', 'Estoque', 'Cadastros']);
+      .toEqual([null, 'Solicitações de Compra', 'Compras', 'Material', 'Estoque', 'Melhoria', 'Cadastros']);
     // a Central de Aprovação decide SC, material e cotação: não mora dentro de um dos três
     expect(grupos[0].itens.map((i) => (ehSubgrupo(i) ? i.rotulo : i.id))).toContain('pr-approvals');
   });

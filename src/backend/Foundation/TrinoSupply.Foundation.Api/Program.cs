@@ -220,6 +220,7 @@ app.MapCadastros();
 app.MapPagamentos();
 app.MapPesosDoScore();
 app.MapPrazosDasEtapas();
+app.MapPlanoDeAcao();
 app.MapAvisosDoUsuario();
 
 // ---- Dashboards analíticos ---------------------------------------------------
@@ -318,6 +319,12 @@ public record UpdateSupplierRequest(string? TradeName, string? Email, string? Ph
 public record PoItemRequest(string Description, decimal Quantity, string? UnitOfMeasure, decimal? UnitPrice, Guid? CatalogItemId);
 public record CreatePurchaseOrderRequest(Guid SupplierId, string? Notes, List<PoItemRequest>? Items, Guid? SourcePrId);
 public record ReceiveOrderRequest(Guid LocationId);
+public record CriarAcaoRequest(string Title, Guid ResponsibleId, DateOnly? StartDate, DateOnly? DueDate,
+    string? Reason, string? Area, string? ExpectedResult, string? Kpi, decimal? ExpectedGain, string? CostCenter);
+public record AtualizarAcaoRequest(string? Title, Guid? ResponsibleId, DateOnly? StartDate, DateOnly? DueDate,
+    string? Reason, string? Area, string? ExpectedResult, string? Kpi, decimal? ExpectedGain,
+    decimal? RealizedGain, string? CostCenter);
+public record MudarStatusDaAcaoRequest(string Status, string? Reason, int? Progress);
 public record CreateCostCenterRequest(string? Code, string Name, string? Region, Guid? ManagerUserId, string? ClientName, Guid? CompanyId, IReadOnlyList<Guid>? Level1UserIds = null, IReadOnlyList<Guid>? Level2UserIds = null, decimal? Level1ValueLimit = null, decimal? Level2ValueLimit = null, bool? ReceivesMaterial = null);
 public record UpdateCostCenterRequest(string? Name, string? Region, Guid? ManagerUserId, string? ClientName, bool? Active, Guid? CompanyId, IReadOnlyList<Guid>? Level1UserIds = null, IReadOnlyList<Guid>? Level2UserIds = null, decimal? Level1ValueLimit = null, decimal? Level2ValueLimit = null, bool? ClearValueLimits = null, bool? ReceivesMaterial = null);
 public record AssignTicketRequest(string? Kind, Guid Id, Guid? ResponsibleId);

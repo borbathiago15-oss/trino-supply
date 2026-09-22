@@ -101,10 +101,6 @@ public class ImprovementCycle
     /// <summary>O que está errado: fato + impacto.</summary>
     public string? Problem { get; set; }
     public string? CurrentSituation { get; set; }
-    /// <summary>Nome da ferramenta escolhida — ver <c>FerramentaDeCausa</c>.</summary>
-    public string? ToolName { get; set; }
-    /// <summary>A ferramenta <b>preenchida</b>, em JSON. Nunca descrita em texto livre.</summary>
-    public string? ToolData { get; set; }
     public string? CauseAnalysis { get; set; }
     public string? RootCause { get; set; }
     public string? GoalDescription { get; set; }
@@ -149,8 +145,47 @@ public class ImprovementCycle
     public DateTimeOffset UpdatedAt { get; set; }
     public int Version { get; set; } = 1;
 
+    /// <summary>
+    /// Quem conduz a análise e quem orienta — os papéis da folha A3, que não são o dono do
+    /// ciclo: o líder toca o trabalho, o mentor cobra o método.
+    /// </summary>
+    public string? Leader { get; set; }
+    public string? Mentor { get; set; }
+    /// <summary>Quem participou, em texto livre: a lista da reunião, e não o cadastro.</summary>
+    public string? Participants { get; set; }
+    /// <summary>O ganho anual esperado, quando a análise o estima.</summary>
+    public decimal? AnnualSaving { get; set; }
+
+    /// <summary>
+    /// As ferramentas preenchidas. São <b>várias</b>, e é a diferença que mais importa: uma
+    /// análise de verdade usa o Ishikawa para levantar, o Pareto para priorizar e o 5W2H para
+    /// organizar a execução — obrigar a escolher uma faria a folha contar meia história.
+    /// </summary>
+    public List<CycleTool> Tools { get; set; } = [];
+
     public List<CycleWatcher> Watchers { get; set; } = [];
     public List<CycleCostCenter> CostCenters { get; set; } = [];
+}
+
+/// <summary>
+/// Uma ferramenta de análise preenchida dentro do ciclo.
+///
+/// <para>
+/// O mesmo tipo não entra duas vezes: dois Paretos no mesmo ciclo dariam duas respostas para
+/// "qual é a causa vital", e a tela mostraria a que carregasse primeiro.
+/// </para>
+/// </summary>
+public class CycleTool
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid CycleId { get; set; }
+    /// <summary>A chave de <c>FerramentaDeCausa</c>.</summary>
+    public string ToolType { get; set; } = string.Empty;
+    /// <summary>A ferramenta <b>preenchida</b>, em JSON. Nunca descrita em texto livre.</summary>
+    public string? ToolData { get; set; }
+    /// <summary>A ordem em que a análise as usou.</summary>
+    public int Seq { get; set; } = 1;
+    public DateTimeOffset UpdatedAt { get; set; }
 }
 
 /// <summary>

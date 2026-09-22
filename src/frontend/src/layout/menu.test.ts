@@ -42,7 +42,7 @@ describe('menu', () => {
     const dashboard = topo.find((i) => ehSubgrupo(i) && i.rotulo === 'Dashboard');
     expect(dashboard).toBeDefined();
     expect((dashboard as SubgrupoMenu).filhos.map((f) => f.id))
-      .toEqual(['director-view', 'supply-dash', 'insights', 'compliance', 'reports']);
+      .toEqual(['director-view', 'supply-dash', 'insights', 'compliance', 'reports', 'cockpit']);
     // a Central de Aprovação continua fora: ela é passo do ciclo, não leitura
     expect(topo.some((i) => !ehSubgrupo(i) && i.id === 'pr-approvals')).toBe(true);
   });
@@ -50,7 +50,7 @@ describe('menu', () => {
   it('quem só enxerga o painel não paga clique: o subgrupo de uma tela vira item simples', () => {
     // sem Insights, Compliance nem Relatórios, "Dashboard" viraria uma gaveta com
     // uma coisa dentro — dois cliques para a tela que a pessoa mais abre
-    const topo = itensVisiveis({ role: 'Auditor', modules: ['SOLICITACOES'] })[0].itens;
+    const topo = itensVisiveis({ role: 'WarehouseOperator', modules: ['ESTOQUE'] })[0].itens;
     expect(topo.map((i) => (ehSubgrupo(i) ? i.rotulo : i.id))).toEqual(['supply-dash']);
   });
 
@@ -202,21 +202,28 @@ describe('a porta do cockpit', () => {
   const comprador: Perfil = { role: 'PurchasingOfficer', modules: ['COMPRAS'] };
 
   it('o comprador acha o cockpit pelo menu', () => {
-    const compras = itensVisiveis(comprador).find((g) => g.titulo === 'Compras');
-    const itens = (compras?.itens ?? []).flatMap((i) => ('filhos' in i ? i.filhos : [i]));
-    expect(itens.map((i) => i.id)).toContain('cockpit');
+    expect(folhas(comprador).map((i) => i.id)).toContain('cockpit');
   });
 
   it('e ele abre em aba nova, porque a tela não tem menu para voltar', () => {
-    const compras = itensVisiveis(comprador).find((g) => g.titulo === 'Compras');
-    const itens = (compras?.itens ?? []).flatMap((i) => ('filhos' in i ? i.filhos : [i]));
-    expect(itens.find((i) => i.id === 'cockpit')?.novaAba).toBe(true);
+    expect(folhas(comprador).find((i) => i.id === 'cockpit')?.novaAba).toBe(true);
   });
 
-  it('o solicitante não vê o cockpit: a parede é da área de compras', () => {
+  // ele morava no grupo Compras e isso o escondia duas vezes: o grupo pede o módulo
+  // COMPRAS e some inteiro para o diretor — justamente quem mais olha a parede
+  it('o diretor também acha, mesmo sem o grupo Compras', () => {
+    const diretor: Perfil = { role: 'Director', modules: ['APROVACAO'] };
+    expect(itensVisiveis(diretor).find((g) => g.titulo === 'Compras')).toBeUndefined();
+    expect(folhas(diretor).map((i) => i.id)).toContain('cockpit');
+  });
+
+  it('e quem não tem o módulo Compras também', () => {
+    const gestor: Perfil = { role: 'SupplyManager', modules: ['APROVACAO'] };
+    expect(folhas(gestor).map((i) => i.id)).toContain('cockpit');
+  });
+
+  it('o solicitante não vê o cockpit: a parede é de quem opera e de quem decide', () => {
     const solicitante: Perfil = { role: 'Requester', modules: ['SOLICITACOES'] };
-    const ids = itensVisiveis(solicitante).flatMap((g) =>
-      g.itens.flatMap((i) => ('filhos' in i ? i.filhos : [i]))).map((i) => i.id);
-    expect(ids).not.toContain('cockpit');
+    expect(folhas(solicitante).map((i) => i.id)).not.toContain('cockpit');
   });
 });

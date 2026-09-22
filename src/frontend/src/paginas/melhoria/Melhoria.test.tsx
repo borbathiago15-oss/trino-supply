@@ -29,7 +29,7 @@ const resposta = (itens: Ciclo[]) => ({
   options: {
     phases: [{ key: 'PLAN', label: 'Plan — planejar' }, { key: 'DO', label: 'Do — executar' }],
     scopes: [{ key: 'GESTAO', label: 'Gestão / corporativo' }, { key: 'CENTRO', label: 'Centro de custo' }],
-    tools: [{ key: 'PARETO', label: 'Pareto' }],
+    tools: [{ key: 'PARETO', label: 'Pareto', hint: 'Achar a minoria de causas.' }],
   },
 });
 

@@ -13,8 +13,20 @@ vi.mock('@/api/melhoria', async (importar) => ({
   salvarCiclo: vi.fn(),
   encerrarCiclo: vi.fn(),
   reabrirCiclo: vi.fn(),
+  listarCiclos: vi.fn(),
+  salvarFerramenta: vi.fn(),
+  removerFerramenta: vi.fn(),
 }));
-import { abrirCiclo, encerrarCiclo, reabrirCiclo, salvarCiclo } from '@/api/melhoria';
+import {
+  abrirCiclo, encerrarCiclo, listarCiclos, reabrirCiclo, removerFerramenta,
+  salvarCiclo, salvarFerramenta,
+} from '@/api/melhoria';
+
+const CATALOGO = [
+  { key: 'PARETO', label: 'Pareto', hint: 'Achar a minoria de causas.' },
+  { key: 'ISHIKAWA', label: 'Ishikawa (6M)', hint: 'Organizar por categoria.' },
+  { key: 'KAIZEN', label: 'Kaizen', hint: 'Antes e depois.' },
+];
 
 const acao = (p: Partial<AcaoDoCiclo>): AcaoDoCiclo => ({
   id: 'a1', number: 'AC-2026-000001', title: 'Afixar o limite de empilhamento',
@@ -22,13 +34,23 @@ const acao = (p: Partial<AcaoDoCiclo>): AcaoDoCiclo => ({
   status: 'PENDENTE', rootCauseRef: null, progress: 0, late: false, open: true, ...p,
 });
 
+const vazia = {
+  problem: null, effect: null, rootCause: null, warning: null,
+  steps: [], groups: [], ideas: [], causes: [], rows: [],
+  before: null, after: null, result: null, currentFlow: [], proposedFlow: [],
+};
+
 const pareto: Analise = {
-  key: 'PARETO', name: 'Pareto', problem: null, effect: null, rootCause: null, warning: null,
-  steps: [], groups: [], ideas: [],
+  ...vazia, key: 'PARETO', name: 'Pareto',
   causes: [
     { label: 'Manuseio', value: 50, percent: 50, cumulative: 50, vital: true, detail: null },
     { label: 'Transporte', value: 10, percent: 10, cumulative: 100, vital: false, detail: null },
   ],
+};
+
+const kaizen: Analise = {
+  ...vazia, key: 'KAIZEN', name: 'Kaizen',
+  before: 'Palete solto', after: 'Palete cintado', result: 'Zero avaria',
 };
 
 const completo = (p: Partial<CicloCompleto> = {}): CicloCompleto => ({
@@ -44,14 +66,16 @@ const completo = (p: Partial<CicloCompleto> = {}): CicloCompleto => ({
   },
   plan: {
     problem: 'Avarias sobem desde julho', currentSituation: '40 por mês',
-    toolName: 'PARETO', toolData: '{}', causeAnalysis: null,
+    causeAnalysis: null,
     rootCause: 'Empilhamento acima do limite', goalDescription: 'Cair para 10/mês',
   },
   check: { checkedOn: null, checkAnalysis: null },
   act: { standardization: null, lessons: null, newCycle: false },
   sectorName: 'Tecnologia',
+  leader: 'Ana', mentor: 'Gustavo', participants: 'Ana, Bruno', annualSaving: 120000,
   watchers: [], costCenters: ['BAH-001'],
-  analysis: pareto,
+  tools: [{ tool: 'PARETO', data: '{}', seq: 1 }],
+  analyses: [pareto],
   actions: [acao({})],
   reading: {
     indicador: {
@@ -88,6 +112,12 @@ describe('<CicloDeMelhoria />', () => {
     vi.mocked(abrirCiclo).mockResolvedValue(completo());
     vi.mocked(salvarCiclo).mockResolvedValue(completo().cycle);
     vi.mocked(reabrirCiclo).mockResolvedValue(completo().cycle);
+    vi.mocked(listarCiclos).mockResolvedValue({
+      items: [], placar: { total: 0, plan: 0, do: 0, check: 0, act: 0, encerrados: 0, encerradosComPendencia: 0 },
+      options: { phases: [], scopes: [], tools: CATALOGO },
+    });
+    vi.mocked(salvarFerramenta).mockResolvedValue({ tools: [] });
+    vi.mocked(removerFerramenta).mockResolvedValue({ tools: [] });
   });
 
   it('mostra a leitura automática vinda do servidor, sem recalcular nada', async () => {
@@ -181,5 +211,43 @@ describe('<CicloDeMelhoria />', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Reabrir' }));
     await waitFor(() => expect(reabrirCiclo).toHaveBeenCalledWith('c1'));
+  });
+
+  // ---- várias ferramentas na mesma folha ----------------------------------
+
+  it('a folha mostra todas as ferramentas, não só uma', async () => {
+    vi.mocked(abrirCiclo).mockResolvedValue(completo({
+      tools: [{ tool: 'PARETO', data: '{}', seq: 1 }, { tool: 'KAIZEN', data: '{}', seq: 2 }],
+      analyses: [pareto, kaizen],
+    }));
+    montar();
+
+    expect(await screen.findByTestId('pareto')).toBeInTheDocument();
+    expect(screen.getByTestId('kaizen')).toBeInTheDocument();
+    expect(screen.getByText('Palete cintado')).toBeInTheDocument();
+  });
+
+  it('a ferramenta já usada não aparece na lista de acrescentar', async () => {
+    montar();
+    await screen.findByTestId('pareto');
+    const seletor = screen.getByLabelText('Ferramenta a acrescentar');
+    const opcoes = within(seletor).getAllByRole('option').map((o) => o.textContent);
+    expect(opcoes).not.toContain('Pareto');
+    expect(opcoes).toContain('Ishikawa (6M)');
+  });
+
+  it('acrescenta uma ferramenta à folha', async () => {
+    montar();
+    await screen.findByTestId('pareto');
+    await userEvent.selectOptions(screen.getByLabelText('Ferramenta a acrescentar'), 'ISHIKAWA');
+    await userEvent.click(screen.getByRole('button', { name: 'Acrescentar' }));
+    await waitFor(() => expect(salvarFerramenta).toHaveBeenCalledWith('c1', 'ISHIKAWA', '{}'));
+  });
+
+  it('retira uma ferramenta sem mexer nas outras', async () => {
+    montar();
+    await screen.findByTestId('pareto');
+    await userEvent.click(screen.getByRole('button', { name: 'Retirar' }));
+    await waitFor(() => expect(removerFerramenta).toHaveBeenCalledWith('c1', 'PARETO'));
   });
 });

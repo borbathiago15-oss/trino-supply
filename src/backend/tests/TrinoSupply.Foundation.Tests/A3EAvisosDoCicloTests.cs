@@ -29,7 +29,17 @@ public class A3EAvisosDoCicloTests
     private static AppDbContext Banco() => new(new DbContextOptionsBuilder<AppDbContext>()
         .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 
-    private static ImprovementCycle Ciclo(Guid? dono = null, string fase = FaseDoCiclo.Do) => new()
+    private static ImprovementCycle Ciclo(
+        Guid? dono = null, string fase = FaseDoCiclo.Do,
+        string? ferramenta = null, string? dados = null)
+    {
+        var c = CicloBase(dono, fase);
+        if (ferramenta is not null)
+            c.Tools.Add(new CycleTool { CycleId = c.Id, ToolType = ferramenta, ToolData = dados });
+        return c;
+    }
+
+    private static ImprovementCycle CicloBase(Guid? dono, string fase) => new()
     {
         Code = "PDCA-2026-001", Title = "Reduzir avarias na doca 2",
         Phase = fase, Scope = EscopoDoCiclo.Gestao,
@@ -41,8 +51,8 @@ public class A3EAvisosDoCicloTests
 
     private static CicloCompleto Completo(ImprovementCycle c, params ActionItem[] acoes)
     {
-        var analise = FerramentaDeCausa.Normalizar(c.ToolName, c.ToolData);
-        return new(c, analise, acoes, MotorDeLeitura.Ler(c, analise, acoes, Hoje), null);
+        var analises = CicloDeMelhoriaService.Analises(c);
+        return new(c, analises, acoes, MotorDeLeitura.Ler(c, analises, acoes, Hoje), null);
     }
 
     // ---- §7 o A3 -------------------------------------------------------------
@@ -66,13 +76,19 @@ public class A3EAvisosDoCicloTests
             (FerramentaDeCausa.CincoPorques, """{"problema":"Avarias","porque1":"Por quê?","resposta1":"Caiu","causa_raiz":"Sem limite afixado"}"""),
             (FerramentaDeCausa.Ishikawa, """{"efeito":"Avarias","metodo":["Sem procedimento"]}"""),
             (FerramentaDeCausa.Brainstorming, """{"ideias":["Trocar o filme"]}"""),
+            (FerramentaDeCausa.CincoWDoisH, """{"linhas":[{"oque":"Afixar o cartaz","quem":"Ana","quando":"10/10"}]}"""),
+            (FerramentaDeCausa.Kaizen, """{"antes":"Palete solto","depois":"Palete cintado","melhorias":["Cinta"],"resultados":"Zero avaria"}"""),
+            (FerramentaDeCausa.Fluxograma, """{"atual":["Recebe","Empilha"],"proposto":["Recebe","Confere","Empilha"]}"""),
         };
         foreach (var (nome, dados) in casos)
-        {
-            var c = Ciclo();
-            c.ToolName = nome; c.ToolData = dados;
-            Assert.NotEmpty(A3DoCiclo.Gerar(Completo(c), Hoje));
-        }
+            Assert.NotEmpty(A3DoCiclo.Gerar(Completo(Ciclo(ferramenta: nome, dados: dados)), Hoje));
+
+        // e as oito juntas na mesma folha, que é o caso que o Trino Intelligence trata
+        var folha = Ciclo();
+        var seq = 1;
+        foreach (var (nome, dados) in casos)
+            folha.Tools.Add(new CycleTool { CycleId = folha.Id, ToolType = nome, ToolData = dados, Seq = seq++ });
+        Assert.NotEmpty(A3DoCiclo.Gerar(Completo(folha), Hoje));
     }
 
     [Fact]
@@ -88,9 +104,8 @@ public class A3EAvisosDoCicloTests
     {
         // não é um teste de pixel: é a garantia de que o papel lê o mesmo motor. Se a leitura
         // mudar de forma, isto quebra junto e ninguém publica um A3 com número velho
-        var c = Ciclo();
-        c.ToolName = FerramentaDeCausa.Gut;
-        c.ToolData = """{"itens":[{"problema":"Empilhamento acima do limite","g":5,"u":5,"t":5}]}""";
+        var c = Ciclo(ferramenta: FerramentaDeCausa.Gut,
+            dados: """{"itens":[{"problema":"Empilhamento acima do limite","g":5,"u":5,"t":5}]}""");
         var completo = Completo(c);
 
         Assert.Contains(completo.Leitura.Sinais, s => s.Chave == "causa-vital-sem-acao");

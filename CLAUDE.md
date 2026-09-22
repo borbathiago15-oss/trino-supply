@@ -253,6 +253,59 @@ o usuário descobrir no erro do servidor:
   no denominador puxando o score para baixo. Critério **sem dado** também sai da conta:
   fornecedor novo não é punido por ser novo.
 
+**O ciclo de melhoria (PDCA) trata a causa; o plano de ação trata a tarefa.** `Melhoria/` é o
+ciclo, e as ações dele são os **mesmos** `ActionItem`, pelos planos que apontam para ele
+(`ActionPlan.CycleId`) — duplicar o modelo daria dois lugares para olhar o mesmo trabalho.
+Cinco regras não se afrouxam:
+
+- **Várias ferramentas convivem na mesma folha** (`CycleTool`), como no Trino Intelligence: o
+  Ishikawa levanta, o Pareto prioriza e o 5W2H organiza a execução — obrigar a escolher uma
+  faria a análise contar meia história. São **oito**: 5 Porquês, Ishikawa, Pareto, GUT,
+  Brainstorming, 5W2H, Kaizen e Fluxograma. **Uma por tipo**: dois Paretos dariam duas
+  respostas para "qual é a causa vital", e a tela mostraria a que carregasse primeiro. A causa
+  levantada por uma e priorizada por outra aparece **uma vez** na leitura, e vital vence —
+  contá-la duas vezes faria a folha parecer ter o dobro de frentes. E **nem toda ferramenta
+  elege**: 5W2H, Kaizen, Fluxograma, Ishikawa e Brainstorming não priorizam, e tratá-las como
+  se elegessem faria o sinal de "causa vital sem ação" acender por causa de uma lista de ideias.
+- **Uma função normaliza a ferramenta de causa** (`FerramentaDeCausa.Normalizar`), e tela,
+  leitura e relatório leem dela. Duas leituras do mesmo JSON dariam dois números para a mesma
+  análise, e a tela que mostrasse o errado seria a que o usuário acreditou. **Pareto e GUT
+  ordenam e calculam no servidor**: quem ordena decide qual é a causa vital, e isso não pode
+  depender de em qual tela se olha. O Pareto marca como vital o item cujo acumulado **antes
+  dele** é menor que 80% — pelo acumulado depois, o item que *cruza* os 80% ficaria de fora e
+  a conta nunca fecharia. O GUT **não elege ninguém** com o maior produto abaixo de 27: o
+  maior de uma lista fraca não é prioridade. A causa raiz dos 5 Porquês preenche a do ciclo se
+  ninguém escreveu outra — é o mesmo dado, e digitá-lo duas vezes é convite a divergir.
+- **A leitura automática é uma função** (`MotorDeLeitura.Ler`) e não inventa nada: diz em
+  português o que os campos afirmam, e onde falta dado diz que falta — "0% de avanço" e
+  "ninguém mediu ainda" são notícias diferentes. O sinal que dá valor ao módulo é **causa
+  vital sem ação**; o elo com a ação é o texto da causa comparado sem acento, caixa nem
+  pontuação, senão o sinal acenderia com a ação já escrita.
+- **Prazo vencido não encerra nada.** Encerrar é veredito de uma pessoa e exige **três**
+  coisas: se a meta foi atingida (`PDCA-ERR-043` — dito, não deduzido do indicador, que pode
+  nem ter sido medido), o motivo em texto (`PDCA-ERR-040`) e, havendo ação em aberto, a
+  confirmação explícita **com a lista do que sobrou** anexada ao motivo (`PDCA-ERR-041`). O
+  ciclo **pode** fechar com pendência — às vezes é a decisão certa; o que não pode é fechar
+  sem ninguém assumir isso, e a leitura marca a contradição em vez de escondê-la. Mudar a fase
+  para "encerrado" pela edição comum é **recusado** (`PDCA-ERR-044`): era o clique na trilha
+  que fechava o ciclo sem registrar quem decidiu. **Reabrir apaga o veredito** — quem, quando e
+  por quê não valem mais.
+- **Trocar o escopo leva o plano e as ações junto**, e só com destino **sem ambiguidade** (um centro, ou
+  nenhum). As ações nasceram apontando para o centro antigo e ficariam lá, contando no painel
+  do centro errado; com dois destinos não há para onde mandar cada uma, e escolher por elas
+  seria inventar o dado (`PDCA-ERR-052`).
+
+**A visibilidade do ciclo é um predicado só** (`CicloDeMelhoriaService.VisiveisAsync`), que a
+lista e a abertura consultam igual — e quem não enxerga recebe 404, não 403. Enxerga quem criou,
+quem é dono, quem foi marcado em "quem mais acompanha", quem responde por alguma ação e quem é
+do **setor** do ciclo; o Gestor de Suprimentos soma os centros vinculados a ele e o que a equipe
+dele abriu. Três ausências são deliberadas: **centro vinculado não abre ciclo** para perfil
+operacional (o ciclo de um centro pode tratar de assunto que não é de todo mundo), **"gestão"
+não é público** (o plano da casa entrava na lista de qualquer um só por não ter centro), e a
+visibilidade **sobe, não desce** — o ciclo do gestor só aparece para quem ele marcou. Quem
+conduz (dono, criador, admin) é quem marca o acompanhamento, porque para os demais **essa lista
+é o acesso**; e quem tem setor **não escolhe** o setor do ciclo: é o dele.
+
 **O plano de ação é o projeto; a ação é o como.** `Acoes/` guarda o `ActionPlan` e, **dentro
 dele**, os `ActionItem` — é o desenho do Trino Intelligence, que a operação já conhece. A ação
 solta não contava a história: "trocar o filme do palete" não diz qual problema resolve, quanto
@@ -285,10 +338,6 @@ os riscos, a causa raiz, as lições e o dinheiro.
   perguntas diferentes, e divergir é informação, não erro.
 - O acesso é o módulo `PLANO_ACAO`, que o administrador concede, e ele **não entra em padrão de
   papel nenhum** de propósito: é ferramenta de qualquer área, não de um cargo.
-
-**O ciclo de melhoria aponta para o plano, não para a ação.** `ActionPlan.CycleId` é o elo — no
-Trino Intelligence a análise de causa aponta para o plano, e é isso que faz "as ações do ciclo"
-querer dizer uma coisa só. Mudar o escopo do ciclo leva **o plano e as ações** juntos.
 
 **Filho de associação entra pelo `DbSet`, não só pela navegação.** As entidades deste projeto
 nascem com `Id` preenchido, e o EF lê chave não vazia em filho anexado pela navegação de um pai

@@ -52,6 +52,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Acoes.PlanLesson> PlanLessons => Set<Acoes.PlanLesson>();
     public DbSet<Melhoria.ImprovementCycle> ImprovementCycles => Set<Melhoria.ImprovementCycle>();
     public DbSet<Melhoria.CycleWatcher> CycleWatchers => Set<Melhoria.CycleWatcher>();
+    public DbSet<Melhoria.CycleTool> CycleTools => Set<Melhoria.CycleTool>();
     public DbSet<Melhoria.CycleCostCenter> CycleCostCenters => Set<Melhoria.CycleCostCenter>();
     public DbSet<Domain.CostCenterApprover> CostCenterApprovers => Set<Domain.CostCenterApprover>();
     public DbSet<CompanyProfile> CompanyProfiles => Set<CompanyProfile>();
@@ -86,8 +87,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(c => c.Priority).HasColumnName("priority").HasMaxLength(20).IsRequired();
             e.Property(c => c.Problem).HasColumnName("problem");
             e.Property(c => c.CurrentSituation).HasColumnName("current_situation");
-            e.Property(c => c.ToolName).HasColumnName("tool_name").HasMaxLength(40);
-            e.Property(c => c.ToolData).HasColumnName("tool_data");
+            e.Property(c => c.Leader).HasColumnName("leader").HasMaxLength(200);
+            e.Property(c => c.Mentor).HasColumnName("mentor").HasMaxLength(200);
+            e.Property(c => c.Participants).HasColumnName("participants").HasMaxLength(1000);
+            e.Property(c => c.AnnualSaving).HasColumnName("annual_saving").HasColumnType("numeric(18,2)");
             e.Property(c => c.CauseAnalysis).HasColumnName("cause_analysis");
             e.Property(c => c.RootCause).HasColumnName("root_cause");
             e.Property(c => c.GoalDescription).HasColumnName("goal_description");
@@ -120,10 +123,27 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(c => c.Version).HasColumnName("version");
             // CASCATA, e não por gosto: sem ela, apagar ciclos em massa deixa linha órfã na
             // associação, e o defeito só aparece meses depois, dependente de ordem
+            e.HasMany(c => c.Tools).WithOne().HasForeignKey(t => t.CycleId)
+                .OnDelete(DeleteBehavior.Cascade);
             e.HasMany(c => c.Watchers).WithOne().HasForeignKey(w => w.CycleId)
                 .OnDelete(DeleteBehavior.Cascade);
             e.HasMany(c => c.CostCenters).WithOne().HasForeignKey(x => x.CycleId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Melhoria.CycleTool>(e =>
+        {
+            e.ToTable("improvement_cycle_tool");
+            e.HasKey(t => t.Id);
+            e.Property(t => t.Id).HasColumnName("id");
+            e.Property(t => t.CycleId).HasColumnName("cycle_id");
+            e.Property(t => t.ToolType).HasColumnName("tool_type").HasMaxLength(40).IsRequired();
+            e.Property(t => t.ToolData).HasColumnName("tool_data");
+            e.Property(t => t.Seq).HasColumnName("seq");
+            e.Property(t => t.UpdatedAt).HasColumnName("updated_at");
+            // a mesma ferramenta não entra duas vezes: dois Paretos dariam duas respostas
+            // para "qual é a causa vital", e a tela mostraria a que carregasse primeiro
+            e.HasIndex(t => new { t.CycleId, t.ToolType }).IsUnique();
         });
 
         modelBuilder.Entity<Melhoria.CycleWatcher>(e =>

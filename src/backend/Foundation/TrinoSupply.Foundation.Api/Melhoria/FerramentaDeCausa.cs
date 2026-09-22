@@ -22,6 +22,21 @@ public record GrupoDeCausas(string Chave, string Rotulo, IReadOnlyList<string> I
 /// <summary>
 /// A ferramenta de causa já normalizada: ordenada, somada e com o vital marcado.
 /// </summary>
+/// <summary>Uma linha do 5W2H.</summary>
+public record LinhaDoPlano(
+    string OQue, string? PorQue, string? Onde, string? Quando,
+    string? Quem, string? Como, string? Quanto);
+
+/// <summary>
+/// A ferramenta de causa já normalizada: ordenada, somada e com o vital marcado.
+///
+/// <para>
+/// Nem toda ferramenta elege causa. O Ishikawa levanta, o Brainstorming junta ideias, o 5W2H
+/// organiza a execução, o Kaizen registra o antes e o depois e o Fluxograma compara caminhos —
+/// só Pareto, GUT e os 5 Porquês <b>priorizam</b>. Tratar todas como se elegessem faria o
+/// sinal de "causa vital sem ação" acender por causa de uma lista de ideias.
+/// </para>
+/// </summary>
 public record AnaliseDeCausa(
     string Chave, string Nome,
     IReadOnlyList<CausaDaAnalise> Causas,
@@ -29,7 +44,10 @@ public record AnaliseDeCausa(
     IReadOnlyList<GrupoDeCausas> Grupos,
     IReadOnlyList<string> Ideias,
     string? Problema = null, string? Efeito = null, string? CausaRaiz = null,
-    string? Aviso = null)
+    string? Aviso = null,
+    IReadOnlyList<LinhaDoPlano>? Linhas = null,
+    string? Antes = null, string? Depois = null, string? Resultado = null,
+    IReadOnlyList<string>? FluxoAtual = null, IReadOnlyList<string>? FluxoProposto = null)
 {
     public IReadOnlyList<CausaDaAnalise> Vitais => [.. Causas.Where(c => c.Vital)];
 }
@@ -57,8 +75,15 @@ public static class FerramentaDeCausa
     public const string Pareto = "PARETO";
     public const string Gut = "GUT";
     public const string Brainstorming = "BRAINSTORMING";
+    /// <summary>O plano detalhado: o quê, por quê, onde, quando, quem, como e quanto.</summary>
+    public const string CincoWDoisH = "CINCO_W_DOIS_H";
+    /// <summary>Antes × depois, com as melhorias e o resultado.</summary>
+    public const string Kaizen = "KAIZEN";
+    /// <summary>O fluxo atual ao lado do proposto, etapa a etapa.</summary>
+    public const string Fluxograma = "FLUXOGRAMA";
 
-    public static readonly string[] Todas = [CincoPorques, Ishikawa, Pareto, Gut, Brainstorming];
+    public static readonly string[] Todas =
+        [CincoPorques, Ishikawa, Pareto, Gut, Brainstorming, CincoWDoisH, Kaizen, Fluxograma];
 
     /// <summary>A fatia do acumulado que separa o vital do trivial (Pareto).</summary>
     public const decimal LimitePareto = 80m;
@@ -77,7 +102,27 @@ public static class FerramentaDeCausa
         Pareto => "Pareto",
         Gut => "Matriz GUT",
         Brainstorming => "Brainstorming",
+        CincoWDoisH => "5W2H",
+        Kaizen => "Kaizen",
+        Fluxograma => "Fluxograma",
         _ => chave,
+    };
+
+    /// <summary>
+    /// Para que serve cada uma. A tela mostra isto na hora de escolher: a ferramenta errada
+    /// para o problema é o que faz a análise virar formulário preenchido sem serventia.
+    /// </summary>
+    public static string ParaQue(string chave) => chave switch
+    {
+        CincoPorques => "Chegar à causa-raiz perguntando \"por quê?\" de forma sucessiva.",
+        Ishikawa => "Organizar as causas possíveis por categoria (6M).",
+        Pareto => "Achar a minoria de causas que responde pela maioria do problema.",
+        Gut => "Priorizar por Gravidade, Urgência e Tendência.",
+        Brainstorming => "Levantar ideias sem filtrar.",
+        CincoWDoisH => "Detalhar a execução: o quê, por quê, onde, quando, quem, como e quanto.",
+        Kaizen => "Registrar o antes e o depois de uma melhoria contínua.",
+        Fluxograma => "Mapear o processo atual contra o proposto, etapa a etapa.",
+        _ => "",
     };
 
     private static readonly (string Chave, string Rotulo)[] SeisEmes =
@@ -115,6 +160,9 @@ public static class FerramentaDeCausa
             Ishikawa => DoIshikawa(dados),
             Pareto => DoPareto(dados),
             Gut => DoGut(dados),
+            CincoWDoisH => Do5W2H(dados),
+            Kaizen => DoKaizen(dados),
+            Fluxograma => DoFluxograma(dados),
             _ => DoBrainstorming(dados),
         };
     }
@@ -229,6 +277,61 @@ public static class FerramentaDeCausa
             [.. ideias.Select(i => new CausaDaAnalise(i))], [], [], ideias);
     }
 
+    // ---- 5W2H ----------------------------------------------------------------
+
+    /// <summary>
+    /// O plano detalhado. Ele <b>não elege causa nenhuma</b>: é o oposto — a causa já está
+    /// clara e aqui se organiza a execução.
+    ///
+    /// <para>
+    /// Ele convive com o plano de ação e não o substitui: aqui é o rascunho da reunião, lá a
+    /// ação vira trabalho com dono de verdade (usuário, não texto) e prazo que o sistema
+    /// cobra. Trocar um pelo outro faria a folha parecer um plano que ninguém acompanha.
+    /// </para>
+    /// </summary>
+    private static AnaliseDeCausa Do5W2H(JsonElement d)
+    {
+        var linhas = new List<LinhaDoPlano>();
+        foreach (var item in Itens(d).Concat(Lista2(d, "linhas")).Concat(Lista2(d, "rows")))
+        {
+            var oQue = Texto(item, "oque") ?? Texto(item, "what");
+            if (oQue is null) continue;
+            linhas.Add(new(oQue,
+                Texto(item, "porque") ?? Texto(item, "why"),
+                Texto(item, "onde") ?? Texto(item, "where"),
+                Texto(item, "quando") ?? Texto(item, "when"),
+                Texto(item, "quem") ?? Texto(item, "who"),
+                Texto(item, "como") ?? Texto(item, "how"),
+                Texto(item, "quanto") ?? Texto(item, "how_much")));
+        }
+        return new(CincoWDoisH, Rotulo(CincoWDoisH), [], [], [], [], Linhas: linhas);
+    }
+
+    // ---- Kaizen ---------------------------------------------------------------
+
+    /// <summary>Antes × depois. Também não elege causa: ela registra o que já foi mudado.</summary>
+    private static AnaliseDeCausa DoKaizen(JsonElement d) =>
+        new(Kaizen, Rotulo(Kaizen), [], [], [], Lista(d, "melhorias").Concat(Lista(d, "improvements")).ToList(),
+            Antes: Texto(d, "antes") ?? Texto(d, "situation_before"),
+            Depois: Texto(d, "depois") ?? Texto(d, "situation_after"),
+            Resultado: Texto(d, "resultados") ?? Texto(d, "results"));
+
+    // ---- Fluxograma -----------------------------------------------------------
+
+    /// <summary>O fluxo atual ao lado do proposto — a comparação é a informação.</summary>
+    private static AnaliseDeCausa DoFluxograma(JsonElement d)
+    {
+        List<string> Etapas(string a, string b) =>
+            [.. Lista(d, a).Concat(Lista(d, b)),
+             .. Lista2(d, a).Concat(Lista2(d, b))
+                 .Select(x => Texto(x, "etapa") ?? Texto(x, "step"))
+                 .Where(x => x is not null).Select(x => x!)];
+
+        return new(Fluxograma, Rotulo(Fluxograma), [], [], [], [],
+            FluxoAtual: Etapas("atual", "current"),
+            FluxoProposto: Etapas("proposto", "proposed"));
+    }
+
     // ---- leitura do JSON -----------------------------------------------------
 
     private static IEnumerable<JsonElement> Itens(JsonElement d) =>
@@ -256,11 +359,23 @@ public static class FerramentaDeCausa
     private static int? Nota(JsonElement d, string campo) =>
         Numero(d, campo) is { } n && n >= 1 && n <= 5 ? (int)n : null;
 
+    /// <summary>Um array de objetos num campo — o formato que o Trino Intelligence usa.</summary>
+    private static IEnumerable<JsonElement> Lista2(JsonElement d, string campo) =>
+        d.ValueKind == JsonValueKind.Object && d.TryGetProperty(campo, out var v)
+        && v.ValueKind == JsonValueKind.Array
+            ? v.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.Object)
+            : [];
+
+    /// <summary>
+    /// Uma lista de <b>textos</b>. Objeto no meio do array não vira texto: serializá-lo daria
+    /// <c>{"step":"Recebe"}</c> como se fosse uma etapa, ao lado da etapa de verdade.
+    /// </summary>
     private static List<string> Lista(JsonElement d, string campo) =>
         d.ValueKind == JsonValueKind.Object && d.TryGetProperty(campo, out var v)
         && v.ValueKind == JsonValueKind.Array
             ? [.. v.EnumerateArray()
-                .Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.ToString())
+                .Where(e => e.ValueKind == JsonValueKind.String)
+                .Select(e => e.GetString())
                 .Where(s => !string.IsNullOrWhiteSpace(s)).Select(s => s!.Trim())]
             : [];
 }

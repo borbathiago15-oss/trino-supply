@@ -59,7 +59,7 @@ public class CicloDeMelhoriaTests
         string titulo, string escopo = EscopoDoCiclo.Gestao,
         IReadOnlyList<string>? centros = null, Guid? setor = null, string? fase = null) =>
         new(titulo, escopo, null, setor, null, null, null, null, null,
-            null, null, null, null, null, null, null, null, null, null, null, null,
+            null, null, null, null, null, null, null, null, null, null,
             null, null, null, null, null, null, fase, centros);
 
     /// <summary>
@@ -555,13 +555,120 @@ public class CicloDeMelhoriaTests
         var (_, ator) = await GenteAsync(db, "Ana");
         var ciclo = await CicloAsync(db, ator);
 
-        var (atualizado, _) = await Servico(db).AtualizarAsync(ator, ciclo.Id,
+        var (atualizado, erro) = await Servico(db).SalvarFerramentaAsync(ciclo.Id,
+            FerramentaDeCausa.CincoPorques,
+            """{"causa_raiz":"Não há limite de empilhamento afixado"}""");
+
+        Assert.Null(erro);
+        Assert.Equal("Não há limite de empilhamento afixado", atualizado!.RootCause);
+    }
+
+    // ---- várias ferramentas na mesma folha -----------------------------------
+
+    [Fact]
+    public async Task O_ciclo_carrega_varias_ferramentas_ao_mesmo_tempo()
+    {
+        // é a diferença que mais importa: uma análise de verdade usa o Ishikawa para
+        // levantar, o Pareto para priorizar e o 5W2H para organizar a execução
+        var db = Banco();
+        var (_, ator) = await GenteAsync(db, "Ana");
+        var ciclo = await CicloAsync(db, ator);
+        var svc = Servico(db);
+
+        await svc.SalvarFerramentaAsync(ciclo.Id, FerramentaDeCausa.Ishikawa,
+            """{"efeito":"Avarias","metodo":["Sem procedimento"]}""");
+        await svc.SalvarFerramentaAsync(ciclo.Id, FerramentaDeCausa.Pareto,
+            """{"itens":[{"causa":"Manuseio","valor":50},{"causa":"Transporte","valor":10}]}""");
+
+        var aberto = await svc.AbrirAsync(ator, ciclo.Id);
+        Assert.Equal([FerramentaDeCausa.Ishikawa, FerramentaDeCausa.Pareto],
+            aberto!.Analises.Select(a => a.Chave));
+    }
+
+    [Fact]
+    public async Task A_mesma_ferramenta_nao_entra_duas_vezes_e_salvar_de_novo_corrige()
+    {
+        // dois Paretos dariam duas respostas para "qual é a causa vital", e a tela
+        // mostraria a que carregasse primeiro
+        var db = Banco();
+        var (_, ator) = await GenteAsync(db, "Ana");
+        var ciclo = await CicloAsync(db, ator);
+        var svc = Servico(db);
+
+        await svc.SalvarFerramentaAsync(ciclo.Id, FerramentaDeCausa.Pareto,
+            """{"itens":[{"causa":"Manuseio","valor":50}]}""");
+        await svc.SalvarFerramentaAsync(ciclo.Id, FerramentaDeCausa.Pareto,
+            """{"itens":[{"causa":"Empilhamento","valor":90}]}""");
+
+        var aberto = await svc.AbrirAsync(ator, ciclo.Id);
+        var analise = Assert.Single(aberto!.Analises);
+        Assert.Equal("Empilhamento", analise.Causas[0].Rotulo);
+    }
+
+    [Fact]
+    public async Task Ferramenta_desconhecida_e_recusada()
+    {
+        var db = Banco();
+        var (_, ator) = await GenteAsync(db, "Ana");
+        var ciclo = await CicloAsync(db, ator);
+        var (_, erro) = await Servico(db).SalvarFerramentaAsync(ciclo.Id, "ADIVINHACAO", "{}");
+        Assert.Equal("PDCA-ERR-015", erro!.Code);
+    }
+
+    [Fact]
+    public async Task Tirar_uma_ferramenta_deixa_as_outras()
+    {
+        var db = Banco();
+        var (_, ator) = await GenteAsync(db, "Ana");
+        var ciclo = await CicloAsync(db, ator);
+        var svc = Servico(db);
+        await svc.SalvarFerramentaAsync(ciclo.Id, FerramentaDeCausa.Ishikawa, """{"efeito":"x"}""");
+        await svc.SalvarFerramentaAsync(ciclo.Id, FerramentaDeCausa.Kaizen, """{"antes":"a","depois":"b"}""");
+
+        var (_, erro) = await svc.RemoverFerramentaAsync(ciclo.Id, FerramentaDeCausa.Ishikawa);
+        Assert.Null(erro);
+
+        var aberto = await svc.AbrirAsync(ator, ciclo.Id);
+        Assert.Equal([FerramentaDeCausa.Kaizen], aberto!.Analises.Select(a => a.Chave));
+    }
+
+    [Fact]
+    public async Task A_causa_levantada_e_priorizada_aparece_uma_vez_so_e_vital()
+    {
+        // o Ishikawa costuma listar o que o Pareto depois prioriza; contá-la duas vezes
+        // faria a folha parecer ter o dobro de frentes
+        var db = Banco();
+        var (_, ator) = await GenteAsync(db, "Ana");
+        var ciclo = await CicloAsync(db, ator);
+        var svc = Servico(db);
+        await svc.SalvarFerramentaAsync(ciclo.Id, FerramentaDeCausa.Ishikawa,
+            """{"metodo":["Empilhamento acima do limite"]}""");
+        await svc.SalvarFerramentaAsync(ciclo.Id, FerramentaDeCausa.Gut,
+            """{"itens":[{"problema":"Empilhamento acima do limite","g":5,"u":5,"t":5}]}""");
+
+        var aberto = await svc.AbrirAsync(ator, ciclo.Id);
+        var causa = Assert.Single(aberto!.Leitura.Causas);
+        Assert.Equal("Empilhamento acima do limite", causa.Rotulo);
+        Assert.True(causa.Vital);
+    }
+
+    [Fact]
+    public async Task A_folha_guarda_lider_mentor_participantes_e_o_ganho_anual()
+    {
+        var db = Banco();
+        var (_, ator) = await GenteAsync(db, "Ana");
+        var ciclo = await CicloAsync(db, ator);
+
+        var (atualizado, erro) = await Servico(db).AtualizarAsync(ator, ciclo.Id,
             Dados("Reduzir avarias na doca 2") with
             {
-                ToolName = FerramentaDeCausa.CincoPorques,
-                ToolData = """{"causa_raiz":"Não há limite de empilhamento afixado"}""",
+                Leader = "Ana", Mentor = "Gustavo",
+                Participants = "Ana, Bruno, Carla", AnnualSaving = 120_000m,
             });
 
-        Assert.Equal("Não há limite de empilhamento afixado", atualizado!.RootCause);
+        Assert.Null(erro);
+        Assert.Equal("Ana", atualizado!.Leader);
+        Assert.Equal("Gustavo", atualizado.Mentor);
+        Assert.Equal(120_000m, atualizado.AnnualSaving);
     }
 }

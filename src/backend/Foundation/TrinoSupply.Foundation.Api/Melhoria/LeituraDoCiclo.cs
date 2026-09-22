@@ -40,13 +40,14 @@ public static class MotorDeLeitura
     public const int DiasDeAtencao = 7;
 
     public static LeituraDoCiclo Ler(
-        ImprovementCycle c, AnaliseDeCausa? analise, IReadOnlyList<ActionItem> acoes, DateOnly hoje)
+        ImprovementCycle c, IReadOnlyList<AnaliseDeCausa> analises,
+        IReadOnlyList<ActionItem> acoes, DateOnly hoje)
     {
         var indicador = DoIndicador(c);
         var prazo = DoPrazo(c, hoje);
         var contas = DasAcoes(acoes, hoje);
-        var causas = CausasComAcoes(analise, acoes);
-        var sinais = Sinais(c, analise, causas, acoes, prazo, hoje);
+        var causas = CausasComAcoes(analises, acoes);
+        var sinais = Sinais(c, analises, causas, acoes, prazo, hoje);
 
         var frases = new List<string> { indicador.Frase, prazo.Frase, contas.Frase };
         frases.RemoveAll(string.IsNullOrWhiteSpace);
@@ -147,14 +148,33 @@ public static class MotorDeLeitura
 
     // ---- causas x ações ------------------------------------------------------
 
+    /// <summary>
+    /// As causas de <b>todas</b> as ferramentas, com quantas ações atacam cada uma. A mesma
+    /// causa levantada por duas ferramentas aparece uma vez: o Ishikawa costuma listar o que o
+    /// Pareto depois prioriza, e contá-la duas vezes faria a folha parecer ter o dobro de
+    /// frentes. Vital é quem foi eleito por <b>alguma</b> delas.
+    /// </summary>
     private static List<CausaComAcoes> CausasComAcoes(
-        AnaliseDeCausa? analise, IReadOnlyList<ActionItem> acoes)
+        IReadOnlyList<AnaliseDeCausa> analises, IReadOnlyList<ActionItem> acoes)
     {
-        if (analise is null) return [];
         var apontadas = acoes.Where(a => !string.IsNullOrWhiteSpace(a.RootCauseRef))
             .Select(a => Chave(a.RootCauseRef!)).ToList();
-        return [.. analise.Causas.Select(c => new CausaComAcoes(
-            c.Rotulo, c.Vital, apontadas.Count(x => x == Chave(c.Rotulo)), c.Detalhe))];
+        var saida = new List<CausaComAcoes>();
+        var vistas = new Dictionary<string, int>();
+        foreach (var causa in analises.SelectMany(a => a.Causas))
+        {
+            var chave = Chave(causa.Rotulo);
+            if (vistas.TryGetValue(chave, out var onde))
+            {
+                // vital por uma ferramenta é vital: quem prioriza vence quem só levanta
+                if (causa.Vital && !saida[onde].Vital) saida[onde] = saida[onde] with { Vital = true };
+                continue;
+            }
+            vistas[chave] = saida.Count;
+            saida.Add(new(causa.Rotulo, causa.Vital,
+                apontadas.Count(x => x == chave), causa.Detalhe));
+        }
+        return saida;
     }
 
     /// <summary>
@@ -173,7 +193,7 @@ public static class MotorDeLeitura
     // ---- sinais --------------------------------------------------------------
 
     private static List<SinalDoCiclo> Sinais(
-        ImprovementCycle c, AnaliseDeCausa? analise, IReadOnlyList<CausaComAcoes> causas,
+        ImprovementCycle c, IReadOnlyList<AnaliseDeCausa> analises, IReadOnlyList<CausaComAcoes> causas,
         IReadOnlyList<ActionItem> acoes, LeituraDoPrazo prazo, DateOnly hoje)
     {
         var sinais = new List<SinalDoCiclo>();
@@ -186,7 +206,7 @@ public static class MotorDeLeitura
             sinais.Add(new("causa-vital-sem-acao", "risco",
                 $"A causa vital \"{causa.Rotulo}\" não tem nenhuma ação atacando-a."));
 
-        if (analise is null && c.Phase != FaseDoCiclo.Plan)
+        if (analises.Count == 0 && c.Phase != FaseDoCiclo.Plan)
             sinais.Add(new("sem-ferramenta", "atencao",
                 "Nenhuma ferramenta de causa foi preenchida — a causa raiz ficou sem análise."));
 

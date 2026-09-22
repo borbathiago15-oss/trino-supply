@@ -17,6 +17,13 @@ public class User
     public string? CostCenters { get; set; }
     /// <summary>Diretor responsável pela 2ª alçada dos processos deste gerente (RFQ-001).</summary>
     public Guid? DirectorId { get; set; }
+    /// <summary>
+    /// Gestor de Suprimentos responsável pela 2ª alçada das compras <b>deste comprador</b>
+    /// (decisão da empresa, 2026-09). O comprador solicita, cota e dá o próprio Nível 1; quem
+    /// fecha é o gestor dele, não a diretoria. Nulo devolve o processo à régua de sempre —
+    /// comprador sem responsável cadastrado não trava a fila, vai para o Nível 2 do centro.
+    /// </summary>
+    public Guid? SupplyManagerId { get; set; }
     public bool Active { get; set; } = true;
     /// <summary>
     /// Senha provisória: quem cadastrou o usuário escolheu a senha, então ela precisa

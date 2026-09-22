@@ -45,10 +45,25 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
         return null;
     }
 
+    /// <summary>
+    /// Gestor de Suprimentos responsável pela 2ª alçada das compras deste comprador
+    /// (a regra vive em <c>Procurement/AlcadaDoComprador.cs</c>). Só vale gente ativa com o papel:
+    /// apontar para outro papel deixaria a segunda assinatura com quem não a tem.
+    /// </summary>
+    private async Task<UserError?> ValidateSupplyManagerAsync(Guid? supplyManagerId, CancellationToken ct)
+    {
+        if (supplyManagerId is null) return null;
+        var gestor = await db.Users.SingleOrDefaultAsync(u => u.Id == supplyManagerId && u.Active, ct);
+        if (gestor is null || gestor.Role != Roles.SupplyManager)
+            return new("IAM-ERR-020",
+                "Gestor responsável inválido: escolha um usuário ativo com papel Gestor de Suprimentos.");
+        return null;
+    }
+
     public async Task<(User? user, UserError? error)> CreateAsync(
         string email, string name, string role, string password,
         IReadOnlyList<string>? modules = null, IReadOnlyList<string>? costCenters = null,
-        Guid? directorId = null, CancellationToken ct = default)
+        Guid? directorId = null, Guid? supplyManagerId = null, CancellationToken ct = default)
     {
         var normalized = email.Trim().ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(normalized) || !normalized.Contains('@'))
@@ -62,6 +77,7 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
         var (modulesCsv, modulesError) = NormalizeModules(modules);
         if (modulesError is not null) return (null, modulesError);
         if (await ValidateDirectorAsync(directorId, ct) is { } directorError) return (null, directorError);
+        if (await ValidateSupplyManagerAsync(supplyManagerId, ct) is { } gestorError) return (null, gestorError);
 
         var user = new User
         {
@@ -71,6 +87,7 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
             Modules = modulesCsv,
             CostCenters = NormalizeCostCenters(costCenters),
             DirectorId = directorId,
+            SupplyManagerId = supplyManagerId,
             // quem cadastra escolhe a senha, então ela nasce provisória: o dono
             // troca no primeiro acesso e ninguém fica com senha de terceiro (SEC-004)
             MustChangePassword = true,
@@ -87,7 +104,8 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
     public async Task<(User? user, UserError? error)> UpdateAsync(
         Guid id, Guid actorId, string? name, string? role, bool? active,
         IReadOnlyList<string>? modules = null, IReadOnlyList<string>? costCenters = null,
-        Guid? directorId = null, bool clearDirector = false, CancellationToken ct = default)
+        Guid? directorId = null, bool clearDirector = false,
+        Guid? supplyManagerId = null, bool clearSupplyManager = false, CancellationToken ct = default)
     {
         var user = await db.Users.SingleOrDefaultAsync(u => u.Id == id, ct);
         if (user is null) return (null, new("IAM-ERR-404", "Usuário não encontrado."));
@@ -104,12 +122,15 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
             return (null, new("IAM-ERR-016", "Você não pode inativar o seu próprio usuário."));
 
         if (await ValidateDirectorAsync(directorId, ct) is { } directorError) return (null, directorError);
+        if (await ValidateSupplyManagerAsync(supplyManagerId, ct) is { } gestorError) return (null, gestorError);
         if (name is not null && name.Trim().Length >= 2) user.Name = name.Trim();
         if (role is not null) user.Role = role;
         if (modules is not null) user.Modules = modulesCsv;
         if (costCenters is not null) user.CostCenters = NormalizeCostCenters(costCenters);
         if (directorId is not null) user.DirectorId = directorId;
         else if (clearDirector) user.DirectorId = null;
+        if (supplyManagerId is not null) user.SupplyManagerId = supplyManagerId;
+        else if (clearSupplyManager) user.SupplyManagerId = null;
         if (active is not null) user.Active = active.Value;
         user.UpdatedAt = clock.GetUtcNow();
 

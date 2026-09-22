@@ -5,7 +5,7 @@ import type { Usuario } from '@/api/auth';
 import type { CentroCusto } from '@/api/centrosCusto';
 import type { UsuarioCadastro } from '@/api/usuarios';
 import { ToastProvider } from '@/componentes/Toast';
-import { diretoresPossiveis, impedimentoDeInativar, papeisOferecidos, Usuarios } from './Usuarios';
+import { diretoresPossiveis, gestoresPossiveis, impedimentoDeInativar, pedeGestorResponsavel, papeisOferecidos, Usuarios } from './Usuarios';
 
 vi.mock('@/api/usuarios', async (importar) => ({
   ...(await importar<typeof import('@/api/usuarios')>()),
@@ -27,7 +27,7 @@ const usuario = (p: Partial<UsuarioCadastro>): UsuarioCadastro => {
   return {
     id: 'u-' + email, email, name: 'Ana Solicitante', role: 'Requester',
     active: true, modules: ['SOLICITACOES', 'MATERIAL'], customModules: false, costCenters: ['BAH-001'],
-    directorId: null, mustChangePassword: false, passwordChangedAt: '2026-01-02T00:00:00Z',
+    directorId: null, supplyManagerId: null, mustChangePassword: false, passwordChangedAt: '2026-01-02T00:00:00Z',
     createdAt: '2026-01-01T00:00:00Z', updatedAt: null, ...p,
   };
 };
@@ -49,6 +49,21 @@ describe('regras da tela de usuários', () => {
   it('papéis resolvidos por módulo saem da lista de escolha', () => {
     expect(papeisOferecidos(['Requester', 'WarehouseOperator', 'SupplyManager', 'Director']))
       .toEqual(['Requester', 'Director']);
+  });
+
+    it('só o Gestor de Suprimentos ativo pode ser gestor responsável', () => {
+    const gestor = usuario({ email: 'gu@t.com', name: 'Gustavo Gestor', role: 'SupplyManager' });
+    const inativoGestor = usuario({ email: 'gi@t.com', name: 'Gina Inativa', role: 'SupplyManager', active: false });
+    const nomes = gestoresPossiveis([usuario({}), diretor, gestor, inativoGestor]).map((u) => u.name);
+    // diretor não entra: o servidor recusaria (IAM-ERR-020) e a tela não propõe o que não grava
+    expect(nomes).toEqual(['Gustavo Gestor']);
+  });
+
+  it('o vínculo do gestor só é pedido ao comprador', () => {
+    expect(pedeGestorResponsavel('PurchasingOfficer')).toBe(true);
+    expect(pedeGestorResponsavel('Requester')).toBe(false);
+    expect(pedeGestorResponsavel('SupplyManager')).toBe(false);
+    expect(pedeGestorResponsavel('')).toBe(false);
   });
 
   describe('quem não pode ser inativado', () => {

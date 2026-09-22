@@ -28,6 +28,7 @@ public static class UsuarioRotas
             modules = AppModules.EffectiveFor(u), customModules = u.Modules is not null,
             costCenters = (u.CostCenters ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
             directorId = u.DirectorId,
+            supplyManagerId = u.SupplyManagerId,
             // quem ainda não definiu a própria senha aparece marcado na lista do admin
             mustChangePassword = u.MustChangePassword, passwordChangedAt = u.PasswordChangedAt,
             createdAt = u.CreatedAt, updatedAt = u.UpdatedAt,
@@ -39,7 +40,7 @@ public static class UsuarioRotas
         users.MapPost("/", async (CreateUserRequest body, UserService svc, HttpContext ctx) =>
         {
             var (user, error) = await svc.CreateAsync(body.Email, body.Name, body.Role, body.Password,
-                body.Modules, body.CostCenters, body.DirectorId);
+                body.Modules, body.CostCenters, body.DirectorId, body.SupplyManagerId);
             return error is not null
                 ? Error(ctx, error.Code switch { "IAM-ERR-014" => 409, "IAM-ERR-021" => 422, _ => 400 }, error.Code, error.Message)
                 : Results.Json(new { data = UserView(user!), correlationId = CorrelationId(ctx) }, statusCode: 201);
@@ -48,7 +49,8 @@ public static class UsuarioRotas
         users.MapPatch("/{id:guid}", async (Guid id, UpdateUserRequest body, UserService svc, ClaimsPrincipal principal, HttpContext ctx) =>
         {
             var (user, error) = await svc.UpdateAsync(id, ActorId(principal), body.Name, body.Role, body.Active,
-                body.Modules, body.CostCenters, body.DirectorId, body.ClearDirector == true);
+                body.Modules, body.CostCenters, body.DirectorId, body.ClearDirector == true,
+                body.SupplyManagerId, body.ClearSupplyManager == true);
             return error is not null
                 ? Error(ctx, error.Code == "IAM-ERR-404" ? 404 : 422, error.Code, error.Message)
                 : Ok(UserView(user!), ctx);

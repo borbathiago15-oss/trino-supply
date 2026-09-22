@@ -3,7 +3,7 @@ import type { EtapaDoCaminho } from '@/api/cotacoes';
 import { dataHora } from '@/util/formato';
 
 const MARCA: Record<EtapaDoCaminho['situacao'], string> = {
-  feita: '✓', atual: '●', pendente: '○', encerrada: '■',
+  feita: '✓', atual: '●', pendente: '○', encerrada: '■', dispensada: '—',
 };
 
 /**
@@ -22,6 +22,10 @@ export function legenda(e: EtapaDoCaminho): string {
         e.em ? ` desde ${dataHora(e.em)}` : ''}`;
     case 'pendente':
       return e.quem ? `a seguir · ${e.quem}` : 'a seguir';
+    case 'dispensada':
+      // a etapa não existe neste processo, e dizer isso é diferente de deixá-la
+      // pendente para sempre: não há assinatura faltando
+      return e.quem ?? 'não se aplica a este processo';
     case 'encerrada':
       return '';
   }
@@ -52,7 +56,8 @@ export function CaminhoDoProcesso({ etapas, centro }: { etapas: EtapaDoCaminho[]
         {etapas.map((e) => (
           <li key={e.chave} data-etapa={e.chave} data-situacao={e.situacao}
             className={`flex items-start gap-2 text-[13px] ${
-              e.situacao === 'atual' ? 'font-bold' : e.situacao === 'pendente' ? 'text-texto-suave' : ''}`}>
+              e.situacao === 'atual' ? 'font-bold'
+                : e.situacao === 'pendente' || e.situacao === 'dispensada' ? 'text-texto-suave' : ''}`}>
             <span aria-hidden className="w-4 shrink-0 text-center">{MARCA[e.situacao]}</span>
             <div className="min-w-0">
               <div>{e.titulo}</div>

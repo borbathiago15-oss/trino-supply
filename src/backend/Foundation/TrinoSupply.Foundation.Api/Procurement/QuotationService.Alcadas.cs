@@ -60,11 +60,23 @@ public partial class QuotationService
         if (actor.Id == q.SelectedBy || actor.Id == q.ManagerApprovedBy)
             return new("RFQ-ERR-030", "Segregação de funções: o Diretor não pode ser quem selecionou nem quem deu a aprovação gerencial.");
         if (actor.Role == Roles.SystemAdministrator) return null;
+        // compra da própria área de compras: quem fecha é o gestor responsável pelo comprador,
+        // e não o Nível 2 do centro — a fila da Central lê esta mesma função
+        var rota = await AlcadaDoComprador.RotaAsync(db, q, q.ManagerApprovedBy, ct);
+        if (rota.Caminho == CaminhoDoNivel2.GestorResponsavel)
+            return actor.Id == rota.GestorId ? null
+                : new("RFQ-ERR-032", "Alçada de compras: a 2ª aprovação deste processo é do Gestor de "
+                    + $"Suprimentos responsável pelo comprador ({rota.GestorNome}).");
         // alçada do centro (Nível 2): qualquer pessoa da lista resolve a etapa
         if (await ApprovalLevels.CanDecideAsync(db, q.CostCenter, ApprovalLevels.Level2, actor.Id, ct) is { } noNivel2)
             return noNivel2 ? null
                 : new("RFQ-ERR-032", "Alçada por centro de custo: a 2ª aprovação deste processo é do Nível 2 do centro (" +
                     await ApprovalLevels.LabelAsync(db, q.CostCenter, ApprovalLevels.Level2, ct) + ").");
+        // Sem lista no centro, a 2ª alçada é da diretoria. O Gestor de Suprimentos chegou até
+        // aqui porque `CanApproveAsDirector` o admite, mas a alçada dele é só a compra dos
+        // próprios compradores (rota acima); sem isso ele herdaria todo centro sem lista.
+        if (actor.Role == Roles.SupplyManager)
+            return new("RFQ-ERR-032", "Alçada por diretoria: a 2ª aprovação deste processo é da diretoria.");
         // centro sem Nível 2 cadastrado: vale o diretor vinculado ao gerente
         if (await LinkedDirectorAsync(q, ct) is { } linkedDirector && linkedDirector != actor.Id)
             return new("RFQ-ERR-032", "Alçada por diretoria: este processo está vinculado a outro diretor responsável.");
@@ -145,10 +157,24 @@ public partial class QuotationService
                     q.ManagerApprovedBy = actor.Id;
                     q.ManagerApprovedByLabel = actor.Label;
                     q.ManagerApprovedAt = clock.GetUtcNow();
-                    q.Status = QuotationStatus.AwaitingDirector;
-                    AddEvent(q, "GERENTE_APROVOU",
-                        "Aprovador 01 (Nível 1) aprovou. Processo encaminhado ao Nível 2.",
+                    // a compra que a própria área de compras pediu pode terminar aqui: o Gestor
+                    // de Suprimentos não presta segunda alçada a si mesmo (AlcadaDoComprador)
+                    var rota = await AlcadaDoComprador.RotaAsync(db, q, actor.Id, ct);
+                    q.Status = rota.SemNivel2
+                        ? QuotationStatus.ApprovedForIssue : QuotationStatus.AwaitingDirector;
+                    AddEvent(q, "GERENTE_APROVOU", rota.SemNivel2
+                        ? "Aprovador 01 (Nível 1) aprovou. Nível 2 dispensado: a compra é do próprio "
+                          + "Gestor de Suprimentos. Pedido(s) criado(s) — registre a O.C. do SENIOR na tela do pedido."
+                        : "Aprovador 01 (Nível 1) aprovou. Processo encaminhado ao Nível 2.",
                         actor, from, q.Status, reason);
+                    if (rota.SemNivel2)
+                    {
+                        // mesmo desfecho do Nível 2, sem inventar um aprovador que não existiu:
+                        // `DirectorApprovedBy` fica nulo, e é por ele que todo mundo reconhece a dispensa
+                        await MarkSourcePrApprovedAsync(q, actor, ct);
+                        if (await CriarPedidosAsync(q, actor, ct) is { } erroDoPedido)
+                            return (null, erroDoPedido);
+                    }
                 }
                 break;
             case "REJEITAR":
@@ -202,8 +228,15 @@ public partial class QuotationService
                     ? ApprovalLevels.Level1 : ApprovalLevels.Level2;
                 var tipo = nivel == ApprovalLevels.Level1
                     ? AvisoKinds.AprovacaoNivel1 : AvisoKinds.AprovacaoNivel2;
-                var quem = (await ApprovalLevels.OfAsync(db, q.CostCenter, nivel, ct))
-                    .Select(a => a.UserId).ToList();
+                // o Nível 2 da compra da própria área de compras é o gestor responsável pelo
+                // comprador, e não a lista do centro: o aviso segue a mesma régua da decisão
+                var rota = nivel == ApprovalLevels.Level2
+                    ? await AlcadaDoComprador.RotaAsync(db, q, q.ManagerApprovedBy, ct)
+                    : new RotaDoNivel2(CaminhoDoNivel2.Padrao);
+                var quem = rota.Caminho == CaminhoDoNivel2.GestorResponsavel
+                    ? [rota.GestorId!.Value]
+                    : (await ApprovalLevels.OfAsync(db, q.CostCenter, nivel, ct))
+                        .Select(a => a.UserId).ToList();
                 avisos.EnfileirarParaTodos(quem, tipo,
                     $"{q.Number} aguarda sua aprovação (Nível {nivel})",
                     $"O processo {q.Number} do centro {q.CostCenter} chegou ao Nível {nivel}.",

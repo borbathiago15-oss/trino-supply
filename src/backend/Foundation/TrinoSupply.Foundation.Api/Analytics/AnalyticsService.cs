@@ -209,7 +209,7 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
         var quotes = await db.Quotations
             .Where(q => prIds.Contains(q.SourcePrId)
                         || q.Items.Any(i => i.SourcePrId != null && prIds.Contains(i.SourcePrId.Value)))
-            .Select(q => new { q.Id, q.SourcePrId, q.CreatedAt, q.DirectorApprovedAt, q.PurchaseOrderId,
+            .Select(q => new { q.Id, q.SourcePrId, q.CreatedAt, q.DirectorApprovedAt, q.ManagerApprovedAt, q.PurchaseOrderId,
                                q.SavingValue, q.BaselineValue, q.NegotiatedValue, q.NegotiatedByLabel, q.Number,
                                ItemPrIds = q.Items.Where(i => i.SourcePrId != null)
                                    .Select(i => i.SourcePrId!.Value).Distinct().ToList() })
@@ -238,10 +238,13 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
             {
                 if (pr.SubmittedAt is not null && q is not null)
                     Registrar(f, 0, (q.CreatedAt - pr.SubmittedAt.Value).TotalDays);
-                if (q?.DirectorApprovedAt is not null)
-                    Registrar(f, 1, (q.DirectorApprovedAt.Value - q.CreatedAt).TotalDays);
-                if (q?.DirectorApprovedAt is not null && po is not null)
-                    Registrar(f, 2, (po.CreatedAt - q.DirectorApprovedAt.Value).TotalDays);
+                // a compra aprovada sem Nível 2 (AlcadaDoComprador) termina no Nível 1: contar
+                // só `DirectorApprovedAt` sumiria com ela do funil em vez de medi-la
+                var aprovadaEm = q?.DirectorApprovedAt ?? q?.ManagerApprovedAt;
+                if (aprovadaEm is not null)
+                    Registrar(f, 1, (aprovadaEm.Value - q!.CreatedAt).TotalDays);
+                if (aprovadaEm is not null && po is not null)
+                    Registrar(f, 2, (po.CreatedAt - aprovadaEm.Value).TotalDays);
                 if (po?.DeliveryCompletedAt is not null)
                     Registrar(f, 3, (po.DeliveryCompletedAt.Value - po.CreatedAt).TotalDays);
             }

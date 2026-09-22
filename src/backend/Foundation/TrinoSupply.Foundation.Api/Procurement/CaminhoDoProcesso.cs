@@ -43,9 +43,16 @@ public static class CaminhoDoProcesso
     public const string Atual = "atual";
     public const string Pendente = "pendente";
     public const string Encerrada = "encerrada";
+    /// <summary>Etapa que este processo não tem — hoje só o Nível 2 dispensado (AlcadaDoComprador).</summary>
+    public const string Dispensada = "dispensada";
 
+    /// <param name="rota">
+    /// Como este processo resolve a 2ª alçada. Dispensada, o Nível 2 aparece como etapa que não
+    /// existe — "pendente para sempre" faria a tela cobrar uma assinatura que a regra não pede.
+    /// </param>
     public static IReadOnlyList<EtapaDoCaminho> De(
-        Quotation q, IReadOnlyList<string> solicitantes, DateTimeOffset? pedidaEm, AlcadasDoCentro alcadas)
+        Quotation q, IReadOnlyList<string> solicitantes, DateTimeOffset? pedidaEm, AlcadasDoCentro alcadas,
+        RotaDoNivel2? rota = null)
     {
         var s = q.Status;
         var viva = s is not (QuotationStatus.Rejected or QuotationStatus.Cancelled);
@@ -66,9 +73,7 @@ public static class CaminhoDoProcesso
             Alcada("nivel1", "Aprovação de Nível 1", q.ManagerApprovedAt, q.ManagerApprovedByLabel,
                 atual: viva && s == QuotationStatus.AwaitingManager, desde: q.SelectedAt,
                 alcadas.Nivel1, alcadas.IdsDo(1), impedidos: []),
-            Alcada("nivel2", "Aprovação de Nível 2", q.DirectorApprovedAt, q.DirectorApprovedByLabel,
-                atual: viva && s == QuotationStatus.AwaitingDirector, desde: q.ManagerApprovedAt,
-                alcadas.Nivel2, alcadas.IdsDo(2), impedidos: [q.SelectedBy, q.ManagerApprovedBy]),
+            Nivel2(q, viva, alcadas, rota),
             Etapa("oc", "Registro da O.C. do ERP",
                 feita: s == QuotationStatus.PoIssued, atual: viva && s == QuotationStatus.ApprovedForIssue,
                 quem: s == QuotationStatus.ApprovedForIssue ? comprador : null,
@@ -81,6 +86,33 @@ public static class CaminhoDoProcesso
             etapas.Add(new("encerrado", s == QuotationStatus.Rejected ? "Rejeitado" : "Cancelada", Encerrada, null, null));
 
         return etapas;
+    }
+
+    /// <summary>
+    /// O Nível 2, nas três formas que ele tem. Dispensado, a etapa existe na lista mas diz que
+    /// não se aplica: sumir com ela faria o caminho ter um passo a menos que o de todo mundo, e
+    /// deixá-la pendente cobraria uma assinatura que a regra não pede. Com gestor responsável, a
+    /// etapa nomeia ele em vez da lista do centro, que não decide esta compra.
+    /// </summary>
+    private static EtapaDoCaminho Nivel2(
+        Quotation q, bool viva, AlcadasDoCentro alcadas, RotaDoNivel2? rota)
+    {
+        const string titulo = "Aprovação de Nível 2";
+        if (q.DirectorApprovedAt is not null)
+            return new("nivel2", titulo, Feita, q.DirectorApprovedByLabel, q.DirectorApprovedAt);
+
+        if (rota?.SemNivel2 == true)
+            return new("nivel2", titulo, Dispensada,
+                "dispensado — compra do próprio Gestor de Suprimentos", q.ManagerApprovedAt);
+
+        var atual = viva && q.Status == QuotationStatus.AwaitingDirector;
+        if (rota?.Caminho == CaminhoDoNivel2.GestorResponsavel)
+            // o gestor do comprador nunca é quem escolheu nem quem deu o Nível 1: não há impasse
+            return new("nivel2", titulo, atual ? Atual : Pendente,
+                rota.GestorNome, atual ? q.ManagerApprovedAt : null);
+
+        return Alcada("nivel2", titulo, null, null, atual, q.ManagerApprovedAt,
+            alcadas.Nivel2, alcadas.IdsDo(2), impedidos: [q.SelectedBy, q.ManagerApprovedBy]);
     }
 
     private static EtapaDoCaminho Etapa(

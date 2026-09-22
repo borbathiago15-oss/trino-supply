@@ -37,8 +37,12 @@ public static class AcompanhamentoDaSc
     /// Monta o acompanhamento a partir do que já existe. <paramref name="aprovadores"/> traz os
     /// nomes do nível pendente do centro (vazio = sem cadastro, que a frase diz).
     /// </summary>
+    /// <param name="ehGestorResponsavel">
+    /// O Nível 2 pendente é o gestor de suprimentos do comprador, e não a diretoria
+    /// (<c>AlcadaDoComprador</c>). Muda só a frase: quem decide já veio em <paramref name="aprovadores"/>.
+    /// </param>
     public static Acompanhamento Montar(PurchaseRequisition pr, Quotation? q, PurchaseOrder? o,
-        IReadOnlyList<string>? aprovadores = null)
+        IReadOnlyList<string>? aprovadores = null, bool ehGestorResponsavel = false)
     {
         var etapas = new Dictionary<string, (string situacao, DateTimeOffset? quando, string? quem)>();
         foreach (var (chave, _) in Passos) etapas[chave] = (Pendente, null, null);
@@ -136,7 +140,9 @@ public static class AcompanhamentoDaSc
                 desde = nivel2 ? q.ManagerApprovedAt : q.SelectedAt;
                 etapas["aprovacao"] = (Atual, desde, null);
                 comQuem = aprovadores is { Count: > 0 } ? string.Join(", ", aprovadores) : null;
-                var nivel = nivel2 ? "Nível 2 (diretoria)" : "Nível 1 (gestor do centro)";
+                var nivel = nivel2
+                    ? (ehGestorResponsavel ? "Nível 2 (gestor de suprimentos)" : "Nível 2 (diretoria)")
+                    : "Nível 1 (gestor do centro)";
                 frase = comQuem is null
                     ? $"Aguardando aprovação de {nivel} — o centro {pr.CostCenter} está sem aprovador cadastrado."
                     : $"Aguardando aprovação de {comQuem} — {nivel}.";
@@ -251,13 +257,21 @@ public static class AcompanhamentoDaSc
                 QuotationStatus.AwaitingDirector => ApprovalLevels.Level2,
                 _ => q is null && pr.Status == RequisitionStatus.InApproval ? ApprovalLevels.Level1 : 0,
             };
-            if (nivel > 0)
+            // a compra da própria área de compras tem Nível 2 próprio: o gestor responsável pelo
+            // comprador. Dizer a lista do centro aqui mandaria o solicitante cobrar quem não decide
+            var rota = nivel == ApprovalLevels.Level2 && q is not null
+                ? await AlcadaDoComprador.RotaAsync(db, q, q.ManagerApprovedBy, ct)
+                : new RotaDoNivel2(CaminhoDoNivel2.Padrao);
+            if (rota.Caminho == CaminhoDoNivel2.GestorResponsavel)
+                nomes = [rota.GestorNome!];
+            else if (nivel > 0)
             {
                 var chave = $"{pr.CostCenter.Trim().ToUpperInvariant()}:{nivel}";
                 if (!aprovadores.TryGetValue(chave, out nomes))
                     aprovadores[chave] = nomes = (await ApprovalLevels.OfAsync(db, pr.CostCenter, nivel, ct)).Select(a => a.UserName).ToList();
             }
-            map[pr.Id] = (ProcessStatus.Of(pr, q, o), Montar(pr, q, o, nomes));
+            map[pr.Id] = (ProcessStatus.Of(pr, q, o),
+                Montar(pr, q, o, nomes, rota.Caminho == CaminhoDoNivel2.GestorResponsavel));
         }
         return map;
     }

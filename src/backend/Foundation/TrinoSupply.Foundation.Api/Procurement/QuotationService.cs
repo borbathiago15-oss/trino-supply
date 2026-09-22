@@ -79,9 +79,13 @@ public partial class QuotationService(AppDbContext db, TimeProvider clock)
     public static bool CanApproveAsManager(string role) =>
         role is Roles.SupplyManager or Roles.SystemAdministrator or Roles.Approver or Roles.PurchasingOfficer;
 
-    /// <summary>Aprovação da diretoria (2ª alçada).</summary>
+    /// <summary>
+    /// Segunda alçada. A diretoria a dá em geral; o <b>Gestor de Suprimentos</b> entra aqui só
+    /// para fechar a compra dos compradores sob a responsabilidade dele — quem separa os dois
+    /// casos é <see cref="ImpedimentoNivel2Async"/>, que é a mesma régua da fila da Central.
+    /// </summary>
     public static bool CanApproveAsDirector(string role) =>
-        role is Roles.Director or Roles.SystemAdministrator;
+        role is Roles.Director or Roles.SystemAdministrator or Roles.SupplyManager;
 
     public static bool CanView(string role) =>
         CanConduct(role) || CanApproveAsManager(role) || CanApproveAsDirector(role) || role == Roles.Auditor;

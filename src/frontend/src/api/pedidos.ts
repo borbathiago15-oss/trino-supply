@@ -125,6 +125,17 @@ export const totalRecebido = (itens: Pick<ItemPedido, 'receivedQuantity'>[]) =>
 
 const base = '/api/v1/purchase-orders';
 
+/**
+ * `families` já viajou como texto: a entidade guarda um CSV e a vista mandava a string crua,
+ * o que derrubava a lista inteira no `.join` do primeiro pedido com duas famílias. O servidor
+ * agora manda lista, e esta função aceita as três formas — lista, texto e nulo — porque a tela
+ * não pode morrer por causa do formato de um campo de exibição.
+ */
+export const listaDeFamilias = (valor: unknown): string[] =>
+  Array.isArray(valor) ? valor.filter((f): f is string => typeof f === 'string')
+    : typeof valor === 'string' ? valor.split(',').map((f) => f.trim()).filter(Boolean)
+    : [];
+
 /** A API pode mandar `families`/`invoices`/`items` nulos; a tela sempre trabalha com listas. */
 export function normalizarPedido(bruto: PedidoCompra): PedidoCompra {
   const items = (bruto.items ?? []).map((i) => ({
@@ -134,7 +145,7 @@ export function normalizarPedido(bruto: PedidoCompra): PedidoCompra {
   }));
   const erpDocuments = (bruto.erpDocuments ?? []).map((d) => ({ ...d, items: d.items ?? [] }));
   return {
-    ...bruto, families: bruto.families ?? [], invoices: bruto.invoices ?? [], items, erpDocuments,
+    ...bruto, families: listaDeFamilias(bruto.families), invoices: bruto.invoices ?? [], items, erpDocuments,
     erpPending: bruto.erpPending ?? (bruto.noErpReason == null && items.some((i) => i.erpPendingQuantity > 0)),
   };
 }

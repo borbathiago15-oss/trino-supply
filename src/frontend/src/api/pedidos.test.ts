@@ -10,6 +10,23 @@ describe('pedidos', () => {
     expect(o.items).toEqual([]);
     expect(o.erpDocuments).toEqual([]);
   });
+  it('families em texto vira lista: era o que derrubava /pedidos com duas famílias', () => {
+    // a vista mandava o CSV cru da entidade; `"EPI, UNIFORME"` passava no `?? []` por não ser
+    // nulo e morria no `.join(', ')` da lista, que string não tem
+    const bruto = { id: 'x', number: 'PO-1', status: 'EMITIDO', families: 'EPI, UNIFORME' } as unknown as PedidoCompra;
+    expect(normalizarPedido(bruto).families).toEqual(['EPI', 'UNIFORME']);
+  });
+
+  it('uma família só, texto sem vírgula, também vira lista', () => {
+    const bruto = { id: 'x', number: 'PO-1', status: 'EMITIDO', families: 'EPI' } as unknown as PedidoCompra;
+    expect(normalizarPedido(bruto).families).toEqual(['EPI']);
+  });
+
+  it('texto vazio não vira uma família em branco', () => {
+    const bruto = { id: 'x', number: 'PO-1', status: 'EMITIDO', families: '  ' } as unknown as PedidoCompra;
+    expect(normalizarPedido(bruto).families).toEqual([]);
+  });
+
   it('pedido encerrado = entrega concluída, recebido ou cancelado', () => {
     expect(pedidoEncerrado({ deliveryCompletedAt: null, status: 'EMITIDO' })).toBe(false);
     expect(pedidoEncerrado({ deliveryCompletedAt: '2026-09-01T00:00:00Z', status: 'PARCIAL' })).toBe(true);

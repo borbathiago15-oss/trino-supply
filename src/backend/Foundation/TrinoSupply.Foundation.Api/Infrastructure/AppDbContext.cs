@@ -23,6 +23,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<SupplierDocument> SupplierDocuments => Set<SupplierDocument>();
     public DbSet<ContractAdjustment> ContractAdjustments => Set<ContractAdjustment>();
     public DbSet<CostCenter> CostCenters => Set<CostCenter>();
+    public DbSet<Sector> Sectors => Set<Sector>();
     public DbSet<Company> Companies => Set<Company>();
     public DbSet<PurchaseOrder> PurchaseOrders => Set<PurchaseOrder>();
     public DbSet<PurchaseOrderItem> PurchaseOrderItems => Set<PurchaseOrderItem>();
@@ -106,6 +107,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(u => u.Modules).HasColumnName("modules").HasMaxLength(300);
             e.Property(u => u.CostCenters).HasColumnName("cost_centers").HasMaxLength(2000);
             e.Property(u => u.DirectorId).HasColumnName("director_id");
+            e.Property(u => u.SupplyManagerId).HasColumnName("supply_manager_id");
+            e.Property(u => u.SectorId).HasColumnName("sector_id");
             e.Property(u => u.Active).HasColumnName("active");
             e.Property(u => u.MustChangePassword).HasColumnName("must_change_password");
             e.Property(u => u.PasswordChangedAt).HasColumnName("password_changed_at");
@@ -389,6 +392,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(a => a.Level).HasColumnName("level");
             e.Property(a => a.CreatedAt).HasColumnName("created_at");
             e.HasIndex(a => new { a.CostCenterId, a.Level });
+        });
+
+        modelBuilder.Entity<Sector>(e =>
+        {
+            e.ToTable("sector"); // schema foundation — dimensão organizacional, ao lado do centro
+            e.HasKey(s => s.Id);
+            e.Property(s => s.Id).HasColumnName("id");
+            e.Property(s => s.Code).HasColumnName("code").HasMaxLength(20).IsRequired();
+            e.Property(s => s.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+            e.Property(s => s.Active).HasColumnName("active");
+            e.Property(s => s.CreatedAt).HasColumnName("created_at");
+            e.Property(s => s.CreatedBy).HasColumnName("created_by");
+            e.Property(s => s.UpdatedAt).HasColumnName("updated_at");
+            e.Property(s => s.Version).HasColumnName("version");
+            e.HasIndex(s => s.Code).IsUnique();
         });
 
         modelBuilder.Entity<CostCenter>(e =>

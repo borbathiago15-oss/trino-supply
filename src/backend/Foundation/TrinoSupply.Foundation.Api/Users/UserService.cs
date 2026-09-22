@@ -60,10 +60,24 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
         return null;
     }
 
+    /// <summary>
+    /// O setor de quem trabalha — o que faz o ciclo de melhoria de um setor aparecer para o
+    /// colega do mesmo setor. Setor inativo não se vincula: inativar é a forma de tirar um
+    /// setor de uso, e deixá-lo entrar por aqui desfaria a decisão do cadastro.
+    /// </summary>
+    private async Task<UserError?> ValidateSectorAsync(Guid? sectorId, CancellationToken ct)
+    {
+        if (sectorId is null) return null;
+        if (!await db.Sectors.AnyAsync(s => s.Id == sectorId && s.Active, ct))
+            return new("IAM-ERR-023", "Setor inválido: escolha um setor ativo do cadastro.");
+        return null;
+    }
+
     public async Task<(User? user, UserError? error)> CreateAsync(
         string email, string name, string role, string password,
         IReadOnlyList<string>? modules = null, IReadOnlyList<string>? costCenters = null,
-        Guid? directorId = null, Guid? supplyManagerId = null, CancellationToken ct = default)
+        Guid? directorId = null, Guid? supplyManagerId = null, Guid? sectorId = null,
+        CancellationToken ct = default)
     {
         var normalized = email.Trim().ToLowerInvariant();
         if (string.IsNullOrWhiteSpace(normalized) || !normalized.Contains('@'))
@@ -78,6 +92,7 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
         if (modulesError is not null) return (null, modulesError);
         if (await ValidateDirectorAsync(directorId, ct) is { } directorError) return (null, directorError);
         if (await ValidateSupplyManagerAsync(supplyManagerId, ct) is { } gestorError) return (null, gestorError);
+        if (await ValidateSectorAsync(sectorId, ct) is { } setorError) return (null, setorError);
 
         var user = new User
         {
@@ -88,6 +103,7 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
             CostCenters = NormalizeCostCenters(costCenters),
             DirectorId = directorId,
             SupplyManagerId = supplyManagerId,
+            SectorId = sectorId,
             // quem cadastra escolhe a senha, então ela nasce provisória: o dono
             // troca no primeiro acesso e ninguém fica com senha de terceiro (SEC-004)
             MustChangePassword = true,
@@ -105,7 +121,8 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
         Guid id, Guid actorId, string? name, string? role, bool? active,
         IReadOnlyList<string>? modules = null, IReadOnlyList<string>? costCenters = null,
         Guid? directorId = null, bool clearDirector = false,
-        Guid? supplyManagerId = null, bool clearSupplyManager = false, CancellationToken ct = default)
+        Guid? supplyManagerId = null, bool clearSupplyManager = false,
+        Guid? sectorId = null, bool clearSector = false, CancellationToken ct = default)
     {
         var user = await db.Users.SingleOrDefaultAsync(u => u.Id == id, ct);
         if (user is null) return (null, new("IAM-ERR-404", "Usuário não encontrado."));
@@ -123,6 +140,7 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
 
         if (await ValidateDirectorAsync(directorId, ct) is { } directorError) return (null, directorError);
         if (await ValidateSupplyManagerAsync(supplyManagerId, ct) is { } gestorError) return (null, gestorError);
+        if (await ValidateSectorAsync(sectorId, ct) is { } setorError) return (null, setorError);
         if (name is not null && name.Trim().Length >= 2) user.Name = name.Trim();
         if (role is not null) user.Role = role;
         if (modules is not null) user.Modules = modulesCsv;
@@ -131,6 +149,8 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
         else if (clearDirector) user.DirectorId = null;
         if (supplyManagerId is not null) user.SupplyManagerId = supplyManagerId;
         else if (clearSupplyManager) user.SupplyManagerId = null;
+        if (sectorId is not null) user.SectorId = sectorId;
+        else if (clearSector) user.SectorId = null;
         if (active is not null) user.Active = active.Value;
         user.UpdatedAt = clock.GetUtcNow();
 

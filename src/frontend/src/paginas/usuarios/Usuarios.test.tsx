@@ -15,10 +15,12 @@ vi.mock('@/api/usuarios', async (importar) => ({
   redefinirSenha: vi.fn(),
 }));
 vi.mock('@/api/centrosCusto', () => ({ listarCentrosCusto: vi.fn() }));
+vi.mock('@/api/setores', () => ({ listarSetores: vi.fn() }));
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => admin }));
 
 import { atualizarUsuario, criarUsuario, listarUsuarios, redefinirSenha } from '@/api/usuarios';
 import { listarCentrosCusto } from '@/api/centrosCusto';
+import { listarSetores } from '@/api/setores';
 
 const admin: Usuario = { id: 'u-admin', email: 'admin@t.com', name: 'Administrador', role: 'SystemAdministrator', modules: [] };
 
@@ -27,7 +29,7 @@ const usuario = (p: Partial<UsuarioCadastro>): UsuarioCadastro => {
   return {
     id: 'u-' + email, email, name: 'Ana Solicitante', role: 'Requester',
     active: true, modules: ['SOLICITACOES', 'MATERIAL'], customModules: false, costCenters: ['BAH-001'],
-    directorId: null, supplyManagerId: null, mustChangePassword: false, passwordChangedAt: '2026-01-02T00:00:00Z',
+    directorId: null, supplyManagerId: null, sectorId: null, mustChangePassword: false, passwordChangedAt: '2026-01-02T00:00:00Z',
     createdAt: '2026-01-01T00:00:00Z', updatedAt: null, ...p,
   };
 };
@@ -99,9 +101,29 @@ describe('<Usuarios />', () => {
       availableModules: ['SOLICITACOES', 'MATERIAL'],
     });
     vi.mocked(listarCentrosCusto).mockResolvedValue(centros);
+    vi.mocked(listarSetores).mockResolvedValue([
+      { id: 's-rh', code: 'RH', name: 'Recursos Humanos', active: true },
+      { id: 's-ti', code: 'TI', name: 'Tecnologia', active: true },
+    ]);
   });
 
   const montar = () => render(<ToastProvider><Usuarios /></ToastProvider>);
+
+  // o setor é de qualquer papel: diz onde a pessoa trabalha, não o que ela aprova —
+  // por isso o campo aparece sem depender do papel escolhido, ao contrário do gestor
+  it('vincula o setor em que a pessoa trabalha, seja qual for o papel', async () => {
+    montar();
+    await waitFor(() => expect(screen.getByTestId('tabela-usuarios')).toBeInTheDocument());
+    await userEvent.type(screen.getByLabelText(/^Nome/), 'Rita Requisitante');
+    await userEvent.type(screen.getByLabelText(/E-mail/), 'rita@t.com');
+    await userEvent.selectOptions(screen.getByLabelText(/Papel/), 'Requester');
+    await userEvent.type(screen.getByLabelText(/Senha/), 'Bandeira#Azul47');
+    await userEvent.selectOptions(screen.getByLabelText(/^Setor/), 's-ti');
+    await userEvent.click(screen.getByRole('button', { name: 'Criar usuário' }));
+
+    await waitFor(() => expect(criarUsuario).toHaveBeenCalledWith(
+      expect.objectContaining({ sectorId: 's-ti' })));
+  });
 
   it('lista com autorizações legíveis, vínculos e diretor pelo nome', async () => {
     montar();

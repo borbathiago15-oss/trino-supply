@@ -62,6 +62,7 @@ GET /api/v1/quotations/{id:guid}/score-map
 GET /api/v1/quotations/{id:guid}/timeline
 GET /api/v1/request-types/
 GET /api/v1/score-weights/
+GET /api/v1/sectors/
 GET /api/v1/stage-sla/
 GET /api/v1/suppliers/
 GET /api/v1/suppliers/{id:guid}/contract/adjustments
@@ -79,6 +80,7 @@ PATCH /api/v1/payment-terms/{id:guid}
 PATCH /api/v1/product-families/{id:guid}
 PATCH /api/v1/purchase-requisitions/{id:guid}
 PATCH /api/v1/request-types/{id:guid}
+PATCH /api/v1/sectors/{id:guid}
 PATCH /api/v1/suppliers/{id:guid}
 PATCH /api/v1/suppliers/{id:guid}/homologation
 PATCH /api/v1/users/{id:guid}
@@ -144,6 +146,7 @@ POST /api/v1/quotations/{id:guid}/select-winner
 POST /api/v1/quotations/{id:guid}/suppliers
 POST /api/v1/quotations/{id:guid}/suppliers/{supplierId:guid}/waive
 POST /api/v1/request-types/
+POST /api/v1/sectors/
 POST /api/v1/suppliers/
 POST /api/v1/suppliers/{id:guid}/contract/adjustments
 POST /api/v1/suppliers/{id:guid}/documents

@@ -215,6 +215,7 @@ app.MapPedidos();
 
 // ---- Cadastros: centros de custo, triagem de demandas e empresas -------------
 app.MapCadastros();
+app.MapSetores();
 
 // ---- Cadastros de pagamento: formas e condições -------------------------------
 app.MapPagamentos();
@@ -248,10 +249,11 @@ public record LoginRequest(string Email, string Password);
 public record RefreshRequest(string RefreshToken);
 public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 public record CreateUserRequest(string Email, string Name, string Role, string Password, List<string>? Modules,
-    List<string>? CostCenters, Guid? DirectorId, Guid? SupplyManagerId = null);
+    List<string>? CostCenters, Guid? DirectorId, Guid? SupplyManagerId = null, Guid? SectorId = null);
 public record UpdateUserRequest(string? Name, string? Role, bool? Active, List<string>? Modules,
     List<string>? CostCenters, Guid? DirectorId, bool? ClearDirector,
-    Guid? SupplyManagerId = null, bool? ClearSupplyManager = null);
+    Guid? SupplyManagerId = null, bool? ClearSupplyManager = null,
+    Guid? SectorId = null, bool? ClearSector = null);
 public record ResetPasswordRequest(string NewPassword);
 /// <summary>
 /// Item pedido na SC. <c>Family</c> é a família escolhida pelo solicitante e só vale para
@@ -325,6 +327,8 @@ public record AtualizarAcaoRequest(string? Title, Guid? ResponsibleId, DateOnly?
     string? Reason, string? Area, string? ExpectedResult, string? Kpi, decimal? ExpectedGain,
     decimal? RealizedGain, string? CostCenter);
 public record MudarStatusDaAcaoRequest(string Status, string? Reason, int? Progress);
+public record SetorRequest(string Name, string? Code = null);
+public record AtualizarSetorRequest(string? Name, bool? Active);
 public record CreateCostCenterRequest(string? Code, string Name, string? Region, Guid? ManagerUserId, string? ClientName, Guid? CompanyId, IReadOnlyList<Guid>? Level1UserIds = null, IReadOnlyList<Guid>? Level2UserIds = null, decimal? Level1ValueLimit = null, decimal? Level2ValueLimit = null, bool? ReceivesMaterial = null);
 public record UpdateCostCenterRequest(string? Name, string? Region, Guid? ManagerUserId, string? ClientName, bool? Active, Guid? CompanyId, IReadOnlyList<Guid>? Level1UserIds = null, IReadOnlyList<Guid>? Level2UserIds = null, decimal? Level1ValueLimit = null, decimal? Level2ValueLimit = null, bool? ClearValueLimits = null, bool? ReceivesMaterial = null);
 public record AssignTicketRequest(string? Kind, Guid Id, Guid? ResponsibleId);

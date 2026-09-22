@@ -21,6 +21,8 @@ export interface UsuarioCadastro {
   directorId: string | null;
   /** Gestor de Suprimentos que dá a 2ª alçada das compras deste comprador. */
   supplyManagerId: string | null;
+  /** Setor em que a pessoa trabalha — quem tem setor não escolhe o setor de um ciclo. */
+  sectorId: string | null;
   /** Ainda usa a senha de cadastro: troca obrigatória no próximo acesso (SEC-004). */
   mustChangePassword: boolean;
   passwordChangedAt: string | null;
@@ -40,13 +42,14 @@ export interface DadosUsuario {
   costCenters: string[];
   directorId: string | null;
   supplyManagerId: string | null;
+  sectorId: string | null;
 }
 
 export const criarUsuario = (dados: DadosUsuario & { email: string; password: string }) =>
   api<UsuarioCadastro>(`${base}/`, { method: 'POST', body: dados });
 
 /** E-mail e senha não mudam por aqui: a senha tem rota própria. */
-export const atualizarUsuario = (id: string, dados: Partial<DadosUsuario> & { active?: boolean; clearDirector?: boolean; clearSupplyManager?: boolean }) =>
+export const atualizarUsuario = (id: string, dados: Partial<DadosUsuario> & { active?: boolean; clearDirector?: boolean; clearSupplyManager?: boolean; clearSector?: boolean }) =>
   api<UsuarioCadastro>(`${base}/${id}`, { method: 'PATCH', body: dados });
 
 export const redefinirSenha = (id: string, novaSenha: string) =>

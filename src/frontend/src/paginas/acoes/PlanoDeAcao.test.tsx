@@ -1,122 +1,135 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Acao, PaginaDeAcoes } from '@/api/acoes';
-import { exigeMotivo } from '@/api/acoes';
+import type { Plano } from '@/api/acoes';
 import { ToastProvider } from '@/componentes/Toast';
 import { PlanoDeAcaoTela, rotuloDaLinha, tomDaLinha } from './PlanoDeAcao';
 
 vi.mock('@/api/acoes', async (importar) => ({
   ...(await importar<typeof import('@/api/acoes')>()),
-  listarAcoes: vi.fn(),
-  mudarStatusDaAcao: vi.fn(),
-  criarAcao: vi.fn(),
+  listarPlanos: vi.fn(),
+  criarPlano: vi.fn(),
 }));
-vi.mock('@/api/usuarios', () => ({ listarUsuariosPicker: vi.fn().mockResolvedValue([]) }));
-vi.mock('@/api/centrosCusto', () => ({ listarCentrosCusto: vi.fn().mockResolvedValue([]) }));
+import { criarPlano, listarPlanos } from '@/api/acoes';
 
-import { listarAcoes, mudarStatusDaAcao } from '@/api/acoes';
-
-const acao = (p: Partial<Acao>): Acao => ({
-  id: 'a1', number: 'AC-2026-000001', title: 'Refazer o layout da doca',
-  reason: null, area: null, responsibleId: 'u1', responsibleLabel: 'Carla Compradora',
-  startDate: null, dueDate: '2026-09-01', expectedGain: null, realizedGain: null,
-  expectedResult: null, kpi: null, costCenter: 'CC-01', status: 'PENDENTE',
-  statusReason: null, progress: 0, late: false, daysLate: null, open: true,
-  completedAt: null, createdByLabel: 'Carla', createdAt: '2026-08-01T00:00:00Z', ...p,
+const plano = (p: Partial<Plano>): Plano => ({
+  id: 'p-' + (p.code ?? 'AP-2026-001'), code: 'AP-2026-001',
+  title: 'Reduzir avarias na doca 2', description: null,
+  costCenter: 'BAH-001', areas: ['Operações'], otherArea: null,
+  priority: 'ALTA', criticality: 'ALTA', complexity: 'MEDIA',
+  category: 'Melhoria Contínua', sponsor: null, managerName: null,
+  startDate: '2026-09-01', dueDate: '2026-12-31', completion: 0,
+  problem: 'Avarias sobem desde julho', businessReason: 'Custa 40 mil por mês',
+  operationalImpact: null, financialImpact: null, kpiAffected: null, targetGoal: null,
+  roiExpected: 0, savingExpected: 10000, savingRealized: 4000,
+  investmentPlanned: 0, investmentActual: 2000,
+  cancelled: false, cancelReason: null, life: 'ATIVO',
+  closedAt: null, closedByLabel: null, evidenceNote: null,
+  cycleId: null, autoKey: null,
+  responsibles: [{ userId: 'u1', label: 'Ana' }],
+  status: 'EM_ANDAMENTO', itemsProgress: 40,
+  savingTotalExpected: 15000, savingTotalRealized: 4000, roi: 100,
+  closedWithPending: false, itemCount: 2, openItems: 1,
+  createdByLabel: 'Ana', createdAt: '2026-09-01T00:00:00Z', ...p,
 });
 
-const pagina = (itens: Acao[], placar?: Partial<PaginaDeAcoes['placar']>): PaginaDeAcoes => ({
-  itens,
+const resposta = (itens: Plano[]) => ({
+  items: itens,
   placar: {
-    total: itens.length, pendentes: 0, emAndamento: 0, concluidas: 0, suspensas: 0,
-    canceladas: 0, atrasadas: 0, ganhoEsperado: 0, ganhoRealizado: 0, ...placar,
+    total: itens.length, pendentes: 0, emAndamento: 1, atrasados: 1,
+    concluidos: 0, cancelados: 0, encerrados: 1, encerradosComPendencia: 1,
+    savingEsperado: 15000, savingRealizado: 4000,
   },
-  opcoes: { responsibles: [{ id: 'u1', label: 'Carla Compradora' }], costCenters: ['CC-01'] },
+  filterOptions: {
+    responsibles: [{ id: 'u1', label: 'Ana' }],
+    costCenters: ['BAH-001'],
+    areas: ['Operações', 'RH'],
+    categories: ['Melhoria Contínua'],
+    priorities: ['ALTA', 'MEDIA', 'BAIXA'],
+    degrees: ['BAIXA', 'MEDIA', 'ALTA'],
+    riskDegrees: ['BAIXA', 'MEDIA', 'ALTA', 'MUITO_ALTA'],
+    statuses: ['PENDENTE', 'EM_ANDAMENTO', 'ATRASADO', 'CONCLUIDO', 'CANCELADO'],
+  },
 });
 
-const abrir = () => render(<ToastProvider><PlanoDeAcaoTela /></ToastProvider>);
+const montar = () => render(
+  <MemoryRouter><ToastProvider><PlanoDeAcaoTela /></ToastProvider></MemoryRouter>);
 
-describe('leitura da linha', () => {
-  it('a suspensa e vencida diz "suspensa", e não "atrasada"', () => {
-    // é a regra do módulo: ela está parada por decisão, e chamá-la de atrasada
-    // cobraria a equipe por uma decisão da gestão
-    const suspensa = acao({ status: 'SUSPENSA', dueDate: '2026-01-01', late: false });
-    expect(rotuloDaLinha(suspensa)).toBe('Suspensa');
-    expect(tomDaLinha(suspensa)).not.toContain('perigo');
+describe('a linha do plano', () => {
+  it('encerrado diz "encerrado", e não a situação do trabalho', () => {
+    // a pergunta que interessa no plano encerrado é outra: alguém decidiu parar, e quando
+    const encerrado = plano({ life: 'ENCERRADO', status: 'ATRASADO' });
+    expect(rotuloDaLinha(encerrado)).toBe('Encerrado');
+    expect(tomDaLinha(encerrado)).toContain('slate');
   });
 
-  it('a atrasada diz há quantos dias', () => {
-    expect(rotuloDaLinha(acao({ late: true, daysLate: 5 }))).toBe('Atrasada há 5d');
-    expect(tomDaLinha(acao({ late: true, daysLate: 5 }))).toContain('perigo');
+  it('encerrado com pendência é dito na própria linha', () => {
+    expect(rotuloDaLinha(plano({ life: 'ENCERRADO', closedWithPending: true })))
+      .toBe('Encerrado com pendência');
   });
 
-  it('suspender e cancelar exigem motivo; as outras não', () => {
-    expect(exigeMotivo('SUSPENSA')).toBe(true);
-    expect(exigeMotivo('CANCELADA')).toBe(true);
-    expect(exigeMotivo('EM_ANDAMENTO')).toBe(false);
-    expect(exigeMotivo('CONCLUIDA')).toBe(false);
+  it('atrasado fala mais alto que a situação', () => {
+    expect(tomDaLinha(plano({ status: 'ATRASADO' }))).toContain('perigo');
+    expect(rotuloDaLinha(plano({ status: 'ATRASADO' }))).toBe('Atrasado');
   });
 });
 
 describe('<PlanoDeAcaoTela />', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(listarAcoes).mockResolvedValue(pagina([acao({})]));
+    vi.mocked(listarPlanos).mockResolvedValue(resposta([
+      plano({}),
+      plano({ code: 'AP-2026-002', title: 'Reduzir retrabalho', status: 'ATRASADO' }),
+    ]));
+    vi.mocked(criarPlano).mockResolvedValue(plano({ code: 'AP-2026-003' }));
   });
 
-  it('o placar separa suspensa de atrasada', async () => {
-    vi.mocked(listarAcoes).mockResolvedValue(pagina(
-      [acao({}), acao({ id: 'a2', number: 'AC-2026-000002', status: 'SUSPENSA' })],
-      { suspensas: 1, atrasadas: 1 }));
-    abrir();
-    const placar = await screen.findByTestId('placar-das-acoes');
-    expect(within(placar).getByText('Suspensas')).toBeInTheDocument();
-    expect(within(placar).getByText('Atrasadas')).toBeInTheDocument();
+  it('lista os planos com o problema que cada um ataca', async () => {
+    montar();
+    const tabela = await screen.findByTestId('tabela-planos');
+    expect(within(tabela).getByText('Reduzir avarias na doca 2')).toBeInTheDocument();
+    // o problema aparece na linha: é o que separa o plano de uma lista de tarefas
+    expect(within(tabela).getAllByText('Avarias sobem desde julho').length).toBeGreaterThan(0);
   });
 
-  it('suspender abre o diálogo e só confirma com motivo', async () => {
-    const usuario = userEvent.setup();
-    abrir();
-    await screen.findByTestId('tabela-acoes');
-
-    await usuario.selectOptions(screen.getByLabelText('Mudar situação de AC-2026-000001'), 'SUSPENSA');
-    const confirmar = await screen.findByRole('button', { name: 'Confirmar' });
-    expect(confirmar).toBeDisabled();
-    // sem motivo não passa: parar o trabalho de alguém sem dizer por quê é o que faz
-    // a ação ficar meses parada sem dono da decisão
-    expect(mudarStatusDaAcao).not.toHaveBeenCalled();
-
-    await usuario.type(screen.getByLabelText('Motivo'), 'Obra parada pela diretoria.');
-    await usuario.click(screen.getByRole('button', { name: 'Confirmar' }));
-    await waitFor(() => expect(mudarStatusDaAcao).toHaveBeenCalledWith(
-      'a1', 'SUSPENSA', 'Obra parada pela diretoria.'));
+  it('o placar mostra os encerrados com pendência', async () => {
+    montar();
+    await screen.findByTestId('tabela-planos');
+    expect(screen.getByText(/1 com ação em aberto/)).toBeInTheDocument();
   });
 
-  it('concluir não pede motivo: vai direto', async () => {
-    const usuario = userEvent.setup();
-    vi.mocked(mudarStatusDaAcao).mockResolvedValue(acao({ status: 'CONCLUIDA' }));
-    abrir();
-    await screen.findByTestId('tabela-acoes');
-
-    await usuario.selectOptions(screen.getByLabelText('Mudar situação de AC-2026-000001'), 'CONCLUIDA');
-    await waitFor(() => expect(mudarStatusDaAcao).toHaveBeenCalledWith('a1', 'CONCLUIDA'));
-    expect(screen.queryByRole('button', { name: 'Confirmar' })).not.toBeInTheDocument();
+  it('a linha mostra quantas ações fecharam, e não só o total', async () => {
+    montar();
+    const tabela = await screen.findByTestId('tabela-planos');
+    const linha = tabela.querySelector('[data-plano="AP-2026-001"]')!;
+    expect(within(linha as HTMLElement).getByText('1/2')).toBeInTheDocument();
   });
 
-  it('ação encerrada não oferece mudar situação', async () => {
-    vi.mocked(listarAcoes).mockResolvedValue(pagina([acao({ status: 'CONCLUIDA', open: false })]));
-    abrir();
-    await screen.findByTestId('tabela-acoes');
-    expect(screen.queryByLabelText(/Mudar situação/)).not.toBeInTheDocument();
+  it('filtra por situação e o limpar só aparece quando há filtro', async () => {
+    montar();
+    await screen.findByTestId('tabela-planos');
+    expect(screen.queryByRole('button', { name: 'Limpar' })).toBeNull();
+
+    await userEvent.selectOptions(screen.getByLabelText('Situação'), 'ATRASADO');
+    await waitFor(() => expect(listarPlanos).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: 'ATRASADO' }), expect.anything()));
+    expect(screen.getByRole('button', { name: 'Limpar' })).toBeInTheDocument();
   });
 
-  it('o filtro de atrasadas vai para o servidor', async () => {
-    const usuario = userEvent.setup();
-    abrir();
-    await screen.findByTestId('tabela-acoes');
-    await usuario.click(screen.getByLabelText('Só atrasadas'));
-    await waitFor(() => expect(listarAcoes).toHaveBeenCalledWith(
-      expect.objectContaining({ atrasadas: true }), expect.anything()));
+  it('abrir um plano já pede o problema e o porquê', async () => {
+    // plano sem os dois vira lista de tarefas, e é o que este módulo existe para não ser
+    montar();
+    await screen.findByTestId('tabela-planos');
+    await userEvent.type(screen.getByLabelText(/O que o plano vai resolver/), 'Reduzir retrabalho na doca');
+    await userEvent.type(screen.getByLabelText(/Problema encontrado/), 'Retrabalho em 3 de 10 cargas');
+    await userEvent.type(screen.getByLabelText(/Por quê/), 'Perde-se meio turno por dia');
+    await userEvent.click(screen.getByRole('button', { name: 'Abrir plano' }));
+
+    await waitFor(() => expect(criarPlano).toHaveBeenCalledWith({
+      title: 'Reduzir retrabalho na doca',
+      problem: 'Retrabalho em 3 de 10 cargas',
+      businessReason: 'Perde-se meio turno por dia',
+    }));
   });
 });

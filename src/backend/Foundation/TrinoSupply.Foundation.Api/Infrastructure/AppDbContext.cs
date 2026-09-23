@@ -87,6 +87,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(c => c.Priority).HasColumnName("priority").HasMaxLength(20).IsRequired();
             e.Property(c => c.Problem).HasColumnName("problem");
             e.Property(c => c.CurrentSituation).HasColumnName("current_situation");
+            e.Property(c => c.OriginKey).HasColumnName("origin_key").HasMaxLength(200);
+            // o mesmo achado não abre dois ciclos: quem clica de novo cai no que já existe
+            e.HasIndex(c => c.OriginKey);
+            e.Property(c => c.OriginLabel).HasColumnName("origin_label").HasMaxLength(300);
             e.Property(c => c.Leader).HasColumnName("leader").HasMaxLength(200);
             e.Property(c => c.Mentor).HasColumnName("mentor").HasMaxLength(200);
             e.Property(c => c.Participants).HasColumnName("participants").HasMaxLength(1000);

@@ -401,6 +401,10 @@ public record CicloRequest(
         Leader, Mentor, Participants, AnnualSaving);
 }
 
+/// <summary>Um achado do Insights que vai virar ciclo — e, se pedido, o plano da contramedida.</summary>
+public record AchadoRequest(string? Code, string? Title, string? Evidence, string? Action,
+    string? CostCenter, bool? CreatePlan);
+
 /// <summary>A ferramenta preenchida. Uma por tipo no ciclo; salvar de novo corrige a que existe.</summary>
 public record FerramentaDoCicloRequest(string Tool, string? Data);
 

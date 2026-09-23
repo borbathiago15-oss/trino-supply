@@ -151,6 +151,28 @@ public static class MelhoriaRotas
                 : Results.Json(new { data = Resumo(ciclo!), correlationId = CorrelationId(ctx) }, statusCode: 201);
         });
 
+        // o caminho achado → causa → contramedida. O Insights já aponta o problema com a
+        // evidência junto, e parava aí: quem lia redigitava na mão o que a tela já dizia
+        ciclos.MapPost("/from-insight", async (AchadoRequest body, CausaDoAchadoService svc,
+            ClaimsPrincipal p, HttpContext ctx, CancellationToken ct) =>
+        {
+            var (aberta, erro) = await svc.AbrirAsync(BuildActor(p)!, new AchadoATratar(
+                body.Code ?? "", body.Title ?? "", body.Evidence, body.Action,
+                body.CostCenter, body.CreatePlan == true), ct);
+            if (erro is not null) return Error(ctx, 400, erro.Code, erro.Message);
+            var dados = new
+            {
+                cycle = Resumo(aberta!.Ciclo),
+                planId = aberta.Plano?.Id,
+                planCode = aberta.Plano?.Code,
+                // a tela precisa saber: "já existia" abre o ciclo em vez de anunciar um novo
+                alreadyExisted = aberta.JaExistia,
+            };
+            return aberta.JaExistia
+                ? Ok(dados, ctx)
+                : Results.Json(new { data = dados, correlationId = CorrelationId(ctx) }, statusCode: 201);
+        });
+
         ciclos.MapPatch("/{id:guid}", async (Guid id, CicloRequest body, CicloDeMelhoriaService svc,
             ClaimsPrincipal p, HttpContext ctx, CancellationToken ct) =>
         {

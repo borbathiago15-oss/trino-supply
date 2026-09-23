@@ -50,6 +50,7 @@ public static class Servicos
         servicos.AddScoped<Acoes.PlanoDeAcaoService>();
         servicos.AddScoped<Melhoria.CicloDeMelhoriaService>();
         servicos.AddScoped<Melhoria.AvisoDoCicloService>();
+        servicos.AddScoped<Melhoria.CausaDoAchadoService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Comunicados.AnnouncementService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Analytics.AnalyticsService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Analytics.RelatorioExecutivoService>();

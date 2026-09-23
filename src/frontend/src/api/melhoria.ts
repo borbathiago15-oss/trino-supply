@@ -144,6 +144,23 @@ export const listarCiclos = (
     `${base}/${qs ? '?' + qs : ''}`, { signal });
 };
 
+/**
+ * Trata a causa de um achado: abre o ciclo com o problema e a evidência já escritos, e — se
+ * pedido — o plano da contramedida. Clicar duas vezes devolve o ciclo que já existe
+ * (`alreadyExisted`), em vez de abrir um gêmeo.
+ */
+export interface CausaAberta {
+  cycle: Ciclo;
+  planId: string | null;
+  planCode: string | null;
+  alreadyExisted: boolean;
+}
+
+export const tratarAchado = (achado: {
+  code: string; title: string; evidence?: string | null; action?: string | null;
+  costCenter?: string | null; createPlan?: boolean;
+}) => api<CausaAberta>(`${base}/from-insight`, { method: 'POST', body: achado });
+
 export const abrirCiclo = (id: string, signal?: AbortSignal) =>
   api<CicloCompleto>(`${base}/${id}`, { signal });
 

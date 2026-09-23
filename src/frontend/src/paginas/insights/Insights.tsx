@@ -1,14 +1,84 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   BADGE_ACHADO, CLASSE_ACHADO, JANELAS, relatorioDeInsights, tcoPorProduto,
-  type Backlog, type Janela, type LinhaTco, type VisaoExecutiva,
+  type Achado, type Backlog, type Janela, type LinhaTco, type VisaoExecutiva,
 } from '@/api/analytics';
+import { tratarAchado } from '@/api/melhoria';
 import { Badge, Carregando, Erro, Kpi, Painel, SeletorJanela, Vazio } from '@/componentes/basicos';
+import { Dialogo } from '@/componentes/Dialogo';
+import { Nota } from '@/componentes/formulario';
+import { useToast } from '@/componentes/Toast';
 import { moedaCurta } from '@/componentes/graficos';
 import { enderecoDoId } from '@/layout/menu';
 import { moeda, quantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
+
+/**
+ * Tratar a causa de um achado. O Insights aponta o problema com a evidência junto e parava
+ * aí — quem lia abria um ciclo na mão e redigitava o que a tela já dizia.
+ *
+ * <p>
+ * O diálogo pergunta uma coisa só: abrir junto o plano da contramedida. É a decisão que o
+ * usuário de fato tem — o resto o achado já respondeu.
+ * </p>
+ */
+export function TratarACausa({ achado }: { achado: Achado }) {
+  const { avisar } = useToast();
+  const navegar = useNavigate();
+  const [aberto, setAberto] = useState(false);
+  const [comPlano, setComPlano] = useState(true);
+  const [indo, setIndo] = useState(false);
+
+  async function tratar() {
+    setIndo(true);
+    try {
+      const r = await tratarAchado({
+        code: achado.code, title: achado.title,
+        evidence: achado.evidence, action: achado.action, createPlan: comPlano,
+      });
+      // "já existia" abre o ciclo em vez de anunciar um novo: dizer "criado" seria mentir,
+      // e o usuário procuraria um segundo ciclo que não existe
+      avisar(r.alreadyExisted
+        ? `Este achado já tinha o ciclo ${r.cycle.code} — abrindo ele.`
+        : `Ciclo ${r.cycle.code} aberto${r.planCode ? `, com o plano ${r.planCode}` : ''}.`);
+      navegar(`/melhoria/${r.cycle.id}`);
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'Falha ao abrir o ciclo.', 'erro');
+      setIndo(false);
+    }
+  }
+
+  return (
+    <>
+      <button type="button" className="botao-secundario" onClick={() => setAberto(true)}>
+        Tratar a causa
+      </button>
+      {aberto && (
+        <Dialogo titulo="Tratar a causa deste achado" aoFechar={() => setAberto(false)} acoes={
+          <>
+            <button type="button" className="botao-secundario"
+              onClick={() => setAberto(false)}>Cancelar</button>
+            <button type="button" className="botao" disabled={indo}
+              onClick={() => void tratar()}>{indo ? 'Abrindo…' : 'Abrir ciclo'}</button>
+          </>
+        }>
+          <p className="text-[13.5px] font-semibold">{achado.title}</p>
+          <p className="sub mt-1">{achado.evidence}</p>
+          <Nota>
+            O ciclo nasce em Plan, com o problema e a evidência já escritos e os 5 Porquês
+            começados. O mesmo achado não abre dois ciclos.
+          </Nota>
+          <label className="mt-3 flex items-center gap-2 text-[13px]">
+            <input type="checkbox" checked={comPlano}
+              onChange={(e) => setComPlano(e.target.checked)} />
+            Abrir também o plano da contramedida
+          </label>
+        </Dialogo>
+      )}
+    </>
+  );
+}
 
 /** As quatro faixas do backlog, da mais nova para a mais velha. */
 const CORES_AGING = ['bg-ok-fundo text-ok', 'bg-teal-50 text-teal-800', 'bg-aviso-fundo text-aviso', 'bg-perigo-fundo text-perigo'];
@@ -129,16 +199,19 @@ export function Insights() {
                       <strong>{i.title}</strong>
                     </div>
                     <div className="sub mt-1">{i.evidence}</div>
-                    {i.action && (
-                      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-[13px] font-semibold">{i.action}</span>
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                      {i.action && <span className="text-[13px] font-semibold">{i.action}</span>}
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        {/* o achado aponta o problema com a evidência junto, e parava aí:
+                            quem lia redigitava na mão o que a tela já dizia */}
+                        <TratarACausa achado={i} />
                         {i.view && (
-                          <Link to={enderecoDoId(i.view)} className="botao-secundario shrink-0">
+                          <Link to={enderecoDoId(i.view)} className="botao-secundario">
                             Ir para a tela →
                           </Link>
                         )}
                       </div>
-                    )}
+                    </div>
                   </div>
                 ))}
               </div>

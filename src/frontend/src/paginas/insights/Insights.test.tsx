@@ -9,8 +9,17 @@ vi.mock('@/api/analytics', async (importar) => ({
   ...(await importar<typeof import('@/api/analytics')>()),
   relatorioDeInsights: vi.fn(), tcoPorProduto: vi.fn(),
 }));
+vi.mock('@/api/melhoria', () => ({ tratarAchado: vi.fn() }));
 
 import { relatorioDeInsights, tcoPorProduto } from '@/api/analytics';
+import { tratarAchado } from '@/api/melhoria';
+
+const achado = {
+  code: 'INS-01', kind: 'sobrepreco', severity: 'alta' as const,
+  title: 'Sobrepreço em LUVA NITRÍLICA TAM. M',
+  evidence: 'Pago R$ 12,40 contra R$ 8,90 no último pedido.',
+  action: 'Renegocie com o fornecedor.', view: 'quotations',
+};
 
 const relatorio = (p: Partial<RelatorioInsights>): RelatorioInsights => ({
   months: 6,
@@ -120,5 +129,59 @@ describe('tela Insights & Executivo', () => {
     expect(within(tabela).getByText('R$ 12,00')).toBeInTheDocument();
     expect(within(tabela).getByText('R$ 13,50')).toBeInTheDocument();
     expect(within(tabela).getByText('(11.1%)')).toBeInTheDocument();
+  });
+
+  // o achado aponta o problema com a evidência junto e parava aí: quem lia abria um
+  // ciclo na mão e redigitava o que a tela já dizia
+  describe('tratar a causa', () => {
+    beforeEach(() => {
+      vi.mocked(relatorioDeInsights).mockResolvedValue(relatorio({ insights: [achado] }));
+      vi.mocked(tratarAchado).mockResolvedValue({
+        cycle: { id: 'c1', code: 'PDCA-2026-001' } as never,
+        planId: 'p1', planCode: 'AP-2026-001', alreadyExisted: false,
+      });
+    });
+
+    it('o achado oferece tratar a causa, ao lado de ir para a tela', async () => {
+      render(<MemoryRouter><Insights /></MemoryRouter>);
+      const lista = await screen.findByTestId('lista-insights');
+      expect(within(lista).getByRole('button', { name: 'Tratar a causa' })).toBeInTheDocument();
+      expect(within(lista).getByRole('link', { name: /Ir para a tela/ })).toBeInTheDocument();
+    });
+
+    it('manda o achado inteiro, e por padrão abre o plano junto', async () => {
+      render(<MemoryRouter><Insights /></MemoryRouter>);
+      await screen.findByTestId('lista-insights');
+      await userEvent.click(screen.getByRole('button', { name: 'Tratar a causa' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Abrir ciclo' }));
+
+      await waitFor(() => expect(tratarAchado).toHaveBeenCalledWith({
+        code: 'INS-01',
+        title: 'Sobrepreço em LUVA NITRÍLICA TAM. M',
+        evidence: 'Pago R$ 12,40 contra R$ 8,90 no último pedido.',
+        action: 'Renegocie com o fornecedor.',
+        createPlan: true,
+      }));
+    });
+
+    it('dá para abrir só o ciclo, sem o plano', async () => {
+      render(<MemoryRouter><Insights /></MemoryRouter>);
+      await screen.findByTestId('lista-insights');
+      await userEvent.click(screen.getByRole('button', { name: 'Tratar a causa' }));
+      await userEvent.click(screen.getByLabelText(/plano da contramedida/));
+      await userEvent.click(screen.getByRole('button', { name: 'Abrir ciclo' }));
+
+      await waitFor(() => expect(tratarAchado).toHaveBeenCalledWith(
+        expect.objectContaining({ createPlan: false })));
+    });
+
+    it('o diálogo mostra a evidência antes de decidir', async () => {
+      render(<MemoryRouter><Insights /></MemoryRouter>);
+      await screen.findByTestId('lista-insights');
+      await userEvent.click(screen.getByRole('button', { name: 'Tratar a causa' }));
+      const dialogo = screen.getByRole('dialog');
+      expect(within(dialogo).getByText(/R\$ 8,90/)).toBeInTheDocument();
+      expect(within(dialogo).getByText(/não abre dois ciclos/)).toBeInTheDocument();
+    });
   });
 });

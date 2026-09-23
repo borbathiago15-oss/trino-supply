@@ -107,6 +107,7 @@ POST /api/v1/auth/refresh
 POST /api/v1/companies/
 POST /api/v1/cost-centers/
 POST /api/v1/improvement-cycles/
+POST /api/v1/improvement-cycles/from-insight
 POST /api/v1/improvement-cycles/{id:guid}/close
 POST /api/v1/improvement-cycles/{id:guid}/reopen
 POST /api/v1/improvement-cycles/{id:guid}/scope

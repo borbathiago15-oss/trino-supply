@@ -86,9 +86,12 @@ describe('<Cockpit />', () => {
     vi.mocked(obterCockpit).mockRejectedValue(new Error('rede'));
     await vi.advanceTimersByTimeAsync(31_000);
 
+    // a falha chega numa microtarefa depois do relógio: esperar por ela é o que torna o
+    // teste determinístico — a máquina lenta do CI errava aqui, e a rápida daqui não
+    await waitFor(() => expect(screen.getByText('última leitura mantida')).toBeInTheDocument());
+    // e o que estava na parede continua lá, que é o ponto
     expect(screen.getByTestId('cockpit')).toBeInTheDocument();
     expect(screen.getByText('25%')).toBeInTheDocument();
-    expect(screen.getByText('última leitura mantida')).toBeInTheDocument();
   });
 
   it('a parede diz qual recorte está na tela', async () => {

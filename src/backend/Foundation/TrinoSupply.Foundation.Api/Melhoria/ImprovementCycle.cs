@@ -146,6 +146,15 @@ public class ImprovementCycle
     public int Version { get; set; } = 1;
 
     /// <summary>
+    /// De onde o ciclo nasceu, quando não foi de alguém clicando em "abrir": o achado do
+    /// Insights, por exemplo. É a chave que impede o <b>mesmo</b> problema de abrir cinco
+    /// ciclos — quem clica duas vezes cai no ciclo que já existe.
+    /// </summary>
+    public string? OriginKey { get; set; }
+    /// <summary>A origem em português, para a tela dizer de onde veio.</summary>
+    public string? OriginLabel { get; set; }
+
+    /// <summary>
     /// Quem conduz a análise e quem orienta — os papéis da folha A3, que não são o dono do
     /// ciclo: o líder toca o trabalho, o mentor cobra o método.
     /// </summary>

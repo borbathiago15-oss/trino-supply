@@ -301,6 +301,16 @@ Cinco regras não se afrouxam:
   do centro errado; com dois destinos não há para onde mandar cada uma, e escolher por elas
   seria inventar o dado (`PDCA-ERR-052`).
 
+**O achado do Insights abre o ciclo, e o mesmo achado não abre dois.** `CausaDoAchadoService`
+é o caminho *achado → causa → contramedida*, que é o do Trino Intelligence (indicador crítico →
+análise de causa → plano) com os nomes daqui. O ciclo nasce em Plan com o problema e a evidência
+já escritos e **os 5 Porquês começados** — deixar a folha em branco devolveria para quem lê o
+trabalho que a tela já tinha feito. A `OriginKey` (`INSIGHT:código:assunto`, normalizado sem
+acento nem caixa) é o que impede os ciclos gêmeos: clicar de novo devolve o que existe, e a tela
+diz "já tinha o ciclo X" em vez de anunciar um novo que o usuário procuraria em vão. O plano da
+contramedida nasce na **mesma transação** — ciclo sem o plano que ele prometeu seria pior que
+nenhum dos dois.
+
 **A visibilidade do ciclo é um predicado só** (`CicloDeMelhoriaService.VisiveisAsync`), que a
 lista e a abertura consultam igual — e quem não enxerga recebe 404, não 403. Enxerga quem criou,
 quem é dono, quem foi marcado em "quem mais acompanha", quem responde por alguma ação e quem é

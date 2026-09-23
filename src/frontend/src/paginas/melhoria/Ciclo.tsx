@@ -13,6 +13,7 @@ import { useToast } from '@/componentes/Toast';
 import { data as formatarData } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
 import { FerramentaRenderizada, Vital } from './ferramenta';
+import { FormularioDaFerramenta, lerDados } from './formularios';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
@@ -319,7 +320,7 @@ function Ferramentas({ completo, recarregar, avisar }: {
 }) {
   const c = completo.cycle;
   const [editando, setEditando] = useState<string | null>(null);
-  const [texto, setTexto] = useState('');
+  const [rascunho, setRascunho] = useState<Record<string, unknown>>({});
   const [nova, setNova] = useState('');
   const [salvando, setSalvando] = useState(false);
 
@@ -328,10 +329,10 @@ function Ferramentas({ completo, recarregar, avisar }: {
   const usadas = new Set(completo.tools.map((t) => t.tool));
   const disponiveis = catalogo.filter((t) => !usadas.has(t.key));
 
-  async function guardar(tool: string, data: string | null) {
+  async function guardar(tool: string, dados: Record<string, unknown>) {
     setSalvando(true);
     try {
-      await salvarFerramenta(c.id, tool, data);
+      await salvarFerramenta(c.id, tool, JSON.stringify(dados));
       avisar('Ferramenta salva.');
       setEditando(null);
       recarregar();
@@ -360,7 +361,7 @@ function Ferramentas({ completo, recarregar, avisar }: {
             {disponiveis.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
           </select>
           <button type="button" className="botao" disabled={!nova || salvando}
-            onClick={() => { void guardar(nova, '{}'); setNova(''); }}>Acrescentar</button>
+            onClick={() => { void guardar(nova, {}); setNova(''); }}>Acrescentar</button>
         </div>
       )
     }>
@@ -384,7 +385,7 @@ function Ferramentas({ completo, recarregar, avisar }: {
                 <button type="button" className="botao-secundario"
                   onClick={() => {
                     setEditando(editando === a.key ? null : a.key);
-                    setTexto(guardada?.data ?? '{}');
+                    setRascunho(lerDados(guardada?.data));
                   }}>{editando === a.key ? 'Fechar' : 'Preencher'}</button>
                 <button type="button" className="botao-perigo"
                   onClick={() => void tirar(a.key)}>Retirar</button>
@@ -392,14 +393,10 @@ function Ferramentas({ completo, recarregar, avisar }: {
             </header>
             <FerramentaRenderizada analise={a} />
             {editando === a.key && (
-              <div className="mt-3">
-                <Campo id={`ft-${a.key}`} rotulo="Dados da ferramenta"
-                  dica="o servidor é quem ordena e marca o vital">
-                  <textarea id={`ft-${a.key}`} rows={6} className="font-mono text-[12px]"
-                    value={texto} onChange={(e) => setTexto(e.target.value)} />
-                </Campo>
-                <button type="button" className="botao mt-2" disabled={salvando}
-                  onClick={() => void guardar(a.key, texto)}>Salvar ferramenta</button>
+              <div className="mt-3 rounded-painel bg-superficie-suave p-3" data-testid={`form-${a.key}`}>
+                <FormularioDaFerramenta chave={a.key} dados={rascunho} aoMudar={setRascunho} />
+                <button type="button" className="botao mt-3" disabled={salvando}
+                  onClick={() => void guardar(a.key, rascunho)}>Salvar ferramenta</button>
               </div>
             )}
           </section>

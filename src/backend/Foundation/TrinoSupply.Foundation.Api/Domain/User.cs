@@ -76,9 +76,12 @@ public static class AppModules
     public const string Insights = "INSIGHTS";           // insights determinísticos + visão executiva (V2-P3)
     public const string PlanoAcao = "PLANO_ACAO";        // plano de ação: tarefa com dono e prazo (5W2H)
     public const string Pdca = "PDCA";                   // ciclo de melhoria: onde se trata a causa
+    // Atender chamado de suporte. Abrir não pede módulo nenhum — pedir ajuda não depende de
+    // permissão; atender é função que se dá a alguém, e por isso fica fora de todo padrão.
+    public const string Suporte = "SUPORTE";
 
     public static readonly string[] All =
-        [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, CentrosCusto, Usuarios, Contratos, Compliance, Insights, PlanoAcao, Pdca];
+        [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, CentrosCusto, Usuarios, Contratos, Compliance, Insights, PlanoAcao, Pdca, Suporte];
 
     /// <summary>Padrão por papel, aplicado quando o cadastro não define módulos.</summary>
     public static string[] DefaultsFor(string role) => role switch

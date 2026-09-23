@@ -58,6 +58,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Domain.CostCenterApprover> CostCenterApprovers => Set<Domain.CostCenterApprover>();
     public DbSet<CompanyProfile> CompanyProfiles => Set<CompanyProfile>();
     public DbSet<Announcement> Announcements => Set<Announcement>();
+    public DbSet<Suporte.SupportTicket> SupportTickets => Set<Suporte.SupportTicket>();
+    public DbSet<Suporte.SupportTicketMessage> SupportTicketMessages => Set<Suporte.SupportTicketMessage>();
     public DbSet<AnnouncementDismissal> AnnouncementDismissals => Set<AnnouncementDismissal>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -807,6 +809,49 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // um prazo por (tipo, etapa); nulo no tipo é o conjunto padrão, e por isso os
             // nulos precisam ser comparados entre si — senão haveria vários "padrão"
             e.HasIndex(s => new { s.RequestType, s.Stage }).IsUnique().AreNullsDistinct(false);
+        });
+
+        modelBuilder.Entity<Suporte.SupportTicket>(e =>
+        {
+            e.ToTable("support_ticket", "foundation");   // é de quem usa o sistema, não da compra
+            e.HasKey(t => t.Id);
+            e.Property(t => t.Id).HasColumnName("id");
+            e.Property(t => t.Number).HasColumnName("number").HasMaxLength(20).IsRequired();
+            e.Property(t => t.Status).HasColumnName("status").HasMaxLength(30).IsRequired();
+            e.Property(t => t.Category).HasColumnName("category").HasMaxLength(20).IsRequired();
+            e.Property(t => t.Subject).HasColumnName("subject").HasMaxLength(150).IsRequired();
+            e.Property(t => t.Screen).HasColumnName("screen").HasMaxLength(300).IsRequired();
+            e.Property(t => t.ScreenLabel).HasColumnName("screen_label").HasMaxLength(150).IsRequired();
+            e.Property(t => t.ClientInfo).HasColumnName("client_info").HasMaxLength(300);
+            e.Property(t => t.CreatedById).HasColumnName("created_by_id");
+            e.Property(t => t.CreatedByLabel).HasColumnName("created_by_label").HasMaxLength(200).IsRequired();
+            e.Property(t => t.CreatedAt).HasColumnName("created_at");
+            e.Property(t => t.UpdatedAt).HasColumnName("updated_at");
+            e.Property(t => t.AssignedToId).HasColumnName("assigned_to_id");
+            e.Property(t => t.AssignedToLabel).HasColumnName("assigned_to_label").HasMaxLength(200);
+            e.Property(t => t.ResolvedAt).HasColumnName("resolved_at");
+            e.Property(t => t.ResolvedByLabel).HasColumnName("resolved_by_label").HasMaxLength(200);
+            e.HasIndex(t => t.Number).IsUnique();
+            // as duas leituras: "os meus" e "a fila"
+            e.HasIndex(t => new { t.CreatedById, t.UpdatedAt });
+            e.HasIndex(t => new { t.Status, t.UpdatedAt });
+            e.HasMany(t => t.Messages).WithOne().HasForeignKey(m => m.TicketId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Suporte.SupportTicketMessage>(e =>
+        {
+            e.ToTable("support_ticket_message", "foundation");
+            e.HasKey(m => m.Id);
+            e.Property(m => m.Id).HasColumnName("id");
+            e.Property(m => m.TicketId).HasColumnName("ticket_id");
+            e.Property(m => m.AuthorId).HasColumnName("author_id");
+            e.Property(m => m.AuthorLabel).HasColumnName("author_label").HasMaxLength(200).IsRequired();
+            e.Property(m => m.FromSupport).HasColumnName("from_support");
+            e.Property(m => m.Text).HasColumnName("text").HasMaxLength(4000).IsRequired();
+            e.Property(m => m.AttachmentId).HasColumnName("attachment_id");
+            e.Property(m => m.AttachmentName).HasColumnName("attachment_name").HasMaxLength(300);
+            e.Property(m => m.CreatedAt).HasColumnName("created_at");
+            e.HasIndex(m => new { m.TicketId, m.CreatedAt });
         });
 
         modelBuilder.Entity<UserNotice>(e =>

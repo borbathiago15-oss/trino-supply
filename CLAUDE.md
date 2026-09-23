@@ -396,6 +396,31 @@ roda ao gravar entra lá. E **nenhum `SaveChanges` no meio de uma decisão**: o 
 `EnsureAwardsAsync` gravou o processo como aprovado sem pedido quando o passo seguinte
 falhou, e a segunda tentativa respondeu "não está aguardando aprovação".
 
+**Toda tela tem Manual e Suporte no topo, e os dois são daquela tela.** Os botões moram no
+cabeçalho da casca (`layout/BarraDeAjuda.tsx`), e não em cada página, para nenhuma tela nova
+nascer sem eles; a tela é descoberta pela rota (`manual/telas.ts`, `telaDaRota`): a rota exata do
+menu vence, depois o detalhe (`/cotacoes/:id` tem manual próprio, não o da lista), depois a raiz.
+**Tela nova precisa de manual** em `manual/conteudo.ts` — o teste `manual/telas.test.ts` lê as
+rotas do `App.tsx` e falha com rota ou item de menu sem manual, e também com manual de tela que
+não existe mais. O manual fica **no código**, não num cadastro: a tela e o texto que a explica
+mudam no mesmo commit, e manual que descreve botão que não existe ensina errado com cara de
+oficial. Ele cita o **código do erro** quando a regra tem um, porque é o que a pessoa leu na
+mensagem.
+
+**O chamado de suporte** (`Suporte/`, rotas `/api/v1/support`) grava a **tela de origem** sem a
+pessoa digitar — "não consigo aprovar" quer dizer coisas diferentes na Central e no processo.
+**Abrir não pede módulo nem papel**: pedir ajuda é a única porta que não pode depender de
+permissão. **Atender** é do administrador e de quem recebeu o módulo `SUPORTE`, que, como o
+plano de ação, não entra em padrão de papel nenhum. Quem não atende vê só os seus, e o chamado
+alheio responde **404**. A situação diz **de quem é a vez** (`AGUARDANDO_SUPORTE`,
+`AGUARDANDO_USUARIO`, `RESOLVIDO`), a mesma pergunta que a Torre responde: a mensagem do suporte
+passa a vez a quem abriu, a de quem abriu a devolve. **Responder é assumir** (o primeiro atendente
+que responde fica com o chamado), **o suporte não resolve em silêncio** (`CH-ERR-021`), quem
+abriu encerra sem texto, e **responder o resolvido reabre** e apaga o veredito — "não resolveu"
+dito dentro do chamado vale mais que um chamado novo sem a história. No próprio chamado, quem
+atende fala como quem pediu, e a fila do cabeçalho não o conta. O print vai em `stored_document`
+(`SUPPORT_TICKET`), e o download segue a mesma régua da leitura.
+
 ## Segurança que vale para o app inteiro
 
 Não são regras de uma tela: valem para toda resposta e todo upload, e estão no

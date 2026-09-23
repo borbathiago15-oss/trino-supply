@@ -72,6 +72,9 @@ GET /api/v1/sectors/
 GET /api/v1/stage-sla/
 GET /api/v1/suppliers/
 GET /api/v1/suppliers/{id:guid}/contract/adjustments
+GET /api/v1/support/summary
+GET /api/v1/support/tickets
+GET /api/v1/support/tickets/{id:guid}
 GET /api/v1/triage/
 GET /api/v1/triage/responsibles
 GET /api/v1/users/
@@ -167,6 +170,9 @@ POST /api/v1/suppliers/
 POST /api/v1/suppliers/{id:guid}/contract/adjustments
 POST /api/v1/suppliers/{id:guid}/documents
 POST /api/v1/suppliers/{id:guid}/portal-key
+POST /api/v1/support/tickets
+POST /api/v1/support/tickets/{id:guid}/messages
+POST /api/v1/support/tickets/{id:guid}/messages/{mensagemId:guid}/attachment
 POST /api/v1/triage/assign
 POST /api/v1/triage/assign-batch
 POST /api/v1/triage/priority

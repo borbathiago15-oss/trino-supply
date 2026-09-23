@@ -178,6 +178,11 @@ export const MENU: GrupoMenu[] = [
       { id: 'payment-terms', rotulo: 'Condições de Pagamento', rota: '/condicoes-pagamento', modulo: 'COMPRAS', mostrar: podeComprar },
     ]},
   ]},
+  // Para todo mundo, sem módulo: pedir ajuda não pode depender de permissão. A mesma tela
+  // mostra os chamados da pessoa e, para quem atende, a fila de todos.
+  { titulo: 'Suporte', itens: [
+    { id: 'support', rotulo: 'Chamados de Suporte', rota: '/suporte', mostrar: sempre },
+  ]},
 ];
 
 // referência para o lint não reclamar de import sem uso quando o menu evoluir

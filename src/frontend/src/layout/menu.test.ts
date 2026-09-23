@@ -15,14 +15,15 @@ describe('menu', () => {
 
   it('solicitante vê só as próprias solicitações e o material: nem Compras, nem o painel do comprador', () => {
     const grupos = itensVisiveis({ role: 'Requester', modules: ['SOLICITACOES', 'MATERIAL'] });
-    expect(grupos.map((g) => g.titulo)).toEqual(['Solicitações de Compra', 'Material']);
+    // o Suporte vem para todo mundo: pedir ajuda não depende de módulo
+    expect(grupos.map((g) => g.titulo)).toEqual(['Solicitações de Compra', 'Material', 'Suporte']);
     expect(folhas({ role: 'Requester', modules: ['SOLICITACOES', 'MATERIAL'] }).map((i) => i.id)).not.toContain('supply-dash');
   });
 
   it('os grupos seguem a sequência do processo, e a aprovação fica no topo', () => {
     const grupos = itensVisiveis({ role: 'SystemAdministrator', modules: [] });
     expect(grupos.map((g) => g.titulo))
-      .toEqual([null, 'Solicitações de Compra', 'Compras', 'Material', 'Estoque', 'Melhoria', 'Cadastros']);
+      .toEqual([null, 'Solicitações de Compra', 'Compras', 'Material', 'Estoque', 'Melhoria', 'Cadastros', 'Suporte']);
     // a Central de Aprovação decide SC, material e cotação: não mora dentro de um dos três
     expect(grupos[0].itens.map((i) => (ehSubgrupo(i) ? i.rotulo : i.id))).toContain('pr-approvals');
   });
@@ -101,7 +102,7 @@ describe('menu', () => {
     const todos = ['SOLICITACOES', 'APROVACAO', 'MATERIAL', 'ESTOQUE', 'COMPRAS', 'PRODUTOS', 'FORNECEDORES',
       'CENTROS_CUSTO', 'USUARIOS', 'CONTRATOS', 'COMPLIANCE', 'INSIGHTS'] as const;
     const grupos = itensVisiveis({ role: 'Director', modules: [...todos] });
-    expect(grupos.map((g) => g.titulo)).toEqual([null, 'Solicitações de Compra', 'Material']);
+    expect(grupos.map((g) => g.titulo)).toEqual([null, 'Solicitações de Compra', 'Material', 'Suporte']);
     const ids = folhas({ role: 'Director', modules: [...todos] }).map((i) => i.id);
     expect(ids).toContain('pr-approvals');
     expect(ids).toContain('reports');
@@ -225,5 +226,14 @@ describe('a porta do cockpit', () => {
   it('o solicitante não vê o cockpit: a parede é de quem opera e de quem decide', () => {
     const solicitante: Perfil = { role: 'Requester', modules: ['SOLICITACOES'] };
     expect(folhas(solicitante).map((i) => i.id)).not.toContain('cockpit');
+  });
+});
+
+describe('o suporte', () => {
+  it('aparece para todo papel, sem módulo nenhum: pedir ajuda não depende de permissão', () => {
+    const papeis = ['Requester', 'Approver', 'PurchasingOfficer', 'WarehouseOperator', 'WarehouseSupervisor',
+      'SupplyManager', 'Director', 'Auditor', 'SystemAdministrator'] as const;
+    for (const role of papeis)
+      expect(folhas({ role, modules: [] }).map((i) => i.id), role).toContain('support');
   });
 });

@@ -7,7 +7,8 @@ export type Modulo =
   | 'SOLICITACOES' | 'APROVACAO' | 'MATERIAL' | 'ESTOQUE' | 'COMPRAS' | 'PRODUTOS'
   | 'FORNECEDORES' | 'CENTROS_CUSTO' | 'USUARIOS' | 'CONTRATOS' | 'COMPLIANCE' | 'INSIGHTS'
   | 'PLANO_ACAO'
-  | 'PDCA';
+  | 'PDCA'
+  | 'SUPORTE';
 
 export const ROTULO_MODULO: Record<Modulo, string> = {
   SOLICITACOES: 'Solicitações de Compra', APROVACAO: 'Central de Aprovação',
@@ -20,6 +21,9 @@ export const ROTULO_MODULO: Record<Modulo, string> = {
   // trabalho de qualquer área, e quem decide quem a usa é o administrador, no cadastro
   PLANO_ACAO: 'Plano de Ação',
   PDCA: 'Ciclos de Melhoria (PDCA)',
+  // atender chamado de suporte. Abrir chamado não pede módulo nenhum: pedir ajuda não pode
+  // depender de permissão. Como o plano de ação, fica fora de todo padrão de papel
+  SUPORTE: 'Atender chamados de suporte',
 };
 
 /** Autorizações sugeridas ao escolher o papel de um usuário novo. */

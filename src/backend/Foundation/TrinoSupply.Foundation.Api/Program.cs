@@ -216,6 +216,7 @@ app.MapPedidos();
 // ---- Cadastros: centros de custo, triagem de demandas e empresas -------------
 app.MapCadastros();
 app.MapSetores();
+app.MapSuporte();
 
 // ---- Cadastros de pagamento: formas e condições -------------------------------
 app.MapPagamentos();

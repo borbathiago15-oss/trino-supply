@@ -46,6 +46,8 @@ import { paginaInicial } from '@/dominio/papeis';
 import { Carregando } from '@/componentes/basicos';
 import { LimiteErro } from '@/componentes/LimiteErro';
 import { Cockpit } from '@/paginas/cockpit/Cockpit';
+import { MeusChamados } from '@/paginas/suporte/MeusChamados';
+import { Chamado } from '@/paginas/suporte/Chamado';
 import { PlanoDeAcaoTela } from '@/paginas/acoes/PlanoDeAcao';
 import { PlanoDetalhe } from '@/paginas/acoes/Plano';
 
@@ -123,6 +125,8 @@ export function Rotas() {
           <Route path="/cotacoes" element={<ProcessosDeCotacao />} />
           <Route path="/cotacoes/abrir" element={<AbrirCotacao />} />
           <Route path="/cotacoes/:id" element={<ProcessoDetalhe />} />
+          <Route path="/suporte" element={<MeusChamados />} />
+          <Route path="/suporte/:id" element={<Chamado />} />
         </Route>
       </Route>
       <Route path="*" element={<Inicio />} />

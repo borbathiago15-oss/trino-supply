@@ -22,7 +22,7 @@ public static class DocumentoRotas
     public static void MapDocumentos(this WebApplication app)
     {
         // ==== Documentos (download autorizado por papel/vínculo) =====================
-        app.MapGet("/api/v1/documents/{id:guid}", async (Guid id, AppDbContext db, ClaimsPrincipal p, HttpContext ctx) =>
+        app.MapGet("/api/v1/documents/{id:guid}", async (Guid id, AppDbContext db, Suporte.ChamadoService chamados, ClaimsPrincipal p, HttpContext ctx) =>
         {
             var doc = await db.StoredDocuments.SingleOrDefaultAsync(d => d.Id == id);
             if (doc is null) return Error(ctx, 404, "DOC-ERR-404", "Documento não encontrado.");
@@ -38,6 +38,14 @@ public static class DocumentoRotas
                 var owner = await db.Requisitions.AnyAsync(r => r.Id == doc.EntityId && r.RequesterId == actor.Id);
                 if (!owner && !actor.SeesAll && !QuotationService.CanView(role) && role != Roles.Auditor)
                     return Error(ctx, 403, "DOC-ERR-900", "Seu papel não acessa este documento.");
+            }
+            else if (doc.EntityType == Suporte.ChamadoService.TipoDoAnexo)
+            {
+                // o print do chamado é de quem abriu e de quem atende — a mesma régua da leitura
+                // do chamado, e o mesmo 404 para quem não o enxerga
+                var quem = new Suporte.QuemChama(ActorId(p), "", Suporte.ChamadoService.Atende(role, ModulesOf(p)));
+                if (!await chamados.PodeVerAsync(quem, doc.EntityId))
+                    return Error(ctx, 404, "DOC-ERR-404", "Documento não encontrado.");
             }
             else if (!QuotationService.CanView(role) && role != Roles.Auditor)
                 return Error(ctx, 403, "DOC-ERR-900", "Seu papel não acessa documentos do processo.");

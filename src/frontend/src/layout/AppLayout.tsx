@@ -5,6 +5,7 @@ import { Sidebar } from './Sidebar';
 import { ModalDeComunicados } from '@/componentes/Comunicados';
 import { AvisosProvider } from '@/sessao/AvisosProvider';
 import { CaixaDeAvisos } from './CaixaDeAvisos';
+import { BarraDeAjuda } from './BarraDeAjuda';
 import { useSessao, useUsuario } from '@/sessao/SessaoProvider';
 import { ROTULO_PAPEL } from '@/dominio/papeis';
 import { tituloDaRota } from './titulos';
@@ -59,6 +60,8 @@ export function AppLayout() {
               <span className="max-w-[46vw] truncate sm:hidden">
                 <strong className="text-texto">{usuario.name || usuario.email}</strong>
               </span>
+              {/* o manual e o chamado da tela aberta — no cabeçalho, para nenhuma tela nascer sem eles */}
+              <BarraDeAjuda />
               <button type="button" className="botao-perigo !py-1.5" onClick={async () => { await sair(); navegar('/login', { replace: true }); }}>Sair</button>
             </div>
           </div>

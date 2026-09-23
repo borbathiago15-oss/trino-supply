@@ -3,6 +3,7 @@ using Testcontainers.PostgreSql;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Infrastructure;
 using TrinoSupply.Foundation.Api.Procurement;
+using TrinoSupply.Foundation.Api.Suporte;
 
 namespace TrinoSupply.Foundation.Tests;
 
@@ -72,5 +73,17 @@ public sealed class MigrationsTests : IAsyncLifetime
         var vazia = new Quotation { Number = "RFQ-0", CostCenter = "CC-01" };
         Assert.Equal(CaminhoDoNivel2.Padrao,
             (await AlcadaDoComprador.RotaAsync(db, vazia, Guid.NewGuid())).Caminho);
+
+        // o chamado de suporte: os atendentes saem de um filtro sobre o texto dos módulos, e a
+        // abertura grava chamado, primeira mensagem e avisos na mesma transação
+        var chamados = new ChamadoService(db, TimeProvider.System, new AvisoDoUsuarioService(db, TimeProvider.System));
+        var quem = new QuemChama(Guid.NewGuid(), "Solicitante", false);
+        var (chamado, erro) = await chamados.AbrirAsync(quem,
+            new("DUVIDA", "Não acho o botão", "Onde fica o botão de aprovar a SC?", "/aprovacoes", "Central de Aprovação", null));
+        Assert.Null(erro);
+        Assert.Empty(await chamados.AtendentesAsync());
+        Assert.Single(await chamados.ListarAsync(quem, fila: false, situacao: null));
+        Assert.Equal((0, (int?)null), await chamados.ResumoAsync(quem));
+        Assert.Single((await chamados.AbrirParaLerAsync(quem, chamado!.Id))!.Messages);
     }
 }

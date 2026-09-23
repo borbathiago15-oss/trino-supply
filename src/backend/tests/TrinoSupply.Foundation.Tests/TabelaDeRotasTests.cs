@@ -63,6 +63,7 @@ public class TabelaDeRotasTests
         app.MapPedidos();
         app.MapCadastros();
         app.MapSetores();
+        app.MapSuporte();
         app.MapAnalytics();
         app.MapCotacoes();
         app.MapDocumentos();

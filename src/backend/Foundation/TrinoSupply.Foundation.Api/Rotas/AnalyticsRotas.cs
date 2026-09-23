@@ -54,13 +54,20 @@ public static class AnalyticsRotas
 
         // Procurement Insights (V2-P3): achados determinísticos + visão executiva + backlog
         analytics.MapGet("/insights", async (TrinoSupply.Foundation.Api.Insights.InsightsService svc,
-            ClaimsPrincipal p, HttpContext ctx, int? months) =>
+            TrinoSupply.Foundation.Api.Melhoria.GatilhoDePlanoService gatilho,
+            ClaimsPrincipal p, HttpContext ctx, int? months, CancellationToken ct) =>
         {
             if (!TrinoSupply.Foundation.Api.Insights.InsightsService.CanView(RoleOf(p)))
                 return Error(ctx, 403, "INS-ERR-900", "Seu papel não acessa o painel de insights.");
             if (!ModulesOf(p).Contains(AppModules.Insights))
                 return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para este módulo.");
-            return Ok(await svc.ReportAsync(months ?? 6), ctx);
+
+            var (relatorio, achados) = await svc.ReportAsync(months ?? 6, ct);
+            // o gatilho é avaliado aqui, na leitura: o projeto não tem agendador, e um
+            // relógio de servidor entregaria o mesmo recado com uma peça a mais que pode
+            // falhar em silêncio. Quem conta é o dia, não a visita — ver GatilhoDePlanoService
+            await gatilho.AvaliarAsync(achados, ct);
+            return Ok(relatorio, ctx);
         });
 
         // TCO por produto (V2-P4): custo total de aquisição com frete/impostos rateados

@@ -205,7 +205,13 @@ public class InsightsService(AppDbContext db, ComplianceService compliance, Time
             .Take(100).ToList();
     }
 
-    public async Task<object> ReportAsync(int monthsBack, CancellationToken ct = default)
+    /// <summary>
+    /// O relatório do painel, com os achados <b>também</b> em lista tipada: o gatilho lê a
+    /// mesma lista que a tela mostra, e não a recalcula. Dois cálculos dariam dois conjuntos
+    /// de achados na mesma requisição, e o plano poderia nascer de um que a tela não mostrou.
+    /// </summary>
+    public async Task<(object Relatorio, IReadOnlyList<Insight> Achados)> ReportAsync(
+        int monthsBack, CancellationToken ct = default)
     {
         var now = clock.GetUtcNow();
         var from = now.AddMonths(-Math.Clamp(monthsBack, 1, 36));
@@ -263,7 +269,7 @@ public class InsightsService(AppDbContext db, ComplianceService compliance, Time
                 .OrderByDescending(x => x.count).Take(10).ToList(),
         };
 
-        return new
+        return (new
         {
             months = Math.Clamp(monthsBack, 1, 36),
             executive, backlog,
@@ -274,6 +280,6 @@ public class InsightsService(AppDbContext db, ComplianceService compliance, Time
                     title = i.Title, evidence = i.Evidence, action = i.Action, view = i.View,
                 })
                 .ToList(),
-        };
+        }, insights);
     }
 }

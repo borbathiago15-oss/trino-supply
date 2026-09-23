@@ -53,6 +53,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Melhoria.ImprovementCycle> ImprovementCycles => Set<Melhoria.ImprovementCycle>();
     public DbSet<Melhoria.CycleWatcher> CycleWatchers => Set<Melhoria.CycleWatcher>();
     public DbSet<Melhoria.CycleTool> CycleTools => Set<Melhoria.CycleTool>();
+    public DbSet<Melhoria.InsightSighting> InsightSightings => Set<Melhoria.InsightSighting>();
     public DbSet<Melhoria.CycleCostCenter> CycleCostCenters => Set<Melhoria.CycleCostCenter>();
     public DbSet<Domain.CostCenterApprover> CostCenterApprovers => Set<Domain.CostCenterApprover>();
     public DbSet<CompanyProfile> CompanyProfiles => Set<CompanyProfile>();
@@ -133,6 +134,24 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
                 .OnDelete(DeleteBehavior.Cascade);
             e.HasMany(c => c.CostCenters).WithOne().HasForeignKey(x => x.CycleId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Melhoria.InsightSighting>(e =>
+        {
+            e.ToTable("insight_sighting");
+            e.HasKey(s => s.Id);
+            e.Property(s => s.Id).HasColumnName("id");
+            e.Property(s => s.OriginKey).HasColumnName("origin_key").HasMaxLength(200).IsRequired();
+            e.HasIndex(s => s.OriginKey).IsUnique();
+            e.Property(s => s.Code).HasColumnName("code").HasMaxLength(20).IsRequired();
+            e.Property(s => s.Title).HasColumnName("title").HasMaxLength(400).IsRequired();
+            e.Property(s => s.Severity).HasColumnName("severity").HasMaxLength(20).IsRequired();
+            e.Property(s => s.FirstSeenOn).HasColumnName("first_seen_on");
+            e.Property(s => s.LastSeenOn).HasColumnName("last_seen_on");
+            e.Property(s => s.Days).HasColumnName("days");
+            e.Property(s => s.PlanId).HasColumnName("plan_id");
+            e.Property(s => s.CreatedAt).HasColumnName("created_at");
+            e.Property(s => s.UpdatedAt).HasColumnName("updated_at");
         });
 
         modelBuilder.Entity<Melhoria.CycleTool>(e =>

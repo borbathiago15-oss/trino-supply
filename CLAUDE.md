@@ -311,6 +311,19 @@ diz "já tinha o ciclo X" em vez de anunciar um novo que o usuário procuraria e
 contramedida nasce na **mesma transação** — ciclo sem o plano que ele prometeu seria pior que
 nenhum dos dois.
 
+**O achado que não passa abre o plano sozinho.** `GatilhoDePlanoService` é a última peça do
+caminho do Trino Intelligence, onde o plano nasce quando um indicador fica crítico por vários
+períodos. O que conta é **dia diferente, não visita**: contar chamadas faria dez atualizações da
+tela na mesma tarde parecerem recorrência, e o gatilho abriria plano no primeiro F5. Três dias
+(`DiasParaOGatilho`) é onde o achado deixa de ser acidente do dado de um dia. Só **severidade
+alta** dispara — gatilho que dispara com tudo enche a lista de planos que ninguém pediu, e a
+primeira coisa que se aprende é a ignorá-la. A `AutoKey` impede o segundo plano do mesmo achado.
+O plano nasce **sem responsável**, de propósito: pendurá-lo em quem por acaso abriu a tela seria
+dar trabalho a um sorteado — quem recebe o aviso é o **gestor**, que distribui. Como o
+escalonamento de prazo e os avisos do ciclo, ele é avaliado **na leitura** do Insights, e lê a
+**mesma lista** que a tela mostra (`ReportAsync` devolve as duas): recalcular daria dois
+conjuntos de achados na mesma requisição, e o plano poderia nascer de um que a tela não mostrou.
+
 **A visibilidade do ciclo é um predicado só** (`CicloDeMelhoriaService.VisiveisAsync`), que a
 lista e a abertura consultam igual — e quem não enxerga recebe 404, não 403. Enxerga quem criou,
 quem é dono, quem foi marcado em "quem mais acompanha", quem responde por alguma ação e quem é

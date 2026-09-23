@@ -93,4 +93,6 @@ public static class AvisoDoCicloKinds
     public const string CicloParado = "PDCA_CICLO_PARADO";
     /// <summary>O prazo da meta passou e o indicador não foi medido.</summary>
     public const string CheckVencido = "PDCA_CHECK_VENCIDO";
+    /// <summary>O gatilho abriu um plano sozinho, e ele nasceu sem responsável.</summary>
+    public const string PlanoPorGatilho = "PDCA_PLANO_POR_GATILHO";
 }

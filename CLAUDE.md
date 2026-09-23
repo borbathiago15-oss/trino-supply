@@ -267,6 +267,12 @@ Cinco regras não se afrouxam:
   contá-la duas vezes faria a folha parecer ter o dobro de frentes. E **nem toda ferramenta
   elege**: 5W2H, Kaizen, Fluxograma, Ishikawa e Brainstorming não priorizam, e tratá-las como
   se elegessem faria o sinal de "causa vital sem ação" acender por causa de uma lista de ideias.
+- **O formulário só coleta; quem calcula é o servidor.** Cada ferramenta tem o seu
+  (`paginas/melhoria/formularios.tsx`) — a escada dos 5 Porquês, a grade dos 6M, a tabela do
+  Pareto, a do GUT com as notas de 1 a 5. O GUT mostra o produto ao digitar, porque multiplicar
+  é aritmética; **não** mostra quem é vital, porque isso depende de ordenar e do piso de 27, e
+  repetir a régua na tela daria dois donos para a mesma conta. Ferramenta sem formulário
+  próprio cai no JSON cru, que é honesto — melhor que um campo que não abre.
 - **Uma função normaliza a ferramenta de causa** (`FerramentaDeCausa.Normalizar`), e tela,
   leitura e relatório leem dela. Duas leituras do mesmo JSON dariam dois números para a mesma
   análise, e a tela que mostrasse o errado seria a que o usuário acreditou. **Pareto e GUT

@@ -250,4 +250,26 @@ describe('<CicloDeMelhoria />', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Retirar' }));
     await waitFor(() => expect(removerFerramenta).toHaveBeenCalledWith('c1', 'PARETO'));
   });
+
+  it('preencher abre o formulário da ferramenta, e não um campo de JSON', async () => {
+    montar();
+    await screen.findByTestId('pareto');
+    await userEvent.click(screen.getByRole('button', { name: 'Preencher' }));
+
+    const form = screen.getByTestId('form-PARETO');
+    expect(within(form).getByRole('button', { name: 'Acrescentar causa' })).toBeInTheDocument();
+    expect(within(form).queryByLabelText(/Dados da ferramenta/)).toBeNull();
+  });
+
+  it('o que se preenche vai para o servidor como JSON', async () => {
+    montar();
+    await screen.findByTestId('pareto');
+    await userEvent.click(screen.getByRole('button', { name: 'Preencher' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Acrescentar causa' }));
+    await userEvent.type(screen.getByLabelText('Causa 1'), 'Manuseio');
+    await userEvent.click(screen.getByRole('button', { name: 'Salvar ferramenta' }));
+
+    await waitFor(() => expect(salvarFerramenta).toHaveBeenCalledWith(
+      'c1', 'PARETO', JSON.stringify({ itens: [{ causa: 'Manuseio', valor: 0 }] })));
+  });
 });

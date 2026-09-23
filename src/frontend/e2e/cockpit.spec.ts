@@ -58,3 +58,36 @@ test.describe('Cockpit (Modo TV)', () => {
     await expect(page.getByTestId('cockpit')).toBeVisible();
   });
 });
+
+/**
+ * As portas do cockpit. Os testes acima abrem `/cockpit` com o token já injetado, e
+ * por isso nunca viram o defeito que o usuário viu: clicar no cockpit abria a aba nova
+ * na tela de login. A sessão mora no `sessionStorage`, que é por aba, e o navegador só
+ * o copia para a aba nova quando ela mantém o `opener` — o `target="_blank"` hoje
+ * implica `noopener`. Aqui a aba nova **não** recebe token nenhum: ou ela herda a
+ * sessão de quem a abriu, ou cai no login e o teste falha.
+ */
+test.describe('Cockpit — abrir a partir do app', () => {
+  test.use({ viewport: { width: 1920, height: 1080 } });
+
+  test('pelo menu, a aba nova chega logada', async ({ page, context }) => {
+    await abrirAutenticado(page, '/painel');
+    const [tv] = await Promise.all([
+      context.waitForEvent('page'),
+      page.getByRole('link', { name: /Cockpit \(Modo TV\)/ }).click(),
+    ]);
+    await expect(tv).toHaveURL(/\/cockpit$/);
+    await expect(tv.getByTestId('cockpit')).toBeVisible();
+    await expect(tv.getByRole('button', { name: /entrar/i })).toHaveCount(0);
+  });
+
+  test('pelo "Modo TV" da Torre, a aba nova chega logada', async ({ page, context }) => {
+    await abrirAutenticado(page, '/torre');
+    const [tv] = await Promise.all([
+      context.waitForEvent('page'),
+      page.getByRole('link', { name: 'Modo TV ↗' }).click(),
+    ]);
+    await expect(tv).toHaveURL(/\/cockpit$/);
+    await expect(tv.getByTestId('cockpit')).toBeVisible();
+  });
+});

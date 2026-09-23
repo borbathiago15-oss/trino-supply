@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { contagemPorItem, ehSubgrupo, itensVisiveis, localizar, type ItemMenu, type SubgrupoMenu } from './menu';
 import { useAvisos } from '@/sessao/AvisosProvider';
 import { useUsuario } from '@/sessao/SessaoProvider';
+import { LinkAbaNova } from '@/componentes/LinkAbaNova';
 
 const classeItem = (ativo: boolean, recuo: number) =>
   `flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[13.5px] font-medium transition-colors ` +
@@ -15,8 +16,8 @@ function Folha({ item, recuo, ativo, pendente }: {
   // a tela que vive fora do AppLayout abre em aba nova: dentro da mesma, o usuário
   // cairia numa tela sem menu e sem caminho de volta
   const Alvo = item.novaAba
-    ? ({ children, className, ...resto }: React.ComponentProps<'a'>) =>
-        <a href={item.rota} target="_blank" rel="noopener" className={className} {...resto}>{children}</a>
+    ? ({ children, ...resto }: React.ComponentProps<'a'>) =>
+        <LinkAbaNova href={item.rota} {...resto}>{children}</LinkAbaNova>
     : ({ children, ...resto }: React.ComponentProps<'a'>) =>
         <Link to={item.rota} {...resto}>{children}</Link>;
 

@@ -11,6 +11,7 @@ import { Campo } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
 import { podeTriar } from '@/dominio/papeis';
 import { designar, designarEmLote, listarResponsaveis, rotuloDoResponsavel } from '@/api/triagem';
+import { LinkAbaNova } from '@/componentes/LinkAbaNova';
 import { DialogoDePrioridade, type Pleito } from '@/paginas/triagem/DialogoDePrioridade';
 import { useUsuario } from '@/sessao/SessaoProvider';
 import { data, moeda, quantidade } from '@/util/formato';
@@ -353,8 +354,8 @@ export function TorreDeControle() {
           caminho a partir daqui ele só abria para quem soubesse digitar a URL — e tela
           que ninguém acha é tela que ninguém usa */}
       <Painel titulo="Filtros" acoes={
-        <a className="botao-secundario" href="/cockpit" target="_blank" rel="noopener"
-          title="Abre o cockpit em tela cheia, para a TV da sala">Modo TV ↗</a>
+        <LinkAbaNova className="botao-secundario" href="/cockpit"
+          title="Abre o cockpit em tela cheia, para a TV da sala">Modo TV ↗</LinkAbaNova>
       }>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Campo id="tc-busca" rotulo="Buscar" dica="(SC, produto ou código)">

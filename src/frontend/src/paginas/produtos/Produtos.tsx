@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
-  atualizarProduto, buscarProdutos, criarGradeDeTamanhos, criarProduto, enviarFoto, GRADES_DE_TAMANHO,
+  atualizarProduto, buscarProdutos, excluirProduto, criarGradeDeTamanhos, criarProduto, enviarFoto, GRADES_DE_TAMANHO,
   resumoCatalogo, tiposDeProduto, type Produto, type ResumoCatalogo, type TipoDeProduto,
 } from '@/api/catalogo';
 import { listarFamilias, type Familia } from '@/api/familias';
@@ -8,6 +8,7 @@ import { listarFornecedores, type Fornecedor } from '@/api/fornecedores';
 import { Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { BadgeAtivo, Campo, Grade2, Nota } from '@/componentes/formulario';
 import { Miniatura, Visor } from '@/componentes/Miniatura';
+import { Confirmacao } from '@/componentes/Dialogo';
 import { useToast } from '@/componentes/Toast';
 import { podeManterCatalogo, temModulo } from '@/dominio/papeis';
 import { useUsuario } from '@/sessao/SessaoProvider';
@@ -164,6 +165,17 @@ export function Produtos() {
     finally { setSalvando(false); }
   }
 
+  const [aExcluir, setAExcluir] = useState<Produto | null>(null);
+
+  async function excluir(p: Produto) {
+    setAExcluir(null);
+    try {
+      await excluirProduto(p.id);
+      avisar(`Produto ${p.code} excluído.`);
+      recarregar();
+    } catch (e) { avisar(mensagem(e, 'Falha ao excluir o produto.'), 'erro'); }
+  }
+
   async function alternarSituacao(p: Produto) {
     try {
       await atualizarProduto(p.id, { active: !p.active });
@@ -262,8 +274,9 @@ export function Produtos() {
                         <td className="whitespace-nowrap">
                           <div className="flex gap-1.5">
                             <button type="button" className="botao-secundario" onClick={() => editar(p)}>Editar</button>
-                            <button type="button" className={p.active ? 'botao-perigo' : 'botao-secundario'}
+                            <button type="button" className="botao-secundario"
                               onClick={() => alternarSituacao(p)}>{p.active ? 'Inativar' : 'Reativar'}</button>
+                            <button type="button" className="botao-perigo" onClick={() => setAExcluir(p)}>Excluir</button>
                           </div>
                         </td>
                       )}
@@ -394,6 +407,18 @@ export function Produtos() {
 
       {ampliada && (
         <Visor url={ampliada.url} descricao={ampliada.descricao} aoFechar={() => setAmpliada(null)} />
+      )}
+
+      {aExcluir && (
+        <Confirmacao titulo="Excluir produto" perigo rotuloConfirmar="Excluir"
+          mensagem={<>
+            Excluir <strong>{aExcluir.code} — {aExcluir.description}</strong> de vez? Isto não se desfaz.
+            <span className="mt-2 block text-texto-suave">
+              Só sai o produto que nunca foi usado. O que já entrou numa SC, cotação, pedido, contrato ou
+              no estoque não se exclui — nesse caso, <strong>Inativar</strong> tira ele de circulação e mantém o histórico.
+            </span>
+          </>}
+          aoConfirmar={() => excluir(aExcluir)} aoFechar={() => setAExcluir(null)} />
       )}
     </>
   );

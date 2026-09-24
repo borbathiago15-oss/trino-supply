@@ -8,7 +8,9 @@ import {
   itensDoFormulario, itensSemCa, novaLinha, NovaSolicitacao, SEM_CADASTRO, totalDaGrade, type LinhaItem,
 } from './NovaSolicitacao';
 
-vi.mock('@/api/catalogo', () => ({ produtosParaEscolha: vi.fn(), familiasDoCatalogo: vi.fn() }));
+vi.mock('@/api/catalogo', () => ({ produtosParaEscolha: vi.fn(), fichaDoProduto: vi.fn() }));
+vi.mock('@/api/familias', () => ({ listarFamilias: vi.fn() }));
+vi.mock('@/api/documentos', () => ({ urlDocumento: vi.fn() }));
 vi.mock('@/api/centrosCusto', () => ({ listarCentrosCusto: vi.fn() }));
 vi.mock('@/api/empresas', () => ({ listarEmpresas: vi.fn(), perfilDaEmpresa: vi.fn() }));
 vi.mock('@/api/locais', async (importar) => ({
@@ -21,7 +23,9 @@ vi.mock('@/api/solicitacoes', async (importar) => ({
 }));
 vi.mock('@/api/tiposDeSolicitacao', () => ({ listarTiposDeSolicitacao: vi.fn() }));
 
-import { familiasDoCatalogo, produtosParaEscolha } from '@/api/catalogo';
+import { fichaDoProduto, produtosParaEscolha, type Produto } from '@/api/catalogo';
+import { urlDocumento } from '@/api/documentos';
+import { listarFamilias } from '@/api/familias';
 import { listarCentrosCusto } from '@/api/centrosCusto';
 import { listarEmpresas, perfilDaEmpresa } from '@/api/empresas';
 import { listarLocaisDeEntrega } from '@/api/locais';
@@ -104,7 +108,10 @@ describe('tela Inclusão de SC', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(produtosParaEscolha).mockResolvedValue([cimento, bota]);
-    vi.mocked(familiasDoCatalogo).mockResolvedValue(['CIVIL', 'EPI']);
+    // do cadastro de famílias: só as ativas, e não os nomes que aparecem nos produtos
+    vi.mocked(listarFamilias).mockResolvedValue([{ name: 'CIVIL' }, { name: 'EPI' }] as never);
+    vi.mocked(fichaDoProduto).mockImplementation(async (id: string) => ficha(id));
+    vi.mocked(urlDocumento).mockResolvedValue('blob:foto');
     vi.mocked(listarCentrosCusto).mockResolvedValue([
       { id: 'cc1', code: 'BAH-001', name: 'Obra Bahia' } as never,
     ]);
@@ -114,12 +121,21 @@ describe('tela Inclusão de SC', () => {
     vi.mocked(listarTiposDeSolicitacao).mockResolvedValue({ items: [] } as never);
   });
 
-  /** Abre o seletor, busca e escolhe o produto — o caminho que a tela passou a ter. */
+  /** Abre o seletor, busca, abre a ficha e usa o produto — o caminho que a tela passou a ter. */
   const escolherNoCatalogo = async (usuario: ReturnType<typeof userEvent.setup>, descricao: string) => {
     await usuario.click(await screen.findByRole('button', { name: 'Buscar no catálogo' }));
     const dialogo = within(await screen.findByRole('dialog'));
     await usuario.selectOptions(dialogo.getByLabelText('Família'), 'EPI');
     await usuario.click(await dialogo.findByRole('button', { name: new RegExp(descricao) }));
+    await usuario.click(await screen.findByRole('button', { name: 'Usar este produto' }));
+  };
+
+  /** "Não achou?": o item fora do catálogo sai da busca, com o termo como descrição. */
+  const descreverForaDoCatalogo = async (usuario: ReturnType<typeof userEvent.setup>, termo: string) => {
+    await usuario.click(await screen.findByRole('button', { name: 'Buscar no catálogo' }));
+    const dialogo = within(await screen.findByRole('dialog'));
+    await usuario.type(dialogo.getByLabelText(/Buscar produto/), termo);
+    await usuario.click(dialogo.getByRole('button', { name: 'Não achou? Pedir item fora do catálogo' }));
   };
 
   it('a busca só acontece com família ou termo: o catálogo inteiro não é listado', async () => {
@@ -173,15 +189,16 @@ describe('tela Inclusão de SC', () => {
     expect(screen.getByLabelText('Quantidade de Cimento CP-II')).toHaveValue(1);
     expect(screen.getByText(/do cadastro do produto/)).toHaveTextContent('CIVIL');
     // escolhido do catálogo, a linha não pede mais descrição livre
-    expect(screen.queryByLabelText('Produto')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Descrição do item')).not.toBeInTheDocument();
   });
 
-  it('o item fora do catálogo continua sendo digitado, com unidade, quantidade e família', async () => {
+  it('o item fora do catálogo sai da busca, com unidade, quantidade e família', async () => {
     const usuario = userEvent.setup();
     vi.mocked(criarSolicitacao).mockResolvedValue({ id: 'sc1', number: 'PR-2026-000001' } as never);
     abrir();
 
-    await usuario.type(await screen.findByLabelText('Produto'), 'Fita isolante');
+    await descreverForaDoCatalogo(usuario, 'Fita isolante');
+    expect(screen.getByLabelText('Descrição do item')).toHaveValue('Fita isolante');
     await usuario.type(screen.getByLabelText('Unidade'), 'RL');
     await usuario.clear(screen.getByLabelText('Quantidade'));
     await usuario.type(screen.getByLabelText('Quantidade'), '3');
@@ -208,13 +225,15 @@ describe('tela Inclusão de SC', () => {
     await usuario.selectOptions(dialogo.getByLabelText('Família'), 'EPI');
 
     const botao = await dialogo.findByRole('button', { name: /Bota de segurança/ });
-    expect(botao).toBeDisabled();
     expect(botao).toHaveTextContent('IC-ERR-023');
+    // a ficha abre para quem quer entender, mas não deixa usar
+    await usuario.click(botao);
+    expect(await screen.findByRole('button', { name: 'Usar este produto' })).toBeDisabled();
   });
 
   it('o essencial vem primeiro e o resto fica recolhido em "Mais detalhes"', async () => {
     abrir();
-    await screen.findByLabelText('Produto');
+    await screen.findByRole('button', { name: 'Buscar no catálogo' });
     const extras = screen.getByTestId('mais-detalhes');
     expect(extras).not.toHaveAttribute('open');
     // o que decide a SC fica fora da gaveta
@@ -230,7 +249,7 @@ describe('tela Inclusão de SC', () => {
     vi.mocked(criarSolicitacao).mockResolvedValue({ id: 'sc1', number: 'PR-2026-000001' } as never);
     abrir();
 
-    await usuario.type(await screen.findByLabelText('Produto'), 'Fita isolante');
+    await descreverForaDoCatalogo(usuario, 'Fita isolante');
     await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'reposição de obra');
     await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
     await usuario.type(screen.getByLabelText(/Orçamento previsto/), '1200');
@@ -246,7 +265,7 @@ describe('tela Inclusão de SC', () => {
     vi.mocked(criarSolicitacao).mockResolvedValue({ id: 'sc1', number: 'PR-2026-000001' } as never);
     abrir();
 
-    await usuario.type(await screen.findByLabelText('Produto'), 'Fita isolante');
+    await descreverForaDoCatalogo(usuario, 'Fita isolante');
     await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'reposição de obra');
     await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
 
@@ -254,4 +273,74 @@ describe('tela Inclusão de SC', () => {
     await waitFor(() => expect(criarSolicitacao).toHaveBeenCalledWith(
       expect.objectContaining({ budget: null })));
   });
+
+  it('a linha nova tem uma porta só: a busca do catálogo', async () => {
+    abrir();
+    const linha = await screen.findByTestId('linha-sem-produto');
+    expect(within(linha).getByRole('button', { name: 'Buscar no catálogo' })).toBeInTheDocument();
+    // não há mais campo de texto que parecia uma segunda busca
+    expect(within(linha).queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
+  it('linha sem produto barra o envio e diz o que fazer', async () => {
+    const usuario = userEvent.setup();
+    abrir();
+    await screen.findByTestId('linha-sem-produto');
+    await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'reposição');
+    await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
+    await usuario.click(screen.getByRole('button', { name: /Criar rascunho da SC/ }));
+    expect(await screen.findByTestId('toast')).toHaveTextContent('Há item sem produto');
+    expect(criarSolicitacao).not.toHaveBeenCalled();
+  });
+
+  it('as famílias da busca são as do cadastro', async () => {
+    const usuario = userEvent.setup();
+    abrir();
+    await usuario.click(await screen.findByRole('button', { name: 'Buscar no catálogo' }));
+    const opcoes = within(within(screen.getByRole('dialog')).getByLabelText('Família')).getAllByRole('option');
+    expect(opcoes.map((o) => o.textContent)).toEqual(['Todas as famílias', 'CIVIL', 'EPI']);
+    expect(listarFamilias).toHaveBeenCalledWith(false, expect.anything());
+  });
+
+  it('clicar no produto abre a ficha com foto, código e o cadastro, antes de usar', async () => {
+    const usuario = userEvent.setup();
+    abrir();
+    await usuario.click(await screen.findByRole('button', { name: 'Buscar no catálogo' }));
+    const dialogo = within(screen.getByRole('dialog'));
+    await usuario.selectOptions(dialogo.getByLabelText('Família'), 'EPI');
+    await usuario.click(await dialogo.findByRole('button', { name: /Cimento CP-II/ }));
+
+    const f = within(await screen.findByTestId('ficha-do-produto'));
+    expect(await f.findByTestId('foto-do-produto')).toHaveAttribute('src', 'blob:foto');
+    expect(f.getByText('MAT-001')).toBeInTheDocument();
+    expect(f.getByText('Cimento CP-II')).toBeInTheDocument();
+    expect(within(f.getByTestId('fornecedores-da-ficha')).getByText('Votorantim')).toBeInTheDocument();
+    // voltar não escolhe nada
+    await usuario.click(f.getByRole('button', { name: '← Voltar à busca' }));
+    expect(await screen.findByTestId('produtos-encontrados')).toBeInTheDocument();
+  });
+
+  it('a empresa é escolhida do cadastro de CNPJs, sem texto livre', async () => {
+    vi.mocked(listarEmpresas).mockResolvedValue([
+      { legalName: 'TRINO FRIO ARMAZENS GERAIS LTDA' }, { legalName: 'TRINO LOGISTICA INTEGRADA LTDA' },
+    ] as never);
+    abrir();
+    const empresa = await screen.findByLabelText('Empresa');
+    expect(empresa.tagName).toBe('SELECT');
+    await waitFor(() => expect(within(empresa).getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Selecione a empresa…', 'TRINO FRIO ARMAZENS GERAIS LTDA', 'TRINO LOGISTICA INTEGRADA LTDA',
+    ]));
+  });
 });
+
+/** A ficha que o servidor devolve: o cadastro inteiro do produto. */
+function ficha(id: string): Produto {
+  return {
+    id, code: id === 'v-cimento' ? 'MAT-001' : '12003-38', description: 'Cimento CP-II', family: 'CIVIL',
+    unitOfMeasure: 'SC', referencePrice: 32, active: true, stockControlled: true, purchasable: true, minimumQty: 10,
+    productType: null, productTypeLabel: null, baseCode: null, size: null,
+    imageDocumentId: 'doc-foto', imageFileName: 'cimento.jpg', compliancePending: false,
+    suppliers: [{ supplierId: null, supplierName: 'Votorantim', taxId: null, contact: null,
+      supplierItemCode: 'CP2-50', lastPrice: 31.5, caNumber: null, notes: null }],
+  };
+}

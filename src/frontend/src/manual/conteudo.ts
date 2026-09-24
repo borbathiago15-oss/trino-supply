@@ -125,16 +125,19 @@ export const MANUAIS: Record<string, Manual> = {
   'pr-new-unit': {
     paraQueServe: 'Abrir uma Solicitação de Compra (SC): o que você precisa, para quando, por quê e em qual centro de custo.',
     passos: [
-      'Busque o produto por família ou digitando duas letras. Item fora do catálogo pode ser digitado na própria linha.',
+      'Em cada item, clique em "Buscar no catálogo" e escolha a família ou digite duas letras. As famílias são as ativas do cadastro.',
+      'Clique no produto para ver a ficha — foto, código, família, unidade, fornecedores — e use "Usar este produto".',
+      'Não achou? Na própria busca, "Pedir item fora do catálogo" abre a descrição livre, já com o que você buscou.',
       'Para produto com grade de tamanhos, informe a quantidade de cada tamanho — cada um vira um item da SC.',
       'Preencha a justificativa, o centro de custo, a data de necessidade e a prioridade.',
-      'Em "Mais detalhes" ficam local de entrega, tipo de solicitação, orçamento previsto, observação e anexos.',
+      'Em "Mais detalhes" ficam local de entrega, tipo de solicitação, a empresa (da lista de CNPJs cadastrados), orçamento previsto, observação e anexos.',
       'Envie. A SC vai para quem aprova o centro de custo.',
     ],
     regras: [
       { codigo: 'PR-ERR-021', texto: 'Com centros vinculados ao seu cadastro, você só solicita para eles.' },
       { codigo: 'IC-ERR-023', texto: 'EPI/EPC só circula com C.A. válido no par produto-fornecedor — cobrado do tamanho pedido.' },
       { texto: 'Prioridade urgente pede a justificativa da urgência e o impacto de não comprar.' },
+      { codigo: 'PR-ERR-023', texto: 'A empresa precisa ser um dos CNPJs ativos do cadastro (Estrutura da Empresa → Empresas).' },
     ],
     duvidas: [
       { pergunta: 'Onde a SC vai ser entregue?', resposta: 'No local de entrega escolhido. A lista junta os almoxarifados e os centros de custo que recebem material — quem paga e quem recebe podem ser diferentes.' },
@@ -369,8 +372,10 @@ export const MANUAIS: Record<string, Manual> = {
       '"Novo produto" cadastra um item. Com "Grade de tamanhos", cadastra todos os tamanhos de uma vez.',
       'Em fornecedores do produto, registre o código no fornecedor e o C.A. (para EPI/EPC).',
       '"Importar produtos por planilha" carrega em volume.',
+      '"Excluir" apaga de vez o produto cadastrado por engano; o que já circulou se inativa.',
     ],
     regras: [
+      { codigo: 'IC-ERR-030', texto: 'Só se exclui o produto que nunca entrou numa SC, cotação, pedido, contrato, solicitação de material ou no estoque — a mensagem diz onde ele foi usado. Nesses casos, inative.' },
       { texto: 'Cada tamanho é um produto próprio (código 12003-38, 12003-39…). A grade é cadastrada inteira ou nada.' },
       { codigo: 'IC-ERR-023', texto: 'EPI/EPC precisa de C.A. válido no par produto-fornecedor para circular.' },
     ],
@@ -380,6 +385,10 @@ export const MANUAIS: Record<string, Manual> = {
     passos: [
       '"Nova família": nome, categoria e as metas de prazo.',
       'As metas alimentam o painel "Prazos do processo — meta da família × realizado".',
+      'As famílias ativas são as que aparecem na busca de produto da SC, da Solicitação em Lote e do material.',
+    ],
+    regras: [
+      { codigo: 'IC-ERR-031', texto: 'Só se exclui a família sem nenhum produto, contando os inativos. Com produto dentro, mova-os para outra família ou inative a família.' },
     ],
   },
   'cost-centers': {

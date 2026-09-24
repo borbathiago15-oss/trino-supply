@@ -6,6 +6,7 @@ import { Campo } from '@/componentes/formulario';
 import { moeda } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
 import { useDebounce } from '@/util/useDebounce';
+import { FichaDoProduto } from './FichaDoProduto';
 
 /** Quantos produtos a lista mostra antes de pedir um recorte melhor. */
 export const TETO_DA_LISTA = 40;
@@ -19,14 +20,26 @@ export const podeBuscar = (familia: string, termo: string) => !!familia || termo
 /**
  * Escolha do produto na SC: primeiro a família, depois a busca — e o resultado vem por
  * produto, com a grade de tamanhos junta, em vez de uma linha por tamanho.
+ *
+ * É a **única** porta de produto da SC. Clicar num resultado abre a ficha (foto e cadastro),
+ * e é de lá que se usa o produto: escolher sem ver era como a bota de PVC virava a de
+ * composite. O item fora do catálogo também sai daqui ("não achou?"), com o termo buscado
+ * como descrição: pedir o que ninguém cadastrou continua possível, mas depois de procurar —
+ * digitar direto na linha era como o mesmo produto do catálogo entrava como texto solto.
+ *
+ * As famílias são as **ativas do cadastro**, não os nomes que aparecem nos produtos: a lista
+ * derivada do catálogo mostrava família inativa e escondia a ativa que ainda não tem produto.
  */
-export function SeletorDeProduto({ familias, aoEscolher, aoFechar }: {
+export function SeletorDeProduto({ familias, aoEscolher, aoDescrever, aoFechar }: {
   familias: string[];
   aoEscolher: (p: ProdutoParaEscolha) => void;
+  /** Pedir item fora do catálogo, com o que foi buscado como ponto de partida da descrição. */
+  aoDescrever: (termo: string, familia: string) => void;
   aoFechar: () => void;
 }) {
   const [familia, setFamilia] = useState('');
   const [busca, setBusca] = useState('');
+  const [aberto, setAberto] = useState<ProdutoParaEscolha | null>(null);
   const termo = useDebounce(busca);
   const buscar = podeBuscar(familia, termo);
   const { dados, erro, carregando } = useCarregar(
@@ -37,9 +50,26 @@ export function SeletorDeProduto({ familias, aoEscolher, aoFechar }: {
   const achados = dados ?? [];
   const mostrados = achados.slice(0, TETO_DA_LISTA);
 
+  if (aberto) {
+    return (
+      <Dialogo titulo="Ficha do produto" aoFechar={aoFechar} largura="max-w-[760px]" acoes={<></>}>
+        <div className="max-h-[70vh] overflow-y-auto">
+          <FichaDoProduto produto={aberto} aoUsar={() => aoEscolher(aberto)} aoVoltar={() => setAberto(null)} />
+        </div>
+      </Dialogo>
+    );
+  }
+
   return (
     <Dialogo titulo="Escolher produto do catálogo" aoFechar={aoFechar} largura="max-w-[760px]"
-      acoes={<button type="button" className="botao-secundario" onClick={aoFechar}>Fechar</button>}>
+      acoes={
+        <div className="flex w-full flex-wrap items-center justify-between gap-2">
+          <button type="button" className="botao-secundario" onClick={() => aoDescrever(busca.trim(), familia)}>
+            Não achou? Pedir item fora do catálogo
+          </button>
+          <button type="button" className="botao-secundario" onClick={aoFechar}>Fechar</button>
+        </div>
+      }>
       <div className="grid gap-3 sm:grid-cols-[220px_1fr]">
         <Campo id="sel-familia" rotulo="Família">
           <select id="sel-familia" value={familia} onChange={(e) => setFamilia(e.target.value)}>
@@ -61,7 +91,7 @@ export function SeletorDeProduto({ familias, aoEscolher, aoFechar }: {
         {buscar && carregando && !dados && <Carregando texto="Buscando no catálogo…" />}
         {buscar && dados && !achados.length && (
           <p className="sub py-6 text-center">
-            Nenhum produto encontrado. Feche e descreva o item — a SC aceita produto fora do catálogo.
+            Nenhum produto encontrado. Se ele não está no catálogo, use "Não achou? Pedir item fora do catálogo".
           </p>
         )}
         {mostrados.length > 0 && (
@@ -69,9 +99,9 @@ export function SeletorDeProduto({ familias, aoEscolher, aoFechar }: {
             {mostrados.map((p) => (
               <li key={p.key}>
                 <button type="button" data-produto={p.baseCode ?? p.sizes[0]?.code}
-                  disabled={p.compliancePending}
-                  onClick={() => aoEscolher(p)}
-                  className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-1 py-2.5 text-left hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60">
+                  title="Ver a ficha do produto"
+                  onClick={() => setAberto(p)}
+                  className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-1 py-2.5 text-left hover:bg-slate-50">
                   <span className="font-semibold">{p.description}</span>
                   <span className="sub">{p.baseCode ?? p.sizes[0]?.code} · {p.family} · {p.unitOfMeasure}</span>
                   {p.hasGrade && (
@@ -99,8 +129,8 @@ export function SeletorDeProduto({ familias, aoEscolher, aoFechar }: {
         )}
       </div>
       <p className="sub mt-3">
-        Produto com tamanho (bota, luva, fardamento) vem com a grade: você escolhe o produto uma vez
-        e informa a quantidade de cada tamanho.
+        Clique no produto para ver a ficha com foto e cadastro. Produto com tamanho (bota, luva,
+        fardamento) vem com a grade: você escolhe uma vez e informa a quantidade de cada tamanho.
       </p>
     </Dialogo>
   );

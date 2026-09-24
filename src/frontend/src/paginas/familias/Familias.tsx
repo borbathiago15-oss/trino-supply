@@ -1,8 +1,9 @@
 import { useMemo, useState, type FormEvent } from 'react';
-import { atualizarFamilia, criarFamilia, listarFamilias, type DadosFamilia, type Familia } from '@/api/familias';
+import { atualizarFamilia, criarFamilia, excluirFamilia, listarFamilias, type DadosFamilia, type Familia } from '@/api/familias';
 import { contarProdutosPorFamilia } from '@/api/catalogo';
 import { BadgeAtivo, Campo, Grade2, Nota } from '@/componentes/formulario';
 import { Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
+import { Confirmacao } from '@/componentes/Dialogo';
 import { useToast } from '@/componentes/Toast';
 import { podeManterCatalogo, temModulo } from '@/dominio/papeis';
 import { useUsuario } from '@/sessao/SessaoProvider';
@@ -84,6 +85,17 @@ export function Familias() {
     finally { setSalvando(false); }
   }
 
+  const [aExcluir, setAExcluir] = useState<Familia | null>(null);
+
+  async function excluir(f: Familia) {
+    setAExcluir(null);
+    try {
+      await excluirFamilia(f.id);
+      avisar(`Família ${f.name} excluída.`);
+      recarregar();
+    } catch (e) { avisar(e instanceof Error ? e.message : 'Falha ao excluir a família.', 'erro'); }
+  }
+
   async function alternarSituacao(f: Familia) {
     try {
       await atualizarFamilia(f.id, { active: !f.active });
@@ -129,8 +141,16 @@ export function Familias() {
                       <td className="whitespace-nowrap">
                         <div className="flex gap-1.5">
                           <button type="button" className="botao-secundario !py-1.5" onClick={() => editar(f)}>Editar</button>
-                          <button type="button" className={(f.active ? 'botao-perigo' : 'botao-secundario') + ' !py-1.5'}
+                          <button type="button" className="botao-secundario !py-1.5"
                             onClick={() => alternarSituacao(f)}>{f.active ? 'Inativar' : 'Reativar'}</button>
+                          {/* só a família vazia sai de vez (IC-ERR-031): com produto dentro, eles
+                              ficariam numa família que o cadastro não conhece. O número da coluna é
+                              dos ativos — o servidor confere também os inativos */}
+                          <button type="button" className="botao-perigo !py-1.5"
+                            disabled={(dados.usoPorFamilia[f.name] ?? 0) > 0}
+                            title={(dados.usoPorFamilia[f.name] ?? 0) > 0
+                              ? 'Tem produtos: mova-os para outra família ou inative a família' : undefined}
+                            onClick={() => setAExcluir(f)}>Excluir</button>
                         </div>
                       </td>
                     )}
@@ -184,7 +204,13 @@ export function Familias() {
               {editando && <button type="button" className="botao-secundario" onClick={cancelar}>Cancelar edição</button>}
             </div>
           </form>
-        </Painel>
+    </Painel>
+      )}
+
+      {aExcluir && (
+        <Confirmacao titulo="Excluir família" perigo rotuloConfirmar="Excluir"
+          mensagem={<>Excluir a família <strong>{aExcluir.name}</strong> de vez? Isto não se desfaz. Para só tirá-la de uso, prefira <strong>Inativar</strong>.</>}
+          aoConfirmar={() => excluir(aExcluir)} aoFechar={() => setAExcluir(null)} />
       )}
     </>
   );

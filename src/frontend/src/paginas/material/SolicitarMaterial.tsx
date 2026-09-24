@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { buscarProdutos, familiasDoCatalogo, type Produto } from '@/api/catalogo';
+import { buscarProdutos, type Produto } from '@/api/catalogo';
+import { listarFamilias } from '@/api/familias';
 import { listarCentrosCusto } from '@/api/centrosCusto';
 import { criarSolicitacaoMaterial } from '@/api/material';
 import { Aviso, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
@@ -49,7 +50,8 @@ export function SolicitarMaterial() {
 
   const base = useCarregar(async (signal) => ({
     centros: await listarCentrosCusto(false, signal),
-    familias: await familiasDoCatalogo(signal),
+    // as famílias ativas do cadastro, e não os nomes que aparecem nos produtos
+    familias: (await listarFamilias(false, signal)).map((f) => f.name),
   }), []);
 
   const produtos = useCarregar(

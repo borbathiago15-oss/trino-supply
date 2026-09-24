@@ -1,6 +1,8 @@
 DELETE /api/v1/action-plans/{id:guid}/risks/{riskId:guid}
 DELETE /api/v1/announcements/{id:guid}
 DELETE /api/v1/improvement-cycles/{id:guid}/tools/{tool}
+DELETE /api/v1/items/{id:guid}
+DELETE /api/v1/product-families/{id:guid}
 DELETE /api/v1/purchase-requisitions/{id:guid}
 DELETE /api/v1/purchase-requisitions/{id:guid}/attachments/{attachmentId:guid}
 DELETE /api/v1/purchase-requisitions/{id:guid}/items/{itemId:guid}
@@ -40,6 +42,7 @@ GET /api/v1/items/batch-view
 GET /api/v1/items/families
 GET /api/v1/items/picker
 GET /api/v1/items/summary
+GET /api/v1/items/{id:guid}
 GET /api/v1/items/{id:guid}/price-history
 GET /api/v1/material-requisitions/
 GET /api/v1/material-requisitions/panel

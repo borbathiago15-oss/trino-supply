@@ -14,6 +14,7 @@ vi.mock('@/api/catalogo', async (importar) => ({
   criarProduto: vi.fn(),
   criarGradeDeTamanhos: vi.fn(),
   atualizarProduto: vi.fn(),
+  excluirProduto: vi.fn(),
 }));
 vi.mock('@/api/familias', () => ({ listarFamilias: vi.fn() }));
 vi.mock('@/api/fornecedores', () => ({ listarFornecedores: vi.fn() }));
@@ -26,7 +27,7 @@ let usuarioAtual: Usuario;
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => usuarioAtual }));
 
 import {
-  atualizarProduto, buscarProdutos, criarGradeDeTamanhos, criarProduto, resumoCatalogo, tiposDeProduto,
+  atualizarProduto, buscarProdutos, criarGradeDeTamanhos, excluirProduto, criarProduto, resumoCatalogo, tiposDeProduto,
 } from '@/api/catalogo';
 import { listarFamilias } from '@/api/familias';
 import { listarFornecedores } from '@/api/fornecedores';
@@ -99,6 +100,23 @@ describe('<Produtos />', () => {
     expect(tabela.getByText('C.A. 4567 · Alfa EPIs')).toBeInTheDocument();
     expect(tabela.getByTestId('miniatura')).toHaveTextContent('Bota de segurança');
     expect(tabela.getByText('INATIVO')).toBeInTheDocument();
+  });
+
+  it('excluir pede confirmação; o produto que já circulou é recusado e a mensagem diz onde', async () => {
+    vi.mocked(excluirProduto).mockRejectedValue(
+      new Error('"Luva" já foi usado (2 itens de solicitação de compra) e não pode ser excluído: apagaria o histórico. Inative o produto.'));
+    montar();
+    await waitFor(() => expect(screen.getByLabelText('Buscar produto')).toBeInTheDocument());
+    await userEvent.type(screen.getByLabelText('Buscar produto'), 'luva');
+    await userEvent.click(screen.getByRole('button', { name: 'Buscar' }));
+    const tabela = await screen.findByTestId('tabela-produtos');
+    await userEvent.click(within(tabela).getAllByRole('button', { name: 'Excluir' })[0]);
+
+    const dialogo = screen.getByRole('dialog', { name: 'Excluir produto' });
+    expect(dialogo).toHaveTextContent('Só sai o produto que nunca foi usado');
+    await userEvent.click(within(dialogo).getByRole('button', { name: 'Excluir' }));
+    expect(excluirProduto).toHaveBeenCalledTimes(1);
+    expect(await screen.findByTestId('toast')).toHaveTextContent('2 itens de solicitação de compra');
   });
 
   it('o resumo do catálogo aparece antes de qualquer busca', async () => {

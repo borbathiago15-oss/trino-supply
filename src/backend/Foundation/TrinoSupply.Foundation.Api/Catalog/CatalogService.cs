@@ -357,6 +357,75 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         return (item, null);
     }
 
+    /// <summary>A ficha do produto, com os fornecedores — o que a busca da SC mostra ao clicar.</summary>
+    public Task<CatalogItem?> DetalheAsync(Guid id, CancellationToken ct = default) =>
+        db.CatalogItems.Include(i => i.Suppliers).SingleOrDefaultAsync(i => i.Id == id, ct);
+
+    /// <summary>
+    /// Onde o produto já foi usado. É a resposta de "posso apagar?": produto que entrou numa
+    /// SC, numa cotação, num pedido, num contrato, numa solicitação de material ou no estoque é
+    /// histórico, e apagá-lo deixaria esses registros apontando para nada.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> UsosAsync(Guid id, CancellationToken ct = default)
+    {
+        var usos = new List<string>();
+        void Conta(int n, string um, string varios) { if (n > 0) usos.Add($"{n} {(n == 1 ? um : varios)}"); }
+        Conta(await db.RequisitionItems.CountAsync(i => i.CatalogItemId == id, ct), "item de solicitação de compra", "itens de solicitação de compra");
+        Conta(await db.QuotationItems.CountAsync(i => i.CatalogItemId == id, ct), "item de cotação", "itens de cotação");
+        Conta(await db.PurchaseOrderItems.CountAsync(i => i.CatalogItemId == id, ct), "item de pedido de compra", "itens de pedido de compra");
+        Conta(await db.SupplierContractItems.CountAsync(i => i.CatalogItemId == id, ct), "item de contrato", "itens de contrato");
+        Conta(await db.MaterialRequisitionItems.CountAsync(i => i.CatalogItemId == id, ct), "item de solicitação de material", "itens de solicitação de material");
+        Conta(await db.StockMovements.CountAsync(m => m.CatalogItemId == id, ct), "movimentação de estoque", "movimentações de estoque");
+        Conta(await db.StockBalances.CountAsync(b => b.CatalogItemId == id && (b.TotalQty != 0 || b.ReservedQty != 0), ct),
+            "saldo em estoque", "saldos em estoque");
+        return usos;
+    }
+
+    /// <summary>
+    /// Excluir de verdade — só o que nunca foi usado (<c>IC-ERR-030</c>). O produto cadastrado
+    /// por engano, ou em duplicidade, sai sem deixar rastro; o que já circulou se inativa, e a
+    /// mensagem diz onde ele circulou, para ninguém procurar às cegas.
+    /// </summary>
+    public async Task<UserError?> ExcluirAsync(Guid id, CancellationToken ct = default)
+    {
+        var item = await db.CatalogItems.Include(i => i.Suppliers).SingleOrDefaultAsync(i => i.Id == id, ct);
+        if (item is null) return new("IC-ERR-404", "Item não encontrado.");
+        var usos = await UsosAsync(id, ct);
+        if (usos.Count > 0)
+            return new("IC-ERR-030",
+                $"\"{item.Description}\" já foi usado ({string.Join(", ", usos)}) e não pode ser excluído: apagaria o histórico. Inative o produto.");
+
+        // saldo zerado e sem movimento é só a linha criada ao abrir o almoxarifado
+        db.StockBalances.RemoveRange(await db.StockBalances.Where(b => b.CatalogItemId == id).ToListAsync(ct));
+        db.StoredDocuments.RemoveRange(await db.StoredDocuments
+            .Where(d => d.EntityType == TipoDaFoto && d.EntityId == id).ToListAsync(ct));
+        db.CatalogItems.Remove(item);   // os fornecedores do produto saem junto (cascade)
+        await db.SaveChangesAsync(ct);
+        return null;
+    }
+
+    /// <summary>O <c>entity_type</c> da foto do produto em <c>stored_document</c>.</summary>
+    public const string TipoDaFoto = "PRODUTO_IMAGEM";
+
+    /// <summary>
+    /// Excluir a família — só sem produto nenhum nela, ativo ou inativo (<c>IC-ERR-031</c>).
+    /// A família é texto no produto: apagá-la com produtos dentro os deixaria numa família que
+    /// o cadastro não conhece mais, e a próxima edição deles seria recusada (<c>IC-ERR-022</c>).
+    /// </summary>
+    public async Task<UserError?> ExcluirFamiliaAsync(Guid id, CancellationToken ct = default)
+    {
+        var familia = await db.ProductFamilies.SingleOrDefaultAsync(f => f.Id == id, ct);
+        if (familia is null) return new("IC-ERR-404", "Família não encontrada.");
+        var produtos = await db.CatalogItems.CountAsync(i => i.Family == familia.Name, ct);
+        if (produtos > 0)
+            return new("IC-ERR-031",
+                $"{produtos} produto(s) do catálogo estão na família {familia.Name}, contando os inativos. " +
+                "Mova-os para outra família antes de excluir, ou inative a família.");
+        db.ProductFamilies.Remove(familia);
+        await db.SaveChangesAsync(ct);
+        return null;
+    }
+
     /// <summary>Código automático: 3 letras da família (sem acento) + sequência — ex.: MAT-001.</summary>
     private async Task<string> GenerateCodeAsync(string family, CancellationToken ct)
     {

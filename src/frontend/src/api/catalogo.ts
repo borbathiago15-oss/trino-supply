@@ -135,9 +135,8 @@ export async function contarProdutosPorFamilia(signal?: AbortSignal): Promise<Re
   return Object.fromEntries(families.map((f) => [f.family, f.count]));
 }
 
-/** Só os nomes das famílias que existem no catálogo. */
-export const familiasDoCatalogo = async (signal?: AbortSignal) =>
-  (await api<{ families: string[] }>(`${base}/families`, { signal })).families;
+// A lista de famílias das telas de pedido vem do cadastro (`listarFamilias`), e não dos nomes
+// que aparecem nos produtos: a derivada mostrava família inativa e escondia a ativa sem produto.
 
 /** Linha da grade da Solicitação em Lote: saldo, entrada prevista e cobertura. */
 export interface LinhaDeLote {
@@ -182,6 +181,16 @@ export const atualizarProduto = (id: string, dados: Partial<DadosProduto> & { ac
   api<Produto>(`${base}/${id}`, { method: 'PATCH', body: dados });
 
 export const enviarFoto = (id: string, arquivo: File) => enviarArquivo(`${base}/${id}/image`, arquivo);
+
+/** A ficha do produto: o que a busca da SC mostra ao clicar, antes de escolher. */
+export const fichaDoProduto = async (id: string, signal?: AbortSignal) =>
+  normalizar(await api<Produto>(`${base}/${id}`, { signal }));
+
+/**
+ * Excluir de verdade — só o produto que nunca circulou (IC-ERR-030). O que já entrou numa
+ * SC, cotação, pedido, contrato ou no estoque se inativa, e a recusa diz onde ele circulou.
+ */
+export const excluirProduto = (id: string) => api<{ deleted: boolean }>(`${base}/${id}`, { method: 'DELETE' });
 
 // ---- importação por planilha ----
 export type SituacaoLinha = 'NOVO' | 'DUPLICADO' | 'ERRO';

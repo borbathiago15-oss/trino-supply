@@ -36,3 +36,6 @@ export const criarFamilia = (dados: DadosFamilia) => api<Familia>(`${base}/`, { 
 
 export const atualizarFamilia = (id: string, dados: Partial<DadosFamilia> & { active?: boolean }) =>
   api<Familia>(`${base}/${id}`, { method: 'PATCH', body: dados });
+
+/** Excluir a família — só vazia, contando os produtos inativos (IC-ERR-031). */
+export const excluirFamilia = (id: string) => api<{ deleted: boolean }>(`${base}/${id}`, { method: 'DELETE' });

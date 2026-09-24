@@ -596,6 +596,14 @@ discordariam no primeiro caso de canto e o comprador não confiaria em nenhum do
 O rótulo vem do servidor; o destino é do navegador (`destinoDaAcao`), que é quem
 conhece as rotas. **Exceção volta ao comprador em qualquer etapa.**
 
+**O comprador da linha é quem conduziu a compra, não quem foi atribuído nem quem aprovou.**
+`TorreDeControleService.CompradorDe` responde, nesta ordem: quem escolheu o vencedor, quem abriu
+a cotação e, só antes de existir cotação, o responsável da triagem. A coluna caía antes na
+atribuição e depois em quem **emitiu o pedido** — e o pedido nasce na aprovação do Nível 2, então
+a Torre mostrava o gestor ou o diretor como comprador de uma compra que outra pessoa cotou.
+Coluna, filtro (que por isso é **derivado**) e a produtividade do cockpit perguntam à mesma
+função. A linha mostra o **nome** do centro de custo; o código fica na dica.
+
 **A triagem mora dentro da Torre.** Atribuir e liberar responsável se faz na própria
 Torre, porque a demanda que chega para o comprador *é* a etapa de Solicitação dela —
 sair da tela para atribuir e voltar para acompanhar era o caminho longo para a mesma

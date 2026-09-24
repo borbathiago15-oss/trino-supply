@@ -72,7 +72,7 @@ function Linha({ i, triando, marcada, aoMarcar, aoLiberar, aoPriorizar }: {
       </td>
       <td className="whitespace-nowrap">{quantidade(i.quantity)} {i.unitOfMeasure}</td>
       <td className="whitespace-nowrap">{i.requesterLabel}<div className="sub">{i.company ?? '—'}</div></td>
-      <td className="whitespace-nowrap">{i.costCenter}</td>
+      <td title={i.costCenter} data-testid="centro-da-linha">{i.costCenterName ?? i.costCenter}</td>
       <td className="whitespace-nowrap">
         {i.buyerLabel ? (
           <>
@@ -372,7 +372,7 @@ export function TorreDeControle() {
             <select id="tc-cc" {...campo('centroCusto')}>
               <option value="">Todos</option>
               {(fo?.costCenters ?? []).map((c) => (
-                <option key={c.code} value={c.code}>{c.code} — {c.name}</option>
+                <option key={c.code} value={c.code}>{c.name} ({c.code})</option>
               ))}
             </select>
           </Campo>

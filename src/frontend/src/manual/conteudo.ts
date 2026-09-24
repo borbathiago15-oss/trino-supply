@@ -181,6 +181,7 @@ export const MANUAIS: Record<string, Manual> = {
       { texto: '"Atrasado" é sobre a data prometida ao solicitante; "prazo estourado" é sobre o tempo da etapa. São perguntas diferentes.' },
       { texto: '"Em faturamento" espera o fornecedor (O.C. sem nota fiscal); "Aguardando recebimento" espera o almoxarifado (nota lançada, material não recebido).' },
       { texto: 'O prazo da etapa mede e avisa, nunca bloqueia. A atenção chega a 80% do prazo.' },
+      { texto: 'A coluna Comprador mostra quem conduziu a compra (escolheu o vencedor ou abriu a cotação). Antes da cotação, mostra o responsável da triagem. O aprovador nunca aparece ali.' },
     ],
   },
   'rfq-queue': {

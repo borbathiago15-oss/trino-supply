@@ -17,6 +17,9 @@ export interface LinhaDaTorre {
   requesterLabel: string;
   company: string | null;
   costCenter: string;
+  /** Nome do centro de custo — é o que a coluna mostra; o código fica na dica. */
+  costCenterName?: string | null;
+  /** Quem de fato conduz a compra: quem escolheu o vencedor ou abriu a cotação; antes dela, o da triagem. */
   buyerLabel: string | null;
   supplierName: string | null;
   /** Onde o item está no fluxo. */

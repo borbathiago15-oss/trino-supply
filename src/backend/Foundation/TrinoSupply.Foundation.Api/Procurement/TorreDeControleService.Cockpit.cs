@@ -114,7 +114,8 @@ public partial class TorreDeControleService
                     TipoDeSolicitacaoService.Normalizar(sc.NeedType), prazosPorTipo[""])).Breached;
             var desde = sc.DecidedAt ?? sc.SubmittedAt;
             var horasNaFila = desde is { } d ? (int)Math.Max(0, (agora - d).TotalHours) : 0;
-            var comprador = string.IsNullOrWhiteSpace(sc.AssignedToLabel) ? "Sem responsável" : sc.AssignedToLabel;
+            // a mesma régua da coluna da Torre: quem conduziu a cotação, e não o aprovador
+            var comprador = CompradorDe(sc, cotacao).Label is { Length: > 0 } nome ? nome : "Sem responsável";
 
             if (!encerrado)
             {

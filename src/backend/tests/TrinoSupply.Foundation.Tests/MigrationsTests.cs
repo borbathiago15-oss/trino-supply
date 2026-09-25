@@ -89,5 +89,14 @@ public sealed class MigrationsTests : IAsyncLifetime
         // roda na exclusão do produto: as sete contagens de "onde ele já circulou"
         Assert.Empty(await new TrinoSupply.Foundation.Api.Catalog.CatalogService(db, TimeProvider.System)
             .UsosAsync(Guid.NewGuid()));
+
+        // a ficha do contrato: o fornecedor com o consumo na vigência, as compras e a história
+        var fornecedores = new SupplierService(db, TimeProvider.System);
+        var (alfa, _) = await fornecedores.CreateAsync(Guid.NewGuid(), "Alfa Postgres Ltda", null, null, null, "11 4000-0000");
+        await fornecedores.SaveContractAsync(alfa!.Id, "CT-PG", null, null, null,
+            [new SupplierService.ContractItemInput(null, "Luva", null, "UN", 2m, null, null, null, null)], 1_000m);
+        var ficha = (await fornecedores.FichaAsync(alfa.Id))!;
+        Assert.Empty(ficha.Pedidos);
+        Assert.Single(ficha.LinhaDoTempo);
     }
 }

@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { linhaDeContrato, resumoDeContratos, type LinhaContrato } from '@/api/contratos';
 import type { Fornecedor } from '@/api/fornecedores';
@@ -27,7 +28,7 @@ const fornecedor = (nome: string, c: Partial<Fornecedor['contract']>): Fornecedo
 const linha = (nome: string, c: Partial<Fornecedor['contract']>): LinhaContrato =>
   linhaDeContrato(fornecedor(nome, c));
 
-const abrir = () => render(<ToastProvider><Contratos /></ToastProvider>);
+const abrir = () => render(<MemoryRouter><ToastProvider><Contratos /></ToastProvider></MemoryRouter>);
 
 describe('contas do contrato de parceria', () => {
   it('saldo abaixo de 20% do teto é crítico', () => {

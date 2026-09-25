@@ -22,6 +22,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<SupplierContractItem> SupplierContractItems => Set<SupplierContractItem>();
     public DbSet<SupplierDocument> SupplierDocuments => Set<SupplierDocument>();
     public DbSet<ContractAdjustment> ContractAdjustments => Set<ContractAdjustment>();
+    public DbSet<SupplierContractEvent> SupplierContractEvents => Set<SupplierContractEvent>();
     public DbSet<CostCenter> CostCenters => Set<CostCenter>();
     public DbSet<Sector> Sectors => Set<Sector>();
     public DbSet<Company> Companies => Set<Company>();
@@ -923,6 +924,20 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(a => a.CreatedAt).HasColumnName("created_at");
             e.HasIndex(a => a.SupplierId);
             e.HasIndex(a => a.CreatedAt);
+        });
+
+        modelBuilder.Entity<SupplierContractEvent>(e =>
+        {
+            e.ToTable("supplier_contract_event", "procurement"); // histórico do contrato de parceria
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Id).HasColumnName("id");
+            e.Property(a => a.SupplierId).HasColumnName("supplier_id");
+            e.Property(a => a.Kind).HasColumnName("kind").HasMaxLength(30);
+            e.Property(a => a.Summary).HasColumnName("summary").HasMaxLength(2000);
+            e.Property(a => a.CreatedBy).HasColumnName("created_by");
+            e.Property(a => a.CreatedByLabel).HasColumnName("created_by_label").HasMaxLength(200);
+            e.Property(a => a.CreatedAt).HasColumnName("created_at");
+            e.HasIndex(a => new { a.SupplierId, a.CreatedAt });
         });
 
         modelBuilder.Entity<PurchaseOrder>(e =>

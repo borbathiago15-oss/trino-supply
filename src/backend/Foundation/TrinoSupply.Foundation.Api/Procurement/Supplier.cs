@@ -49,12 +49,12 @@ public class Supplier
 
     /// <summary>
     /// Situação efetiva: HOMOLOGADO com certidão vencida vira RESTRITO — só para quem já
-    /// cadastrou certidões (quem nunca cadastrou não é punido retroativamente).
+    /// cadastrou certidões (quem nunca cadastrou não é punido retroativamente). O contrato
+    /// assinado e os aditivos não são certidão e ficam fora (<see cref="SupplierDocument.IsCertificate"/>).
     /// </summary>
     public string EffectiveHomologation(DateOnly today) =>
         HomologationStatus == SupplierHomologation.Homologado
-            && Documents.Count > 0
-            && Documents.Any(d => d.ValidUntil is not null && d.ValidUntil < today)
+            && Documents.Any(d => d.IsCertificate && d.ValidUntil is not null && d.ValidUntil < today)
         ? SupplierHomologation.Restrito
         : HomologationStatus;
     public bool Active { get; set; } = true;
@@ -94,7 +94,11 @@ public static class SupplierHomologation
     public static readonly string[] All = [Prospect, EmHomologacao, Homologado, Restrito, Bloqueado];
 }
 
-/// <summary>Certidão/documento do fornecedor com validade monitorada (V2-P2).</summary>
+/// <summary>
+/// Certidão/documento do fornecedor com validade monitorada (V2-P2) — e também os papéis do
+/// contrato de parceria (<see cref="SupplierDocumentTypes.DoContrato"/>: o contrato assinado e
+/// os aditivos), que vivem no mesmo lugar para a ficha do contrato mostrar tudo de uma vez.
+/// </summary>
 public class SupplierDocument
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -107,6 +111,51 @@ public class SupplierDocument
     public DateOnly? ValidUntil { get; set; }       // certidão sem validade = documento permanente
     public string UploadedByLabel { get; set; } = string.Empty;
     public DateTimeOffset CreatedAt { get; set; }
+
+    /// <summary>
+    /// Certidão é o que conta para a homologação. O papel do contrato <b>não</b>: a validade dele
+    /// é a vigência do contrato, e o contrato vencer não torna o fornecedor irregular — só
+    /// deixa de valer o preço combinado.
+    /// </summary>
+    public bool IsCertificate => !SupplierDocumentTypes.DoContrato.Contains(Type);
+}
+
+/// <summary>Tipos de documento do fornecedor.</summary>
+public static class SupplierDocumentTypes
+{
+    public const string Contrato = "CONTRATO";
+    public const string Aditivo = "ADITIVO";
+    /// <summary>Os papéis do contrato de parceria: ficam fora da régua de homologação.</summary>
+    public static readonly string[] DoContrato = [Contrato, Aditivo];
+    public static readonly string[] All = ["CND_FEDERAL", "FGTS", "CNDT", "CONTRATO_SOCIAL", Contrato, Aditivo, "OUTRO"];
+}
+
+/// <summary>
+/// O que aconteceu com o contrato de parceria, com quem e quando. O contrato é regravado
+/// inteiro a cada edição (<c>SaveContractAsync</c>), então sem este registro a vigência e o
+/// preço de antes simplesmente sumiam — e "quanto pagávamos antes da renovação?" ficava sem
+/// resposta. Registro imutável, escrito na mesma transação da mudança.
+/// </summary>
+public class SupplierContractEvent
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid SupplierId { get; set; }
+    /// <summary><see cref="EventosDoContrato"/>.</summary>
+    public string Kind { get; set; } = EventosDoContrato.Alterado;
+    /// <summary>O que mudou, em português, já pronto para a linha do tempo.</summary>
+    public string Summary { get; set; } = string.Empty;
+    public Guid? CreatedBy { get; set; }
+    public string CreatedByLabel { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+public static class EventosDoContrato
+{
+    public const string Criado = "CRIADO";
+    public const string Alterado = "ALTERADO";
+    public const string Encerrado = "ENCERRADO";
+    public const string DocumentoAnexado = "DOCUMENTO_ANEXADO";
+    public const string DocumentoRemovido = "DOCUMENTO_REMOVIDO";
 }
 
 /// <summary>

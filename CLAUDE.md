@@ -223,6 +223,18 @@ o usuário descobrir no erro do servidor:
   trabalho feito. O `totalDuplicados` vem do cadastro inteiro, não da página: contá-lo do que
   coube na tela diria "2" onde há sete. **Fundir dois cadastros não existe** — repontar
   cotação, O.C. e contrato é decisão que precisa de dono, não de um botão.
+- **O contrato de parceria tem ficha, e a ficha tem memória.** `/contratos/:id` junta o que o
+  comprador pergunta antes de renovar ou reajustar: os documentos, os produtos, **todas** as compras
+  com o fornecedor (a de antes do contrato mostra quanto se pagava sem ele; cada linha diz se abate
+  o saldo, pela mesma `NaVigencia` da lista) e a história. O contrato é regravado inteiro a cada
+  edição, então sem registro o preço de antes da renovação sumia: `SupplierContractEvent` guarda,
+  na mesma transação, o que mudou — `RetratoDoContrato` compara o antes e o depois e escreve a frase
+  ("preço de Luva R$ 1,80 → R$ 1,95"), e salvar sem mudar nada **não** é acontecimento. Reajustes
+  entram na mesma linha do tempo, e o contrato cadastrado antes do registro diz que a história está
+  incompleta em vez de parecer começar na primeira alteração. O **contrato assinado e o aditivo**
+  (`CONTRATO`, `ADITIVO`) vivem com as certidões, mas **não são certidão** (`IsCertificate`): a
+  validade deles é a vigência, e o contrato vencer não restringe a homologação nem acende o aviso de
+  certidão vencida.
 - O *saving* tem **três réguas**, que convivem porque respondem perguntas diferentes,
   e cada uma é nula quando não se aplica:
   - **negociação** — contra a **primeira** proposta do fornecedor vencedor;

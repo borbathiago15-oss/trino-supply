@@ -91,3 +91,60 @@ export const registrarReajuste = (fornecedorId: string, pleito: PleitoDeReajuste
 
 export const historicoDeReajustes = (fornecedorId: string, signal?: AbortSignal) =>
   api<{ items: Reajuste[]; costAvoidanceTotal: number }>(contrato(fornecedorId), { signal });
+
+/** Compra feita com o fornecedor, e se ela abate o saldo do contrato. */
+export interface CompraDoContrato {
+  id: string;
+  number: string;
+  erpNumber: string | null;
+  createdAt: string;
+  total: number;
+  status: string;
+  cancelled: boolean;
+  quotationNumber: string | null;
+  sourcePrNumber: string | null;
+  /** Emitida na vigência e não cancelada: é o que o saldo desconta. */
+  countsInContract: boolean;
+}
+
+export type TipoDoAcontecimento = 'CRIADO' | 'ALTERADO' | 'ENCERRADO' | 'DOCUMENTO_ANEXADO' | 'DOCUMENTO_REMOVIDO' | 'REAJUSTE';
+
+export interface AcontecimentoDoContrato {
+  at: string;
+  kind: TipoDoAcontecimento;
+  /** A frase já vem pronta do servidor: é ele quem compara o antes e o depois. */
+  text: string;
+  by: string;
+}
+
+export interface FichaDoContrato {
+  supplier: Fornecedor;
+  purchaseOrders: CompraDoContrato[];
+  timeline: AcontecimentoDoContrato[];
+  costAvoidanceTotal: number;
+  /**
+   * Falso quando o contrato é de antes de o sistema registrar a história: a linha do tempo
+   * começa na primeira alteração registrada, e a tela diz isso.
+   */
+  historyComplete: boolean;
+}
+
+export const fichaDoContrato = (fornecedorId: string, signal?: AbortSignal) =>
+  api<FichaDoContrato>(`/api/v1/suppliers/${fornecedorId}/contract/record`, { signal });
+
+export const ROTULO_ACONTECIMENTO: Record<TipoDoAcontecimento, string> = {
+  CRIADO: 'Contrato cadastrado',
+  ALTERADO: 'Contrato alterado',
+  ENCERRADO: 'Contrato encerrado',
+  DOCUMENTO_ANEXADO: 'Documento anexado',
+  DOCUMENTO_REMOVIDO: 'Documento removido',
+  REAJUSTE: 'Reajuste',
+};
+
+/** Por que a compra conta ou não no saldo — a linha diz, em vez de só marcar. */
+export function motivoDaCompra(c: CompraDoContrato, temContrato: boolean): string {
+  if (c.countsInContract) return 'abate o saldo';
+  if (!temContrato) return 'sem contrato';
+  if (c.cancelled) return 'cancelado — não conta';
+  return 'fora da vigência';
+}

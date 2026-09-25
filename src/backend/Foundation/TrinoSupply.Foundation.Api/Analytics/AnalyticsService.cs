@@ -515,7 +515,7 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
                 if (situacao == SupplierHomologation.Bloqueado) Fator(40, "homologação BLOQUEADA");
                 else if (situacao == SupplierHomologation.Restrito) Fator(20, "homologação RESTRITA");
                 else if (situacao != SupplierHomologation.Homologado) Fator(10, $"homologação {situacao}");
-                if (sup.Documents.Any(d => d.ValidUntil < today)) Fator(30, "certidão vencida");
+                if (sup.Documents.Any(d => d.IsCertificate && d.ValidUntil < today)) Fator(30, "certidão vencida");
                 if (sup.ContractNumber is not null && sup.ContractValidUntil is { } fim)
                 {
                     if (fim < today) Fator(10, "contrato vencido");

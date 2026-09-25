@@ -85,25 +85,88 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
         var total = await q.CountAsync(ct);
         var list = await q.OrderBy(s => s.LegalName).Take(Math.Clamp(tamanho, 1, 500)).ToListAsync(ct);
 
-        // consumo do contrato (teto − O.C.s na vigência), calculado em uma consulta só
-        var comTeto = list.Where(s => s.ContractValueLimit is not null && s.ContractItems.Count > 0).ToList();
-        if (comTeto.Count > 0)
-        {
-            var ids = comTeto.Select(s => s.Id).ToList();
-            var somas = (await db.PurchaseOrders
-                    .Where(o => ids.Contains(o.SupplierId) && o.Status != PurchaseOrderStatus.Cancelled)
-                    .Select(o => new { o.SupplierId, o.TotalValue, o.CreatedAt }).ToListAsync(ct))
-                .GroupBy(o => o.SupplierId).ToDictionary(g => g.Key, g => g.ToList());
-            foreach (var s in comTeto)
-            {
-                var i0 = s.ContractValidFrom?.ToDateTime(TimeOnly.MinValue) ?? DateTime.MinValue;
-                var f0 = s.ContractValidUntil?.ToDateTime(TimeOnly.MaxValue) ?? DateTime.MaxValue;
-                s.ContractConsumed = somas.TryGetValue(s.Id, out var os)
-                    ? os.Where(o => o.CreatedAt.UtcDateTime >= i0 && o.CreatedAt.UtcDateTime <= f0).Sum(o => o.TotalValue)
-                    : 0m;
-            }
-        }
+        await PreencherConsumoAsync(list, ct);
         return new(list, total, repetidos, repetidos.Count);
+    }
+
+    /// <summary>
+    /// O consumo do contrato (teto − O.C.s na vigência), calculado em uma consulta só para a
+    /// lista inteira. A ficha usa a mesma conta: o saldo da linha e o da ficha não podem discordar.
+    /// </summary>
+    private async Task PreencherConsumoAsync(List<Supplier> list, CancellationToken ct)
+    {
+        var comTeto = list.Where(s => s.ContractValueLimit is not null && s.ContractItems.Count > 0).ToList();
+        if (comTeto.Count == 0) return;
+        var ids = comTeto.Select(s => s.Id).ToArray();
+        var somas = (await db.PurchaseOrders
+                .Where(o => ids.Contains(o.SupplierId) && o.Status != PurchaseOrderStatus.Cancelled)
+                .Select(o => new { o.SupplierId, o.TotalValue, o.CreatedAt }).ToListAsync(ct))
+            .GroupBy(o => o.SupplierId).ToDictionary(g => g.Key, g => g.ToList());
+        foreach (var s in comTeto)
+            s.ContractConsumed = somas.TryGetValue(s.Id, out var os)
+                ? os.Where(o => NaVigencia(s, o.CreatedAt)).Sum(o => o.TotalValue)
+                : 0m;
+    }
+
+    /// <summary>A O.C. conta no contrato quando foi emitida dentro da vigência dele.</summary>
+    public static bool NaVigencia(Supplier s, DateTimeOffset emitidaEm)
+    {
+        var i0 = s.ContractValidFrom?.ToDateTime(TimeOnly.MinValue) ?? DateTime.MinValue;
+        var f0 = s.ContractValidUntil?.ToDateTime(TimeOnly.MaxValue) ?? DateTime.MaxValue;
+        return emitidaEm.UtcDateTime >= i0 && emitidaEm.UtcDateTime <= f0;
+    }
+
+    // ==== ficha do contrato: documentos, compras e história num lugar só ============
+
+    public sealed record PedidoDoContrato(Guid Id, string Number, string? ErpNumber, DateTimeOffset CreatedAt,
+        decimal Total, PurchaseOrderStatus Status, string? QuotationNumber, string? SourcePrNumber, bool NaVigencia);
+
+    /// <summary>Um acontecimento da linha do tempo: alteração, documento ou reajuste.</summary>
+    public sealed record AcontecimentoDoContrato(DateTimeOffset Quando, string Tipo, string Texto, string Quem);
+
+    public sealed record FichaDoContrato(Supplier Fornecedor, IReadOnlyList<PedidoDoContrato> Pedidos,
+        IReadOnlyList<AcontecimentoDoContrato> LinhaDoTempo, decimal CustoEvitado, bool HistoricoCompleto);
+
+    /// <summary>
+    /// Tudo o que se sabe do contrato de um fornecedor. As compras são <b>todas</b> as dele, e
+    /// não só as da vigência: a O.C. de antes do contrato é justamente o que mostra quanto se
+    /// pagava sem ele — cada linha diz se conta no saldo. A linha do tempo junta as alterações
+    /// do contrato, os documentos dele e os reajustes, do mais novo para o mais antigo.
+    /// </summary>
+    public async Task<FichaDoContrato?> FichaAsync(Guid supplierId, CancellationToken ct = default)
+    {
+        var s = await db.Suppliers.Include(x => x.ContractItems).Include(x => x.Documents)
+            .SingleOrDefaultAsync(x => x.Id == supplierId, ct);
+        if (s is null) return null;
+        await PreencherConsumoAsync([s], ct);
+
+        var pedidos = (await db.PurchaseOrders.Where(o => o.SupplierId == supplierId)
+                .OrderByDescending(o => o.CreatedAt).Take(200)
+                .Select(o => new { o.Id, o.Number, o.ErpNumber, o.CreatedAt, o.TotalValue, o.Status, o.QuotationNumber, o.SourcePrNumber })
+                .ToListAsync(ct))
+            .Select(o => new PedidoDoContrato(o.Id, o.Number, o.ErpNumber, o.CreatedAt, o.TotalValue, o.Status,
+                o.QuotationNumber, o.SourcePrNumber,
+                s.ContractItems.Count > 0 && o.Status != PurchaseOrderStatus.Cancelled && NaVigencia(s, o.CreatedAt)))
+            .ToList();
+
+        var eventos = await db.SupplierContractEvents.Where(e => e.SupplierId == supplierId)
+            .OrderByDescending(e => e.CreatedAt).Take(200).ToListAsync(ct);
+        var reajustes = await db.ContractAdjustments.Where(a => a.SupplierId == supplierId)
+            .OrderByDescending(a => a.CreatedAt).Take(200).ToListAsync(ct);
+        var br = CultureInfo.GetCultureInfo("pt-BR");
+        var linha = eventos.Select(e => new AcontecimentoDoContrato(e.CreatedAt, e.Kind, e.Summary, e.CreatedByLabel))
+            .Concat(reajustes.Select(a => new AcontecimentoDoContrato(a.CreatedAt, "REAJUSTE",
+                $"Reajuste pleiteado de {a.RequestedPercent.ToString("0.##", br)}%, fechado em {a.AgreedPercent.ToString("0.##", br)}% — "
+                + $"custo evitado de {a.CostAvoidance.ToString("C", br)} sobre {a.BaseValue.ToString("C", br)} comprados em 12 meses"
+                + (a.AppliedToPrices ? "; preços do contrato reajustados" : "") + (a.Notes is null ? "." : $". {a.Notes}"),
+                a.CreatedByLabel)))
+            .OrderByDescending(x => x.Quando).ToList();
+
+        // o registro das alterações começou com a ficha: o contrato cadastrado antes dela não tem
+        // o "cadastrado" na linha do tempo, e a tela diz isso em vez de deixar parecer que a
+        // história começa na primeira alteração registrada
+        var completo = eventos.Any(e => e.Kind == EventosDoContrato.Criado);
+        return new FichaDoContrato(s, pedidos, linha, reajustes.Sum(a => a.CostAvoidance), completo);
     }
 
     /// <summary>Só os dígitos de um documento/telefone — nulo quando não sobra nenhum.</summary>
@@ -262,8 +325,7 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
         return (supplier, null);
     }
 
-    public static readonly string[] DocumentTypes =
-        ["CND_FEDERAL", "FGTS", "CNDT", "CONTRATO_SOCIAL", "OUTRO"];
+    public static readonly string[] DocumentTypes = SupplierDocumentTypes.All;
 
     public async Task<(SupplierDocument? doc, UserError? error)> AddDocumentAsync(
         Guid supplierId, string? type, string? label, DateOnly? validUntil,
@@ -273,7 +335,7 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
             return (null, new("SUP-ERR-404", "Fornecedor não encontrado."));
         var t = (type ?? "OUTRO").Trim().ToUpperInvariant();
         if (!DocumentTypes.Contains(t))
-            return (null, new("SUP-ERR-032", "Tipo de documento inválido (CND_FEDERAL, FGTS, CNDT, CONTRATO_SOCIAL ou OUTRO)."));
+            return (null, new("SUP-ERR-032", "Tipo de documento inválido (CND_FEDERAL, FGTS, CNDT, CONTRATO_SOCIAL, CONTRATO, ADITIVO ou OUTRO)."));
         var doc = new SupplierDocument
         {
             SupplierId = supplierId, Type = t,
@@ -283,15 +345,28 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
             CreatedAt = clock.GetUtcNow(),
         };
         db.SupplierDocuments.Add(doc);
+        if (!doc.IsCertificate)
+            Registrar(supplierId, EventosDoContrato.DocumentoAnexado,
+                $"{NomeDoDocumento(doc)} anexado: {doc.FileName}.", null, uploadedByLabel);
         await db.SaveChangesAsync(ct);
         return (doc, null);
     }
 
-    public async Task<UserError?> RemoveDocumentAsync(Guid supplierId, Guid docId, CancellationToken ct = default)
+    private static string NomeDoDocumento(SupplierDocument d) =>
+        (d.Type == SupplierDocumentTypes.Aditivo ? "Aditivo" : "Contrato assinado")
+        + (d.Label is null ? "" : $" ({d.Label})");
+
+    public async Task<UserError?> RemoveDocumentAsync(Guid supplierId, Guid docId, CancellationToken ct = default,
+        Actor? actor = null)
     {
         var doc = await db.SupplierDocuments.SingleOrDefaultAsync(d => d.Id == docId && d.SupplierId == supplierId, ct);
         if (doc is null) return new("SUP-ERR-404", "Documento não encontrado.");
         db.SupplierDocuments.Remove(doc);
+        // o papel do contrato sai da lista, mas não da história: sem isto, "quem tirou o aditivo?"
+        // não teria resposta
+        if (!doc.IsCertificate)
+            Registrar(supplierId, EventosDoContrato.DocumentoRemovido,
+                $"{NomeDoDocumento(doc)} removido: {doc.FileName}.", actor?.Id, actor?.Label ?? "Cadastro");
         await db.SaveChangesAsync(ct);
         return null;
     }
@@ -307,10 +382,12 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
     /// </summary>
     public async Task<(Supplier? supplier, UserError? error)> SaveContractAsync(
         Guid id, string? number, DateOnly? validFrom, DateOnly? validUntil, string? notes,
-        IReadOnlyList<ContractItemInput>? items, decimal? valueLimit = null, CancellationToken ct = default)
+        IReadOnlyList<ContractItemInput>? items, decimal? valueLimit = null, CancellationToken ct = default,
+        Actor? actor = null)
     {
         var supplier = await db.Suppliers.Include(s => s.ContractItems).SingleOrDefaultAsync(s => s.Id == id, ct);
         if (supplier is null) return (null, new("SUP-ERR-404", "Fornecedor não encontrado."));
+        var antes = RetratoDoContrato.De(supplier);
         if (validFrom is not null && validUntil is not null && validUntil < validFrom)
             return (null, new("SUP-ERR-020", "A vigência do contrato termina antes de começar."));
 
@@ -321,6 +398,7 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
         supplier.ContractValidUntil = validUntil;
         supplier.ContractNotes = Clean(notes);
 
+        IReadOnlyList<SupplierContractItem> itensDepois = supplier.ContractItems.ToList();
         if (items is not null)
         {
             var catalogIds = items.Where(i => i.CatalogItemId is not null).Select(i => i.CatalogItemId!.Value).Distinct().ToList();
@@ -360,7 +438,14 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
                 supplier.ContractItems.Clear();
             }
             db.SupplierContractItems.AddRange(novos);
+            itensDepois = novos;
         }
+
+        // os itens novos entram pelo DbSet (a navegação se preenche pelo fixup), então o retrato
+        // de depois lê a lista que acabou de ser montada, e não a navegação
+        var depois = RetratoDoContrato.De(supplier, itensDepois);
+        if (RetratoDoContrato.Mudanca(antes, depois) is { } mudanca)
+            Registrar(supplier.Id, mudanca.Kind, mudanca.Summary, actor?.Id, actor?.Label ?? "Cadastro");
 
         supplier.UpdatedAt = clock.GetUtcNow();
         supplier.Version += 1;
@@ -424,6 +509,15 @@ public class SupplierService(AppDbContext db, TimeProvider clock)
             .OrderByDescending(a => a.CreatedAt).Take(50).ToListAsync(ct);
 
     private static string? Clean(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+
+    private void Registrar(Guid supplierId, string kind, string summary, Guid? por, string porLabel) =>
+        db.SupplierContractEvents.Add(new SupplierContractEvent
+        {
+            SupplierId = supplierId, Kind = kind,
+            // um contrato de centenas de produtos renegociados de uma vez não cabe na coluna inteiro
+            Summary = summary.Length <= 2000 ? summary : summary[..1997] + "…",
+            CreatedBy = por, CreatedByLabel = porLabel, CreatedAt = clock.GetUtcNow(),
+        });
 
     // ---- Portal do Fornecedor (RFQ-001 §5) ----------------------------------
     /// <summary>Gera nova chave de acesso ao portal; retorna a chave em claro UMA vez (persistido só o hash).</summary>

@@ -451,6 +451,10 @@ public record ProposalItemRequest(Guid QuotationItemId, decimal UnitPrice, decim
 public record InternalProposalRequest(Guid SupplierId, int? DeliveryDays, string? PaymentTerms, decimal? FreightValue,
     DateOnly? ValidUntil, string? Notes, List<ProposalItemRequest>? Items, decimal? DiscountValue, string? Currency,
     int? PaymentDays = null, decimal? TaxValue = null, decimal? OtherCosts = null, string? PaymentMethodName = null);
+/// <summary>O produto do item fora do catálogo: um que já existe, ou o cadastro de um novo.</summary>
+public record ProdutoDoItemRequest(Guid? CatalogItemId, NovoProdutoRequest? NewProduct);
+public record NovoProdutoRequest(string? Code, string? Description, string? Family, string? UnitOfMeasure,
+    decimal? ReferencePrice, string? ProductType);
 public record SelectWinnerRequest(Guid ProposalId, List<string>? Criteria, string Justification,
     List<AwardRequest>? Awards = null);
 /// <summary>Escolha do vencedor de uma família (compra dividida entre vários fornecedores).</summary>

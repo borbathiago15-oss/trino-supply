@@ -46,6 +46,10 @@ public partial class QuotationService
         if (q is null) return (null, new("RFQ-ERR-404", "Cotação não encontrada."));
         if (q.Status != QuotationStatus.Analysis)
             return (null, new("RFQ-ERR-020", "A escolha do fornecedor acontece na etapa de análise."));
+        // comprar exige produto: o item fora do catálogo vira produto antes de alguém vencer. O
+        // orçamento é a exceção — ele só levanta preço, e a cobrança vem se ele virar compra
+        if (!q.IsBudget || q.BudgetConvertedAt is not null)
+            if (ErroDeCatalogo(q) is { } semProduto) return (null, semProduto);
         if (pedidos.Count == 0)
             return (null, new("RFQ-ERR-021", "Informe o fornecedor vencedor de cada família."));
 
@@ -470,6 +474,8 @@ public partial class QuotationService
         if (q is null) return (null, new("RFQ-ERR-404", "Processo não encontrado."));
         if (q.Status != QuotationStatus.BudgetPresented)
             return (null, new("RFQ-ERR-064", "Só o orçamento apresentado vira compra."));
+        // o orçamento pôde fechar com item digitado; a compra, não (RFQ-ERR-026)
+        if (ErroDeCatalogo(q) is { } semProduto) return (null, semProduto);
 
         var from = q.Status;
         var now = clock.GetUtcNow();

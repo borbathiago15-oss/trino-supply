@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ROTULO_RFQ, type Processo } from '@/api/cotacoes';
+import { ROTULO_RFQ, type ItemDoProcesso, type Processo } from '@/api/cotacoes';
 import { Badge, Dado, Painel } from '@/componentes/basicos';
 import { Nota } from '@/componentes/formulario';
 import { data, dataHora, quantidade } from '@/util/formato';
@@ -14,7 +14,11 @@ import { CaminhoDoProcesso } from './CaminhoDoProcesso';
  * poder abrir o arquivo do cabeçalho sem passar pelas ações, pela negociação e
  * pelo mapa.
  */
-export function CabecalhoDoProcesso({ processo: q, usuarioId }: { processo: Processo; usuarioId?: string }) {
+export function CabecalhoDoProcesso({ processo: q, usuarioId, aoDefinirProduto }: {
+  processo: Processo; usuarioId?: string;
+  /** Presente quando quem olha pode transformar o item digitado em produto (RFQ-ERR-026). */
+  aoDefinirProduto?: (item: ItemDoProcesso) => void;
+}) {
   const marca = ROTULO_RFQ[q.status] ?? { rotulo: q.status, classe: 'bg-slate-100 text-slate-600' };
   const origem = q.sourcePrNumbers.length ? q.sourcePrNumbers : (q.sourcePrNumber ? [q.sourcePrNumber] : []);
   // "Aguardando Aprovador 01" diz a etapa; o nome ao lado diz de quem — sem rolar até o caminho
@@ -70,9 +74,22 @@ export function CabecalhoDoProcesso({ processo: q, usuarioId }: { processo: Proc
               return (
                 <tr key={i.id}>
                   <td>{i.sequence}</td>
-                  <td>
+                  <td data-item={i.id}>
                     {i.description}
                     {i.catalogCode && <div className="sub">{i.catalogCode}</div>}
+                    {!i.catalogItemId && (
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <Badge classe="bg-aviso-fundo text-aviso" title="Item digitado: precisa virar produto antes da escolha do vencedor (RFQ-ERR-026)">
+                          fora do catálogo
+                        </Badge>
+                        {aoDefinirProduto && (
+                          <button type="button" className="text-[13px] font-semibold text-marca underline"
+                            onClick={() => aoDefinirProduto(i)}>
+                            Cadastrar produto
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </td>
                   {q.families.length > 1 && (
                     <td>

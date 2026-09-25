@@ -852,8 +852,29 @@ export function acoesDisponiveis(
     cancelar: conduz && !['OC_REGISTRADA', 'REJEITADO', 'CANCELADA'].includes(q.status),
     /** O orçamento apresentado vira compra e entra no Nível 1 (RFQ-ERR-064 fora disso). */
     converterEmCompra: conduz && q.status === 'ORCAMENTO_APRESENTADO',
+    /** O item fora do catálogo vira produto até a escolha do vencedor — e no orçamento parado. */
+    definirProduto: conduz && (emAberto || emAnalise || q.status === 'ORCAMENTO_APRESENTADO'),
+    /**
+     * O que falta cadastrar para o próximo passo andar (RFQ-ERR-026): a escolha do vencedor da
+     * compra, ou a conversão do orçamento. O orçamento em análise escolhe com item digitado —
+     * ele só levanta preço — e é cobrado quando virar compra.
+     */
+    produtoPendente: (emAnalise && !(q.isBudget && !q.budgetConvertedAt)) || q.status === 'ORCAMENTO_APRESENTADO'
+      ? itensSemProduto(q) : [],
   };
 }
+
+/** Os itens digitados, sem produto do catálogo. */
+export const itensSemProduto = (q: Pick<Processo, 'items'>) => q.items.filter((i) => !i.catalogItemId);
+
+/** Um produto do catálogo que já existe, ou o cadastro de um novo — um dos dois. */
+export type ProdutoDoItem =
+  | { catalogItemId: string }
+  | { newProduct: { code: string | null; description: string; family: string; unitOfMeasure: string; referencePrice: number | null } };
+
+/** Transforma o item digitado no produto do catálogo; o comprador cadastra ali mesmo se não existir. */
+export const definirProdutoDoItem = (id: string, itemId: string, produto: ProdutoDoItem) =>
+  api<Processo>(`/api/v1/quotations/${id}/items/${itemId}/product`, { method: 'POST', body: produto });
 
 /** O orçamento apresentado vira compra e segue para a aprovação do Nível 1. */
 export const converterOrcamentoEmCompra = (id: string) =>

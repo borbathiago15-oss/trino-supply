@@ -19,6 +19,16 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
     public static bool CanMaintain(string role) =>
         role is Roles.SupplyManager or Roles.SystemAdministrator;
 
+    /// <summary>
+    /// Cadastrar e corrigir produto é também do comprador — decisão da empresa (2026-09): é ele
+    /// quem encontra o item fora do catálogo na cotação, e mandar o cadastro para outra pessoa
+    /// travaria a escolha do vencedor esperando uma fila. O que continua do gestor e do
+    /// administrador (<see cref="CanMaintain"/>) é o que mexe na estrutura: famílias, importação
+    /// em lote e excluir de verdade.
+    /// </summary>
+    public static bool CanRegisterProduct(string role) =>
+        CanMaintain(role) || role == Roles.PurchasingOfficer;
+
     // ---- famílias (cadastro próprio) ----------------------------------------
     public Task<List<ProductFamily>> ListFamiliesAsync(bool includeInactive, CancellationToken ct = default)
     {

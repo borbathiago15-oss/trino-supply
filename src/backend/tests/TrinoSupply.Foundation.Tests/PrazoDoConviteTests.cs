@@ -42,7 +42,7 @@ public class PrazoDoConviteTests
     private static async Task<Mundo> BuildAsync(DateOnly? prazoDoProcesso = null)
     {
         var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).AddInterceptors(new ItensDaCotacaoNoCatalogo()).Options);
         var relogio = new RelogioFixo(Segunda);
         var rfq = new QuotationService(db, relogio);
         var sup = new SupplierService(db, relogio);

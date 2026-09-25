@@ -187,6 +187,22 @@ o usuário descobrir no erro do servidor:
   e **não toca na linha em divisão**, que tem decisão própria com quantidade digitada. O número
   no botão (`levar tudo (8)`) conta a história antes do clique: em doze itens, ele diz que este
   fornecedor não cotou quatro.
+- **Item fora do catálogo cota, mas não é comprado (`RFQ-ERR-026`).** É a mesma lógica do
+  fornecedor pré-cadastrado, que cota e só vence homologado: o item digitado entra na cotação e
+  vira produto **antes da escolha do vencedor** — sem produto, a compra não tem código para a
+  O.C., não entra no histórico de preço e não casa com contrato nem com C.A. O **orçamento** é a
+  exceção: ele só levanta preço, fecha com item digitado e é cobrado quando **vira compra**. Quem
+  cadastra é o **comprador**, na própria cotação (decisão da empresa, 2026-09): mandar o cadastro
+  para uma fila travaria a escolha esperando outra pessoa. `CatalogService.CanRegisterProduct`
+  (e `podeCadastrarProduto` na tela) é cadastrar e corrigir produto; importar, excluir e manter
+  famílias continuam em `CanMaintain`, do gestor e do administrador — e `podeManterCatalogo`
+  também guarda o menu de centros de custo e setores, por isso não foi ele que se alargou.
+  `DefinirProdutoDoItemAsync` confere o vínculo **antes** de cadastrar o produto novo (produto não
+  nasce à toa para um vínculo recusado), leva código, descrição e família ao item e à SC de origem,
+  e mantém **quantidade e unidade** (as propostas foram dadas sobre elas). No orçamento já
+  apresentado a **família fica**: a adjudicação por família está feita, e mudar a chave tiraria o
+  item do lote que o fornecedor levou. Nos testes, `ItensDaCotacaoNoCatalogo` cadastra os itens
+  digitados dos cenários que verificam outra coisa; a regra tem teste próprio sem ele.
 - **Contrato de parceria preenche o preço da proposta, se estiver vigente.**
   `QuotationService.ContractPricesAsync` casa item do processo com `SupplierContractItem`
   **pelo produto do catálogo** (código como segundo caminho), nunca pela descrição — "BOTA

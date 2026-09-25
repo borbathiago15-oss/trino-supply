@@ -41,7 +41,7 @@ public class QuantidadeDivididaTests
         decimal freteAlfa = 500m, decimal freteBeta = 300m)
     {
         var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).AddInterceptors(new ItensDaCotacaoNoCatalogo()).Options);
         var relogio = new RelogioFixo(new DateTimeOffset(2026, 9, 10, 12, 0, 0, TimeSpan.Zero));
         var rfq = new QuotationService(db, relogio);
         var sup = new SupplierService(db, relogio);

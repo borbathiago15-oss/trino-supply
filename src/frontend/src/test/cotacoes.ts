@@ -24,7 +24,7 @@ export const processo = (p: Partial<Processo>): Processo => ({
   justification: null, deadline: '2026-10-01', notes: null, createdByLabel: 'Carla',
   createdAt: '2026-09-01T10:00:00Z', decisionReason: null,
   items: [{
-    id: 'i1', sequence: 1, catalogItemId: null, catalogCode: 'EPI-001', description: 'Luva nitrílica',
+    id: 'i1', sequence: 1, catalogItemId: 'cat-epi-001', catalogCode: 'EPI-001', description: 'Luva nitrílica',
     quantity: 100, unitOfMeasure: 'PAR', sourcePrNumber: 'SC-2026-000001', family: 'EPI',
   }],
   families: ['EPI'],

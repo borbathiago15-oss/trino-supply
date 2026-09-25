@@ -39,7 +39,7 @@ public class AlcadaDoCompradorTests
     private static async Task<World> BuildAsync()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).AddInterceptors(new ItensDaCotacaoNoCatalogo()).Options;
         var db = new AppDbContext(options);
         var clock = new FixedTimeProvider(new DateTimeOffset(2026, 9, 22, 12, 0, 0, TimeSpan.Zero));
 

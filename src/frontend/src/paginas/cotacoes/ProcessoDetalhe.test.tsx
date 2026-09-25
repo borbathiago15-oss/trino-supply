@@ -21,7 +21,15 @@ vi.mock('@/api/cotacoes', async (importar) => ({
   escolherVencedor: vi.fn(), decidir: vi.fn(), registrarOc: vi.fn(),
   registrarNegociacao: vi.fn(), cancelarProcesso: vi.fn(), registrarProposta: vi.fn(),
   anexarNaProposta: vi.fn(), mapaDeFamilias: vi.fn(), precosDeContrato: vi.fn(),
-  historicoDoProcesso: vi.fn(), mapaDeScore: vi.fn(),
+  historicoDoProcesso: vi.fn(), mapaDeScore: vi.fn(), definirProdutoDoItem: vi.fn(),
+}));
+vi.mock('@/api/catalogo', async (importar) => ({
+  ...(await importar<typeof import('@/api/catalogo')>()),
+  buscarProdutos: vi.fn(),
+}));
+vi.mock('@/api/familias', async (importar) => ({
+  ...(await importar<typeof import('@/api/familias')>()),
+  listarFamilias: vi.fn(),
 }));
 describe('preço vindo do contrato de parceria', () => {
   const cobertura = (over = {}) => ({
@@ -85,8 +93,10 @@ vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => eu }));
 
 import {
   anexarNaProposta, cancelarProcesso, decidir, encerrarParaAnalise, escolherVencedor,
-  convidarFornecedor, lerProcesso, mapaDeFamilias, registrarNegociacao, registrarOc, registrarProposta,
+  convidarFornecedor, definirProdutoDoItem, lerProcesso, mapaDeFamilias, registrarNegociacao, registrarOc, registrarProposta,
 } from '@/api/cotacoes';
+import { buscarProdutos } from '@/api/catalogo';
+import { listarFamilias } from '@/api/familias';
 import { anexarOc } from '@/api/pedidos';
 import { acharFornecedor, criarFornecedor, listarFornecedores } from '@/api/fornecedores';
 
@@ -206,6 +216,22 @@ describe('regras das ações por etapa', () => {
       expect(acoesDisponiveis(processo({ status }), conduz).cancelar).toBe(false);
     expect(acoesDisponiveis(processo({ status: 'EM_ANALISE' }), conduz).cancelar).toBe(true);
   });
+  it('o item sem produto trava a escolha da compra, mas não a do orçamento, que é cobrado ao converter', () => {
+    const digitado = (over = {}) => {
+      const q = processo({ status: 'EM_ANALISE', ...over });
+      q.items = q.items.map((i) => ({ ...i, catalogItemId: null }));
+      return q;
+    };
+    expect(acoesDisponiveis(digitado(), conduz).produtoPendente).toHaveLength(1);
+    expect(acoesDisponiveis(digitado({ isBudget: true, budgetConvertedAt: null }), conduz).produtoPendente).toEqual([]);
+    expect(acoesDisponiveis(digitado({ isBudget: true, status: 'ORCAMENTO_APRESENTADO' }), conduz).produtoPendente).toHaveLength(1);
+    // com produto, nada pendente
+    expect(acoesDisponiveis(processo({ status: 'EM_ANALISE' }), conduz).produtoPendente).toEqual([]);
+    // define o produto até a escolha; depois dela, não
+    expect(acoesDisponiveis(digitado(), conduz).definirProduto).toBe(true);
+    expect(acoesDisponiveis(digitado({ status: 'AGUARDANDO_GERENTE' }), conduz).definirProduto).toBe(false);
+  });
+
   it('mais de um item manda escolher na grade item × fornecedor', () => {
     // o critério deixou de ser a família: a divisão passou a poder acontecer DENTRO de
     // uma família só (o papel com um fornecedor, a caneta com outro)
@@ -630,6 +656,38 @@ describe('tela do processo', () => {
 
     await waitFor(() => expect(escolherVencedor).toHaveBeenCalledWith('q1', {
       proposalId: 'p1', criteria: ['Preço'], justification: 'menor preço e prazo',
+    }));
+  });
+
+  it('item fora do catálogo: a escolha espera o cadastro, e o comprador cadastra ali mesmo (RFQ-ERR-026)', async () => {
+    const usuario = userEvent.setup();
+    const semProduto = processo({ status: 'EM_ANALISE' });
+    semProduto.items = semProduto.items.map((i) => ({ ...i, catalogItemId: null, catalogCode: null, description: 'Suporte de monitor' }));
+    vi.mocked(lerProcesso).mockResolvedValue(semProduto);
+    vi.mocked(buscarProdutos).mockResolvedValue([]);
+    vi.mocked(listarFamilias).mockResolvedValue([
+      { id: 'f1', name: 'MOBILIARIO', active: true } as Awaited<ReturnType<typeof listarFamilias>>[number],
+    ]);
+    vi.mocked(definirProdutoDoItem).mockResolvedValue(processo({ status: 'EM_ANALISE' }));
+    abrir();
+
+    // a tela diz qual item falta, e não mostra a escolha que o servidor recusaria
+    expect(await screen.findByTestId('produto-pendente')).toHaveTextContent('Suporte de monitor');
+    expect(screen.queryByTestId('form-vencedor')).toBeNull();
+    const itens = screen.getByTestId('itens-cotacao');
+    expect(within(itens).getByText('fora do catálogo')).toBeInTheDocument();
+
+    await usuario.click(within(itens).getByRole('button', { name: 'Cadastrar produto' }));
+    const dialogo = await screen.findByRole('dialog');
+    expect(await within(dialogo).findByText(/Nada encontrado/)).toBeInTheDocument();
+    await usuario.click(within(dialogo).getByRole('tab', { name: 'Cadastrar produto novo' }));
+    // o cadastro nasce com a descrição e a unidade do item
+    expect(within(dialogo).getByLabelText('Descrição do produto')).toHaveValue('Suporte de monitor');
+    await usuario.selectOptions(within(dialogo).getByLabelText('Família'), 'MOBILIARIO');
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Cadastrar e usar no item' }));
+
+    await waitFor(() => expect(definirProdutoDoItem).toHaveBeenCalledWith('q1', 'i1', {
+      newProduct: { code: null, description: 'Suporte de monitor', family: 'MOBILIARIO', unitOfMeasure: 'PAR', referencePrice: null },
     }));
   });
 

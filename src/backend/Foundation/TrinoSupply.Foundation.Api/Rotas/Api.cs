@@ -155,6 +155,20 @@ public static class Api
         QuotationKind.Bid => "BID", QuotationKind.Service => "SERVICO", _ => "COMPRA",
     };
 
+    /// <summary>
+    /// A situação pedida no filtro da lista. A tela manda a chave que ela mesma recebe
+    /// (<c>EM_ANALISE</c>), e o filtro só aceitava o nome do enum (<c>Analysis</c>): a conversão
+    /// falhava calada e a lista vinha inteira, com o filtro marcado na tela. As duas formas valem.
+    /// </summary>
+    public static QuotationStatus? StatusDoFiltro(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status)) return null;
+        var chave = status.Trim().ToUpperInvariant();
+        foreach (var s in Enum.GetValues<QuotationStatus>())
+            if (QStatusLabel(s) == chave) return s;
+        return Enum.TryParse<QuotationStatus>(status, true, out var st) ? st : null;
+    }
+
     public static string QStatusLabel(QuotationStatus s) => s switch
     {
         QuotationStatus.Open => "COTACAO_ABERTA",
@@ -164,6 +178,7 @@ public static class Api
         QuotationStatus.ApprovedForIssue => "APROVADO_PARA_EMISSAO",
         QuotationStatus.PoIssued => "OC_REGISTRADA",
         QuotationStatus.Rejected => "REJEITADO",
+        QuotationStatus.BudgetPresented => "ORCAMENTO_APRESENTADO",
         _ => "CANCELADA",
     };
 }

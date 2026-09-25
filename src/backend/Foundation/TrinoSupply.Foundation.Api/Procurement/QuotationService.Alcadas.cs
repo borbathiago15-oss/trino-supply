@@ -247,6 +247,19 @@ public partial class QuotationService
             }
             // aviso 5: aprovado — volta ao comprador para registrar a O.C. do ERP. O pedido já
             // nasceu na aprovação: o link leva à tela dele, onde ficam O.C., faturamento e entrega
+            // o orçamento ficou pronto: quem pediu cada SC do processo recebe o seu aviso
+            case QuotationStatus.BudgetPresented:
+            {
+                var prIds = q.SourcePrIds.ToArray();
+                var solicitantes = await db.Requisitions.Where(r => prIds.Contains(r.Id))
+                    .Select(r => r.RequesterId).Distinct().ToListAsync(ct);
+                avisos.EnfileirarParaTodos(solicitantes, AvisoKinds.OrcamentoApresentado,
+                    $"Orçamento pronto — {q.Number}",
+                    $"O comprador fechou o orçamento do processo {q.Number}. Se for comprar, avise o comprador: "
+                    + "ele converte em compra e o processo segue para a aprovação.",
+                    $"{AvisoKinds.OrcamentoApresentado}:{q.Id}", "/solicitacoes");
+                break;
+            }
             case QuotationStatus.ApprovedForIssue:
                 avisos.Enfileirar(q.CreatedBy, AvisoKinds.LiberadoParaOc,
                     $"{q.Number} aprovado — registre a O.C.",

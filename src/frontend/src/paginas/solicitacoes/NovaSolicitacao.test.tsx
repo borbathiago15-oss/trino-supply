@@ -171,6 +171,7 @@ describe('tela Inclusão de SC', () => {
 
     await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'reposição de EPI');
     await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
+    await usuario.click(screen.getByRole('radio', { name: /^Compra/ }));
     await usuario.click(screen.getByRole('button', { name: /Criar rascunho da SC/ }));
 
     await waitFor(() => expect(criarSolicitacao).toHaveBeenCalledWith(expect.objectContaining({
@@ -208,6 +209,7 @@ describe('tela Inclusão de SC', () => {
     await usuario.type(screen.getByLabelText('Quantidade'), '3');
     await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'manutenção');
     await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
+    await usuario.click(screen.getByRole('radio', { name: /^Compra/ }));
     await usuario.click(screen.getByRole('button', { name: /Criar rascunho da SC/ }));
 
     await waitFor(() => expect(criarSolicitacao).toHaveBeenCalledWith(expect.objectContaining({
@@ -257,6 +259,7 @@ describe('tela Inclusão de SC', () => {
     await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
     await usuario.type(screen.getByLabelText(/Orçamento previsto/), '1200');
 
+    await usuario.click(screen.getByRole('radio', { name: /^Compra/ }));
     await usuario.click(screen.getByRole('button', { name: /Criar rascunho da SC/ }));
     await waitFor(() => expect(criarSolicitacao).toHaveBeenCalledWith(
       expect.objectContaining({ budget: 1200 })));
@@ -272,6 +275,7 @@ describe('tela Inclusão de SC', () => {
     await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'reposição de obra');
     await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
 
+    await usuario.click(screen.getByRole('radio', { name: /^Compra/ }));
     await usuario.click(screen.getByRole('button', { name: /Criar rascunho da SC/ }));
     await waitFor(() => expect(criarSolicitacao).toHaveBeenCalledWith(
       expect.objectContaining({ budget: null })));
@@ -285,6 +289,7 @@ describe('tela Inclusão de SC', () => {
     expect(screen.getByTestId('familia-fora-do-catalogo')).toHaveTextContent('Sem família');
     await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'manutenção');
     await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
+    await usuario.click(screen.getByRole('radio', { name: /^Compra/ }));
     await usuario.click(screen.getByRole('button', { name: /Criar rascunho da SC/ }));
     await waitFor(() => expect(criarSolicitacao).toHaveBeenCalledWith(expect.objectContaining({
       items: [expect.objectContaining({ description: 'Fita isolante', family: null })],
@@ -305,6 +310,7 @@ describe('tela Inclusão de SC', () => {
     await screen.findByTestId('linha-sem-produto');
     await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'reposição');
     await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
+    await usuario.click(screen.getByRole('radio', { name: /^Compra/ }));
     await usuario.click(screen.getByRole('button', { name: /Criar rascunho da SC/ }));
     expect(await screen.findByTestId('toast')).toHaveTextContent('Há item sem produto');
     expect(criarSolicitacao).not.toHaveBeenCalled();
@@ -347,6 +353,31 @@ describe('tela Inclusão de SC', () => {
     await waitFor(() => expect(within(empresa).getAllByRole('option').map((o) => o.textContent)).toEqual([
       'Selecione a empresa…', 'TRINO FRIO ARMAZENS GERAIS LTDA', 'TRINO LOGISTICA INTEGRADA LTDA',
     ]));
+  });
+
+  it('a finalidade é obrigatória e vem sem nada marcado', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(criarSolicitacao).mockResolvedValue({ id: 'sc1', number: 'PR-2026-000001' } as never);
+    abrir();
+    const campo = within(await screen.findByTestId('campo-finalidade'));
+    expect(campo.getAllByRole('radio').every((r) => !(r as HTMLInputElement).checked)).toBe(true);
+    await escolherNoCatalogo(usuario, 'Cimento CP-II');
+    await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'levantar preço');
+    await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
+    await usuario.click(screen.getByRole('button', { name: /Criar rascunho da SC/ }));
+    expect(criarSolicitacao).not.toHaveBeenCalled();
+  });
+
+  it('orçamento vai marcado na SC', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(criarSolicitacao).mockResolvedValue({ id: 'sc1', number: 'PR-2026-000001' } as never);
+    abrir();
+    await usuario.click(await screen.findByRole('radio', { name: /^Orçamento/ }));
+    await escolherNoCatalogo(usuario, 'Cimento CP-II');
+    await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'levantar preço');
+    await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
+    await usuario.click(screen.getByRole('button', { name: /Criar rascunho da SC/ }));
+    await waitFor(() => expect(criarSolicitacao).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'ORCAMENTO' })));
   });
 });
 

@@ -163,7 +163,8 @@ export function FormVencedor({ processo, aoConcluir, aoAvisar }: {
 
       <button type="button" className="botao mt-3" disabled={!propostaId || !justificativa.trim() || salvando}
         onClick={confirmar}>
-        {salvando ? 'Registrando…' : 'Confirmar escolha e enviar à aprovação'}
+        {salvando ? 'Registrando…' : processo.isBudget && !processo.budgetConvertedAt
+          ? 'Confirmar escolha e apresentar o orçamento' : 'Confirmar escolha e enviar à aprovação'}
       </button>
       <Nota>A escolha e os critérios ficam registrados na auditoria do processo.</Nota>
     </div>

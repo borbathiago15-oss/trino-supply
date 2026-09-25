@@ -16,6 +16,9 @@ public static class ProcessStatus
         new("PENDENTE", "Pendente", "", "Pedido aguardando ação do comprador.");
     public static readonly ProcessStatusView InQuotation =
         new("EM_COTACAO", "Em Cotação", "warn", "Comprador iniciou as cotações.");
+    public static readonly ProcessStatusView BudgetPresented =
+        new("ORCAMENTO_APRESENTADO", "Orçamento apresentado", "info",
+            "O comprador fechou o orçamento. Só vai à aprovação se alguém decidir comprar.");
     public static readonly ProcessStatusView AwaitingApproval =
         new("AGUARDANDO_APROVACAO", "Aguardando Aprovação", "teal", "Comprador enviou as cotações para os aprovadores.");
     public static readonly ProcessStatusView Approved =
@@ -49,6 +52,7 @@ public static class ProcessStatus
             return quotation.Status switch
             {
                 QuotationStatus.Open or QuotationStatus.Analysis => InQuotation,
+                QuotationStatus.BudgetPresented => BudgetPresented,
                 QuotationStatus.AwaitingManager or QuotationStatus.AwaitingDirector => AwaitingApproval,
                 QuotationStatus.ApprovedForIssue or QuotationStatus.PoIssued => Approved,
                 QuotationStatus.Rejected => Rejected,

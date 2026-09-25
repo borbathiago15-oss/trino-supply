@@ -231,7 +231,8 @@ export function GradeDeAdjudicacao({ processo, lotes, aoConcluir, aoAvisar }: {
 
       <div className="mt-3">
         <button type="button" className="botao" disabled={!podeConfirmar} onClick={confirmar}>
-          {salvando ? 'Registrando…' : 'Confirmar escolha e enviar à aprovação'}
+          {salvando ? 'Registrando…' : processo.isBudget && !processo.budgetConvertedAt
+          ? 'Confirmar escolha e apresentar o orçamento' : 'Confirmar escolha e enviar à aprovação'}
         </button>
       </div>
       <Nota>A escolha, os itens de cada fornecedor e a justificativa ficam na auditoria do processo.</Nota>

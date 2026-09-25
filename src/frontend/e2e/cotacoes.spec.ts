@@ -10,6 +10,7 @@ async function scComDuasFamilias(page: import('@playwright/test').Page, justific
   await itemForaDoCatalogo(page, `Luva ${marca}`, '10', 'PAR');
   await page.fill('#sc-justificativa', justificativa);
   await page.selectOption('#sc-cc', 'E2E-001');
+  await page.getByRole('radio', { name: /^Compra/ }).check();
   await page.getByRole('button', { name: 'Criar rascunho da SC' }).click();
   await expect(page).toHaveURL(/\/solicitacoes$/);
 
@@ -136,3 +137,55 @@ test.describe('Processos de Cotação (React)', () => {
     await expect(page.getByTestId('itens-cotacao')).toBeVisible();
   });
 });
+
+test.describe('Orçamento (finalidade da SC)', () => {
+  test('orçamento para em "orçamento apresentado" e só vai ao Nível 1 quando vira compra', async ({ page }) => {
+    const justificativa = `E2E orçamento ${marca}`;
+    await abrirAutenticado(page, '/solicitacoes/nova');
+    await page.getByRole('radio', { name: /^Orçamento/ }).check();
+    await itemForaDoCatalogo(page, `Resma ${marca}`, '5', 'UN');
+    await page.fill('#sc-justificativa', justificativa);
+    await page.selectOption('#sc-cc', 'E2E-001');
+    await page.getByRole('button', { name: 'Criar rascunho da SC' }).click();
+    await expect(page).toHaveURL(/\/solicitacoes$/);
+    const sc = page.locator('tr', { hasText: justificativa }).first();
+    await expect(sc).toContainText('Orçamento');
+    await sc.getByRole('button', { name: 'Enviar solicitação' }).click();
+    await expect(page.getByTestId('toast').last()).toContainText('enviada');
+
+    // abre o processo, convida o fornecedor do cenário e lança a proposta
+    await abrirAutenticado(page, '/cotacoes/abrir');
+    await page.getByTestId('fila-cotacao').locator('tr', { hasText: justificativa }).first()
+      .locator('input[type=checkbox]').check();
+    await page.getByRole('button', { name: /Um processo com os itens marcados/ }).click();
+    await expect(page).toHaveURL(/\/cotacoes\/[0-9a-f-]+$/);
+
+    const alfa = await page.locator('#rfq-convidar option', { hasText: 'Alfa' }).first().getAttribute('value');
+    await page.locator('#rfq-convidar').selectOption(alfa!);
+    await page.getByRole('button', { name: 'Convidar' }).click();
+    const form = page.getByTestId('form-proposta');
+    await form.locator('input[type=number]').last().fill('24.90');
+    await form.getByRole('button', { name: 'Registrar proposta' }).click();
+    await expect(page.getByTestId('toast').last()).toContainText('Proposta registrada');
+
+    await page.getByRole('button', { name: 'Encerrar para análise' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Encerrar' }).click();
+    await page.getByRole('radio', { name: /Escolher Alfa/ }).check();
+    await page.fill('#rfq-justificativa', 'Único fornecedor que respondeu');
+    // no orçamento o botão não promete aprovação: ela não vem
+    await page.getByRole('button', { name: 'Confirmar escolha e apresentar o orçamento' }).click();
+
+    // parou em quem pediu: nada de Nível 1
+    await expect(page.locator('body')).toContainText('Orçamento apresentado');
+    await expect(page.getByTestId('proximo-passo')).toContainText('a decisão é de quem pediu');
+    await expect(page.getByRole('button', { name: 'Aprovar' })).toHaveCount(0);
+
+    // o solicitante decidiu comprar: vira compra e entra no Nível 1, com a marca
+    await page.getByRole('button', { name: 'Converter em compra e enviar ao Nível 1' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Converter e enviar ao Nível 1' }).click();
+    await expect(page.getByTestId('toast').last()).toContainText('seguiu para o Nível 1');
+    await expect(page.locator('body')).toContainText('Aguardando Aprovador 01');
+    await expect(page.getByText('Nasceu como orçamento')).toBeVisible();
+  });
+});
+

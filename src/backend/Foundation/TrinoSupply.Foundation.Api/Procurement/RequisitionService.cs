@@ -165,7 +165,20 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
 
     // ---- ciclo de vida ------------------------------------------------------
     public record ScHeaderInput(string? NeedType, string? DeliveryLocation, string? Company, string? InternalNotes,
-        string? UrgencyReason = null, string? UrgencyImpact = null, decimal? Budget = null);
+        string? UrgencyReason = null, string? UrgencyImpact = null, decimal? Budget = null, string? Purpose = null);
+
+    /// <summary>
+    /// Finalidade válida, ou o erro. Vazio é compra aqui dentro — o que torna o campo obrigatório é
+    /// a rota (<c>PR-ERR-024</c>), que é a porta de quem cria SC pela tela.
+    /// </summary>
+    public static (string? finalidade, UserError? erro) FinalidadeDe(string? informada)
+    {
+        if (string.IsNullOrWhiteSpace(informada)) return (FinalidadeDaSc.Compra, null);
+        var f = informada.Trim().ToUpperInvariant();
+        return FinalidadeDaSc.Todas.Contains(f)
+            ? (f, null)
+            : (null, new("PR-ERR-024", "Finalidade inválida: escolha orçamento ou compra."));
+    }
 
     /// <summary>Compra urgente sem justificativa e impacto não entra (insumo do compliance).</summary>
     private static UserError? UrgencyError(string priority, string? reason, string? impact) =>
@@ -200,6 +213,8 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
 
         var (empresa, empresaError) = await EmpresaDoCadastroAsync(header?.Company, ct);
         if (empresaError is not null) return (null, empresaError);
+        var (finalidade, finalidadeError) = FinalidadeDe(header?.Purpose);
+        if (finalidadeError is not null) return (null, finalidadeError);
 
         var (catalogItems, catalogError) = await catalog.ResolveForRequisitionAsync(
             items.Where(i => i.CatalogItemId is not null).Select(i => i.CatalogItemId!.Value).ToList(), ct);
@@ -219,6 +234,7 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
             NeedType = Clean(header?.NeedType)?.ToUpperInvariant(),
             DeliveryLocation = Clean(header?.DeliveryLocation),
             Company = empresa,
+            Purpose = finalidade!,
             InternalNotes = Clean(header?.InternalNotes),
             // orçamento negativo não é orçamento; zero também não diz nada
             Budget = header?.Budget is > 0 ? header.Budget : null,
@@ -330,6 +346,39 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
     }
 
     /// <summary>Submete: Draft/Returned → (validação síncrona) → InApproval; resubmissão incrementa o ciclo.</summary>
+    /// <summary>
+    /// Corrigir a finalidade enquanto ela ainda não mudou nada: antes de a SC entrar num processo
+    /// de cotação (<c>PR-ERR-025</c>). Depois disso, o que decide o caminho é o processo — virar
+    /// compra é "converter o orçamento", com registro de quem e quando, e não uma troca de campo.
+    /// Muda quem pediu (enquanto a SC é dele: rascunho ou devolvida) e quem conduz compra.
+    /// </summary>
+    public async Task<(PurchaseRequisition? pr, UserError? error)> MudarFinalidadeAsync(
+        Actor actor, Guid id, string? finalidade, CancellationToken ct = default)
+    {
+        var pr = await db.Requisitions.Include(r => r.Items).SingleOrDefaultAsync(r => r.Id == id && r.DeletedAt == null, ct);
+        if (pr is null) return (null, new("PR-ERR-404", "Requisição não encontrada."));
+        var dono = pr.RequesterId == actor.Id && pr.Status is RequisitionStatus.Draft or RequisitionStatus.Returned;
+        if (!dono && !QuotationService.CanConduct(actor.Role))
+            return (null, new("PR-ERR-001", "Só quem pediu (no rascunho) ou o comprador corrige a finalidade."));
+        if (string.IsNullOrWhiteSpace(finalidade))
+            return (null, new("PR-ERR-024", "Informe a finalidade da SC: orçamento ou compra."));
+        var (nova, erro) = FinalidadeDe(finalidade);
+        if (erro is not null) return (null, erro);
+        var itens = pr.Items.Select(i => i.Id).ToArray();
+        var emProcesso = await db.Quotations
+            .Where(q => q.Status != QuotationStatus.Cancelled && q.Status != QuotationStatus.Rejected
+                        && (q.SourcePrId == pr.Id || q.Items.Any(i => i.SourcePrItemId != null && itens.Contains(i.SourcePrItemId.Value))))
+            .Select(q => q.Number).FirstOrDefaultAsync(ct);
+        if (emProcesso is not null)
+            return (null, new("PR-ERR-025",
+                $"A SC já está no processo {emProcesso}: a finalidade não muda mais por aqui. Orçamento vira compra no próprio processo."));
+        pr.Purpose = nova!;
+        pr.UpdatedAt = clock.GetUtcNow();
+        pr.Version += 1;
+        await db.SaveChangesAsync(ct);
+        return (pr, null);
+    }
+
     public async Task<(PurchaseRequisition? pr, UserError? error)> SubmitAsync(Actor actor, Guid id, CancellationToken ct = default)
     {
         var pr = await GetAsync(actor, id, ct);

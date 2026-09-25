@@ -43,6 +43,7 @@ public partial class QuotationService
         {
             Number = $"{prefix}-{now.Year}-{seq:000000}",
             Kind = kind,
+            IsBudget = pr.Purpose == FinalidadeDaSc.Orcamento,
             SourcePrId = pr.Id,
             SourcePrNumber = pr.Number,
             CostCenter = pr.CostCenter,
@@ -125,6 +126,13 @@ public partial class QuotationService
         if (scAtiva is not null)
             return (null, new("RFQ-ERR-062", $"Solicitação selecionada já possui o processo ativo {scAtiva}."));
 
+        // orçamento e compra não se misturam: um processo ou para em "orçamento apresentado" ou vai
+        // à aprovação — metade de cada tornaria as duas coisas falsas ao mesmo tempo
+        var finalidades = prs.Select(r => r.Purpose).Distinct().ToList();
+        if (finalidades.Count > 1)
+            return (null, new("RFQ-ERR-063",
+                "Não misture orçamento e compra no mesmo processo: abra um para as SCs de orçamento e outro para as de compra."));
+
         var now = clock.GetUtcNow();
         var ordered = prs.OrderBy(r => r.SubmittedAt ?? r.CreatedAt).ToList();
         var primary = ordered[0];
@@ -135,6 +143,7 @@ public partial class QuotationService
         {
             Number = $"{prefix}-{now.Year}-{seq:000000}",
             Kind = kind,
+            IsBudget = finalidades[0] == FinalidadeDaSc.Orcamento,
             SourcePrId = primary.Id,
             SourcePrNumber = primary.Number,
             CostCenter = primary.CostCenter,

@@ -65,6 +65,8 @@ public static class AvisoKinds
     public const string AprovacaoNivel2 = "APROVACAO_NIVEL_2";
     /// <summary>5 — aprovado: volta ao comprador para registrar a O.C. do ERP.</summary>
     public const string LiberadoParaOc = "LIBERADO_PARA_OC";
+    /// <summary>O orçamento da SC está pronto: o comprador escolheu e o processo parou para quem pediu.</summary>
+    public const string OrcamentoApresentado = "ORCAMENTO_APRESENTADO";
     /// <summary>Escalonamento: algo passou do prazo da etapa e o gestor precisa saber.</summary>
     public const string PrazoEstourado = "PRAZO_ESTOURADO";
 }

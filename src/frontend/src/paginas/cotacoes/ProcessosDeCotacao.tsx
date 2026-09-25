@@ -12,6 +12,7 @@ const POR_PAGINA = 50;
 export const SITUACOES_FILTRO = [
   { valor: 'COTACAO_ABERTA', rotulo: 'Cotações em aberto / aguardando propostas' },
   { valor: 'EM_ANALISE', rotulo: 'Propostas recebidas / em análise' },
+  { valor: 'ORCAMENTO_APRESENTADO', rotulo: 'Orçamentos apresentados (aguardando decisão)' },
   { valor: 'AGUARDANDO_GERENTE', rotulo: 'Aguardando Aprovador 01 (Nível 1)' },
   { valor: 'AGUARDANDO_DIRETOR', rotulo: 'Aguardando Aprovador 02 (Nível 2)' },
   { valor: 'APROVADO_PARA_EMISSAO', rotulo: 'Aprovados — aguardando registro da O.C.' },

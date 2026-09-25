@@ -14,6 +14,7 @@ test.describe('Solicitações de Compra (React)', () => {
 
     await page.fill('#sc-justificativa', justificativa);
     await page.selectOption('#sc-cc', { index: 1 });
+    await page.getByRole('radio', { name: /^Compra/ }).check();
     await page.getByRole('button', { name: 'Criar rascunho da SC' }).click();
 
     // ao criar, a tela leva para Minhas Solicitações (SC)
@@ -60,6 +61,7 @@ test.describe('Solicitações de Compra (React)', () => {
     await abrirAutenticado(page, '/solicitacoes/lote');
     const justificativa = `E2E lote ${marca}`;
 
+    await page.getByRole('radio', { name: /^Compra/ }).check();
     await page.fill('#lote-justificativa', justificativa);
     await page.selectOption('#lote-cc', { index: 1 });
     await expect(page.getByTestId('grade-lote')).toBeVisible();
@@ -85,6 +87,7 @@ test.describe('Solicitações de Compra (React)', () => {
     await itemForaDoCatalogo(page, `Item descartável ${marca}`, '1');
     await page.fill('#sc-justificativa', justificativa);
     await page.selectOption('#sc-cc', { index: 1 });
+    await page.getByRole('radio', { name: /^Compra/ }).check();
     await page.getByRole('button', { name: 'Criar rascunho da SC' }).click();
     await expect(page).toHaveURL(/\/solicitacoes$/);
 

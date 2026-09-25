@@ -22,6 +22,7 @@ public enum QuotationStatus : short
     PoIssued = 6,         // OC REGISTRADA (número vindo do ERP SENIOR)
     Rejected = 7,         // REJEITADO (motivo obrigatório)
     Cancelled = 8,        // CANCELADA (motivo obrigatório)
+    BudgetPresented = 9,  // ORÇAMENTO APRESENTADO — vencedor escolhido, sem aprovação até virar compra
 }
 
 public class Quotation
@@ -45,6 +46,15 @@ public class Quotation
     public Guid? SelectedBy { get; set; }
     public string? SelectedByLabel { get; set; }
     public DateTimeOffset? SelectedAt { get; set; }
+
+    /// <summary>
+    /// O processo nasceu de SCs de orçamento. Fica verdadeiro depois de virar compra — é por ele
+    /// que o Nível 1 sabe que a compra "nasceu como orçamento".
+    /// </summary>
+    public bool IsBudget { get; set; }
+    /// <summary>Quando o orçamento virou compra, e quem decidiu. Nulo enquanto é só orçamento.</summary>
+    public DateTimeOffset? BudgetConvertedAt { get; set; }
+    public string? BudgetConvertedByLabel { get; set; }
 
     // alçadas (RFQ-BR-006/007)
     public Guid? ManagerApprovedBy { get; set; }

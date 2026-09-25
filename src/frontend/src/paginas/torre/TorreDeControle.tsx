@@ -12,6 +12,7 @@ import { useToast } from '@/componentes/Toast';
 import { podeTriar } from '@/dominio/papeis';
 import { designar, designarEmLote, listarResponsaveis, rotuloDoResponsavel } from '@/api/triagem';
 import { LinkAbaNova } from '@/componentes/LinkAbaNova';
+import { mudarFinalidade } from '@/api/solicitacoes';
 import { DialogoDePrioridade, type Pleito } from '@/paginas/triagem/DialogoDePrioridade';
 import { useUsuario } from '@/sessao/SessaoProvider';
 import { data, moeda, quantidade } from '@/util/formato';
@@ -33,11 +34,13 @@ function KpiFiltro({ rotulo, valor, detalhe, ativo, aoClicar }: {
   );
 }
 
-function Linha({ i, triando, marcada, aoMarcar, aoLiberar, aoPriorizar }: {
+function Linha({ i, triando, marcada, aoMarcar, aoLiberar, aoPriorizar, aoMudarFinalidade }: {
   i: LinhaDaTorre; triando: boolean; marcada: boolean;
   aoMarcar: (scId: string) => void; aoLiberar: (scId: string) => void;
   aoPriorizar: (i: LinhaDaTorre) => void;
+  aoMudarFinalidade: (i: LinhaDaTorre) => void;
 }) {
+  const orcamento = i.purpose === 'ORCAMENTO';
   const urgente = i.priority === 'URGENT';
   const destino = destinoDaAcao(i);
   // parado tempo demais na mesma etapa: o número já está na linha, o destaque é para
@@ -56,7 +59,17 @@ function Linha({ i, triando, marcada, aoMarcar, aoLiberar, aoPriorizar }: {
             checked={marcada} onChange={() => aoMarcar(i.requisitionId)} />
         </td>
       )}
-      <td className="whitespace-nowrap">{i.prNumber}<div className="sub">item {i.sequence}</div></td>
+      <td className="whitespace-nowrap">
+        {i.prNumber}
+        {orcamento && <Badge classe="ml-1 bg-teal-50 text-teal-800">Orçamento</Badge>}
+        <div className="sub">item {i.sequence}</div>
+        {/* corrigir a finalidade é antes de cotar (PR-ERR-025): depois, orçamento vira compra no processo */}
+        {triando && i.stage === 'SOLICITACAO' && (
+          <button type="button" className="sub underline" onClick={() => aoMudarFinalidade(i)}>
+            {orcamento ? 'é compra' : 'é orçamento'}
+          </button>
+        )}
+      </td>
       <td className="min-w-[200px]">
         {i.catalogCode ? `[${i.catalogCode}] ` : ''}{i.description}
         {urgente && <Badge classe="ml-2 bg-perigo-fundo text-perigo">URGENTE</Badge>}
@@ -218,6 +231,15 @@ export function TorreDeControle() {
     } catch (e) {
       avisar(e instanceof Error ? e.message : 'Falha ao atribuir.', 'erro');
     } finally { setAtribuindo(false); }
+  }
+
+  async function trocarFinalidade(l: LinhaDaTorre) {
+    const para = l.purpose === 'ORCAMENTO' ? 'COMPRA' : 'ORCAMENTO';
+    try {
+      await mudarFinalidade(l.requisitionId, para);
+      avisar(`${l.prNumber} agora é ${para === 'ORCAMENTO' ? 'orçamento' : 'compra'}.`);
+      setRecarga((n) => n + 1);
+    } catch (e) { avisar(e instanceof Error ? e.message : 'Falha ao corrigir a finalidade.', 'erro'); }
   }
 
   async function tirarResponsavel(scId: string) {
@@ -504,6 +526,7 @@ export function TorreDeControle() {
                   <Linha key={i.itemId} i={i} triando={triando}
                     marcada={!!marcadas[i.requisitionId]} aoMarcar={alternar}
                     aoLiberar={tirarResponsavel}
+                    aoMudarFinalidade={trocarFinalidade}
                     aoPriorizar={(l) => setPleito({
                       id: l.requisitionId, numero: l.prNumber,
                       para: l.priority === 'URGENT' ? 'NORMAL' : 'URGENT',

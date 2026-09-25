@@ -248,6 +248,7 @@ export function MeusPedidos() {
                     <tr key={r.id} data-solicitacao={r.number} data-etapa={a?.etapaAtual}>
                       <td className="whitespace-nowrap">
                         <span className="font-semibold">{r.number}</span>
+                        {r.purpose === 'ORCAMENTO' && <Badge classe="ml-1 bg-teal-50 text-teal-800">Orçamento</Badge>}
                         <div className="sub">ciclo {r.cycle} · {r.kind === 'CATALOGO' ? 'lote' : 'SC'}</div>
                       </td>
                       <td className="min-w-[320px]">

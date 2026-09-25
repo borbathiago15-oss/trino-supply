@@ -265,7 +265,8 @@ public record ItemRequest(string? Description, decimal Quantity, string? UnitOfM
     decimal? EstimatedUnitPrice, string? Notes, Guid? CatalogItemId, string? Family = null);
 public record CreateRequisitionRequest(string Justification, string CostCenter, string? Priority, DateOnly? NeededBy, List<ItemRequest>? Items, string? Kind,
     string? NeedType, string? DeliveryLocation, string? Company, string? InternalNotes,
-    string? UrgencyReason = null, string? UrgencyImpact = null, decimal? Budget = null);
+    string? UrgencyReason = null, string? UrgencyImpact = null, decimal? Budget = null, string? Purpose = null);
+public record FinalidadeRequest(string? Purpose);
 public interface IFamilyLeadTimes
 {
     int? LeadRequestToQuote { get; }

@@ -4,7 +4,8 @@ import { gradeDeLote, type LinhaDeLote } from '@/api/catalogo';
 import { listarFamilias } from '@/api/familias';
 import { listarCentrosCusto, type CentroCusto } from '@/api/centrosCusto';
 import { listarLocaisDeEntrega, locaisPorTipo, rotuloDoLocal, type LocalEntrega } from '@/api/locais';
-import { criarSolicitacao, ROTULO_PRIORIDADE, type Prioridade } from '@/api/solicitacoes';
+import { criarSolicitacao, ROTULO_PRIORIDADE, type Prioridade , type Finalidade } from '@/api/solicitacoes';
+import { CampoFinalidade } from './CampoFinalidade';
 import { Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { Campo, Grade2 } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
@@ -13,7 +14,7 @@ import { useCarregar } from '@/util/useCarregar';
 
 const VAZIO = {
   local: '', centroCusto: '', prioridade: 'NORMAL' as Prioridade, necessidade: '',
-  urgenciaMotivo: '', urgenciaImpacto: '', justificativa: '',
+  urgenciaMotivo: '', urgenciaImpacto: '', justificativa: '', finalidade: '' as Finalidade | '',
 };
 type Formulario = typeof VAZIO;
 
@@ -52,6 +53,7 @@ export function SolicitacaoEmLote() {
 
   async function gerar(ev: FormEvent) {
     ev.preventDefault();
+    if (!form.finalidade) { avisar('Escolha a finalidade da SC: orçamento ou compra.', 'erro'); return; }
     const items = itensComQuantidade(quantidades);
     if (!items.length) { avisar('Informe a "Qtd. a Solicitar" de ao menos um produto.', 'erro'); return; }
     setEnviando(true);
@@ -66,6 +68,7 @@ export function SolicitacaoEmLote() {
         deliveryLocation: form.local || null,
         urgencyReason: form.urgenciaMotivo || null,
         urgencyImpact: form.urgenciaImpacto || null,
+        purpose: form.finalidade,
       });
       avisar(`SC ${criada.number} criada com ${items.length} item(ns). Revise em “Minhas Solicitações (SC)” e envie.`);
       setQuantidades({});
@@ -79,6 +82,9 @@ export function SolicitacaoEmLote() {
   return (
     <Painel titulo="Solicitação em Lote — Gerar SC">
       <form onSubmit={gerar}>
+        <div className="mb-4">
+          <CampoFinalidade valor={form.finalidade} aoMudar={(f) => setForm((x) => ({ ...x, finalidade: f }))} />
+        </div>
         <Grade2>
           <Campo id="lote-local" rotulo="Local de Entrega">
             <select id="lote-local" {...campo('local')}>

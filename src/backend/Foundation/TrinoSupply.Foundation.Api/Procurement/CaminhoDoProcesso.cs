@@ -69,6 +69,20 @@ public static class CaminhoDoProcesso
             Etapa("escolha", "Escolha do fornecedor vencedor",
                 feita: q.SelectedAt is not null, atual: viva && s == QuotationStatus.Analysis,
                 quem: q.SelectedAt is null ? comprador : q.SelectedByLabel, em: q.SelectedAt),
+        };
+
+        // o processo que nasceu como orçamento tem um passo a mais: parar em quem pediu. Feito
+        // quando virou compra — e o caminho diz quem converteu, que é quem ouviu o "vamos comprar"
+        if (q.IsBudget)
+            etapas.Add(q.BudgetConvertedAt is not null
+                ? new("orcamento", "Orçamento apresentado a quem pediu", Feita,
+                    $"virou compra — {q.BudgetConvertedByLabel}", q.BudgetConvertedAt)
+                : Etapa("orcamento", "Orçamento apresentado a quem pediu",
+                    feita: false, atual: viva && s == QuotationStatus.BudgetPresented,
+                    quem: s == QuotationStatus.BudgetPresented ? Nomes(solicitantes) : null, em: q.SelectedAt));
+
+        etapas.AddRange(new[]
+        {
             // Nível 1 sem impedidos: quem escolheu o fornecedor pode dar a primeira alçada
             Alcada("nivel1", "Aprovação de Nível 1", q.ManagerApprovedAt, q.ManagerApprovedByLabel,
                 atual: viva && s == QuotationStatus.AwaitingManager, desde: q.SelectedAt,
@@ -80,7 +94,7 @@ public static class CaminhoDoProcesso
                 em: q.DirectorApprovedAt ?? q.ManagerApprovedAt),
             Etapa("entrega", "Faturamento e recebimento",
                 feita: false, atual: viva && s == QuotationStatus.PoIssued, quem: null, em: null),
-        };
+        });
 
         if (!viva)
             etapas.Add(new("encerrado", s == QuotationStatus.Rejected ? "Rejeitado" : "Cancelada", Encerrada, null, null));

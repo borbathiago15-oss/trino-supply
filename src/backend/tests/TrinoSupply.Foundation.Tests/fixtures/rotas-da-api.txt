@@ -162,6 +162,7 @@ POST /api/v1/quotations/{id:guid}/cancel
 POST /api/v1/quotations/{id:guid}/close
 POST /api/v1/quotations/{id:guid}/convert-to-purchase
 POST /api/v1/quotations/{id:guid}/director-decision
+POST /api/v1/quotations/{id:guid}/items/{itemId:guid}/product
 POST /api/v1/quotations/{id:guid}/manager-decision
 POST /api/v1/quotations/{id:guid}/negotiation
 POST /api/v1/quotations/{id:guid}/proposals

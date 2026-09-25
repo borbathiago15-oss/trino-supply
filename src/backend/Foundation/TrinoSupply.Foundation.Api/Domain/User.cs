@@ -89,7 +89,7 @@ public static class AppModules
         Roles.SystemAdministrator => All,
         Roles.Requester => [Solicitacoes, Material],
         Roles.Approver => [Solicitacoes, Aprovacao],
-        Roles.PurchasingOfficer => [Compras, Fornecedores, Estoque],
+        Roles.PurchasingOfficer => [Compras, Fornecedores, Estoque, Produtos],
         Roles.WarehouseOperator => [Estoque],
         Roles.WarehouseSupervisor => [Estoque, Produtos],
         Roles.SupplyManager => [Solicitacoes, Aprovacao, Material, Estoque, Compras, Produtos, Fornecedores, CentrosCusto, Compliance, Insights],

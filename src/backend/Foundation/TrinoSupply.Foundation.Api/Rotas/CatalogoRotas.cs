@@ -90,7 +90,7 @@ public static class CatalogoRotas
         catalogGroup.MapGet("/", async (CatalogService svc, ClaimsPrincipal p, HttpContext ctx, string? family, string? q, bool? all, bool? stock) =>
         {
             var role = p.FindFirstValue(ClaimTypes.Role) ?? "";
-            var includeInactive = all == true && CatalogService.CanMaintain(role);
+            var includeInactive = all == true && CatalogService.CanRegisterProduct(role);
             var items = await svc.ListAsync(family, q, includeInactive, stock == true);
             return Ok(new { items = items.Select(CatalogView) }, ctx);
         });
@@ -173,7 +173,7 @@ public static class CatalogoRotas
         app.MapPost("/api/v1/items/{id:guid}/image", async (Guid id, HttpRequest request, AppDbContext db,
             CatalogService svc, TimeProvider clock, ClaimsPrincipal p, HttpContext ctx) =>
         {
-            if (!CatalogService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.Produtos))
+            if (!CatalogService.CanRegisterProduct(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.Produtos))
                 return Error(ctx, 403, "IC-ERR-900", "Seu usuário não mantém o catálogo.");
             var item = await db.CatalogItems.SingleOrDefaultAsync(i => i.Id == id);
             if (item is null) return Error(ctx, 404, "IC-ERR-404", "Item não encontrado.");
@@ -272,8 +272,8 @@ public static class CatalogoRotas
         catalogGroup.MapPost("/", async (CreateCatalogItemRequest body, CatalogService svc, ClaimsPrincipal p, HttpContext ctx) =>
         {
             var role = p.FindFirstValue(ClaimTypes.Role) ?? "";
-            if (!CatalogService.CanMaintain(role))
-                return Error(ctx, 403, "IC-ERR-001", "Somente o gestor de suprimentos ou o administrador mantêm o catálogo.");
+            if (!CatalogService.CanRegisterProduct(role))
+                return Error(ctx, 403, "IC-ERR-001", "Somente o comprador, o gestor de suprimentos ou o administrador cadastram produtos.");
             if (!ModulesOf(p).Contains(AppModules.Produtos))
                 return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para o cadastro de produtos.");
             var suppliers = body.Suppliers?.Select(x => new ItemSupplierInput(
@@ -290,8 +290,8 @@ public static class CatalogoRotas
         // grade de tamanhos: um produto por tamanho, de uma vez (bota do 38 ao 44)
         catalogGroup.MapPost("/grade", async (CreateSizeGradeRequest body, CatalogService svc, ClaimsPrincipal p, HttpContext ctx) =>
         {
-            if (!CatalogService.CanMaintain(RoleOf(p)))
-                return Error(ctx, 403, "IC-ERR-001", "Somente o gestor de suprimentos ou o administrador mantêm o catálogo.");
+            if (!CatalogService.CanRegisterProduct(RoleOf(p)))
+                return Error(ctx, 403, "IC-ERR-001", "Somente o comprador, o gestor de suprimentos ou o administrador cadastram produtos.");
             if (!ModulesOf(p).Contains(AppModules.Produtos))
                 return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para o cadastro de produtos.");
             var suppliers = body.Suppliers?.Select(x => new ItemSupplierInput(
@@ -347,8 +347,8 @@ public static class CatalogoRotas
         catalogGroup.MapPatch("/{id:guid}", async (Guid id, UpdateCatalogItemRequest body, CatalogService svc, ClaimsPrincipal p, HttpContext ctx) =>
         {
             var role = p.FindFirstValue(ClaimTypes.Role) ?? "";
-            if (!CatalogService.CanMaintain(role))
-                return Error(ctx, 403, "IC-ERR-001", "Somente o gestor de suprimentos ou o administrador mantêm o catálogo.");
+            if (!CatalogService.CanRegisterProduct(role))
+                return Error(ctx, 403, "IC-ERR-001", "Somente o comprador, o gestor de suprimentos ou o administrador cadastram produtos.");
             if (!ModulesOf(p).Contains(AppModules.Produtos))
                 return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para o cadastro de produtos.");
             var suppliers = body.Suppliers?.Select(x => new ItemSupplierInput(

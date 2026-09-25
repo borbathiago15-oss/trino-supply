@@ -51,6 +51,7 @@ const tipos: TipoDeProduto[] = [
 
 const gestor: Usuario = { id: 'g1', email: 'g@t.com', name: 'Gestor', role: 'SupplyManager', modules: ['PRODUTOS'] };
 const solicitante: Usuario = { id: 's1', email: 's@t.com', name: 'Ana', role: 'Requester', modules: ['PRODUTOS'] };
+const comprador: Usuario = { id: 'c1', email: 'c@t.com', name: 'Carlos', role: 'PurchasingOfficer', modules: ['PRODUTOS'] };
 
 describe('resumoEmTexto', () => {
   it('junta ativos, inativos e pendência de C.A.', () => {
@@ -187,6 +188,19 @@ describe('<Produtos />', () => {
     await waitFor(() => expect(screen.getByTestId('tabela-produtos')).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole('button', { name: 'Inativar' })[0]);
     await waitFor(() => expect(atualizarProduto).toHaveBeenCalledWith('p-12003', { active: false }));
+  });
+
+  it('o comprador cadastra e edita produto, mas importar e excluir continuam com o gestor', async () => {
+    usuarioAtual = comprador;
+    montar();
+    await waitFor(() => expect(screen.getByLabelText('Buscar produto')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: '+ Novo produto' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Importar planilha' })).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('Buscar produto'), 'luva');
+    await userEvent.click(screen.getByRole('button', { name: 'Buscar' }));
+    const tabela = within(await screen.findByTestId('tabela-produtos'));
+    expect(tabela.getAllByRole('button', { name: 'Editar' }).length).toBeGreaterThan(0);
+    expect(tabela.queryByRole('button', { name: 'Excluir' })).not.toBeInTheDocument();
   });
 
   it('quem não mantém o catálogo busca, mas não cadastra nem edita', async () => {

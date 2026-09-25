@@ -10,7 +10,7 @@ import { BadgeAtivo, Campo, Grade2, Nota } from '@/componentes/formulario';
 import { Miniatura, Visor } from '@/componentes/Miniatura';
 import { Confirmacao } from '@/componentes/Dialogo';
 import { useToast } from '@/componentes/Toast';
-import { podeManterCatalogo, temModulo } from '@/dominio/papeis';
+import { podeCadastrarProduto, podeManterCatalogo, temModulo } from '@/dominio/papeis';
 import { useUsuario } from '@/sessao/SessaoProvider';
 import { moeda } from '@/util/formato';
 import { rolarPara } from '@/util/rolar';
@@ -38,7 +38,9 @@ export function resumoEmTexto(s: ResumoCatalogo): string {
 
 export function Produtos() {
   const usuario = useUsuario();
-  const mantem = podeManterCatalogo(usuario) && temModulo(usuario, 'PRODUTOS');
+  // cadastrar e corrigir é também do comprador; importar em lote e excluir, só de quem mantém a estrutura
+  const mantem = podeCadastrarProduto(usuario) && temModulo(usuario, 'PRODUTOS');
+  const estrutura = podeManterCatalogo(usuario) && temModulo(usuario, 'PRODUTOS');
   const { avisar } = useToast();
 
   const [busca, setBusca] = useState('');
@@ -197,9 +199,11 @@ export function Produtos() {
       <Painel titulo="Cadastro de Produtos" acoes={mantem && (
         <>
           <button type="button" className="botao" onClick={novo}>+ Novo produto</button>
-          <button type="button" className="botao-secundario" onClick={() => { setFormAberto(false); setImportando((i) => !i); }}>
-            Importar planilha
-          </button>
+          {estrutura && (
+            <button type="button" className="botao-secundario" onClick={() => { setFormAberto(false); setImportando((i) => !i); }}>
+              Importar planilha
+            </button>
+          )}
         </>
       )}>
         {apoio.erro && <Erro>{apoio.erro}</Erro>}
@@ -276,7 +280,9 @@ export function Produtos() {
                             <button type="button" className="botao-secundario" onClick={() => editar(p)}>Editar</button>
                             <button type="button" className="botao-secundario"
                               onClick={() => alternarSituacao(p)}>{p.active ? 'Inativar' : 'Reativar'}</button>
-                            <button type="button" className="botao-perigo" onClick={() => setAExcluir(p)}>Excluir</button>
+                            {estrutura && (
+                              <button type="button" className="botao-perigo" onClick={() => setAExcluir(p)}>Excluir</button>
+                            )}
                           </div>
                         </td>
                       )}
@@ -400,7 +406,7 @@ export function Produtos() {
         </Painel>
       )}
 
-      {mantem && importando && (
+      {estrutura && importando && (
         <PainelImportacao familias={familiasDisponiveis} tipos={tipos}
           aoImportar={recarregar} aoFechar={() => setImportando(false)} />
       )}

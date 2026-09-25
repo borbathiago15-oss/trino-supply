@@ -180,6 +180,20 @@ test.describe('Orçamento (finalidade da SC)', () => {
     await expect(page.getByTestId('proximo-passo')).toContainText('a decisão é de quem pediu');
     await expect(page.getByRole('button', { name: 'Aprovar' })).toHaveCount(0);
 
+    // o orçamento fechou com o item digitado; para virar compra ele precisa ser produto (RFQ-ERR-026)
+    await expect(page.getByTestId('produto-pendente')).toContainText(`Resma ${marca}`);
+    await expect(page.getByRole('button', { name: 'Converter em compra e enviar ao Nível 1' })).toHaveCount(0);
+    await page.getByTestId('itens-cotacao').getByRole('button', { name: 'Cadastrar produto' }).click();
+    const cadastro = page.getByRole('dialog');
+    await cadastro.getByRole('tab', { name: 'Cadastrar produto novo' }).click();
+    await expect(cadastro.getByLabel('Descrição do produto')).toHaveValue(`Resma ${marca}`);
+    await cadastro.getByLabel('Família', { exact: true }).selectOption('EPI CENARIO E2E');
+    await cadastro.getByLabel(/^Código/).fill(`E2E-RES-${marca}`);
+    await cadastro.getByRole('button', { name: 'Cadastrar e usar no item' }).click();
+    await expect(page.getByTestId('toast').last()).toContainText(`E2E-RES-${marca}`);
+    await expect(page.getByTestId('itens-cotacao')).not.toContainText('fora do catálogo');
+    await expect(page.getByTestId('produto-pendente')).toHaveCount(0);
+
     // o solicitante decidiu comprar: vira compra e entra no Nível 1, com a marca
     await page.getByRole('button', { name: 'Converter em compra e enviar ao Nível 1' }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Converter e enviar ao Nível 1' }).click();

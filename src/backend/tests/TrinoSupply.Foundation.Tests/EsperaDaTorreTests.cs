@@ -41,7 +41,7 @@ public class EsperaDaTorreTests
     private static Mundo Build()
     {
         var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).AddInterceptors(new ItensDaCotacaoNoCatalogo()).Options);
         var relogio = new RelogioFixo(Dia1);
         return new Mundo(db, new TorreDeControleService(db, relogio),
             new RequisitionService(db, new NumerosFalsos(), new CatalogService(db, relogio), relogio),

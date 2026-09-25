@@ -33,7 +33,7 @@ public class FinalidadeDaScTests
     private static async Task<Mundo> Montar()
     {
         var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).AddInterceptors(new ItensDaCotacaoNoCatalogo()).Options);
         var relogio = new Relogio();
         var sup = new SupplierService(db, relogio);
         var (alfa, _) = await sup.CreateAsync(Carla.Id, "Alfa LTDA", "Alfa", "12345678000190", null, "81 3333-1000");

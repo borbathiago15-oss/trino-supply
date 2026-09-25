@@ -31,7 +31,7 @@ export const MODULOS_PADRAO: Record<Papel, Modulo[]> = {
   SystemAdministrator: Object.keys(ROTULO_MODULO) as Modulo[],
   Requester: ['SOLICITACOES', 'MATERIAL'],
   Approver: ['SOLICITACOES', 'APROVACAO'],
-  PurchasingOfficer: ['COMPRAS', 'FORNECEDORES', 'ESTOQUE'],
+  PurchasingOfficer: ['COMPRAS', 'FORNECEDORES', 'ESTOQUE', 'PRODUTOS'],
   WarehouseOperator: ['ESTOQUE'],
   WarehouseSupervisor: ['ESTOQUE', 'PRODUTOS'],
   SupplyManager: ['SOLICITACOES', 'APROVACAO', 'MATERIAL', 'ESTOQUE', 'COMPRAS', 'PRODUTOS', 'FORNECEDORES', 'CENTROS_CUSTO'],
@@ -70,6 +70,12 @@ export const podeAlmoxarifado = (u: Perfil) => temModulo(u, 'ESTOQUE')
   || entre(u, 'WarehouseOperator', 'WarehouseSupervisor', 'SupplyManager', 'SystemAdministrator');
 export const podeComprar = (u: Perfil) => entre(u, 'PurchasingOfficer', 'SupplyManager', 'SystemAdministrator');
 export const podeManterCatalogo = (u: Perfil) => entre(u, 'SupplyManager', 'SystemAdministrator');
+/**
+ * Cadastrar e corrigir produto é também do comprador (2026-09): é ele quem acha o item fora do
+ * catálogo na cotação. Famílias, importação e excluir continuam em `podeManterCatalogo` — a
+ * mesma divisão de `CatalogService.CanRegisterProduct`.
+ */
+export const podeCadastrarProduto = (u: Perfil) => entre(u, 'PurchasingOfficer', 'SupplyManager', 'SystemAdministrator');
 export const podeTriar = podeComprar;
 export const podeConduzirCotacao = podeComprar;
 /** O comprador dá o Nível 1, inclusive do processo que conduziu; a segregação fica no Nível 2. */

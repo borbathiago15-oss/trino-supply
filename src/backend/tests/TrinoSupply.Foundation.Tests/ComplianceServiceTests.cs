@@ -37,7 +37,7 @@ public class ComplianceServiceTests
     private static async Task<World> BuildAsync()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).AddInterceptors(new ItensDaCotacaoNoCatalogo()).Options;
         var db = new AppDbContext(options);
         var clock = new FixedTimeProvider(Hoje);
         var rfq = new QuotationService(db, clock);

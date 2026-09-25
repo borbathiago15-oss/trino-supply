@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { abrirBlob } from '@/api/cliente';
 import {
   acoesDisponiveis, cancelarProcesso, converterOrcamentoEmCompra, decidir, encerrarParaAnalise, lerProcesso,
-  type Alcada, type Decisao,
+  type Alcada, type Decisao, type ItemDoProcesso,
 } from '@/api/cotacoes';
 import { baixarDocumento } from '@/api/documentos';
 import { Aviso, Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
@@ -17,6 +17,7 @@ import { moeda } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
 import { FormRegistroOc, FormVencedor, useLotesDoProcesso } from './AcoesDoProcesso';
 import { GradeDeAdjudicacao } from './GradeDeAdjudicacao';
+import { DialogoProdutoDoItem } from './DialogoProdutoDoItem';
 import { CabecalhoDoProcesso } from './CabecalhoDoProcesso';
 import { MapaDeCotacao } from './MapaDeCotacao';
 import { PainelDeConvidados } from './PainelDeConvidados';
@@ -46,6 +47,7 @@ export function ProcessoDetalhe() {
   const usuario = useUsuario();
   const { avisar } = useToast();
   const [pendente, setPendente] = useState<Pendente | null>(null);
+  const [itemSemProduto, setItemSemProduto] = useState<ItemDoProcesso | null>(null);
 
   const { dados, erro, carregando, recarregar } = useCarregar(
     (signal) => lerProcesso(id, signal), [id]);
@@ -99,7 +101,17 @@ export function ProcessoDetalhe() {
 
   return (
     <>
-      <CabecalhoDoProcesso processo={q} usuarioId={usuario?.id} />
+      <CabecalhoDoProcesso processo={q} usuarioId={usuario?.id}
+        aoDefinirProduto={pode.definirProduto ? setItemSemProduto : undefined} />
+      {itemSemProduto && (
+        <DialogoProdutoDoItem processo={q} item={itemSemProduto} aoFechar={() => setItemSemProduto(null)}
+          aoConcluir={(novo) => {
+            setItemSemProduto(null);
+            const item = novo.items.find((i) => i.id === itemSemProduto.id);
+            avisar(`Item agora é o produto ${item?.catalogCode ?? ''} do catálogo.`);
+            recarregar();
+          }} />
+      )}
 
       <PainelDeConvidados processo={q} podeConvidar={pode.convidar}
         aoConvidar={recarregar} aoAvisar={aviso} />
@@ -171,12 +183,21 @@ export function ProcessoDetalhe() {
             </div>
           )}
 
-          {pode.escolherVencedor && (pode.porItem
+          {/* o item digitado vira produto antes: a tela diz qual, em vez de deixar o erro dizer */}
+          {pode.produtoPendente.length > 0 && (pode.escolherVencedor || pode.converterEmCompra) && (
+            <Aviso testid="produto-pendente">
+              Antes de {pode.converterEmCompra ? 'converter em compra' : 'escolher o vencedor'}, cadastre no catálogo:{' '}
+              <strong>{pode.produtoPendente.map((i) => i.description).join(', ')}</strong> (RFQ-ERR-026).
+              Use “Cadastrar produto” no item, em Itens da cotação.
+            </Aviso>
+          )}
+
+          {pode.escolherVencedor && pode.produtoPendente.length === 0 && (pode.porItem
             ? <GradeDeAdjudicacao processo={q} lotes={lotes} aoConcluir={recarregar} aoAvisar={aviso} />
             : <FormVencedor processo={q} aoConcluir={recarregar} aoAvisar={aviso} />)}
 
           {/* o orçamento parou em quem pediu: a única ação é converter, quando ele decidir comprar */}
-          {pode.converterEmCompra && (
+          {pode.converterEmCompra && pode.produtoPendente.length === 0 && (
             <div data-testid="acao-converter">
               <button type="button" className="botao" onClick={() => setPendente({ tipo: 'converter' })}>
                 Converter em compra e enviar ao Nível 1

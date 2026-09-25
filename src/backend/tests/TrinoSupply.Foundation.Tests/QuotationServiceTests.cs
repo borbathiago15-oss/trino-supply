@@ -35,7 +35,7 @@ public class QuotationServiceTests
     private static async Task<World> BuildAsync()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).AddInterceptors(new ItensDaCotacaoNoCatalogo())
             .Options;
         var db = new AppDbContext(options);
         var clock = new FixedTimeProvider(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero));
@@ -1237,7 +1237,7 @@ public class QuotationServiceTests
     private static async Task<SplitWorld> BuildSplitAsync()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).AddInterceptors(new ItensDaCotacaoNoCatalogo()).Options;
         var db = new AppDbContext(options);
         var clock = new FixedTimeProvider(new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero));
         var catalog = new CatalogService(db, clock);
@@ -1291,7 +1291,7 @@ public class QuotationServiceTests
         MesmaFamiliaAsync()
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).AddInterceptors(new ItensDaCotacaoNoCatalogo()).Options;
         var db = new AppDbContext(options);
         var clock = new FixedTimeProvider(new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero));
         var catalog = new CatalogService(db, clock);
@@ -1871,7 +1871,7 @@ public class QuotationServiceTests
         ContratoDeBotasAsync(DateOnly? validoAte = null)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).AddInterceptors(new ItensDaCotacaoNoCatalogo()).Options;
         var db = new AppDbContext(options);
         var clock = new FixedTimeProvider(new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero));
         var catalog = new CatalogService(db, clock);

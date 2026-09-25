@@ -479,6 +479,38 @@ public static class CotacaoRotas
                 : Ok(QuotationView(q!), ctx);
         });
 
+        // o item fora do catálogo vira produto antes da escolha do vencedor (RFQ-ERR-026): usar um
+        // produto que já existe, ou cadastrar ali mesmo — o comprador cadastra (decisão 2026-09)
+        rfq.MapPost("/{id:guid}/items/{itemId:guid}/product", async (Guid id, Guid itemId, ProdutoDoItemRequest body,
+            QuotationService svc, Catalog.CatalogService catalogo, ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            var role = RoleOf(p);
+            var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+            static IResult Falha(HttpContext ctx, UserError e) => Error(ctx, e.Code switch
+            {
+                "RFQ-ERR-900" => 403, "RFQ-ERR-404" or "IC-ERR-404" => 404, "RFQ-ERR-027" => 409, "IC-ERR-010" => 409, _ => 422,
+            }, e.Code, e.Message);
+
+            if ((body.CatalogItemId is null) == (body.NewProduct is null))
+                return Error(ctx, 400, "RFQ-ERR-028", "Informe o produto do catálogo ou os dados do produto novo — um dos dois.");
+            // o impedimento vem antes do cadastro: produto novo não nasce à toa para um vínculo recusado
+            var (_, impedimento) = await svc.ImpedimentoDoProdutoAsync(actor, id, itemId);
+            if (impedimento is not null) return Falha(ctx, impedimento);
+
+            var produtoId = body.CatalogItemId;
+            if (body.NewProduct is { } novo)
+            {
+                if (!Catalog.CatalogService.CanRegisterProduct(role))
+                    return Error(ctx, 403, "IC-ERR-001", "Somente o comprador, o gestor de suprimentos ou o administrador cadastram produtos.");
+                var (criado, erroDoCadastro) = await catalogo.CreateAsync(actor.Id, novo.Code, novo.Description ?? "",
+                    novo.Family ?? "", novo.UnitOfMeasure, novo.ReferencePrice, productType: novo.ProductType);
+                if (erroDoCadastro is not null) return Falha(ctx, erroDoCadastro);
+                produtoId = criado!.Id;
+            }
+            var (q, erro) = await svc.DefinirProdutoDoItemAsync(actor, id, itemId, produtoId!.Value);
+            return erro is not null ? Falha(ctx, erro) : Ok(QuotationView(q!), ctx);
+        });
+
         rfq.MapPost("/{id:guid}/select-winner", async (Guid id, SelectWinnerRequest body, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>
         {
             var role = RoleOf(p);

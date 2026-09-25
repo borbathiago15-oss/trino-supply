@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { abrirAutenticado } from './sessao';
+import { readFileSync } from 'node:fs';
+import { abrirAutenticado, ARQUIVO_SESSAO } from './sessao';
 
 /**
  * Torre de Controle. O que só o E2E prova é que a paginação é de verdade —
@@ -133,23 +134,54 @@ test.describe('Torre de Controle (React)', () => {
       .or(page.getByText('Nenhum item de compra neste recorte.'))).toBeVisible();
   });
 
-  /** A triagem passou a morar na Torre: a barra existe e a seleção é por SC. */
-  test('a triagem está na Torre, e marcar um item marca a solicitação inteira', async ({ page }) => {
+  /**
+   * A marca é por item: a cotação leva só o que foi marcado, e o outro item da mesma SC
+   * fica pendente nela. A atribuição continua valendo para a SC inteira.
+   */
+  test('marcar um item abre a cotação só com ele, e o resto da SC fica pendente', async ({ page }) => {
+    const marca = Date.now().toString().slice(-6);
+    const { accessToken } = JSON.parse(readFileSync(ARQUIVO_SESSAO, 'utf8'));
+    const api = (caminho: string, corpo: unknown) => page.request.post(caminho, {
+      headers: { Authorization: 'Bearer ' + accessToken }, data: corpo,
+    });
+    const criada = await api('/api/v1/purchase-requisitions/', {
+      justification: `E2E seleção por item ${marca}`, costCenter: 'E2E-001', priority: 'NORMAL', purpose: 'COMPRA',
+      items: [
+        { description: `Caneta ${marca}`, quantity: 10, unitOfMeasure: 'UN' },
+        { description: `Grampeador ${marca}`, quantity: 2, unitOfMeasure: 'UN' },
+      ],
+    });
+    expect(criada.status(), await criada.text()).toBe(201);
+    const sc = (await criada.json()).data;
+    expect((await api(`/api/v1/purchase-requisitions/${sc.id}/submit`, {})).ok()).toBeTruthy();
+
     await abrirAutenticado(page, '/torre');
-    await expect(page.getByTestId('tabela-torre')
-      .or(page.getByText('Nenhum item de compra neste recorte.'))).toBeVisible();
+    await page.fill('#tc-busca', sc.number);
+    await page.getByRole('button', { name: 'Aplicar filtros' }).click();
+    const tabela = page.getByTestId('tabela-torre');
+    await expect(tabela.locator('tbody tr')).toHaveCount(2);
 
+    // só a caneta: o grampeador não é marcado junto, como era quando a marca era da SC
+    await tabela.getByLabel(`Selecionar ${sc.number} item 1`).check();
+    await expect(tabela.getByLabel(`Selecionar ${sc.number} item 2`)).not.toBeChecked();
     const barra = page.getByTestId('triagem-torre');
-    if (!(await barra.count())) return;          // ambiente sem item: nada a triar
-    await expect(barra).toContainText('A atribuição é da SC inteira');
+    await expect(barra.getByTestId('resumo-selecao')).toContainText('1 item(ns) de 1 solicitação(ões)');
+    // sem responsável escolhido, a atribuição continua travada
+    await expect(page.getByRole('button', { name: /^Atribuir/ })).toBeDisabled();
 
-    const caixas = page.getByTestId('tabela-torre').locator('input[type="checkbox"]');
-    if (await caixas.count()) {
-      await caixas.first().check();
-      await expect(barra).toContainText('solicitação(ões) marcada(s)');
-      // sem responsável escolhido, o botão não deixa atribuir
-      await expect(page.getByRole('button', { name: /^Atribuir/ })).toBeDisabled();
-    }
+    await page.getByTestId('cotar-marcados').click();
+    await expect(page).toHaveURL(/\/cotacoes\/[0-9a-f-]+$/);
+    const itens = page.getByTestId('itens-cotacao');
+    await expect(itens).toContainText(`Caneta ${marca}`);
+    await expect(itens).not.toContainText(`Grampeador ${marca}`);
+
+    // de volta à Torre: a caneta está em cotação, e o grampeador segue na Solicitação da mesma SC
+    await page.goto('/torre');
+    await page.fill('#tc-busca', sc.number);
+    await page.getByRole('button', { name: 'Aplicar filtros' }).click();
+    const linhas = page.getByTestId('tabela-torre').locator('tbody tr');
+    await expect(linhas.filter({ hasText: `Caneta ${marca}` })).toContainText('Cotação');
+    await expect(linhas.filter({ hasText: `Grampeador ${marca}` })).toContainText('Solicitação');
   });
 
   test('filtrar por centro de custo refaz a consulta e limpar desfaz', async ({ page }) => {

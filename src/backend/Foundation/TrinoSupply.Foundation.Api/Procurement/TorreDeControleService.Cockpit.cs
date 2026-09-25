@@ -77,16 +77,8 @@ public partial class TorreDeControleService
                         || (o.QuotationId != null && cotacaoIds.Contains(o.QuotationId.Value)))
             .OrderByDescending(o => o.CreatedAt).ToListAsync(ct);
 
-        var cotacaoPorSc = new Dictionary<Guid, Quotation>();
-        foreach (var q in cotacoes)
-            foreach (var id in ids.Where(q.CoversPr)) cotacaoPorSc.TryAdd(id, q);
-        var pedidoPorSc = new Dictionary<Guid, PurchaseOrder>();
-        var pedidoPorCotacao = new Dictionary<Guid, PurchaseOrder>();
-        foreach (var o in pedidos)
-        {
-            if (o.SourcePrId is { } pid) pedidoPorSc.TryAdd(pid, o);
-            if (o.QuotationId is { } qid) pedidoPorCotacao.TryAdd(qid, o);
-        }
+        // a mesma resolução por item da Torre: a parede e a mesa perguntam à mesma classe
+        var andamento = new AndamentoDosItens(cotacoes, pedidos);
 
         var porEtapa = new Dictionary<string, (int Itens, int HorasDoMaisAntigo)>();
         var radar = new List<ExcecaoDoCockpit>();
@@ -96,11 +88,10 @@ public partial class TorreDeControleService
         var semanaAtras = agora.AddDays(-7);
 
         foreach (var sc in abertas)
+        foreach (var grupo in sc.Items.GroupBy(i => andamento.Do(sc, i)))
         {
-            cotacaoPorSc.TryGetValue(sc.Id, out var cotacao);
-            PurchaseOrder? pedido = null;
-            if (!pedidoPorSc.TryGetValue(sc.Id, out pedido) && cotacao is not null)
-                pedidoPorCotacao.TryGetValue(cotacao.Id, out pedido);
+            var (cotacao, pedido) = grupo.Key;
+            var itensDoGrupo = grupo.Count();
 
             var situacao = ProcessStatus.Of(sc, cotacao, pedido);
             var etapa = EtapaDe(situacao.Key);
@@ -120,7 +111,7 @@ public partial class TorreDeControleService
             if (!encerrado)
             {
                 var atual = porEtapa.GetValueOrDefault(etapa);
-                porEtapa[etapa] = (atual.Itens + sc.Items.Count,
+                porEtapa[etapa] = (atual.Itens + itensDoGrupo,
                     Math.Max(atual.HorasDoMaisAntigo, horasNaFila));
             }
 
@@ -129,11 +120,11 @@ public partial class TorreDeControleService
             var fechouHoje = pedido?.CreatedAt is { } criadoEm
                              && DateOnly.FromDateTime(criadoEm.UtcDateTime) == hoje;
             burndown[comprador] = (
-                doDia.Atendidos + (fechouHoje ? sc.Items.Count : 0),
-                doDia.Total + (encerrado && !fechouHoje ? 0 : sc.Items.Count),
-                doDia.Criticas + (!encerrado && (atrasada || estourou) ? sc.Items.Count : 0));
+                doDia.Atendidos + (fechouHoje ? itensDoGrupo : 0),
+                doDia.Total + (encerrado && !fechouHoje ? 0 : itensDoGrupo),
+                doDia.Criticas + (!encerrado && (atrasada || estourou) ? itensDoGrupo : 0));
 
-            foreach (var _ in sc.Items)
+            foreach (var _ in grupo)
             {
                 if (encerrado) continue;
                 backlogItens++;

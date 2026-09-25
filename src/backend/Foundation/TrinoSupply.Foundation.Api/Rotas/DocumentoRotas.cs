@@ -39,6 +39,11 @@ public static class DocumentoRotas
                 if (!owner && !actor.SeesAll && !QuotationService.CanView(role) && role != Roles.Auditor)
                     return Error(ctx, 403, "DOC-ERR-900", "Seu papel não acessa este documento.");
             }
+            else if (doc.EntityType == Catalog.CatalogService.TipoDaFoto)
+            {
+                // a foto do produto é parte do catálogo, que todo papel interno consulta: quem
+                // pede precisa ver o que está pedindo, e não só quem compra
+            }
             else if (doc.EntityType == Suporte.ChamadoService.TipoDoAnexo)
             {
                 // o print do chamado é de quem abriu e de quem atende — a mesma régua da leitura

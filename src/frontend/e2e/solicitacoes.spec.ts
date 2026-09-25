@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { itemForaDoCatalogo } from './sc';
 import { abrirAutenticado } from './sessao';
 
 const marca = Date.now().toString().slice(-6);
@@ -8,10 +9,8 @@ test.describe('Solicitações de Compra (React)', () => {
     await abrirAutenticado(page, '/solicitacoes/nova');
     const justificativa = `E2E SC ${marca}`;
 
-    // um item digitado à mão (o catálogo é opcional)
-    await page.getByLabel('Produto').first().fill(`Item avulso ${marca}`);
-    await page.getByLabel('Unidade').first().fill('UN');
-    await page.getByLabel('Quantidade').first().fill('3');
+    // um item fora do catálogo: sai da busca, pelo "não achou?"
+    await itemForaDoCatalogo(page, `Item avulso ${marca}`, '3', 'UN');
 
     await page.fill('#sc-justificativa', justificativa);
     await page.selectOption('#sc-cc', { index: 1 });
@@ -83,8 +82,7 @@ test.describe('Solicitações de Compra (React)', () => {
   test('excluir rascunho pede confirmação', async ({ page }) => {
     await abrirAutenticado(page, '/solicitacoes/nova');
     const justificativa = `E2E descartável ${marca}`;
-    await page.getByLabel('Produto').first().fill(`Item descartável ${marca}`);
-    await page.getByLabel('Quantidade').first().fill('1');
+    await itemForaDoCatalogo(page, `Item descartável ${marca}`, '1');
     await page.fill('#sc-justificativa', justificativa);
     await page.selectOption('#sc-cc', { index: 1 });
     await page.getByRole('button', { name: 'Criar rascunho da SC' }).click();

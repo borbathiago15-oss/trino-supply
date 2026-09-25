@@ -198,6 +198,9 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         if (kind == "CATALOGO" && items.Any(i => i.CatalogItemId is null))
             return (null, new("PR-ERR-030", "Em requisição por catálogo, todos os itens devem vir do catálogo."));
 
+        var (empresa, empresaError) = await EmpresaDoCadastroAsync(header?.Company, ct);
+        if (empresaError is not null) return (null, empresaError);
+
         var (catalogItems, catalogError) = await catalog.ResolveForRequisitionAsync(
             items.Where(i => i.CatalogItemId is not null).Select(i => i.CatalogItemId!.Value).ToList(), ct);
         if (catalogError is not null) return (null, catalogError);
@@ -215,7 +218,7 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
             NeededBy = neededBy,
             NeedType = Clean(header?.NeedType)?.ToUpperInvariant(),
             DeliveryLocation = Clean(header?.DeliveryLocation),
-            Company = Clean(header?.Company),
+            Company = empresa,
             InternalNotes = Clean(header?.InternalNotes),
             // orçamento negativo não é orçamento; zero também não diz nada
             Budget = header?.Budget is > 0 ? header.Budget : null,
@@ -234,6 +237,32 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         db.Requisitions.Add(pr);
         await db.SaveChangesAsync(ct);
         return (pr, null); // EVT-001 RequisitionCreated (outbox: incremento futuro)
+    }
+
+    /// <summary>
+    /// A empresa da SC vem do cadastro de CNPJs (<c>PR-ERR-023</c>). Texto livre dava "Trino
+    /// Frio", "TRINO FRIO ARMAZENS" e "Trino Frio Armazéns Gerais" como três empresas — e o
+    /// filtro da Torre e a rotação do cockpit, que agrupam pela empresa, contavam três. A SC
+    /// grava o <b>nome oficial</b> do cadastro, seja qual for a caixa em que chegou.
+    ///
+    /// <para>
+    /// Sem nenhum CNPJ <b>ativo</b> a regra não se aplica: a base anterior ao cadastro continua
+    /// criando SC, e a tela usa o nome do padrão da O.C. Vazio continua valendo — a empresa é
+    /// opcional; o que não pode é ser uma que o cadastro não conhece.
+    /// </para>
+    /// </summary>
+    private async Task<(string? empresa, UserError? error)> EmpresaDoCadastroAsync(string? informada, CancellationToken ct)
+    {
+        var limpa = Clean(informada);
+        if (limpa is null) return (null, null);
+        var ativas = await db.Companies.Where(c => c.Active).Select(c => c.LegalName).ToListAsync(ct);
+        // sem empresa ativa não há lista para escolher: a tela cai no nome do padrão da O.C., e
+        // recusá-lo aqui travaria toda SC — a régua é a mesma que a tela consegue enxergar
+        if (ativas.Count == 0) return (limpa, null);
+        var oficial = ativas.FirstOrDefault(n => string.Equals(n.Trim(), limpa, StringComparison.OrdinalIgnoreCase));
+        return oficial is null
+            ? (null, new("PR-ERR-023", $"A empresa \"{limpa}\" não está entre os CNPJs ativos do cadastro (Estrutura da Empresa → Empresas)."))
+            : (oficial.Trim(), null);
     }
 
     /// <summary>Solicitante, aprovador e diretor com centros vinculados só solicitam dos seus centros (PR-ERR-021).</summary>

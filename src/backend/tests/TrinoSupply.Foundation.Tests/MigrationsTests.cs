@@ -85,5 +85,9 @@ public sealed class MigrationsTests : IAsyncLifetime
         Assert.Single(await chamados.ListarAsync(quem, fila: false, situacao: null));
         Assert.Equal((0, (int?)null), await chamados.ResumoAsync(quem));
         Assert.Single((await chamados.AbrirParaLerAsync(quem, chamado!.Id))!.Messages);
+
+        // roda na exclusão do produto: as sete contagens de "onde ele já circulou"
+        Assert.Empty(await new TrinoSupply.Foundation.Api.Catalog.CatalogService(db, TimeProvider.System)
+            .UsosAsync(Guid.NewGuid()));
     }
 }

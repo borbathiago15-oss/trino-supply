@@ -12,7 +12,7 @@ import { DialogoDeSuporte } from '@/paginas/suporte/DialogoDeSuporte';
  *
  * O terceiro botão leva aos chamados. O número nele é o que é a sua vez: chamado seu que o
  * suporte respondeu e, para quem atende, o que espera na fila. Contar "abertos" diria quanto
- * existe, não o que precisa de você. O ícone é o balão, e não as três linhas: no celular elas
+ * existe, não o que precisa de você. O ícone é o balão, desenhado aqui e não emoji (que depende da fonte e saía apagado), e não as três linhas: no celular elas
  * já são o botão do menu, e dois botões iguais lado a lado fariam adivinhar qual é qual.
  */
 export function BarraDeAjuda() {
@@ -48,7 +48,9 @@ export function BarraDeAjuda() {
         </button>
         <Link to="/suporte" className="botao-secundario relative !px-2.5 !py-1.5" title={dicaDosChamados}
           aria-label={pendentes ? `Meus chamados — ${dicaDosChamados}` : 'Meus chamados'}>
-          <span aria-hidden="true">💬</span>
+          <svg aria-hidden="true" viewBox="0 0 20 20" className="h-[15px] w-[15px]" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path strokeLinejoin="round" d="M3.5 4.5h13v8.5h-7l-4 3v-3h-2z" />
+          </svg>
           {pendentes > 0 && (
             <span data-testid="chamados-pendentes"
               className="absolute -right-1.5 -top-1.5 rounded-full bg-perigo px-1.5 text-[10.5px] font-bold leading-[18px] text-white">

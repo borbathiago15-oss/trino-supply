@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { Familia } from '@/api/familias';
 import { ToastProvider } from '@/componentes/Toast';
@@ -8,13 +9,14 @@ import { Familias, resumoPrazos } from './Familias';
 vi.mock('@/api/familias', async (importar) => ({
   ...(await importar<typeof import('@/api/familias')>()),
   listarFamilias: vi.fn(),
+  excluirFamilia: vi.fn(),
 }));
 vi.mock('@/api/catalogo', () => ({ contarProdutosPorFamilia: vi.fn() }));
 
 let usuarioAtual: Usuario;
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => usuarioAtual }));
 
-import { listarFamilias } from '@/api/familias';
+import { excluirFamilia, listarFamilias } from '@/api/familias';
 import { contarProdutosPorFamilia } from '@/api/catalogo';
 
 const familia = (p: Partial<Familia>): Familia => ({
@@ -72,5 +74,27 @@ describe('<Familias />', () => {
     expect(screen.queryByLabelText('Nome')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Editar' })).not.toBeInTheDocument();
     expect(vi.mocked(listarFamilias).mock.calls[0][0]).toBe(false);
+  });
+
+  it('só a família sem produto pode ser excluída — com produto, o botão diz o que fazer', async () => {
+    montar();
+    const epi = await screen.findByText('EPI');
+    const linhaEpi = epi.closest('tr')!;
+    const excluirEpi = within(linhaEpi).getByRole('button', { name: 'Excluir' });
+    expect(excluirEpi).toBeDisabled();
+    expect(excluirEpi).toHaveAttribute('title', expect.stringMatching(/mova-os para outra família/));
+    const linhaLimpeza = screen.getByText('LIMPEZA').closest('tr')!;
+    expect(within(linhaLimpeza).getByRole('button', { name: 'Excluir' })).toBeEnabled();
+  });
+
+  it('excluir pede confirmação e a recusa do servidor aparece', async () => {
+    vi.mocked(excluirFamilia).mockRejectedValue(new Error('1 produto(s) do catálogo estão na família LIMPEZA, contando os inativos.'));
+    montar();
+    const linha = (await screen.findByText('LIMPEZA')).closest('tr')!;
+    await userEvent.click(within(linha).getByRole('button', { name: 'Excluir' }));
+    const dialogo = screen.getByRole('dialog', { name: 'Excluir família' });
+    await userEvent.click(within(dialogo).getByRole('button', { name: 'Excluir' }));
+    expect(excluirFamilia).toHaveBeenCalledWith('f-LIMPEZA');
+    expect(await screen.findByText(/contando os inativos/)).toBeInTheDocument();
   });
 });

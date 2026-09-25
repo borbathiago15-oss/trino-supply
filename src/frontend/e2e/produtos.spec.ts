@@ -109,4 +109,39 @@ test.describe('Cadastro de Produtos (React)', () => {
     await page.getByRole('button', { name: 'Buscar' }).click();
     await expect(page.getByTestId('tabela-produtos').locator('tr[data-produto]')).toHaveCount(2);
   });
+
+  test('produto novo aparece na ficha da SC e, sem uso, se exclui de vez', async ({ page }) => {
+    const codigo = `E2E-DEL-${marca}`;
+    const descricao = `E2E Excluível ${marca}`;
+    await abrirAutenticado(page, '/produtos');
+    await page.getByRole('button', { name: '+ Novo produto' }).click();
+    await page.fill('#prod-codigo', codigo);
+    await page.selectOption('#prod-form-familia', { index: 1 });
+    await page.fill('#prod-descricao', descricao);
+    await page.fill('#prod-unidade', 'UN');
+    await page.getByRole('button', { name: 'Adicionar produto' }).click();
+    await expect(page.getByTestId('toast').last()).toContainText('adicionado ao catálogo');
+
+    // na SC, a busca é a única porta, e o clique abre a ficha antes de usar
+    await abrirAutenticado(page, '/solicitacoes/nova');
+    await page.getByRole('button', { name: 'Buscar no catálogo' }).first().click();
+    const busca = page.getByRole('dialog', { name: 'Escolher produto do catálogo' });
+    await busca.getByLabel(/Buscar produto/).fill(codigo);
+    await busca.getByRole('button', { name: new RegExp(descricao) }).click();
+    const ficha = page.getByTestId('ficha-do-produto');
+    await expect(ficha).toContainText(codigo);
+    await expect(ficha).toContainText(descricao);
+    await page.getByRole('button', { name: 'Usar este produto' }).click();
+    await expect(page.locator('[data-linha-item]').first()).toContainText(descricao);
+
+    // a SC não foi gravada: o produto nunca circulou, e sai de vez
+    await abrirAutenticado(page, '/produtos');
+    await page.getByLabel('Buscar produto').fill(codigo);
+    await page.getByRole('button', { name: 'Buscar' }).click();
+    const linha = page.locator(`tr[data-produto="${codigo}"]`);
+    await linha.getByRole('button', { name: 'Excluir' }).click();
+    await page.getByRole('dialog', { name: 'Excluir produto' }).getByRole('button', { name: 'Excluir' }).click();
+    await expect(page.getByTestId('toast').last()).toContainText(`Produto ${codigo} excluído.`);
+    await expect(linha).toHaveCount(0);
+  });
 });

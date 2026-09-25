@@ -7,11 +7,13 @@ import type { CentroCusto } from '@/api/centrosCusto';
 import { ToastProvider } from '@/componentes/Toast';
 import { casDoProduto, itensEscolhidos, semCaObrigatorio, SolicitarMaterial } from './SolicitarMaterial';
 
-vi.mock('@/api/catalogo', () => ({ buscarProdutos: vi.fn(), familiasDoCatalogo: vi.fn() }));
+vi.mock('@/api/catalogo', () => ({ buscarProdutos: vi.fn() }));
+vi.mock('@/api/familias', () => ({ listarFamilias: vi.fn() }));
 vi.mock('@/api/centrosCusto', () => ({ listarCentrosCusto: vi.fn() }));
 vi.mock('@/api/material', () => ({ criarSolicitacaoMaterial: vi.fn() }));
 
-import { buscarProdutos, familiasDoCatalogo } from '@/api/catalogo';
+import { buscarProdutos } from '@/api/catalogo';
+import { listarFamilias } from '@/api/familias';
 import { listarCentrosCusto } from '@/api/centrosCusto';
 import { criarSolicitacaoMaterial } from '@/api/material';
 
@@ -59,7 +61,7 @@ describe('tela Solicitar Material', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.mocked(listarCentrosCusto).mockResolvedValue([cc]);
-    vi.mocked(familiasDoCatalogo).mockResolvedValue(['EPI', 'LIMPEZA']);
+    vi.mocked(listarFamilias).mockResolvedValue([{ name: 'EPI' }, { name: 'LIMPEZA' }] as never);
     vi.mocked(buscarProdutos).mockResolvedValue([produto({})]);
   });
 

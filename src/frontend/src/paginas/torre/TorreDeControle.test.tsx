@@ -230,6 +230,22 @@ describe('Torre de Controle', () => {
       expect.objectContaining({ excecoes: true, etapa: '', pagina: 1 }), expect.anything()));
   });
 
+  it('o centro de custo aparece pelo nome, com o código na dica', async () => {
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({
+      items: [linha({ costCenter: 'PER-001', costCenterName: 'Suprimentos Pernambuco' })],
+    }));
+    abrir();
+    const celula = await screen.findByTestId('centro-da-linha');
+    expect(celula).toHaveTextContent('Suprimentos Pernambuco');
+    expect(celula).toHaveAttribute('title', 'PER-001');
+  });
+
+  it('centro sem nome no cadastro cai no código, em vez de ficar em branco', async () => {
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({ items: [linha({ costCenter: 'PER-001', costCenterName: null })] }));
+    abrir();
+    expect(await screen.findByTestId('centro-da-linha')).toHaveTextContent('PER-001');
+  });
+
   it('linha sem exceção não ganha marca nenhuma', async () => {
     vi.mocked(torreDeControle).mockResolvedValue(pagina({ items: [linha()] }));
     abrir();

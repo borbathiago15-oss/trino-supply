@@ -54,6 +54,44 @@ public class TorreDeControleServiceTests
     }
 
     [Fact]
+    public async Task O_comprador_da_linha_e_quem_conduziu_a_cotacao_e_nao_quem_foi_atribuido()
+    {
+        // a SC foi atribuída ao gestor na triagem, mas quem cotou foi a Carla: a linha, o
+        // filtro e o cockpit dizem Carla — antes diziam o gestor, ou o aprovador do pedido
+        var w = Build();
+        var gestor = Guid.NewGuid();
+        var sc = await ScAprovadaAsync(w, "Resma de papel A4");
+        var salva = await w.Db.Requisitions.SingleAsync(r => r.Id == sc.Id);
+        salva.AssignedToId = gestor;
+        salva.AssignedToLabel = "Gerson Gestor";
+        await w.Db.SaveChangesAsync();
+
+        // antes da cotação, a triagem é a única resposta
+        Assert.Equal("Gerson Gestor", Assert.Single((await w.Torre.ConsultarAsync(new FiltroTorre())).Items).BuyerLabel);
+
+        await w.Rfq.CreateFromPrAsync(Carla, sc.Id, QuotationKind.Purchase, null, null);
+
+        var linha = Assert.Single((await w.Torre.ConsultarAsync(new FiltroTorre())).Items);
+        Assert.Equal("Carla Compradora", linha.BuyerLabel);
+        Assert.Single((await w.Torre.ConsultarAsync(new FiltroTorre(BuyerId: Carla.Id))).Items);
+        Assert.Empty((await w.Torre.ConsultarAsync(new FiltroTorre(BuyerId: gestor))).Items);
+        Assert.Contains((await w.Torre.ConsultarAsync(new FiltroTorre())).FilterOptions.Buyers, b => b.Id == Carla.Id);
+    }
+
+    [Fact]
+    public async Task A_linha_traz_o_nome_do_centro_de_custo()
+    {
+        var w = Build();
+        w.Db.CostCenters.Add(new CostCenter { Code = "CC-01", Name = "Suprimentos Pernambuco" });
+        await w.Db.SaveChangesAsync();
+        await ScAprovadaAsync(w, "Luva");
+
+        var linha = Assert.Single((await w.Torre.ConsultarAsync(new FiltroTorre())).Items);
+        Assert.Equal("CC-01", linha.CostCenter);
+        Assert.Equal("Suprimentos Pernambuco", linha.CostCenterName);
+    }
+
+    [Fact]
     public async Task Uma_linha_por_item_e_nao_uma_por_solicitacao()
     {
         // é a razão de a Torre existir: numa SC de três itens, olhar a SC inteira

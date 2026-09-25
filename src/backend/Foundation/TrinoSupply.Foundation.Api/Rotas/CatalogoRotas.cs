@@ -190,7 +190,7 @@ public static class CatalogoRotas
             var doc = new StoredDocument
             {
                 FileName = Path.GetFileName(file.FileName), ContentType = file.ContentType, SizeBytes = file.Length,
-                Content = ms.ToArray(), EntityType = "PRODUTO_IMAGEM", EntityId = item.Id,
+                Content = ms.ToArray(), EntityType = CatalogService.TipoDaFoto, EntityId = item.Id,
                 UploadedByLabel = p.FindFirstValue("name") ?? "Cadastro", UploadedAt = clock.GetUtcNow(),
             };
             db.StoredDocuments.Add(doc);
@@ -245,6 +245,17 @@ public static class CatalogoRotas
                 body.Category, body.ClearCategory == true);
             return error is not null ? Error(ctx, error.Code == "IC-ERR-404" ? 404 : 400, error.Code, error.Message)
                 : Ok(FamilyView(family!), ctx);
+        });
+
+        // excluir a família: só vazia (IC-ERR-031) — com produto dentro, o caminho é inativar
+        families.MapDelete("/{id:guid}", async (Guid id, CatalogService svc, ClaimsPrincipal p, HttpContext ctx,
+            CancellationToken ct) =>
+        {
+            if (!CatalogService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.Produtos))
+                return Error(ctx, 403, "IC-ERR-900", "Seu usuário não mantém o catálogo.");
+            var erro = await svc.ExcluirFamiliaAsync(id, ct);
+            return erro is null ? Ok(new { deleted = true }, ctx)
+                : Error(ctx, erro.Code == "IC-ERR-404" ? 404 : 409, erro.Code, erro.Message);
         });
 
         // Locais de entrega para os formulários de SC (sem dados de estoque; aberto a papéis internos).
@@ -313,6 +324,24 @@ public static class CatalogoRotas
                     }),
                 }),
             }, ctx);
+        });
+
+        // a ficha do produto: o que a busca da SC mostra ao clicar, antes de escolher
+        catalogGroup.MapGet("/{id:guid}", async (Guid id, CatalogService svc, HttpContext ctx, CancellationToken ct) =>
+        {
+            var item = await svc.DetalheAsync(id, ct);
+            return item is null ? Error(ctx, 404, "IC-ERR-404", "Item não encontrado.") : Ok(CatalogView(item), ctx);
+        });
+
+        // excluir de verdade: só o produto que nunca circulou (IC-ERR-030); o resto se inativa
+        catalogGroup.MapDelete("/{id:guid}", async (Guid id, CatalogService svc, ClaimsPrincipal p, HttpContext ctx,
+            CancellationToken ct) =>
+        {
+            if (!CatalogService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.Produtos))
+                return Error(ctx, 403, "IC-ERR-900", "Seu usuário não mantém o catálogo.");
+            var erro = await svc.ExcluirAsync(id, ct);
+            return erro is null ? Ok(new { deleted = true }, ctx)
+                : Error(ctx, erro.Code == "IC-ERR-404" ? 404 : 409, erro.Code, erro.Message);
         });
 
         catalogGroup.MapPatch("/{id:guid}", async (Guid id, UpdateCatalogItemRequest body, CatalogService svc, ClaimsPrincipal p, HttpContext ctx) =>

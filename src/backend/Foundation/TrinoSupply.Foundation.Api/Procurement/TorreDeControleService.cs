@@ -67,7 +67,9 @@ public record LinhaDaTorre(
     /// <summary>De quem a linha está esperando, e há quanto tempo. Nulo quando não se espera nada.</summary>
     EsperaDaLinha? WaitingOn = null,
     /// <summary>Como a espera está contra o prazo desta etapa.</summary>
-    SituacaoDoPrazo? Sla = null);
+    SituacaoDoPrazo? Sla = null,
+    /// <summary>O nome do centro de custo — o código diz pouco a quem lê a linha.</summary>
+    string? CostCenterName = null);
 
 /// <summary>
 /// Os números do topo (§5).
@@ -236,6 +238,25 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
     /// que ninguém mais resolve sozinho.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Quem de fato conduz a compra: quem escolheu o vencedor, senão quem abriu a cotação, e só
+    /// antes de existir cotação o responsável da triagem.
+    ///
+    /// <para>
+    /// A atribuição da triagem diz quem <i>deveria</i> pegar a SC, e o pedido é emitido por quem
+    /// aprova o Nível 2 — as duas colunas mostravam o gestor ou o diretor como "comprador" de
+    /// uma compra que outra pessoa cotou. Coluna, filtro e cockpit perguntam a esta função.
+    /// </para>
+    /// </summary>
+    public static (Guid? Id, string? Label) CompradorDe(PurchaseRequisition sc, Quotation? cotacao)
+    {
+        if (cotacao?.SelectedBy is { } quem && !string.IsNullOrWhiteSpace(cotacao.SelectedByLabel))
+            return (quem, cotacao.SelectedByLabel);
+        if (cotacao is not null && !string.IsNullOrWhiteSpace(cotacao.CreatedByLabel))
+            return (cotacao.CreatedBy, cotacao.CreatedByLabel);
+        return (sc.AssignedToId, sc.AssignedToLabel);
+    }
+
     public static (string Label, bool DoComprador) AcaoDe(
         string etapa, string? excecao, bool temComprador)
     {
@@ -279,7 +300,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
                        select new { item, sc };
 
         if (f.RequesterId is { } sol) consulta = consulta.Where(x => x.sc.RequesterId == sol);
-        if (f.BuyerId is { } comp) consulta = consulta.Where(x => x.sc.AssignedToId == comp);
+        // o comprador de fato depende da cotação: é filtro derivado, como etapa e situação
         if (f.Company is { Length: > 0 } emp) consulta = consulta.Where(x => x.sc.Company == emp);
         if (f.CostCenter is { Length: > 0 } cc) consulta = consulta.Where(x => x.sc.CostCenter == cc);
         if (f.Priority is { Length: > 0 } pri) consulta = consulta.Where(x => x.sc.Priority == pri);
@@ -314,7 +335,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
                        || f.DueFrom is not null || f.DueTo is not null
                        || f.MinValue is not null || f.MaxValue is not null
                        || f.Exception == true || f.NeedsBuyer == true || f.Invoicing is not null
-                       || f.SlaBreached == true;
+                       || f.SlaBreached == true || f.BuyerId is not null;
         var ordenada = consulta.OrderByDescending(x => x.sc.CreatedAt).ThenBy(x => x.item.Sequence);
 
         var total = derivado ? 0 : await consulta.CountAsync(ct);
@@ -363,6 +384,12 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
         // uma consulta por item, e a Torre é justamente a tela com muitas linhas
         var centros = bruto.Select(x => x.sc.CostCenter.Trim().ToUpperInvariant())
             .Where(c => c.Length > 0).Distinct().ToList();
+        // os nomes dos centros desta página, de uma vez — com array no Contains, que traduz
+        var codigosDosCentros = centros.ToArray();
+        var nomeDoCentro = (await db.CostCenters.Where(c => codigosDosCentros.Contains(c.Code.ToUpper()))
+                .Select(c => new { c.Code, c.Name }).ToListAsync(ct))
+            .GroupBy(c => c.Code.Trim().ToUpperInvariant())
+            .ToDictionary(g => g.Key, g => g.First().Name);
         var alcadaPorCentro = await AlcadasDoCentro.ResolverAsync(db, centros, ct);
 
         var linhas = new List<LinhaDaTorre>(bruto.Count);
@@ -442,16 +469,20 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
             var sla = PrazoDaEtapaService.Avaliar(etapa, espera?.Days, doTipo);
             if (f.SlaBreached == true && !sla.Breached) continue;
 
+            var comprador = CompradorDe(x.sc, cotacao);
+            if (f.BuyerId is { } filtroComprador && comprador.Id != filtroComprador) continue;
+
             linhas.Add(new LinhaDaTorre(
                 x.item.Id, x.sc.Id, x.sc.Number, x.item.Sequence,
                 x.item.CatalogCode, x.item.Description, x.item.Quantity, x.item.UnitOfMeasure,
                 x.sc.RequesterLabel, x.sc.Company, x.sc.CostCenter,
-                x.sc.AssignedToLabel ?? pedido?.IssuedByLabel ?? cotacao?.CreatedByLabel,
+                comprador.Label,
                 pedido?.SupplierName, etapa, RotuloDaEtapa(etapa),
                 situacao.Key, situacao.Label, situacao.Tone,
                 x.sc.Priority, x.sc.NeededBy, pedido?.PromisedDate, atrasado,
                 valor, cotacao?.Id, cotacao?.Number, pedido?.Id, pedido?.Number,
-                naFilaDesde, excecao, acao.Length == 0 ? null : acao, doComprador, espera, sla));
+                naFilaDesde, excecao, acao.Length == 0 ? null : acao, doComprador, espera, sla,
+                nomeDoCentro.GetValueOrDefault(x.sc.CostCenter.Trim().ToUpperInvariant())));
         }
 
         if (derivado)
@@ -583,8 +614,23 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
         (await db.Requisitions.Select(r => new { r.RequesterId, r.RequesterLabel })
                 .Distinct().OrderBy(x => x.RequesterLabel).Take(200).ToListAsync(ct))
             .Select(x => new OpcaoPessoa(x.RequesterId, x.RequesterLabel)).ToList(),
-        (await db.Requisitions.Where(r => r.AssignedToId != null && r.AssignedToLabel != null)
-                .Select(r => new { Id = r.AssignedToId!.Value, Label = r.AssignedToLabel! })
-                .Distinct().OrderBy(x => x.Label).Take(200).ToListAsync(ct))
-            .Select(x => new OpcaoPessoa(x.Id, x.Label)).ToList());
+        await CompradoresAsync(ct));
+
+    /// <summary>
+    /// Quem aparece no filtro de comprador: quem foi atribuído na triagem e quem conduziu
+    /// cotação — a mesma gente que <see cref="CompradorDe"/> pode pôr na coluna. Sem os da
+    /// cotação, o filtro não teria o nome que a linha mostra.
+    /// </summary>
+    private async Task<IReadOnlyList<OpcaoPessoa>> CompradoresAsync(CancellationToken ct)
+    {
+        var triagem = await db.Requisitions.Where(r => r.AssignedToId != null && r.AssignedToLabel != null)
+            .Select(r => new { Id = r.AssignedToId!.Value, Label = r.AssignedToLabel! }).Distinct().Take(200).ToListAsync(ct);
+        var abriram = await db.Quotations.Where(q => q.CreatedByLabel != "")
+            .Select(q => new { Id = q.CreatedBy, Label = q.CreatedByLabel }).Distinct().Take(200).ToListAsync(ct);
+        var escolheram = await db.Quotations.Where(q => q.SelectedBy != null && q.SelectedByLabel != null)
+            .Select(q => new { Id = q.SelectedBy!.Value, Label = q.SelectedByLabel! }).Distinct().Take(200).ToListAsync(ct);
+        return triagem.Concat(abriram).Concat(escolheram)
+            .GroupBy(x => x.Id).Select(g => new OpcaoPessoa(g.Key, g.First().Label))
+            .OrderBy(x => x.Label).ToList();
+    }
 }

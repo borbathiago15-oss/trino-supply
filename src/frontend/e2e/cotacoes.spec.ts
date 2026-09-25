@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { itemForaDoCatalogo } from './sc';
 import { abrirAutenticado } from './sessao';
 
 const marca = Date.now().toString().slice(-6);
@@ -6,9 +7,7 @@ const marca = Date.now().toString().slice(-6);
 /** Cria uma SC com dois itens de famílias diferentes e a envia, para ela cair na fila. */
 async function scComDuasFamilias(page: import('@playwright/test').Page, justificativa: string) {
   await abrirAutenticado(page, '/solicitacoes/nova');
-  await page.getByLabel('Produto').first().fill(`Luva ${marca}`);
-  await page.getByLabel('Unidade').first().fill('PAR');
-  await page.getByLabel('Quantidade').first().fill('10');
+  await itemForaDoCatalogo(page, `Luva ${marca}`, '10', 'PAR');
   await page.fill('#sc-justificativa', justificativa);
   await page.selectOption('#sc-cc', 'E2E-001');
   await page.getByRole('button', { name: 'Criar rascunho da SC' }).click();

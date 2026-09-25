@@ -525,8 +525,27 @@ viram "Corrigir" e "Reenviar". Centro sem aprovador cadastrado é dito na frase,
 em "aguardando ninguém". O formulário de nova SC pergunta o essencial primeiro (itens,
 justificativa, centro, data, prioridade) e recolhe o resto em "Mais detalhes". **O produto se
 escolhe buscando, não rolando**: o campo de sugestões com o acervo inteiro dentro virou um
-seletor que pede família ou duas letras antes de consultar (`SeletorDeProduto`), e o item fora
-do catálogo continua sendo digitado na própria linha.
+seletor que pede família ou duas letras antes de consultar (`SeletorDeProduto`). **A busca é a
+única porta do produto na SC**: o campo de texto na linha parecia uma segunda busca e deixava o
+produto cadastrado entrar como texto solto. Clicar num resultado abre a **ficha**
+(`FichaDoProduto` — foto, código, família, unidade, fornecedores com C.A.), e é dela que se usa o
+produto; o item **fora do catálogo** sai da própria busca ("não achou?"), com o termo buscado como
+descrição — pedir o que ninguém cadastrou continua possível, mas depois de procurar. As
+**famílias** das telas de pedido (SC, lote, material) são as **ativas do cadastro**
+(`listarFamilias`), não os nomes que aparecem nos produtos: a lista derivada mostrava família
+inativa e escondia a ativa ainda sem produto. A **empresa** da SC é um dos CNPJs ativos do
+cadastro (`PR-ERR-023`), gravada com o nome oficial: texto livre dava a mesma empresa escrita de
+três jeitos, e a Torre e o cockpit, que agrupam por ela, contavam três. Sem nenhum CNPJ
+**ativo** a regra não se aplica — a tela cai no nome do padrão da O.C., e a régua do servidor é
+a mesma que a tela consegue enxergar (a primeira versão contava os inativos e recusava toda SC).
+
+**Excluir de verdade é só para o que nunca circulou.** Produto que entrou numa SC, cotação,
+pedido, contrato, solicitação de material ou no estoque é histórico, e apagá-lo deixaria esses
+registros apontando para nada (`IC-ERR-030`, que diz **onde** ele circulou); o caminho é
+inativar. A família só sai vazia, **contando os inativos** (`IC-ERR-031`): a família é texto no
+produto, e apagá-la com produto dentro os deixaria numa família que o cadastro não conhece — a
+próxima edição deles seria recusada. A foto do produto é do catálogo, e **todo papel interno** a
+baixa: quem pede precisa ver o que está pedindo.
 
 **A diretoria tem página própria (`/diretoria`), e o relatório abre em três frases.** A Visão da
 diretoria põe na ordem em que um diretor pergunta: cinco números com tendência (gasto, saving,
@@ -576,6 +595,14 @@ A **ação da linha e a fila prioritária saem da mesma regra** (`AcaoDe`): a pe
 discordariam no primeiro caso de canto e o comprador não confiaria em nenhum dos dois.
 O rótulo vem do servidor; o destino é do navegador (`destinoDaAcao`), que é quem
 conhece as rotas. **Exceção volta ao comprador em qualquer etapa.**
+
+**O comprador da linha é quem conduziu a compra, não quem foi atribuído nem quem aprovou.**
+`TorreDeControleService.CompradorDe` responde, nesta ordem: quem escolheu o vencedor, quem abriu
+a cotação e, só antes de existir cotação, o responsável da triagem. A coluna caía antes na
+atribuição e depois em quem **emitiu o pedido** — e o pedido nasce na aprovação do Nível 2, então
+a Torre mostrava o gestor ou o diretor como comprador de uma compra que outra pessoa cotou.
+Coluna, filtro (que por isso é **derivado**) e a produtividade do cockpit perguntam à mesma
+função. A linha mostra o **nome** do centro de custo; o código fica na dica.
 
 **A triagem mora dentro da Torre.** Atribuir e liberar responsável se faz na própria
 Torre, porque a demanda que chega para o comprador *é* a etapa de Solicitação dela —

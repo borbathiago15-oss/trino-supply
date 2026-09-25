@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { familiasDoCatalogo, gradeDeLote, type LinhaDeLote } from '@/api/catalogo';
+import { gradeDeLote, type LinhaDeLote } from '@/api/catalogo';
+import { listarFamilias } from '@/api/familias';
 import { listarCentrosCusto, type CentroCusto } from '@/api/centrosCusto';
 import { listarLocaisDeEntrega, locaisPorTipo, rotuloDoLocal, type LocalEntrega } from '@/api/locais';
 import { criarSolicitacao, ROTULO_PRIORIDADE, type Prioridade } from '@/api/solicitacoes';
@@ -34,7 +35,8 @@ export function SolicitacaoEmLote() {
   const [enviando, setEnviando] = useState(false);
 
   const apoio = useCarregar(async (signal) => ({
-    familias: await familiasDoCatalogo(signal).catch(() => [] as string[]),
+    // as famílias ativas do cadastro, e não os nomes que aparecem nos produtos
+    familias: (await listarFamilias(false, signal).catch(() => [])).map((f) => f.name),
     locais: await listarLocaisDeEntrega(signal).catch(() => [] as LocalEntrega[]),
     centros: await listarCentrosCusto(false, signal).catch(() => [] as CentroCusto[]),
   }), []);

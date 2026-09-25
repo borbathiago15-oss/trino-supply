@@ -350,3 +350,26 @@ export const obterCockpit = (unidade?: string | null, signal?: AbortSignal) =>
   api<CockpitDados>(
     `/api/v1/control-tower/cockpit${unidade ? `?unidade=${encodeURIComponent(unidade)}` : ''}`,
     { signal });
+
+/**
+ * O que a seleção da Torre permite fazer. A marca é **por item**: a cotação leva só os itens
+ * marcados, e os outros da mesma SC ficam pendentes nela, na etapa de Solicitação — é o
+ * "sigo com este, deixo aquele" que o comprador pediu. A atribuição continua sendo da SC
+ * inteira (é o servidor que diz de quem a solicitação é), e por isso ela conta as SCs.
+ *
+ * Os impedimentos repetem o que a abertura do processo recusaria, para a tela dizer antes do
+ * clique: só item na etapa Solicitação e sem processo entra numa cotação nova, as SCs têm de ser
+ * do mesmo centro de custo (RFQ-ERR-061) e orçamento não se mistura com compra (RFQ-ERR-063).
+ */
+export function resumoDaSelecao(marcadas: LinhaDaTorre[]) {
+  const scs = [...new Set(marcadas.map((l) => l.requisitionId))];
+  const foraDaEtapa = marcadas.filter((l) => l.stage !== 'SOLICITACAO' || !!l.quotationId);
+  const centros = [...new Set(marcadas.map((l) => l.costCenter.trim().toUpperCase()))];
+  const finalidades = [...new Set(marcadas.map((l) => l.purpose ?? 'COMPRA'))];
+  const impedimento = !marcadas.length ? null
+    : foraDaEtapa.length ? `${foraDaEtapa.map((l) => `${l.prNumber} item ${l.sequence}`).join(', ')} já passou da etapa de Solicitação — só item ainda sem processo entra numa cotação nova.`
+    : centros.length > 1 ? 'Os itens marcados são de centros de custo diferentes — a cotação junta só itens do mesmo centro (RFQ-ERR-061).'
+    : finalidades.length > 1 ? 'Há orçamento e compra entre os itens marcados — os dois não se misturam no mesmo processo (RFQ-ERR-063).'
+    : null;
+  return { itens: marcadas.length, scs, impedimento, podeCotar: marcadas.length > 0 && !impedimento };
+}

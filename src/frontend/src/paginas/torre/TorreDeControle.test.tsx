@@ -18,9 +18,15 @@ vi.mock('@/api/triagem', async (importar) => ({
 }));
 let usuarioAtual = { role: 'PurchasingOfficer', modules: ['COMPRAS'] };
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => usuarioAtual }));
+vi.mock('@/api/cotacoes', async (importar) => ({
+  ...(await importar<typeof import('@/api/cotacoes')>()),
+  abrirProcesso: vi.fn(),
+}));
 
 import { torreDeControle } from '@/api/torre';
 import { designar, designarEmLote, listarResponsaveis } from '@/api/triagem';
+import { abrirProcesso } from '@/api/cotacoes';
+import { resumoDaSelecao } from '@/api/torre';
 
 const linha = (p: Partial<LinhaDaTorre> = {}): LinhaDaTorre => ({
   itemId: 'i1', requisitionId: 'r1', prNumber: 'PR-2026-000001', sequence: 1,
@@ -295,7 +301,7 @@ describe('Torre de Controle', () => {
       expect.anything()));
   });
 
-  it('a triagem mora na Torre: marcar SCs e atribuir em lote', async () => {
+  it('a atribuição conta as SCs dos itens marcados: dois itens da mesma SC vão uma vez só', async () => {
     const usuario = userEvent.setup();
     vi.mocked(torreDeControle).mockResolvedValue(pagina({
       items: [
@@ -307,14 +313,55 @@ describe('Torre de Controle', () => {
     abrir();
     await screen.findByTestId('tabela-torre');
 
-    // dois itens da MESMA SC: marcar um marca a SC, e o lote manda uma só
-    await usuario.click(screen.getAllByLabelText(/Selecionar PR-2026-000001/)[0]);
-    await usuario.click(screen.getByLabelText(/Selecionar PR-2026-000002/));
+    // dois itens da MESMA SC e um de outra: o lote manda cada SC uma vez
+    await usuario.click(screen.getByLabelText('Selecionar PR-2026-000001 item 1'));
+    await usuario.click(screen.getByLabelText('Selecionar PR-2026-000001 item 2'));
+    await usuario.click(screen.getByLabelText('Selecionar PR-2026-000002 item 1'));
+    expect(screen.getByTestId('resumo-selecao')).toHaveTextContent('3 item(ns) de 2 solicitação(ões)');
     await usuario.selectOptions(screen.getByLabelText(/Atribuir as SCs marcadas a/), 'u2');
     await usuario.click(screen.getByRole('button', { name: /^Atribuir/ }));
 
     await waitFor(() => expect(designarEmLote).toHaveBeenCalledWith(
       [{ kind: 'SC', id: 'r1' }, { kind: 'SC', id: 'r2' }], 'u2'));
+  });
+
+  it('marcar um item marca só ele, e a cotação leva só os marcados', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(abrirProcesso).mockResolvedValue({ id: 'q9', number: 'RFQ-2026-000009' });
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({
+      items: [
+        linha({ itemId: 'i1', requisitionId: 'r1', description: 'Caneta' }),
+        linha({ itemId: 'i2', requisitionId: 'r1', sequence: 2, description: 'Grampeador' }),
+      ],
+    }));
+    abrir();
+    await screen.findByTestId('tabela-torre');
+
+    await usuario.click(screen.getByLabelText('Selecionar PR-2026-000001 item 1'));
+    // o outro item da mesma SC não é marcado junto, como era quando a marca era da SC
+    expect(screen.getByLabelText('Selecionar PR-2026-000001 item 2')).not.toBeChecked();
+    expect(screen.getByTestId('resumo-selecao')).toHaveTextContent('os demais ficam pendentes na mesma SC');
+
+    await usuario.click(screen.getByTestId('cotar-marcados'));
+    await waitFor(() => expect(abrirProcesso).toHaveBeenCalledWith({ prItemIds: ['i1'], kind: 'COMPRA', deadline: null }));
+  });
+
+  it('item que já passou da Solicitação não entra numa cotação nova, e a tela diz qual', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({
+      items: [
+        linha({ itemId: 'i1', requisitionId: 'r1', description: 'Caneta' }),
+        linha({ itemId: 'i2', requisitionId: 'r1', sequence: 2, description: 'Grampeador',
+          stage: 'COTACAO', quotationId: 'q1', quotationNumber: 'RFQ-2026-000001' }),
+      ],
+    }));
+    abrir();
+    await screen.findByTestId('tabela-torre');
+
+    await usuario.click(screen.getByLabelText('Selecionar PR-2026-000001 item 2'));
+    expect(screen.getByTestId('selecao-impedida')).toHaveTextContent('PR-2026-000001 item 2 já passou da etapa de Solicitação');
+    expect(screen.getByTestId('cotar-marcados')).toBeDisabled();
+    expect(abrirProcesso).not.toHaveBeenCalled();
   });
 
   it('liberar devolve a SC para a fila, sem tocar nos outros itens dela', async () => {
@@ -577,5 +624,26 @@ describe('Torre de Controle', () => {
     await usuario.click(screen.getByRole('button', { name: /Prazo estourado/ }));
     await waitFor(() => expect(torreDeControle).toHaveBeenLastCalledWith(
       expect.objectContaining({ prazoEstourado: true, atrasados: false }), expect.anything()));
+  });
+});
+
+describe('resumo da seleção da Torre', () => {
+  const l = (over: Partial<LinhaDaTorre>) => ({
+    itemId: 'i', requisitionId: 'r', prNumber: 'PR-1', sequence: 1, costCenter: 'CC-01', purpose: 'COMPRA',
+    stage: 'SOLICITACAO', quotationId: null, ...over,
+  }) as LinhaDaTorre;
+
+  it('antecipa o que a abertura do processo recusaria', () => {
+    expect(resumoDaSelecao([]).podeCotar).toBe(false);
+    expect(resumoDaSelecao([l({})]).podeCotar).toBe(true);
+    expect(resumoDaSelecao([l({ itemId: 'a' }), l({ itemId: 'b', requisitionId: 'r2', costCenter: 'CC-02' })]).impedimento)
+      .toContain('RFQ-ERR-061');
+    expect(resumoDaSelecao([l({ itemId: 'a' }), l({ itemId: 'b', requisitionId: 'r2', purpose: 'ORCAMENTO' })]).impedimento)
+      .toContain('RFQ-ERR-063');
+  });
+
+  it('conta as SCs sem repetir', () => {
+    expect(resumoDaSelecao([l({ itemId: 'a' }), l({ itemId: 'b' }), l({ itemId: 'c', requisitionId: 'r2' })]).scs)
+      .toEqual(['r', 'r2']);
   });
 });

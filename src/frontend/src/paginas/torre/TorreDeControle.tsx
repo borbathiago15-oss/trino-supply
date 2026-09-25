@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   CLASSE_DO_TOM, destinoDaAcao, DIAS_PARA_DESTACAR_ESPERA, ETAPAS, FILTROS_TORRE_VAZIOS,
-  SELO_DO_PRAZO, tempoParado, torreDeControle,
+  resumoDaSelecao, SELO_DO_PRAZO, tempoParado, torreDeControle,
   type FiltrosDaTorre, type LinhaDaTorre,
   FAIXAS_DE_FILA,
 } from '@/api/torre';
@@ -11,6 +11,7 @@ import { Campo } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
 import { podeTriar } from '@/dominio/papeis';
 import { designar, designarEmLote, listarResponsaveis, rotuloDoResponsavel } from '@/api/triagem';
+import { abrirProcesso } from '@/api/cotacoes';
 import { LinkAbaNova } from '@/componentes/LinkAbaNova';
 import { mudarFinalidade } from '@/api/solicitacoes';
 import { DialogoDePrioridade, type Pleito } from '@/paginas/triagem/DialogoDePrioridade';
@@ -36,7 +37,7 @@ function KpiFiltro({ rotulo, valor, detalhe, ativo, aoClicar }: {
 
 function Linha({ i, triando, marcada, aoMarcar, aoLiberar, aoPriorizar, aoMudarFinalidade }: {
   i: LinhaDaTorre; triando: boolean; marcada: boolean;
-  aoMarcar: (scId: string) => void; aoLiberar: (scId: string) => void;
+  aoMarcar: (i: LinhaDaTorre) => void; aoLiberar: (scId: string) => void;
   aoPriorizar: (i: LinhaDaTorre) => void;
   aoMudarFinalidade: (i: LinhaDaTorre) => void;
 }) {
@@ -53,10 +54,10 @@ function Linha({ i, triando, marcada, aoMarcar, aoLiberar, aoPriorizar, aoMudarF
     <tr data-testid={`linha-${i.itemId}`} className={i.late ? 'bg-perigo-fundo/40' : undefined}>
       {triando && (
         <td className="whitespace-nowrap">
-          {/* a atribuição é da SC inteira, não do item: marcar um item marca a SC,
-              e é por isso que a caixa fica desligada nas outras linhas dela */}
-          <input type="checkbox" aria-label={`Selecionar ${i.prNumber}`}
-            checked={marcada} onChange={() => aoMarcar(i.requisitionId)} />
+          {/* a marca é do item: a cotação leva só o que foi marcado, e o resto da SC fica
+              pendente nela. A atribuição, essa sim, vale para a SC inteira */}
+          <input type="checkbox" aria-label={`Selecionar ${i.prNumber} item ${i.sequence}`}
+            checked={marcada} onChange={() => aoMarcar(i)} />
         </td>
       )}
       <td className="whitespace-nowrap">
@@ -204,17 +205,37 @@ export function TorreDeControle() {
   // receber demanda continua num lugar só, no servidor.
   const equipe = useCarregar(
     async (signal) => (triando ? listarResponsaveis(signal).catch(() => []) : []), [triando]);
-  const [marcadas, setMarcadas] = useState<Record<string, boolean>>({});
+  const navegar = useNavigate();
+  // marcada por item: guarda a linha inteira, que é o que a regra da seleção precisa ler
+  const [marcadas, setMarcadas] = useState<Record<string, LinhaDaTorre>>({});
   const [paraQuem, setParaQuem] = useState('');
   const [atribuindo, setAtribuindo] = useState(false);
+  const [cotando, setCotando] = useState(false);
 
-  // a atribuição é da SC, e a Torre mostra uma linha por item: sem deduplicar, uma SC
-  // de cinco itens contaria cinco vezes e o lote mandaria a mesma SC cinco vezes
-  const scsMarcadas = useMemo(
-    () => Object.entries(marcadas).filter(([, v]) => v).map(([id]) => id), [marcadas]);
+  // a atribuição é da SC, e a Torre mostra uma linha por item: a seleção conta as SCs dos
+  // itens marcados, senão uma SC de cinco itens iria cinco vezes no mesmo lote
+  const selecao = useMemo(() => resumoDaSelecao(Object.values(marcadas)), [marcadas]);
+  const scsMarcadas = selecao.scs;
 
-  const alternar = (scId: string) =>
-    setMarcadas((m) => ({ ...m, [scId]: !m[scId] }));
+  const alternar = (l: LinhaDaTorre) =>
+    setMarcadas((m) => {
+      const { [l.itemId]: tinha, ...resto } = m;
+      return tinha ? resto : { ...m, [l.itemId]: l };
+    });
+
+  async function cotarMarcados() {
+    if (!selecao.podeCotar) return;
+    setCotando(true);
+    try {
+      const itens = Object.keys(marcadas);
+      const q = await abrirProcesso({ prItemIds: itens, kind: 'COMPRA', deadline: null });
+      avisar(`Processo ${q.number} aberto com ${itens.length} item(ns). Os itens não marcados continuam pendentes na mesma SC.`);
+      setMarcadas({});
+      navegar(`/cotacoes/${q.id}`);
+    } catch (e) {
+      avisar(e instanceof Error ? e.message : 'Falha ao abrir a cotação.', 'erro');
+    } finally { setCotando(false); }
+  }
 
   async function atribuir() {
     if (!paraQuem || !scsMarcadas.length) return;
@@ -484,6 +505,10 @@ export function TorreDeControle() {
         {triando && !!dados?.items.length && (
           <div data-testid="triagem-torre"
             className="mb-3 flex flex-wrap items-end gap-2 rounded-lg border border-borda bg-superficie-suave p-3">
+            <button type="button" className="botao" data-testid="cotar-marcados"
+              disabled={!selecao.podeCotar || cotando} onClick={cotarMarcados}>
+              {cotando ? 'Abrindo…' : `Abrir cotação com os itens marcados${selecao.itens ? ` (${selecao.itens})` : ''}`}
+            </button>
             <Campo id="tc-responsavel" rotulo="Atribuir as SCs marcadas a" className="min-w-[260px]">
               <select id="tc-responsavel" value={paraQuem} onChange={(e) => setParaQuem(e.target.value)}>
                 <option value="">Escolha o responsável…</option>
@@ -501,11 +526,14 @@ export function TorreDeControle() {
                 Limpar seleção
               </button>
             )}
-            <span className="sub">
-              {scsMarcadas.length
-                ? `${scsMarcadas.length} solicitação(ões) marcada(s) — a atribuição vale para todos os itens dela.`
-                : 'Marque as solicitações na tabela. A atribuição é da SC inteira, não do item.'}
+            <span className="sub" data-testid="resumo-selecao">
+              {selecao.itens
+                ? `${selecao.itens} item(ns) de ${scsMarcadas.length} solicitação(ões). A cotação leva só os itens marcados — os demais ficam pendentes na mesma SC. A atribuição vale para a SC inteira.`
+                : 'Marque os itens que vão seguir. A cotação leva só os marcados; a atribuição vale para a SC inteira.'}
             </span>
+            {selecao.impedimento && (
+              <p className="w-full text-[13px] text-aviso" data-testid="selecao-impedida">{selecao.impedimento}</p>
+            )}
           </div>
         )}
         {carregando && !dados && <Carregando texto="Montando a fila…" />}
@@ -524,7 +552,7 @@ export function TorreDeControle() {
                 </thead>
                 <tbody>{dados.items.map((i) => (
                   <Linha key={i.itemId} i={i} triando={triando}
-                    marcada={!!marcadas[i.requisitionId]} aoMarcar={alternar}
+                    marcada={!!marcadas[i.itemId]} aoMarcar={alternar}
                     aoLiberar={tirarResponsavel}
                     aoMudarFinalidade={trocarFinalidade}
                     aoPriorizar={(l) => setPleito({

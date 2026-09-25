@@ -654,9 +654,18 @@ sair da tela para atribuir e voltar para acompanhar era o caminho longo para a m
 coisa. As chamadas continuam sendo as de `/api/v1/triage`: a regra de quem pode receber
 demanda vive num lugar só, no servidor.
 
-**A atribuição é da SC, e a Torre é por item.** Marcar um item marca a solicitação
-inteira, e a seleção é deduplicada por `requisitionId` — sem isso, uma SC de cinco itens
-iria cinco vezes no mesmo lote. A tela diz isso em vez de deixar o comprador descobrir.
+**A marca da Torre é do item; a atribuição, da SC.** O comprador segue com parte da SC e deixa
+o resto pendente nela (decisão da empresa, 2026-09): marcar um item marca **só ele**, e "Abrir
+cotação com os itens marcados" leva só os marcados — os demais continuam na etapa de Solicitação,
+na mesma SC, para seguir depois. A atribuição continua sendo da SC inteira, e por isso a seleção
+conta as SCs dos itens marcados (`resumoDaSelecao`) — sem deduplicar, uma SC de cinco itens iria
+cinco vezes no mesmo lote. A tela antecipa o que a abertura recusaria: item que já passou da
+Solicitação, centros diferentes (`RFQ-ERR-061`) e orçamento com compra (`RFQ-ERR-063`).
+**Qual processo e qual pedido são de cada item** é uma classe só, `AndamentoDosItens`, que lista,
+KPIs e cockpit consultam: a cotação do item é a que o contém (`SourcePrItemId`), o processo antigo
+da SC inteira (nenhum item rastreado) vale para todos os itens dela, e sem cotação só conta o
+pedido lançado direto da SC. Resolver pela SC mostrava o item deixado para trás "em cotação" num
+processo onde ele não estava — e o comprador não o achava para cotar depois.
 
 **A Torre é uma tela só, e a de compra não se divide em duas.** Ela já foi um subgrupo,
 com a Torre e a triagem lado a lado, e era um erro: as duas listavam a mesma SC por

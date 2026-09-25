@@ -374,19 +374,10 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
                         || (o.QuotationId != null && cotacaoIds.Contains(o.QuotationId.Value)))
             .OrderByDescending(o => o.CreatedAt).ToListAsync(ct);
 
-        // dicionários antes do laço: `FirstOrDefault` por linha faria a busca varrer a
-        // lista inteira a cada item — o custo cresceria com o quadrado do movimento
-        var cotacaoPorSc = new Dictionary<Guid, Quotation>();
-        foreach (var q in cotacoes)
-            foreach (var id in scIds.Where(q.CoversPr))
-                cotacaoPorSc.TryAdd(id, q);
-        var pedidoPorSc = new Dictionary<Guid, PurchaseOrder>();
-        var pedidoPorCotacao = new Dictionary<Guid, PurchaseOrder>();
-        foreach (var o in pedidos)
-        {
-            if (o.SourcePrId is { } pid) pedidoPorSc.TryAdd(pid, o);
-            if (o.QuotationId is { } qid) pedidoPorCotacao.TryAdd(qid, o);
-        }
+        // resolvido antes do laço, e por item: `FirstOrDefault` por linha varreria a lista
+        // inteira a cada item, e resolver pela SC poria o item que ficou para trás no processo
+        // do item que seguiu
+        var andamento = new AndamentoDosItens(cotacoes, pedidos);
 
         var familiaPorProduto = await db.CatalogItems
             .Select(i => new { i.Id, i.Family }).ToDictionaryAsync(x => x.Id, x => x.Family, ct);
@@ -409,10 +400,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
         var linhas = new List<LinhaDaTorre>(bruto.Count);
         foreach (var x in bruto)
         {
-            cotacaoPorSc.TryGetValue(x.sc.Id, out var cotacao);
-            PurchaseOrder? pedido = null;
-            if (!pedidoPorSc.TryGetValue(x.sc.Id, out pedido) && cotacao is not null)
-                pedidoPorCotacao.TryGetValue(cotacao.Id, out pedido);
+            var (cotacao, pedido) = andamento.Do(x.sc, x.item);
 
             var situacao = ProcessStatus.Of(x.sc, cotacao, pedido);
             var etapa = EtapaDe(situacao.Key);
@@ -542,28 +530,19 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
                         || (o.QuotationId != null && cotacaoIds.Contains(o.QuotationId.Value)))
             .OrderByDescending(o => o.CreatedAt).ToListAsync(ct);
 
-        var cotacaoPorSc = new Dictionary<Guid, Quotation>();
-        foreach (var q in cotacoes)
-            foreach (var id in ids.Where(q.CoversPr)) cotacaoPorSc.TryAdd(id, q);
-        var pedidoPorSc = new Dictionary<Guid, PurchaseOrder>();
-        var pedidoPorCotacao = new Dictionary<Guid, PurchaseOrder>();
-        foreach (var o in pedidos)
-        {
-            if (o.SourcePrId is { } pid) pedidoPorSc.TryAdd(pid, o);
-            if (o.QuotationId is { } qid) pedidoPorCotacao.TryAdd(qid, o);
-        }
+        var andamento = new AndamentoDosItens(cotacoes, pedidos);
 
         int total = 0, novos = 0, cotando = 0, aprovando = 0, aguardandoOc = 0,
             recebendo = 0, atrasados = 0, urgentes = 0, faturando = 0, excecoes = 0,
             precisaDeVoce = 0, estourados = 0;
         decimal valor = 0;
         var porFaixa = new int[FaixasDeAging.Length];
+        // por item, agrupado pelo andamento: os itens da SC que seguem juntos (o caso comum) são
+        // contados de uma vez, e o que ficou para trás conta na etapa em que de fato está
         foreach (var sc in abertas)
+        foreach (var grupo in sc.Items.GroupBy(i => andamento.Do(sc, i)))
         {
-            cotacaoPorSc.TryGetValue(sc.Id, out var cotacao);
-            PurchaseOrder? pedido = null;
-            if (!pedidoPorSc.TryGetValue(sc.Id, out pedido) && cotacao is not null)
-                pedidoPorCotacao.TryGetValue(cotacao.Id, out pedido);
+            var (cotacao, pedido) = grupo.Key;
             var situacao = ProcessStatus.Of(sc, cotacao, pedido);
             var etapa = EtapaDe(situacao.Key);
             var previsao = pedido?.PromisedDate ?? sc.NeededBy;
@@ -581,7 +560,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
                 prazosPorTipo.GetValueOrDefault(
                     TipoDeSolicitacaoService.Normalizar(sc.NeedType), prazosPorTipo[""])).Breached;
 
-            foreach (var _ in sc.Items)
+            foreach (var _ in grupo)
             {
                 total++;
                 switch (etapa)
@@ -604,7 +583,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
                     porFaixa[FaixaDeAging(sc.DecidedAt ?? sc.SubmittedAt, agora)]++;
                 if (sc.Priority == "URGENT" && etapa != "ENCERRADO") urgentes++;
             }
-            if (etapa != "ENCERRADO") valor += sc.TotalEstimatedValue;
+            if (etapa != "ENCERRADO") valor += grupo.Sum(i => (i.EstimatedUnitPrice ?? 0) * i.Quantity);
         }
 
         return new KpisDaTorre(total, novos, cotando, aprovando, aguardandoOc,

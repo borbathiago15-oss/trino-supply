@@ -18,8 +18,8 @@ export function CampoFinalidade({ valor, aoMudar }: { valor: Finalidade | ''; ao
       <legend className="px-1 text-[13px] font-bold">Finalidade da SC <span className="font-normal text-texto-suave">(obrigatório)</span></legend>
       <div className="flex flex-col gap-2 sm:flex-row sm:gap-6">
         {OPCOES.map((o) => (
-          <label key={o.valor} className="flex items-start gap-2 text-[13.5px]">
-            <input type="radio" name="finalidade" value={o.valor} required className="mt-1"
+          <label key={o.valor} className="flex flex-1 cursor-pointer items-start gap-2 mb-0 text-[13.5px] font-normal text-texto">
+            <input type="radio" name="finalidade" value={o.valor} required className="mt-1 !w-auto shrink-0"
               checked={valor === o.valor} onChange={() => aoMudar(o.valor)} />
             <span><strong>{o.titulo}</strong> <span className="text-texto-suave">— {o.explicacao}</span></span>
           </label>

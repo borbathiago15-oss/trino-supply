@@ -151,6 +151,7 @@ POST /api/v1/purchase-requisitions/{id:guid}/approve
 POST /api/v1/purchase-requisitions/{id:guid}/attachments
 POST /api/v1/purchase-requisitions/{id:guid}/cancel
 POST /api/v1/purchase-requisitions/{id:guid}/items
+POST /api/v1/purchase-requisitions/{id:guid}/purpose
 POST /api/v1/purchase-requisitions/{id:guid}/reject
 POST /api/v1/purchase-requisitions/{id:guid}/return
 POST /api/v1/purchase-requisitions/{id:guid}/submit
@@ -158,6 +159,7 @@ POST /api/v1/quotations/
 POST /api/v1/quotations/por-contrato
 POST /api/v1/quotations/{id:guid}/cancel
 POST /api/v1/quotations/{id:guid}/close
+POST /api/v1/quotations/{id:guid}/convert-to-purchase
 POST /api/v1/quotations/{id:guid}/director-decision
 POST /api/v1/quotations/{id:guid}/manager-decision
 POST /api/v1/quotations/{id:guid}/negotiation

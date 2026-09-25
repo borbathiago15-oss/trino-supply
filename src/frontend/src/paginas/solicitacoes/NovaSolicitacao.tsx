@@ -6,7 +6,8 @@ import { listarCentrosCusto, type CentroCusto } from '@/api/centrosCusto';
 import { listarEmpresas, perfilDaEmpresa } from '@/api/empresas';
 import { listarLocaisDeEntrega, locaisPorTipo, rotuloDoLocal, type LocalEntrega } from '@/api/locais';
 import { listarTiposDeSolicitacao } from '@/api/tiposDeSolicitacao';
-import { anexarNaSolicitacao, criarSolicitacao, ROTULO_PRIORIDADE, type ItemNovo, type Prioridade } from '@/api/solicitacoes';
+import { anexarNaSolicitacao, criarSolicitacao, ROTULO_PRIORIDADE, type ItemNovo, type Prioridade , type Finalidade } from '@/api/solicitacoes';
+import { CampoFinalidade } from './CampoFinalidade';
 import { Aviso, Badge, Painel } from '@/componentes/basicos';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
@@ -60,7 +61,7 @@ export const linhasSemProduto = (linhas: LinhaItem[]) => linhas.filter((l) => !l
 const VAZIO = {
   justificativa: '', local: '', prioridade: 'NORMAL' as Prioridade, necessidade: '',
   urgenciaMotivo: '', urgenciaImpacto: '', centroCusto: '', empresa: '', observacao: '',
-  orcamento: '', tipo: '',
+  orcamento: '', tipo: '', finalidade: '' as Finalidade | '',
 };
 type Formulario = typeof VAZIO;
 
@@ -187,6 +188,7 @@ export function NovaSolicitacao() {
 
   async function enviar(ev: FormEvent) {
     ev.preventDefault();
+    if (!form.finalidade) { avisar('Escolha a finalidade da SC: orçamento ou compra.', 'erro'); return; }
     if (linhasSemProduto(linhas).length) {
       avisar('Há item sem produto: use "Buscar no catálogo" na linha, ou exclua a linha vazia.', 'erro');
       return;
@@ -210,6 +212,7 @@ export function NovaSolicitacao() {
         deliveryLocation: form.local || null,
         needType: form.tipo || null,
         company: form.empresa || null,
+        purpose: form.finalidade,
         internalNotes: form.observacao || null,
         budget: Number(form.orcamento) > 0 ? Number(form.orcamento) : null,
         urgencyReason: form.urgenciaMotivo || null,
@@ -228,6 +231,9 @@ export function NovaSolicitacao() {
   return (
     <Painel titulo="Inclusão de SC — Solicitação de Compra">
       <form onSubmit={enviar}>
+        <div className="mb-4">
+          <CampoFinalidade valor={form.finalidade} aoMudar={(f) => setForm((x) => ({ ...x, finalidade: f }))} />
+        </div>
         <h3 className="mb-2 text-[14px] font-bold">Itens</h3>
         <div className="flex flex-col gap-3">
           {linhas.map((l) => {

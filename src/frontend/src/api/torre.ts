@@ -17,6 +17,8 @@ export interface LinhaDaTorre {
   requesterLabel: string;
   company: string | null;
   costCenter: string;
+  /** COMPRA ou ORCAMENTO — o comprador precisa saber antes de cotar. */
+  purpose?: 'COMPRA' | 'ORCAMENTO' | null;
   /** Nome do centro de custo — é o que a coluna mostra; o código fica na dica. */
   costCenterName?: string | null;
   /** Quem de fato conduz a compra: quem escolheu o vencedor ou abriu a cotação; antes dela, o da triagem. */

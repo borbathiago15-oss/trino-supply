@@ -194,6 +194,19 @@ public partial class QuotationService
         ApplyAwardSaving(q, novas, orcamentos);
 
         var from = q.Status;
+        // orçamento para aqui: o vencedor está escolhido, mas ninguém decidiu comprar. A aprovação
+        // só começa quando o orçamento vira compra (ConverterOrcamentoEmCompraAsync)
+        if (q.IsBudget && q.BudgetConvertedAt is null)
+        {
+            q.Status = QuotationStatus.BudgetPresented;
+            AddEvent(q, "ORCAMENTO_APRESENTADO",
+                $"Orçamento fechado: {string.Join("; ", novas.Select(a => $"{a.Family} → {a.SupplierName} ({a.TotalValue:0.00})"))}. "
+                + $"Total {totalGeral:0.00}. O processo para aqui até alguém decidir comprar.",
+                actor, from, q.Status, q.SelectionJustification);
+            await AvisarDaEtapaAsync(q, ct);
+            await TouchAndSaveAsync(q, ct);
+            return (q, null);
+        }
         q.Status = QuotationStatus.AwaitingManager;
         AddEvent(q, distintos == 1 ? "FORNECEDOR_SELECIONADO" : "COMPRA_DIVIDIDA",
             distintos == 1
@@ -436,4 +449,39 @@ public partial class QuotationService
         !string.IsNullOrWhiteSpace(item.Family) ? QuotationAward.FamilyKey(item.Family)
         : item.CatalogItemId is { } id && familias.TryGetValue(id, out var f) ? f
         : QuotationAward.Default;
+
+    /// <summary>
+    /// O orçamento vira compra: o processo sai de "orçamento apresentado" e entra no Nível 1, pelo
+    /// mesmo caminho de qualquer compra (<c>RFQ-ERR-064</c> se não estiver apresentado).
+    ///
+    /// <para>
+    /// É do comprador, porque é ele quem ouviu do solicitante que a compra vai acontecer. O
+    /// <see cref="Quotation.IsBudget"/> <b>fica</b> verdadeiro: é por ele que o card do Nível 1 diz
+    /// "nasceu como orçamento", e a decisão é tomada sabendo disso — que era o pedido da empresa.
+    /// Quem converteu e quando ficam no processo e no evento, que a auditoria lê.
+    /// </para>
+    /// </summary>
+    public async Task<(Quotation? q, UserError? error)> ConverterOrcamentoEmCompraAsync(
+        Actor actor, Guid id, CancellationToken ct = default)
+    {
+        if (!CanConduct(actor.Role))
+            return (null, new("RFQ-ERR-900", "Só quem conduz compra converte o orçamento."));
+        var q = await GetAsync(id, ct);
+        if (q is null) return (null, new("RFQ-ERR-404", "Processo não encontrado."));
+        if (q.Status != QuotationStatus.BudgetPresented)
+            return (null, new("RFQ-ERR-064", "Só o orçamento apresentado vira compra."));
+
+        var from = q.Status;
+        var now = clock.GetUtcNow();
+        q.BudgetConvertedAt = now;
+        q.BudgetConvertedByLabel = actor.Label;
+        q.Status = QuotationStatus.AwaitingManager;
+        AddEvent(q, "ORCAMENTO_VIROU_COMPRA",
+            $"O orçamento {q.Number} virou compra e foi encaminhado à aprovação gerencial.",
+            actor, from, q.Status, null);
+        await AvisarDaEtapaAsync(q, ct);
+        await TouchAndSaveAsync(q, ct);
+        return (q, null);
+    }
 }
+

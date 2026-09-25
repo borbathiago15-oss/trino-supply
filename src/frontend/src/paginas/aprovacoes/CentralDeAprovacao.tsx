@@ -289,6 +289,8 @@ export function CardDeDecisao({ q, usuarioId, aoDecidir }: {
             <span className="text-[15px] font-bold">{q.number}</span>
             <Badge classe="bg-marca/10 text-marca">{ROTULO_NIVEL[d?.level ?? (alcada === 'director' ? 2 : 1)]}</Badge>
             {urgente && <Badge classe="bg-perigo-fundo text-perigo">URGENTE</Badge>}
+            {/* decidir sabendo: a compra começou como levantamento de preço (pedido da empresa) */}
+            {q.isBudget && <Badge classe="bg-teal-50 text-teal-800" title={q.budgetConvertedByLabel ? `Convertido por ${q.budgetConvertedByLabel}` : undefined}>Nasceu como orçamento</Badge>}
             {espera != null && (
               <Badge classe={esperaClasse}>{espera === 0 ? 'chegou hoje' : `espera há ${espera} dia${espera === 1 ? '' : 's'}`}</Badge>
             )}

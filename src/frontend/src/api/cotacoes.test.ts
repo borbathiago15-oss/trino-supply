@@ -67,3 +67,20 @@ describe('dias desde', () => {
     expect(diasDesde('não é data', agora)).toBeNull();
   });
 });
+
+describe('o orçamento apresentado', () => {
+  it('só quem conduz converte, e só nessa situação', async () => {
+    const { acoesDisponiveis } = await import('./cotacoes');
+    const orcamento = processo({ status: 'ORCAMENTO_APRESENTADO', isBudget: true });
+    expect(acoesDisponiveis(orcamento, { conduz: true, aprovaNivel1: false, aprovaNivel2: false }).converterEmCompra).toBe(true);
+    expect(acoesDisponiveis(orcamento, { conduz: false, aprovaNivel1: true, aprovaNivel2: true }).converterEmCompra).toBe(false);
+    // a compra comum em análise não tem o que converter
+    expect(acoesDisponiveis(processo({ status: 'EM_ANALISE' }), { conduz: true, aprovaNivel1: false, aprovaNivel2: false })
+      .converterEmCompra).toBe(false);
+  });
+
+  it('o próximo passo diz que a decisão é de quem pediu', async () => {
+    const { proximoPasso } = await import('@/paginas/cotacoes/ProximoPasso');
+    expect(proximoPasso(processo({ status: 'ORCAMENTO_APRESENTADO' }))?.titulo).toMatch(/decisão é de quem pediu/);
+  });
+});

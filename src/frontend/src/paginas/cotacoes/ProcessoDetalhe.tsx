@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { abrirBlob } from '@/api/cliente';
 import {
-  acoesDisponiveis, cancelarProcesso, decidir, encerrarParaAnalise, lerProcesso,
+  acoesDisponiveis, cancelarProcesso, converterOrcamentoEmCompra, decidir, encerrarParaAnalise, lerProcesso,
   type Alcada, type Decisao,
 } from '@/api/cotacoes';
 import { baixarDocumento } from '@/api/documentos';
@@ -29,6 +29,7 @@ const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message
 type Pendente =
   | { tipo: 'cancelar' }
   | { tipo: 'encerrar' }
+  | { tipo: 'converter' }
   | { tipo: 'decidir'; alcada: Alcada; decisao: Decisao };
 
 /**
@@ -79,6 +80,9 @@ export function ProcessoDetalhe() {
       if (acao.tipo === 'cancelar') {
         await cancelarProcesso(q.id, motivo);
         avisar('Processo cancelado.');
+      } else if (acao.tipo === 'converter') {
+        await converterOrcamentoEmCompra(q.id);
+        avisar('Orçamento convertido em compra — o processo seguiu para o Nível 1.');
       } else if (acao.tipo === 'encerrar') {
         await encerrarParaAnalise(q.id);
         avisar('Cotação encerrada. As propostas estão em análise.');
@@ -171,6 +175,16 @@ export function ProcessoDetalhe() {
             ? <GradeDeAdjudicacao processo={q} lotes={lotes} aoConcluir={recarregar} aoAvisar={aviso} />
             : <FormVencedor processo={q} aoConcluir={recarregar} aoAvisar={aviso} />)}
 
+          {/* o orçamento parou em quem pediu: a única ação é converter, quando ele decidir comprar */}
+          {pode.converterEmCompra && (
+            <div data-testid="acao-converter">
+              <button type="button" className="botao" onClick={() => setPendente({ tipo: 'converter' })}>
+                Converter em compra e enviar ao Nível 1
+              </button>
+              <Nota>Use quando o solicitante decidir comprar. O Nível 1 verá que a compra nasceu como orçamento.</Nota>
+            </div>
+          )}
+
           {pode.conflitoSegregacao && (
             <Aviso testid="conflito-segregacao">{pode.conflitoSegregacao}</Aviso>
           )}
@@ -205,6 +219,7 @@ export function ProcessoDetalhe() {
           )}
 
           {!pode.encerrar && !pode.escolherVencedor && !alcadaPendente && !pode.registrarOc && !pode.cancelar
+            && !pode.converterEmCompra
             && !pode.conflitoSegregacao && (
             <Vazio>Nenhuma ação disponível para o seu papel nesta etapa.</Vazio>
           )}
@@ -257,6 +272,12 @@ export function ProcessoDetalhe() {
         <DialogoMotivo titulo={`Cancelar o processo ${q.number}`} rotulo="Motivo do cancelamento"
           dica="(obrigatório)" rotuloConfirmar="Cancelar processo" obrigatorio perigo
           aoConfirmar={concluirPendente} aoFechar={() => setPendente(null)} />
+      )}
+      {pendente?.tipo === 'converter' && (
+        <Confirmacao titulo="Converter orçamento em compra" rotuloConfirmar="Converter e enviar ao Nível 1"
+          mensagem={<>O solicitante decidiu comprar? O processo <strong>{q.number}</strong> segue para a aprovação de
+            Nível 1 com o vencedor já escolhido, marcado como <strong>nascido de orçamento</strong>.</>}
+          aoConfirmar={() => concluirPendente('')} aoFechar={() => setPendente(null)} />
       )}
       {pendente?.tipo === 'encerrar' && (
         <Confirmacao titulo="Encerrar para análise" rotuloConfirmar="Encerrar"

@@ -8,6 +8,8 @@ import { ROTULO_HOMOLOGACAO, type SituacaoHomologacao } from './fornecedores';
 export const ROTULO_RFQ: Record<string, { rotulo: string; classe: string }> = {
   COTACAO_ABERTA: { rotulo: 'Aguardando propostas', classe: 'bg-slate-100 text-slate-600' },
   EM_ANALISE: { rotulo: 'Em análise', classe: 'bg-blue-50 text-blue-800' },
+  // o orçamento parou em quem pediu: nada a aprovar até alguém decidir comprar
+  ORCAMENTO_APRESENTADO: { rotulo: 'Orçamento apresentado', classe: 'bg-teal-50 text-teal-800' },
   AGUARDANDO_GERENTE: { rotulo: 'Aguardando Aprovador 01', classe: 'bg-aviso-fundo text-aviso' },
   AGUARDANDO_DIRETOR: { rotulo: 'Aguardando Aprovador 02', classe: 'bg-aviso-fundo text-aviso' },
   APROVADO_PARA_EMISSAO: { rotulo: 'Aprovado — registrar O.C.', classe: 'bg-teal-50 text-teal-800' },
@@ -397,6 +399,11 @@ export interface Processo {
   createdByLabel: string | null;
   createdAt: string;
   decisionReason: string | null;
+  /** Nasceu de SC de orçamento — continua verdadeiro depois de virar compra. */
+  isBudget?: boolean;
+  /** Quando o orçamento virou compra, e quem converteu. Nulo enquanto é só orçamento. */
+  budgetConvertedAt?: string | null;
+  budgetConvertedByLabel?: string | null;
   items: ItemDoProcesso[];
   families: string[];
   suppliers: FornecedorConvidado[];
@@ -843,5 +850,11 @@ export function acoesDisponiveis(
     registrarOc: conduz && q.status === 'APROVADO_PARA_EMISSAO'
       && (q.purchaseOrders.length === 0 || q.pendingPoSuppliers.length > 0),
     cancelar: conduz && !['OC_REGISTRADA', 'REJEITADO', 'CANCELADA'].includes(q.status),
+    /** O orçamento apresentado vira compra e entra no Nível 1 (RFQ-ERR-064 fora disso). */
+    converterEmCompra: conduz && q.status === 'ORCAMENTO_APRESENTADO',
   };
 }
+
+/** O orçamento apresentado vira compra e segue para a aprovação do Nível 1. */
+export const converterOrcamentoEmCompra = (id: string) =>
+  api<Processo>(`/api/v1/quotations/${id}/convert-to-purchase`, { method: 'POST' });

@@ -581,6 +581,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(r => r.NeedType).HasColumnName("need_type").HasMaxLength(60);
             e.Property(r => r.DeliveryLocation).HasColumnName("delivery_location").HasMaxLength(200);
             e.Property(r => r.Company).HasColumnName("company").HasMaxLength(300);
+            // o padrão é compra: toda SC anterior à regra era compra
+            e.Property(r => r.Purpose).HasColumnName("purpose").HasMaxLength(12).IsRequired()
+                .HasDefaultValue(Procurement.FinalidadeDaSc.Compra);
             e.Property(r => r.Budget).HasColumnName("budget").HasPrecision(18, 4);
             e.Property(r => r.InternalNotes).HasColumnName("internal_notes").HasMaxLength(2000);
             e.Property(r => r.Currency).HasColumnName("currency").HasMaxLength(3);
@@ -1067,6 +1070,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(q => q.SelectedBy).HasColumnName("selected_by");
             e.Property(q => q.SelectedByLabel).HasColumnName("selected_by_label").HasMaxLength(200);
             e.Property(q => q.SelectedAt).HasColumnName("selected_at");
+            e.Property(q => q.IsBudget).HasColumnName("is_budget");
+            e.Property(q => q.BudgetConvertedAt).HasColumnName("budget_converted_at");
+            e.Property(q => q.BudgetConvertedByLabel).HasColumnName("budget_converted_by_label").HasMaxLength(200);
             e.Property(q => q.ManagerApprovedBy).HasColumnName("manager_approved_by");
             e.Property(q => q.ManagerApprovedByLabel).HasColumnName("manager_approved_by_label").HasMaxLength(200);
             e.Property(q => q.ManagerApprovedAt).HasColumnName("manager_approved_at");

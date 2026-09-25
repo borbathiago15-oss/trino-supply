@@ -48,6 +48,12 @@ public class PurchaseRequisition
     public string? NeedType { get; set; }                        // Tipo SC (tipo da necessidade)
     public string? DeliveryLocation { get; set; }                // local de entrega
     public string? Company { get; set; }                         // empresa solicitante (grupo)
+    /// <summary>
+    /// Para que a SC existe: <see cref="FinalidadeDaSc.Compra"/> segue o caminho de sempre;
+    /// <see cref="FinalidadeDaSc.Orcamento"/> para depois da cotação, em "orçamento apresentado",
+    /// e só vai à aprovação se alguém decidir comprar.
+    /// </summary>
+    public string Purpose { get; set; } = FinalidadeDaSc.Compra;
     public string? InternalNotes { get; set; }                   // observação interna
     /// <summary>
     /// Orçamento informado pelo solicitante: quanto ele previa gastar nesta compra.
@@ -124,4 +130,15 @@ public class RequisitionAttachment
     public Guid UploadedBy { get; set; }
     public string UploadedByLabel { get; set; } = string.Empty;
     public DateTimeOffset UploadedAt { get; set; }
+}
+
+/// <summary>
+/// A finalidade da SC. O comprador precisa saber, antes de cotar, se está levantando preço para
+/// mostrar a quem pediu ou comprando — e o Nível 1 precisa saber que a compra nasceu como orçamento.
+/// </summary>
+public static class FinalidadeDaSc
+{
+    public const string Compra = "COMPRA";
+    public const string Orcamento = "ORCAMENTO";
+    public static readonly string[] Todas = [Compra, Orcamento];
 }

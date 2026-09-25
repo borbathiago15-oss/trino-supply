@@ -40,6 +40,11 @@ export function proximoPasso(q: Processo, de?: string): Passo | null {
         titulo: 'Escolher o fornecedor vencedor',
         detalhe: 'A escolha é feita nesta tela, com a justificativa. Depois dela o processo segue para as duas aprovações.',
       };
+    case 'ORCAMENTO_APRESENTADO':
+      return {
+        titulo: 'Orçamento apresentado — a decisão é de quem pediu',
+        detalhe: 'O processo parou aqui, sem aprovação. Se o solicitante decidir comprar, use "Converter em compra": o processo segue para o Nível 1, que verá que ele nasceu como orçamento.',
+      };
     case 'AGUARDANDO_GERENTE':
       return {
         titulo: 'Aprovação de Nível 1',

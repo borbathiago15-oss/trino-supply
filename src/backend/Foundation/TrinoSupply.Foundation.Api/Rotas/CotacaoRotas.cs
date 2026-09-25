@@ -62,6 +62,9 @@ public static class CotacaoRotas
             sourcePrNumbers = q.SourcePrNumbers,
             justification = q.Justification, deadline = q.Deadline, notes = q.Notes,
             createdByLabel = q.CreatedByLabel, createdAt = q.CreatedAt, decisionReason = q.DecisionReason,
+            // nasceu de SC de orçamento: continua verdadeiro depois de virar compra — é o que o
+            // card do Nível 1 mostra como "nasceu como orçamento"
+            isBudget = q.IsBudget, budgetConvertedAt = q.BudgetConvertedAt, budgetConvertedByLabel = q.BudgetConvertedByLabel,
             items = q.Items.OrderBy(i => i.Sequence).Select(i => new
             {
                 id = i.Id, sequence = i.Sequence, catalogItemId = i.CatalogItemId, catalogCode = i.CatalogCode,
@@ -159,7 +162,7 @@ public static class CotacaoRotas
             CancellationToken ct) =>
         {
             if (!QuotationService.CanView(RoleOf(p))) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não acessa cotações.");
-            QuotationStatus? situacao = Enum.TryParse<QuotationStatus>(status, true, out var st) ? st : null;
+            var situacao = StatusDoFiltro(status);
             var (itens, total) = await svc.ListAsync(q, situacao, tamanho ?? 100, from, to, costCenter, createdBy, ct);
             // as opções vêm junto da lista: uma segunda chamada só para preencher as caixas
             // faria a tela abrir com filtro vazio e povoar depois, piscando na frente de quem usa
@@ -462,6 +465,18 @@ public static class CotacaoRotas
             var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
             var (q, error) = await svc.CloseForAnalysisAsync(actor, id);
             return error is not null ? Error(ctx, error.Code == "RFQ-ERR-021" ? 422 : 409, error.Code, error.Message) : Ok(QuotationView(q!), ctx);
+        });
+
+        // o orçamento apresentado vira compra e entra no Nível 1 (RFQ-ERR-064 fora dessa situação)
+        rfq.MapPost("/{id:guid}/convert-to-purchase", async (Guid id, QuotationService svc, ClaimsPrincipal p,
+            HttpContext ctx, CancellationToken ct) =>
+        {
+            var role = RoleOf(p);
+            if (!QuotationService.CanConduct(role)) return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não converte orçamento em compra.");
+            var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
+            var (q, error) = await svc.ConverterOrcamentoEmCompraAsync(actor, id, ct);
+            return error is not null ? Error(ctx, error.Code == "RFQ-ERR-404" ? 404 : 409, error.Code, error.Message)
+                : Ok(QuotationView(q!), ctx);
         });
 
         rfq.MapPost("/{id:guid}/select-winner", async (Guid id, SelectWinnerRequest body, QuotationService svc, ClaimsPrincipal p, HttpContext ctx) =>

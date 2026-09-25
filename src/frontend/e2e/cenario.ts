@@ -6,9 +6,9 @@ const API = process.env.API_URL ?? 'http://127.0.0.1:5099';
 const EMAIL = process.env.ADMIN_EMAIL ?? 'admin@trinosupply.com.br';
 const SENHA = process.env.ADMIN_PASSWORD ?? 'TrinoSupply@2026!';
 
-async function chamar<T>(caminho: string, token?: string, corpo?: unknown): Promise<T> {
+async function chamar<T>(caminho: string, token?: string, corpo?: unknown, metodo?: string): Promise<T> {
   const res = await fetch(API + caminho, {
-    method: corpo === undefined ? 'GET' : 'POST',
+    method: metodo ?? (corpo === undefined ? 'GET' : 'POST'),
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
     body: corpo === undefined ? undefined : JSON.stringify(corpo),
   });
@@ -87,6 +87,9 @@ export async function prepararCenario() {
       legalName: 'Alfa Equipamentos de Proteção Ltda', tradeName: 'Alfa EPIs', taxId: '12345678000199',
       email: 'vendas@alfaepis.com.br', phone: '11 4000-0000',
     });
+
+  // homologado: só fornecedor homologado vence o BID (SUP-ERR-030), e o E2E do orçamento escolhe o vencedor
+  await chamar(`/api/v1/suppliers/${fornecedor.id}/homologation`, token, { status: 'HOMOLOGADO' }, 'PATCH');
 
   const { items: locais } = await chamar<{ items: { code: string }[] }>('/api/v1/inventory/locations', token);
   if (!locais.some((l) => l.code === 'ALM-01'))

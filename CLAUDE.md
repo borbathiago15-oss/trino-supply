@@ -539,6 +539,22 @@ três jeitos, e a Torre e o cockpit, que agrupam por ela, contavam três. Sem ne
 **ativo** a regra não se aplica — a tela cai no nome do padrão da O.C., e a régua do servidor é
 a mesma que a tela consegue enxergar (a primeira versão contava os inativos e recusava toda SC).
 
+**A SC diz se é orçamento ou compra, e orçamento para antes da aprovação.** `FinalidadeDaSc` é
+obrigatória na rota de criação (`PR-ERR-024`) e **sem valor pré-marcado** na tela — um "compra"
+de fábrica faria todo orçamento esquecido chegar ao Nível 1. O serviço trata vazio como compra
+(é a porta interna e o acervo antigo); a obrigação é da porta de quem cria. Corrigir a finalidade
+vale **só antes de a SC entrar em cotação** (`PR-ERR-025`), para quem pediu no rascunho e para
+quem conduz compra. Orçamento e compra **não se misturam** no mesmo processo (`RFQ-ERR-063`):
+um processo ou para ou segue. O processo de SCs de orçamento nasce com `Quotation.IsBudget`, e a
+escolha do vencedor o leva a `BudgetPresented` ("orçamento apresentado") **em vez** do Nível 1 —
+avisa quem pediu e para. `ConverterOrcamentoEmCompraAsync` é a única saída para a aprovação
+(`RFQ-ERR-064`), do comprador, com quem e quando; `IsBudget` **fica** verdadeiro, e é por ele que o
+card da Central diz "nasceu como orçamento". Na Torre ele fica na etapa Cotação, com a ação
+"aguardando decisão do solicitante" **fora da fila do comprador**, e o prazo da etapa **não
+corre** (`DiasQueOPrazoCobra`): a vez é de quem pediu. O status novo é `9` no enum: o único lugar
+que compara status por ordem (`CaminhoDoProcesso`, "cotação feita") responde certo para ele, e
+comparação nova por ordem precisa lembrar que 9 não é "depois da O.C.".
+
 **Excluir de verdade é só para o que nunca circulou.** Produto que entrou numa SC, cotação,
 pedido, contrato, solicitação de material ou no estoque é histórico, e apagá-lo deixaria esses
 registros apontando para nada (`IC-ERR-030`, que diz **onde** ele circulou); o caminho é

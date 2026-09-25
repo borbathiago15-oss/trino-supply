@@ -58,6 +58,7 @@ public static class SolicitacaoRotas
             justification = r.Justification,
             needType = r.NeedType, deliveryLocation = r.DeliveryLocation,
             company = r.Company, internalNotes = r.InternalNotes,
+            purpose = r.Purpose,
             budget = r.Budget,
             costCenter = r.CostCenter,
             currency = r.Currency,
@@ -149,10 +150,14 @@ public static class SolicitacaoRotas
         {
             if (BuildActor(p) is not { CanCreate: true } actor)
                 return Error(ctx, 403, "PR-ERR-001", "Seu papel não cria requisições.");
+            // obrigatória na porta de quem cria: o comprador precisa saber, antes de cotar, se é
+            // orçamento para mostrar ou compra para aprovar — e "esqueci de dizer" não é resposta
+            if (string.IsNullOrWhiteSpace(body.Purpose))
+                return Error(ctx, 400, "PR-ERR-024", "Informe a finalidade da SC: orçamento ou compra.");
             var items = (body.Items ?? []).Select(i => new ItemInput(i.Description ?? "", i.Quantity, i.UnitOfMeasure, i.EstimatedUnitPrice, i.Notes, i.CatalogItemId, i.Family)).ToList();
             var (pr, error) = await svc.CreateAsync(actor, body.Justification, body.CostCenter, body.Priority, body.NeededBy, items, body.Kind,
                 new RequisitionService.ScHeaderInput(body.NeedType, body.DeliveryLocation, body.Company, body.InternalNotes,
-                    body.UrgencyReason, body.UrgencyImpact, body.Budget));
+                    body.UrgencyReason, body.UrgencyImpact, body.Budget, body.Purpose));
             return error is not null ? PrError(ctx, error)
                 : Results.Json(new { data = PrView(pr!), correlationId = CorrelationId(ctx) }, statusCode: 201);
         });
@@ -171,6 +176,15 @@ public static class SolicitacaoRotas
             if (BuildActor(p) is not { } actor) return Error(ctx, 403, "PR-ERR-001", "Seu papel não acessa o módulo de requisições.");
             var error = await svc.DeleteDraftAsync(actor, id);
             return error is not null ? PrError(ctx, error) : Results.NoContent();
+        });
+
+        // corrigir a finalidade antes de cotar: quem pediu (no rascunho ou devolvida) ou o comprador
+        prs.MapPost("/{id:guid}/purpose", async (Guid id, FinalidadeRequest body, RequisitionService svc,
+            ClaimsPrincipal p, HttpContext ctx, CancellationToken ct) =>
+        {
+            if (BuildActor(p) is not { } actor) return Error(ctx, 403, "PR-ERR-001", "Seu papel não acessa o módulo de requisições.");
+            var (pr, error) = await svc.MudarFinalidadeAsync(actor, id, body.Purpose, ct);
+            return error is not null ? PrError(ctx, error) : Ok(PrView(pr!), ctx);
         });
 
         prs.MapPost("/{id:guid}/submit", async (Guid id, RequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>

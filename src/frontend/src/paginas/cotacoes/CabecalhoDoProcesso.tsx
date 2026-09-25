@@ -28,6 +28,13 @@ export function CabecalhoDoProcesso({ processo: q, usuarioId }: { processo: Proc
     <Painel titulo={
       <span className="flex flex-wrap items-center gap-2">
         {q.number} <Badge classe={marca.classe}>{marca.rotulo}</Badge>
+        {/* a marca fica depois de virar compra: é o que diz ao Nível 1 de onde a compra veio */}
+        {q.isBudget && (
+          <Badge classe="ml-1 bg-teal-50 text-teal-800"
+            title={q.budgetConvertedAt ? `Virou compra — ${q.budgetConvertedByLabel ?? ''}` : 'Processo de orçamento'}>
+            {q.budgetConvertedAt ? 'Nasceu como orçamento' : 'Orçamento'}
+          </Badge>
+        )}
         {deQuem && <span data-testid="de-quem" className="text-[13px] font-normal text-texto-suave">· {deQuem}</span>}
       </span>
     } acoes={<Link className="botao-secundario" to="/cotacoes">← Voltar</Link>}>

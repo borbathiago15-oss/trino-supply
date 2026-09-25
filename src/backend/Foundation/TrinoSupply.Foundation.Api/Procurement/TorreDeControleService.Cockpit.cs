@@ -109,7 +109,7 @@ public partial class TorreDeControleService
             var atrasada = !encerrado && previsao is not null && previsao < hoje;
             var motivoDaExcecao = ExcecaoDe(pedido);
             var espera = EsperaDe(sc, cotacao, pedido, AlcadasDoCentro.Nenhuma, hoje, agora);
-            var estourou = PrazoDaEtapaService.Avaliar(etapa, espera?.Days,
+            var estourou = PrazoDaEtapaService.Avaliar(etapa, DiasQueOPrazoCobra(situacao.Key, espera),
                 prazosPorTipo.GetValueOrDefault(
                     TipoDeSolicitacaoService.Normalizar(sc.NeedType), prazosPorTipo[""])).Breached;
             var desde = sc.DecidedAt ?? sc.SubmittedAt;

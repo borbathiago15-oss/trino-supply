@@ -86,6 +86,8 @@ export interface SolicitacaoCompra {
   needType: string | null;
   deliveryLocation: string | null;
   company: string | null;
+  /** COMPRA ou ORCAMENTO. SC anterior à regra vem como COMPRA. */
+  purpose?: Finalidade;
   internalNotes: string | null;
   /** Orçamento previsto pelo solicitante (§17): a régua contra a qual o saving é medido. */
   budget: number | null;
@@ -196,7 +198,19 @@ export interface DadosSc {
   budget?: number | null;
   urgencyReason: string | null;
   urgencyImpact: string | null;
+  /** Obrigatória (PR-ERR-024): orçamento para depois da cotação; compra segue para a aprovação. */
+  purpose: Finalidade;
 }
+
+/**
+ * Para que a SC existe. Orçamento para em "orçamento apresentado" depois da cotação e só vai à
+ * aprovação se alguém decidir comprar; compra segue o caminho de sempre.
+ */
+export type Finalidade = 'COMPRA' | 'ORCAMENTO';
+
+/** Corrigir a finalidade antes de a SC entrar em cotação (PR-ERR-025 depois disso). */
+export const mudarFinalidade = (id: string, purpose: Finalidade) =>
+  api<SolicitacaoCompra>(`${base}/${id}/purpose`, { method: 'POST', body: { purpose } });
 
 export const criarSolicitacao = (dados: DadosSc) => api<SolicitacaoCompra>(`${base}/`, { method: 'POST', body: dados });
 

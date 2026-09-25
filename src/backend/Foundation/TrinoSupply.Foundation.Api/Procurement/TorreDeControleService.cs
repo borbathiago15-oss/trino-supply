@@ -69,7 +69,9 @@ public record LinhaDaTorre(
     /// <summary>Como a espera está contra o prazo desta etapa.</summary>
     SituacaoDoPrazo? Sla = null,
     /// <summary>O nome do centro de custo — o código diz pouco a quem lê a linha.</summary>
-    string? CostCenterName = null);
+    string? CostCenterName = null,
+    /// <summary>A finalidade da SC (COMPRA ou ORCAMENTO) — o comprador precisa saber antes de cotar.</summary>
+    string? Purpose = null);
 
 /// <summary>
 /// Os números do topo (§5).
@@ -166,7 +168,8 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
     public static string EtapaDe(string statusKey) => statusKey switch
     {
         "RASCUNHO" or "PENDENTE" or "DEVOLVIDO" => "SOLICITACAO",
-        "EM_COTACAO" => "COTACAO",
+        // o orçamento apresentado ainda não saiu da cotação: parou nela, esperando a decisão
+        "EM_COTACAO" or "ORCAMENTO_APRESENTADO" => "COTACAO",
         "AGUARDANDO_APROVACAO" => "APROVACAO",
         "PEDIDO_APROVADO" => "ORDEM_DE_COMPRA",
         "OC_FATURAMENTO" => "RECEBIMENTO",
@@ -257,10 +260,21 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
         return (sc.AssignedToId, sc.AssignedToLabel);
     }
 
+    /// <summary>
+    /// Os dias que o prazo da etapa cobra. O orçamento apresentado espera a decisão de quem
+    /// pediu — a espera aparece na linha, mas o prazo da cotação não corre contra o comprador
+    /// por um tempo em que a vez não é dele. As três contas de "estourou?" passam por aqui.
+    /// </summary>
+    public static int? DiasQueOPrazoCobra(string situacao, EsperaDaLinha? espera) =>
+        situacao == ProcessStatus.BudgetPresented.Key ? null : espera?.Days;
+
     public static (string Label, bool DoComprador) AcaoDe(
-        string etapa, string? excecao, bool temComprador)
+        string etapa, string? excecao, bool temComprador, string? situacao = null)
     {
         if (excecao is not null) return ("Tratar exceção", true);
+        // o orçamento está na mesa de quem pediu: não é fila do comprador, que só converte
+        // em compra quando o solicitante decidir
+        if (situacao == ProcessStatus.BudgetPresented.Key) return ("Aguardando decisão do solicitante", false);
         return etapa switch
         {
             "SOLICITACAO" when !temComprador => ("Atribuir comprador", true),
@@ -450,7 +464,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
             var excecao = ExcecaoDe(pedido);
             if (f.Exception == true && excecao is null) continue;
 
-            var (acao, doComprador) = AcaoDe(etapa, excecao, x.sc.AssignedToId is not null);
+            var (acao, doComprador) = AcaoDe(etapa, excecao, x.sc.AssignedToId is not null, situacao.Key);
             if (f.NeedsBuyer == true && !doComprador) continue;
             if (f.Invoicing is { } semNota && EmFaturamento(pedido) != semNota) continue;
 
@@ -466,7 +480,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
             // que é exatamente o que já valia para a solicitação antes de os tipos existirem
             var doTipo = prazosPorTipo.GetValueOrDefault(
                 TipoDeSolicitacaoService.Normalizar(x.sc.NeedType), prazosPorTipo[""]);
-            var sla = PrazoDaEtapaService.Avaliar(etapa, espera?.Days, doTipo);
+            var sla = PrazoDaEtapaService.Avaliar(etapa, DiasQueOPrazoCobra(situacao.Key, espera), doTipo);
             if (f.SlaBreached == true && !sla.Breached) continue;
 
             var comprador = CompradorDe(x.sc, cotacao);
@@ -482,7 +496,7 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
                 x.sc.Priority, x.sc.NeededBy, pedido?.PromisedDate, atrasado,
                 valor, cotacao?.Id, cotacao?.Number, pedido?.Id, pedido?.Number,
                 naFilaDesde, excecao, acao.Length == 0 ? null : acao, doComprador, espera, sla,
-                nomeDoCentro.GetValueOrDefault(x.sc.CostCenter.Trim().ToUpperInvariant())));
+                nomeDoCentro.GetValueOrDefault(x.sc.CostCenter.Trim().ToUpperInvariant()), x.sc.Purpose));
         }
 
         if (derivado)
@@ -559,11 +573,11 @@ public partial class TorreDeControleService(AppDbContext db, TimeProvider clock)
             var excecao = motivoDaExcecao is not null;
             // o KPI usa a mesma regra do filtro: o número do card e o tamanho da lista
             // que ele abre precisam sair da mesma pergunta
-            var doComprador = AcaoDe(etapa, motivoDaExcecao, sc.AssignedToId is not null).DoComprador;
+            var doComprador = AcaoDe(etapa, motivoDaExcecao, sc.AssignedToId is not null, situacao.Key).DoComprador;
             // o KPI do prazo mede a mesma espera que a linha mostra, pelo mesmo prazo:
             // duas contas para "estourou?" dariam um card que não bate com a lista
             var espera = EsperaDe(sc, cotacao, pedido, AlcadasDoCentro.Nenhuma, hoje, agora);
-            var estourou = PrazoDaEtapaService.Avaliar(etapa, espera?.Days,
+            var estourou = PrazoDaEtapaService.Avaliar(etapa, DiasQueOPrazoCobra(situacao.Key, espera),
                 prazosPorTipo.GetValueOrDefault(
                     TipoDeSolicitacaoService.Normalizar(sc.NeedType), prazosPorTipo[""])).Breached;
 

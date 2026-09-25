@@ -138,6 +138,9 @@ public partial class TorreDeControleService
                         cotacao.DirectorApprovedAt ?? cotacao.ManagerApprovedAt, null);
                 case QuotationStatus.Open or QuotationStatus.Analysis:
                     return DaCotacao(cotacao, hoje);
+                // o orçamento está com quem pediu: é dele a decisão de comprar
+                case QuotationStatus.BudgetPresented:
+                    return ("Decisão de quem pediu — orçamento apresentado", cotacao.SelectedAt, null);
                 default:
                     return null;   // rejeitada, cancelada, O.C. emitida
             }

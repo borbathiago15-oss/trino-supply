@@ -131,6 +131,17 @@ public static class AcompanhamentoDaSc
                         ? $"{comprador} abriu a cotação e vai convidar os fornecedores."
                         : $"{comprador} está cotando com {convidados} fornecedor(es) — {propostas} já responderam.";
                 break;
+            // o orçamento parou em quem pediu: a cotação está feita, e a próxima decisão é dele
+            case QuotationStatus.BudgetPresented:
+            {
+                atual = "cotacao"; etapas["cotacao"] = (Atual, q.SelectedAt, comprador);
+                comQuem = pr.RequesterLabel; desde = q.SelectedAt;
+                var total = q.AwardList.Sum(a => a.TotalValue);
+                frase = $"Orçamento pronto{(fornecedor is null ? "" : $" com {fornecedor}")}"
+                    + $", total {total.ToString("C", new System.Globalization.CultureInfo("pt-BR"))}. "
+                    + $"Se for comprar, avise {comprador}: ele envia para a aprovação.";
+                break;
+            }
             case QuotationStatus.AwaitingManager:
             case QuotationStatus.AwaitingDirector:
             {

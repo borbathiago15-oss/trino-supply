@@ -125,6 +125,7 @@ export const MANUAIS: Record<string, Manual> = {
   'pr-new-unit': {
     paraQueServe: 'Abrir uma Solicitação de Compra (SC): o que você precisa, para quando, por quê e em qual centro de custo.',
     passos: [
+      'Escolha a finalidade: Compra (segue para aprovação depois da cotação) ou Orçamento (só levantar preço: para depois da cotação e volta para você decidir).',
       'Em cada item, clique em "Buscar no catálogo" e escolha a família ou digite duas letras. As famílias são as ativas do cadastro.',
       'Clique no produto para ver a ficha — foto, código, família, unidade, fornecedores — e use "Usar este produto".',
       'Não achou? Na própria busca, "Pedir item fora do catálogo" abre a descrição livre, já com o que você buscou. A família do item é a que estava escolhida no filtro da busca.',
@@ -138,6 +139,7 @@ export const MANUAIS: Record<string, Manual> = {
       { codigo: 'IC-ERR-023', texto: 'EPI/EPC só circula com C.A. válido no par produto-fornecedor — cobrado do tamanho pedido.' },
       { texto: 'Prioridade urgente pede a justificativa da urgência e o impacto de não comprar.' },
       { codigo: 'PR-ERR-023', texto: 'A empresa precisa ser um dos CNPJs ativos do cadastro (Estrutura da Empresa → Empresas).' },
+      { codigo: 'PR-ERR-024', texto: 'A finalidade (orçamento ou compra) é obrigatória. O comprador pode corrigi-la na Torre até a SC entrar em cotação (PR-ERR-025).' },
     ],
     duvidas: [
       { pergunta: 'Onde a SC vai ser entregue?', resposta: 'No local de entrega escolhido. A lista junta os almoxarifados e os centros de custo que recebem material — quem paga e quem recebe podem ser diferentes.' },
@@ -146,6 +148,7 @@ export const MANUAIS: Record<string, Manual> = {
   'pr-new-multi': {
     paraQueServe: 'Montar uma SC com muitos produtos de uma vez, preenchendo a quantidade direto na lista do catálogo.',
     passos: [
+      'Escolha a finalidade: Compra ou Orçamento (obrigatória).',
       'Filtre a lista pela família ou busque pelo nome.',
       'Digite a quantidade nos produtos que você precisa. Só entram na SC os que têm quantidade.',
       'Preencha centro de custo, local de entrega, prioridade, data de necessidade e justificativa.',
@@ -182,6 +185,7 @@ export const MANUAIS: Record<string, Manual> = {
       { texto: '"Em faturamento" espera o fornecedor (O.C. sem nota fiscal); "Aguardando recebimento" espera o almoxarifado (nota lançada, material não recebido).' },
       { texto: 'O prazo da etapa mede e avisa, nunca bloqueia. A atenção chega a 80% do prazo.' },
       { texto: 'A coluna Comprador mostra quem conduziu a compra (escolheu o vencedor ou abriu a cotação). Antes da cotação, mostra o responsável da triagem. O aprovador nunca aparece ali.' },
+      { texto: 'A marca "Orçamento" diz que a SC é só levantamento de preço. Antes de cotar, "é compra"/"é orçamento" na linha corrige a finalidade. O orçamento apresentado espera a decisão de quem pediu e não conta no prazo da etapa.' },
     ],
   },
   'rfq-queue': {
@@ -208,10 +212,13 @@ export const MANUAIS: Record<string, Manual> = {
       'Na grade, escolha o vencedor de cada item e escreva a justificativa. A grade marca o menor preço e quanto cada oferta está acima dele — mas não escolhe por você.',
       'Confirmada a escolha, o processo segue para as aprovações. O Nível 1 e o Nível 2 são dados na Central de Aprovação — o card "Próximo passo" leva até lá.',
       'Aprovado o Nível 2, nasce um pedido por fornecedor: a O.C. do ERP se registra na tela do pedido.',
+      'Processo de orçamento: depois da escolha ele para em "Orçamento apresentado". Se o solicitante decidir comprar, use "Converter em compra e enviar ao Nível 1".',
     ],
     regras: [
       { codigo: 'RFQ-ERR-020', texto: 'Proposta depois do prazo do convite é barrada. Saídas: dar novo prazo ou seguir sem o fornecedor (com motivo).' },
       { codigo: 'RFQ-ERR-023', texto: 'Todo item precisa de um vencedor.' },
+      { codigo: 'RFQ-ERR-063', texto: 'Orçamento e compra não se misturam no mesmo processo.' },
+      { codigo: 'RFQ-ERR-064', texto: 'Só o orçamento apresentado vira compra — e o Nível 1 vê a marca "Nasceu como orçamento".' },
       { codigo: 'RFQ-ERR-025', texto: 'Quando a quantidade de um item é dividida entre fornecedores, a soma precisa fechar a quantidade pedida.' },
       { codigo: 'SUP-ERR-030', texto: 'Só fornecedor homologado vence o BID. Homologar exige o CNPJ.' },
       { texto: '"Preencher com o melhor preço" e "levar tudo" são pontos de partida, não decisões — revise antes de enviar.' },

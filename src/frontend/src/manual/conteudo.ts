@@ -252,9 +252,24 @@ export const MANUAIS: Record<string, Manual> = {
       'Veja o teto contratado, o consumido na vigência e o saldo de cada contrato.',
       'Para um reajuste, registre o percentual pleiteado e o fechado com "Registrar reajuste".',
       'O contrato em si se cadastra no fornecedor (Cadastros → Fornecedores).',
+      'Clique no nome do fornecedor para abrir a ficha do contrato: documentos, compras e histórico.',
     ],
     regras: [
       { texto: 'Preço de contrato só preenche a proposta dentro da vigência — preço vencido não entra calado.' },
+    ],
+  },
+  'contract-detail': {
+    paraQueServe: 'Tudo sobre o contrato de um fornecedor numa tela: os documentos, os produtos com preço e prazo, as compras feitas e o histórico do contrato.',
+    passos: [
+      'No topo, veja a vigência, o teto, o consumido, o saldo e o custo evitado em reajustes.',
+      'Em Documentos, abra o contrato assinado, os aditivos e as certidões. "Anexar documento do contrato" guarda o contrato assinado ou um aditivo.',
+      'Em Compras, cada pedido diz se abate o saldo: só conta o emitido dentro da vigência e não cancelado.',
+      'O Histórico conta o que mudou no contrato — vigência, teto, preço de cada produto, documentos e reajustes —, com quem e quando.',
+    ],
+    regras: [
+      { texto: 'O contrato assinado e o aditivo não são certidão: a validade deles é a vigência, e o contrato vencer não restringe a homologação do fornecedor.' },
+      { texto: 'Contrato cadastrado antes de o sistema registrar a história começa na primeira alteração registrada, e a tela avisa.' },
+      { texto: 'Salvar o contrato sem mudar nada não entra no histórico.' },
     ],
   },
   scorecard: {

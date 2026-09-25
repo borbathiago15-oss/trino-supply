@@ -172,7 +172,10 @@ public static class AvisoRotas
                     count = d30 + d60 + d90, view = "contracts",
                     text = $"Contrato(s) de parceria vencendo: {d30} em 30 dias, {d60} em 60, {d90} em 90.",
                 });
-                var certidoes = await db.SupplierDocuments.Where(d => d.ValidUntil != null)
+                // o contrato assinado e o aditivo não são certidão: a validade deles é a vigência,
+                // que já tem o seu aviso logo acima (CONTRATO_VENCENDO)
+                var doContrato = SupplierDocumentTypes.DoContrato;
+                var certidoes = await db.SupplierDocuments.Where(d => d.ValidUntil != null && !doContrato.Contains(d.Type))
                     .Select(d => d.ValidUntil!.Value).ToListAsync();
                 var certVencidas = certidoes.Count(v => v < hoje);
                 if (certVencidas > 0) alerts.Add(new

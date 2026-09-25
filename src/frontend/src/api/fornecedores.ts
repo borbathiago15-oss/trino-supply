@@ -11,15 +11,24 @@ export const ROTULO_HOMOLOGACAO: Record<SituacaoHomologacao, { rotulo: string; c
   BLOQUEADO: { rotulo: 'Bloqueado', classe: 'bg-perigo-fundo text-perigo' },
 };
 
-export type TipoDocumento = 'CND_FEDERAL' | 'FGTS' | 'CNDT' | 'CONTRATO_SOCIAL' | 'OUTRO';
+export type TipoDocumento = 'CND_FEDERAL' | 'FGTS' | 'CNDT' | 'CONTRATO_SOCIAL' | 'CONTRATO' | 'ADITIVO' | 'OUTRO';
 
 export const ROTULO_DOCUMENTO: Record<TipoDocumento, string> = {
   CND_FEDERAL: 'CND Federal',
   FGTS: 'Certificado de regularidade do FGTS',
   CNDT: 'CNDT (débitos trabalhistas)',
   CONTRATO_SOCIAL: 'Contrato social',
+  CONTRATO: 'Contrato de parceria assinado',
+  ADITIVO: 'Aditivo do contrato',
   OUTRO: 'Outro documento',
 };
+
+/**
+ * Os papéis do contrato de parceria. Não são certidão: a validade deles é a vigência, e o
+ * contrato vencer não restringe a homologação — a mesma régua de `SupplierDocument.IsCertificate`.
+ */
+export const DOCUMENTOS_DO_CONTRATO: TipoDocumento[] = ['CONTRATO', 'ADITIVO'];
+export const ehDocumentoDoContrato = (tipo: TipoDocumento) => DOCUMENTOS_DO_CONTRATO.includes(tipo);
 
 export interface DocumentoFornecedor {
   id: string;

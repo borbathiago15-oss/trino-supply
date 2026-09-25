@@ -166,6 +166,30 @@ test.describe('Cadastros (React)', () => {
     await expect(linha).toContainText('VIGENTE');
     await expect(linha).toContainText('1 produto(s)');
 
+    // a ficha do contrato: abre pelo nome do fornecedor na tela de Contratos
+    await page.goto('/contratos');
+    await page.getByRole('link', { name: `E2E Contrato ${marca} LTDA` }).click();
+    const ficha = page.getByTestId('ficha-contrato');
+    await expect(ficha).toContainText(`CT-E2E-${marca}`);
+    await expect(ficha).toContainText('VIGENTE');
+    const historia = page.getByTestId('linha-do-tempo-contrato');
+    await expect(historia.locator('[data-tipo="CRIADO"]')).toContainText(`Contrato CT-E2E-${marca} cadastrado`);
+
+    // o contrato assinado entra nos documentos e na história
+    await page.getByRole('button', { name: 'Anexar documento do contrato' }).click();
+    await page.getByLabel('Arquivo').setInputFiles({
+      name: `contrato-${marca}.pdf`, mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%E2E\n'),
+    });
+    await page.getByRole('button', { name: 'Anexar', exact: true }).click();
+    await expect(page.getByTestId('toast').last()).toContainText('Documento anexado ao contrato.');
+    await expect(page.getByTestId('documentos-do-contrato').locator('[data-documento="CONTRATO"]'))
+      .toContainText(`contrato-${marca}.pdf`);
+    await expect(historia.locator('[data-tipo="DOCUMENTO_ANEXADO"]')).toContainText(`contrato-${marca}.pdf`);
+
+    // de volta ao cadastro, pela busca: a lista é paginada e o fornecedor pode não estar na primeira página
+    await page.goto('/fornecedores');
+    await page.getByLabel('Buscar', { exact: true }).fill(cnpj);
+
     // remover o produto e salvar encerra o contrato
     await linha.getByRole('button', { name: /Mais ações de/ }).click();
     await page.getByRole('menuitem', { name: 'Contrato de parceria' }).click();

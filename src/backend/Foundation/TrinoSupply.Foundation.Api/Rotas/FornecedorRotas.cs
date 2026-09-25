@@ -98,8 +98,9 @@ public static class FornecedorRotas
             var items = body.Items?.Select(i => new SupplierService.ContractItemInput(
                 i.CatalogItemId, i.Description, i.CatalogCode, i.UnitOfMeasure, i.UnitPrice,
                 i.PaymentTerms, i.PaymentDays, i.DeliveryDays, i.Notes)).ToList();
+            var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", RoleOf(p));
             var (supplier, error) = await svc.SaveContractAsync(
-                id, body.Number, body.ValidFrom, body.ValidUntil, body.Notes, items, body.ValueLimit);
+                id, body.Number, body.ValidFrom, body.ValidUntil, body.Notes, items, body.ValueLimit, actor: actor);
             return error is not null ? Error(ctx, error.Code == "SUP-ERR-404" ? 404 : 422, error.Code, error.Message)
                 : Ok(SupplierView(supplier!), ctx);
         });
@@ -133,6 +134,28 @@ public static class FornecedorRotas
             {
                 items = items.Select(AdjustmentView),
                 costAvoidanceTotal = items.Sum(a => a.CostAvoidance),
+            }, ctx);
+        });
+
+        // ficha do contrato: o fornecedor, os documentos, as compras e a história do contrato
+        sup.MapGet("/{id:guid}/contract/record", async (Guid id, SupplierService svc, ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            if (!SupplierService.CanView(RoleOf(p)))
+                return Error(ctx, 403, "SUP-ERR-900", "Seu papel não acessa contratos de fornecedor.");
+            var f = await svc.FichaAsync(id);
+            if (f is null) return Error(ctx, 404, "SUP-ERR-404", "Fornecedor não encontrado.");
+            return Ok(new
+            {
+                supplier = SupplierView(f.Fornecedor),
+                purchaseOrders = f.Pedidos.Select(o => new
+                {
+                    id = o.Id, number = o.Number, erpNumber = o.ErpNumber, createdAt = o.CreatedAt, total = o.Total,
+                    status = Vistas.PoStatusLabel(o.Status), cancelled = o.Status == PurchaseOrderStatus.Cancelled,
+                    quotationNumber = o.QuotationNumber, sourcePrNumber = o.SourcePrNumber, countsInContract = o.NaVigencia,
+                }),
+                timeline = f.LinhaDoTempo.Select(e => new { at = e.Quando, kind = e.Tipo, text = e.Texto, by = e.Quem }),
+                costAvoidanceTotal = f.CustoEvitado,
+                historyComplete = f.HistoricoCompleto,
             }, ctx);
         });
 
@@ -185,7 +208,8 @@ public static class FornecedorRotas
         {
             if (!SupplierService.CanMaintain(RoleOf(p)))
                 return Error(ctx, 403, "SUP-ERR-900", "Seu papel não mantém documentos de fornecedor.");
-            var error = await svc.RemoveDocumentAsync(id, docId);
+            var error = await svc.RemoveDocumentAsync(id, docId,
+                actor: new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", RoleOf(p)));
             return error is not null ? Error(ctx, 404, error.Code, error.Message) : Results.NoContent();
         });
 

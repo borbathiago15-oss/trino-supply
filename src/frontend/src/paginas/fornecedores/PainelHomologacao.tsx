@@ -2,7 +2,7 @@ import { useState, type ChangeEvent } from 'react';
 import { abrirBlob } from '@/api/cliente';
 import { baixarDocumento } from '@/api/documentos';
 import {
-  anexarDocumento, removerDocumento, ROTULO_DOCUMENTO, ROTULO_HOMOLOGACAO, salvarHomologacao,
+  anexarDocumento, ehDocumentoDoContrato, removerDocumento, ROTULO_DOCUMENTO, ROTULO_HOMOLOGACAO, salvarHomologacao,
   type Fornecedor, type SituacaoHomologacao, type TipoDocumento,
 } from '@/api/fornecedores';
 import { Badge, Painel, Vazio } from '@/componentes/basicos';
@@ -97,7 +97,8 @@ export function PainelHomologacao({ fornecedor, aoSalvar, aoFechar }:
             <thead><tr><th>Documento</th><th>Arquivo</th><th>Válida até</th><th>Situação</th><th></th></tr></thead>
             <tbody>
               {fornecedor.documents.map((d) => {
-                const marca = situacaoDocumento(d);
+                // o contrato assinado não é certidão: vencer a vigência não restringe o fornecedor
+                const marca = ehDocumentoDoContrato(d.type) ? null : situacaoDocumento(d);
                 return (
                   <tr key={d.id} data-documento={d.id}>
                     <td>{ROTULO_DOCUMENTO[d.type] ?? d.type}{d.label && <div className="sub">{d.label}</div>}</td>

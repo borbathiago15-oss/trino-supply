@@ -26,6 +26,7 @@ import { CentralDeAprovacao } from '@/paginas/aprovacoes/CentralDeAprovacao';
 import { SolicitarMaterial } from '@/paginas/material/SolicitarMaterial';
 import { MinhasSolicitacoes } from '@/paginas/material/MinhasSolicitacoes';
 import { Contratos } from '@/paginas/contratos/Contratos';
+import { FichaDoContrato } from '@/paginas/contratos/FichaDoContrato';
 import { Scorecard } from '@/paginas/scorecard/Scorecard';
 import { Compliance } from '@/paginas/compliance/Compliance';
 import { FilaDeAtendimento } from '@/paginas/estoque/FilaDeAtendimento';
@@ -110,6 +111,7 @@ export function Rotas() {
           <Route path="/material" element={<MinhasSolicitacoes />} />
           <Route path="/material/nova" element={<SolicitarMaterial />} />
           <Route path="/contratos" element={<Contratos />} />
+          <Route path="/contratos/:id" element={<FichaDoContrato />} />
           <Route path="/scorecard" element={<Scorecard />} />
           <Route path="/compliance" element={<Compliance />} />
           <Route path="/estoque/fila" element={<FilaDeAtendimento />} />

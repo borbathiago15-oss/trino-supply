@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   historicoDeReajustes, listarContratos, registrarReajuste, resumoDeContratos,
   type LinhaContrato, type Reajuste,
@@ -80,7 +81,8 @@ export function Contratos() {
       <Painel titulo="Contratos de Parceria">
         <Nota>
           Os contratos são mantidos em Cadastros → Fornecedores (botão Contrato). Aqui você acompanha
-          vigência, teto, consumo e saldo — cada O.C. registrada do fornecedor abate o saldo.
+          vigência, teto, consumo e saldo — cada O.C. registrada do fornecedor abate o saldo. Clique no
+          fornecedor para abrir a ficha: documentos, compras e o histórico do contrato.
         </Nota>
 
         {erro && <Erro>{erro}</Erro>}
@@ -118,7 +120,10 @@ export function Contratos() {
                       return (
                         <tr key={l.supplierId} data-contrato={l.supplierName}>
                           <td className="min-w-[200px]">
-                            {l.supplierName}
+                            <Link className="font-semibold text-marca hover:underline" to={`/contratos/${l.supplierId}`}
+                              title="Abrir a ficha: documentos, compras e histórico do contrato">
+                              {l.supplierName}
+                            </Link>
                             <div className="sub">Contrato {c.number || '—'}</div>
                           </td>
                           <td className="sub whitespace-nowrap">{data(c.validFrom)} → {data(c.validUntil)}</td>

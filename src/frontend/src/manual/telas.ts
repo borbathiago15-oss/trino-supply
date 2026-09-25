@@ -10,6 +10,7 @@ export const DETALHES: { chave: string; rotulo: string; padrao: RegExp }[] = [
   // /cotacoes/abrir é item do menu e resolve antes, pela rota exata
   { chave: 'quotation-detail', rotulo: 'Processo de Cotação', padrao: /^\/cotacoes\/[^/]+$/ },
   { chave: 'order-detail', rotulo: 'Pedido de Compra', padrao: /^\/pedidos\/[^/]+$/ },
+  { chave: 'contract-detail', rotulo: 'Ficha do Contrato', padrao: /^\/contratos\/[^/]+$/ },
   { chave: 'pdca-detail', rotulo: 'Ciclo de Melhoria', padrao: /^\/melhoria\/[^/]+$/ },
   { chave: 'plan-detail', rotulo: 'Plano de Ação', padrao: /^\/plano-acao\/[^/]+$/ },
   { chave: 'support-detail', rotulo: 'Chamado de Suporte', padrao: /^\/suporte\/[^/]+$/ },

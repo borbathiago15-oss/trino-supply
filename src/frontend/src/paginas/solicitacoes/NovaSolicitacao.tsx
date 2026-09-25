@@ -338,14 +338,14 @@ export function NovaSolicitacao() {
               {p ? (
                 <p className="sub mt-2">Família <Badge classe="bg-slate-100 text-slate-600">{p.family}</Badge> — do cadastro do produto.</p>
               ) : l.foraDoCatalogo && (
-                <Campo rotulo="Família do produto" className="mt-3" dica="(escolha ou marque como não cadastrado)">
-                  <select aria-label={`Família de ${l.produto || 'item ' + l.chave}`}
-                    value={l.familia} onChange={(e) => editarLinha(l.chave, { familia: e.target.value })}>
-                    <option value="">Escolha a família…</option>
-                    {(dados?.familias ?? []).map((f) => <option key={f} value={f}>{f}</option>)}
-                    <option value={SEM_CADASTRO}>Produto não cadastrado</option>
-                  </select>
-                </Campo>
+                // sem uma segunda lista de família na linha: ela parecia outra busca ao lado da
+                // do catálogo. A família do item de fora é a do filtro da própria busca, e
+                // "Buscar no catálogo" de novo é o jeito de trocá-la
+                <p className="sub mt-2" data-testid="familia-fora-do-catalogo">
+                  {l.familia && l.familia !== SEM_CADASTRO
+                    ? <>Família <Badge classe="bg-slate-100 text-slate-600">{l.familia}</Badge> — escolhida na busca.</>
+                    : 'Sem família: vai como produto não cadastrado. Para classificar, busque de novo escolhendo a família.'}
+                </p>
               )}
 
               {pendente && (

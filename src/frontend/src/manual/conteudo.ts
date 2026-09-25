@@ -127,7 +127,7 @@ export const MANUAIS: Record<string, Manual> = {
     passos: [
       'Em cada item, clique em "Buscar no catálogo" e escolha a família ou digite duas letras. As famílias são as ativas do cadastro.',
       'Clique no produto para ver a ficha — foto, código, família, unidade, fornecedores — e use "Usar este produto".',
-      'Não achou? Na própria busca, "Pedir item fora do catálogo" abre a descrição livre, já com o que você buscou.',
+      'Não achou? Na própria busca, "Pedir item fora do catálogo" abre a descrição livre, já com o que você buscou. A família do item é a que estava escolhida no filtro da busca.',
       'Para produto com grade de tamanhos, informe a quantidade de cada tamanho — cada um vira um item da SC.',
       'Preencha a justificativa, o centro de custo, a data de necessidade e a prioridade.',
       'Em "Mais detalhes" ficam local de entrega, tipo de solicitação, a empresa (da lista de CNPJs cadastrados), orçamento previsto, observação e anexos.',

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { HexagonosDaMarca } from '@/componentes/HexagonosDaMarca';
 import { INTERVALO_DO_COCKPIT, obterCockpit, type CockpitDados } from '@/api/torre';
 import { moeda } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
@@ -73,7 +74,8 @@ export function Cockpit() {
   const slaOk = slaAtingido(kpis.slaSemanalPct, kpis.metaSlaPct);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-fundo p-5 text-white" data-testid="cockpit">
+    <div className="relative flex h-screen flex-col overflow-hidden bg-fundo p-5 text-white" data-testid="cockpit">
+      <HexagonosDaMarca variante="cantos" opacidade={0.6} />
       {/* NÍVEL 1 — barra de estado */}
       <header className="flex items-center justify-between pb-4">
         <div className="flex items-center gap-4">

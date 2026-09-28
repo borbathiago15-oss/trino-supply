@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { HexagonosDaMarca } from '@/componentes/HexagonosDaMarca';
 import { Link, useLocation } from 'react-router-dom';
 import { contagemPorItem, ehSubgrupo, itensVisiveis, localizar, type ItemMenu, type SubgrupoMenu } from './menu';
 import { useAvisos } from '@/sessao/AvisosProvider';
@@ -153,6 +154,9 @@ export function Sidebar({ aberto = false, aoFechar }: { aberto?: boolean; aoFech
           );
         })}
       </nav>
+      <div className="relative mt-6 h-16 shrink-0" aria-hidden="true">
+        <HexagonosDaMarca variante="rodape" opacidade={0.8} />
+      </div>
     </aside>
   );
 }

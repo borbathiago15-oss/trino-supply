@@ -1,4 +1,5 @@
 import { FaixaDaMarca } from '@/componentes/FaixaDaMarca';
+import { HexagonosDaMarca } from '@/componentes/HexagonosDaMarca';
 import { Fragment, useState, type FormEvent, type ReactNode } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { entrar, type Usuario } from '@/api/auth';
@@ -88,18 +89,9 @@ export function Login() {
           aria-hidden="true" className="pointer-events-none absolute inset-0 hidden min-[561px]:block"
           style={{ background: 'radial-gradient(120% 95% at 12% 0%, #1d1d1d 0%, #0b0d0f 55%, #040607 100%)' }}
         />
-        {/* malha discreta de conexões — só CSS, sem imagem de fundo */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 hidden min-[561px]:block"
-          style={{
-            backgroundImage:
-              'linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px)',
-            backgroundSize: '58px 58px',
-            WebkitMaskImage: 'radial-gradient(85% 70% at 28% 18%, #000 0%, transparent 78%)',
-            maskImage: 'radial-gradient(85% 70% at 28% 18%, #000 0%, transparent 78%)',
-          }}
-        />
+        {/* os hexágonos neon das artes do Grupo Trino, atrás do texto — a partir do tablet: no
+            celular o painel é curto e o texto ocupa tudo, e os contornos cairiam em cima dele */}
+        <HexagonosDaMarca className="hidden min-[561px]:block" />
 
         <div className="relative w-full max-w-[520px] motion-safe:animate-entrada">
           <img

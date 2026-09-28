@@ -65,7 +65,7 @@ const CLASSE_ETAPA: Record<string, string> = {
   feita: 'bg-ok text-white border-ok',
   atual: 'bg-marca text-white border-marca',
   parada: 'bg-perigo text-white border-perigo',
-  pendente: 'bg-white text-slate-400 border-borda',
+  pendente: 'bg-superficie text-texto-suave border-borda',
 };
 
 /**
@@ -82,7 +82,7 @@ export function LinhaDoTempoDaSc({ a }: { a: AcompanhamentoDaSc }) {
           <span aria-hidden className={`flex h-4 w-4 items-center justify-center rounded-full border text-[9px] leading-none ${CLASSE_ETAPA[e.situacao] ?? CLASSE_ETAPA.pendente}`}>
             {e.situacao === 'feita' ? '✓' : e.situacao === 'parada' ? '!' : i + 1}
           </span>
-          <span className={`text-[11px] ${e.situacao === 'atual' ? 'font-bold text-marca' : e.situacao === 'parada' ? 'font-bold text-perigo' : e.situacao === 'pendente' ? 'text-slate-400' : 'text-texto-suave'}`}>
+          <span className={`text-[11px] ${e.situacao === 'atual' ? 'font-bold text-marca' : e.situacao === 'parada' ? 'font-bold text-perigo' : e.situacao === 'pendente' ? 'text-texto-suave' : 'text-texto-suave'}`}>
             {e.rotulo}
           </span>
         </li>
@@ -224,11 +224,11 @@ export function MeusPedidos() {
         )}
         {minhas.length > 0 && !termo.trim() && (
           <div className="mb-3 flex flex-wrap gap-2 text-[12.5px]" data-testid="resumo-solicitacoes">
-            <Badge classe={comigo > 0 ? 'bg-aviso-fundo text-aviso' : 'bg-slate-100 text-slate-600'}>
+            <Badge classe={comigo > 0 ? 'bg-aviso-fundo text-aviso' : 'bg-superficie-forte text-texto-suave'}>
               {comigo === 0 ? 'nada esperando por você' : `${comigo} esperando por você`}
             </Badge>
             <Badge classe="bg-blue-50 text-blue-800">{andando} em andamento</Badge>
-            <Badge classe="bg-slate-100 text-slate-600">{encerradas} encerrada(s)</Badge>
+            <Badge classe="bg-superficie-forte text-texto-suave">{encerradas} encerrada(s)</Badge>
           </div>
         )}
         {lista.length > 0 && (

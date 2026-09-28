@@ -53,7 +53,7 @@ export function MinhasSolicitacoes() {
               </thead>
               <tbody>
                 {lista.map((r) => {
-                  const marca = ROTULO_MATERIAL[r.status] ?? { rotulo: r.status, classe: 'bg-slate-100 text-slate-600' };
+                  const marca = ROTULO_MATERIAL[r.status] ?? { rotulo: r.status, classe: 'bg-superficie-forte text-texto-suave' };
                   return (
                     <tr key={r.id} data-material={r.number}>
                       <td className="whitespace-nowrap">

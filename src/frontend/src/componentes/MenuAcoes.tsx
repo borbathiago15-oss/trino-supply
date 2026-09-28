@@ -36,7 +36,7 @@ export function MenuAcoes({ acoes, rotulo = 'Mais ações' }: { acoes: AcaoMenu[
         ⋯
       </button>
       {aberto && (
-        <div role="menu" className="absolute right-0 z-30 mt-1 min-w-[190px] overflow-hidden rounded-lg border border-borda bg-white py-1 shadow-lg">
+        <div role="menu" className="absolute right-0 z-30 mt-1 min-w-[190px] overflow-hidden rounded-lg border border-borda bg-superficie py-1 shadow-lg">
           {acoes.map((a) => (
             <button key={a.rotulo} type="button" role="menuitem" disabled={!!a.impedimento}
               title={a.impedimento}

@@ -43,7 +43,7 @@ export function Scorecard() {
             </thead>
             <tbody>
               {linhas.map((s) => {
-                const risco = RISCO[s.riskLevel] ?? { rotulo: s.riskLevel, classe: 'bg-slate-100 text-slate-600' };
+                const risco = RISCO[s.riskLevel] ?? { rotulo: s.riskLevel, classe: 'bg-superficie-forte text-texto-suave' };
                 return (
                   <tr key={s.supplierId} data-fornecedor={s.supplierName}>
                     <td className="min-w-[180px]">{s.supplierName}</td>

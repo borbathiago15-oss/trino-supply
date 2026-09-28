@@ -6,6 +6,8 @@ import type { Config } from 'tailwindcss';
 // nem que a marca deixou de ser azul para ser o vermelho do Grupo Trino (2026-09).
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
+  // o tema é escolha da pessoa (classe `dark` no <html>), não do sistema operacional sozinho
+  darkMode: 'class',
   theme: {
     extend: {
       colors: {
@@ -18,17 +20,28 @@ export default {
         marca: { DEFAULT: '#9d202c', escuro: '#7e1a23', vermelho: '#bd1622',
           laranja: '#df8e24', azul: '#67a6dd', verde: '#a6bf38',
           navy: '#0b0d0f', navy2: '#161616', prata: '#a1aab5' },
-        texto: { DEFAULT: '#0f172a', suave: '#64748b' },
-        borda: '#e2e8f0',
-        // o fundo da aplicação é slate-50; o cartão é branco em cima dele
-        superficie: { DEFAULT: '#ffffff', suave: '#f8fafc' },
-        // conforme / no prazo: emerald
-        ok: { DEFAULT: '#047857', fundo: '#ecfdf5', borda: '#a7f3d0', forte: '#10b981' },
+        // As superfícies e os textos das telas de trabalho são variáveis CSS (index.css):
+        // é o que faz o tema escuro existir sem cada tela saber dele. Tela nova usa estes
+        // nomes — `bg-white` e `text-slate-900` fixos não escurecem.
+        texto: { DEFAULT: 'rgb(var(--texto) / <alpha-value>)', suave: 'rgb(var(--texto-suave) / <alpha-value>)' },
+        borda: { DEFAULT: 'rgb(var(--borda) / <alpha-value>)', suave: 'rgb(var(--borda-suave) / <alpha-value>)' },
+        // o fundo da aplicação (suave), o cartão em cima dele (DEFAULT) e o realce (forte)
+        superficie: {
+          DEFAULT: 'rgb(var(--superficie) / <alpha-value>)',
+          suave: 'rgb(var(--superficie-suave) / <alpha-value>)',
+          forte: 'rgb(var(--superficie-forte) / <alpha-value>)',
+        },
+        // conforme / no prazo: emerald — texto e tinta trocam com o tema, o `forte` (barras,
+        // pontos) é o mesmo nos dois
+        ok: { DEFAULT: 'rgb(var(--ok) / <alpha-value>)', fundo: 'rgb(var(--ok-fundo) / <alpha-value>)',
+          borda: 'rgb(var(--ok-borda) / <alpha-value>)', forte: '#10b981' },
         // crítico / penalidade: rose — tinta clara com texto rose, para não se confundir com
         // o botão de ação, que é bordô sólido
-        perigo: { DEFAULT: '#be123c', fundo: '#fff1f2', borda: '#fecdd3', forte: '#f43f5e' },
+        perigo: { DEFAULT: 'rgb(var(--perigo) / <alpha-value>)', fundo: 'rgb(var(--perigo-fundo) / <alpha-value>)',
+          borda: 'rgb(var(--perigo-borda) / <alpha-value>)', forte: '#f43f5e' },
         // atenção / pendente: amber
-        aviso: { DEFAULT: '#b45309', fundo: '#fffbeb', borda: '#fde68a', forte: '#f59e0b' },
+        aviso: { DEFAULT: 'rgb(var(--aviso) / <alpha-value>)', fundo: 'rgb(var(--aviso-fundo) / <alpha-value>)',
+          borda: 'rgb(var(--aviso-borda) / <alpha-value>)', forte: '#f59e0b' },
       },
       borderRadius: { painel: '12px' },
       boxShadow: {

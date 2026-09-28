@@ -91,7 +91,7 @@ export function DialogoDeSuporte({ tela, rota, aoFechar }:
       </>
     }>
       <div className="space-y-3">
-        <p className="rounded-lg bg-slate-50 px-3 py-2 text-[13px]">
+        <p className="rounded-lg bg-superficie-suave px-3 py-2 text-[13px]">
           Tela: <strong data-testid="tela-do-chamado">{tela.rotulo}</strong>
           <span className="block text-[12px] text-texto-suave">vai junto com o chamado — não precisa escrever onde você estava</span>
         </p>

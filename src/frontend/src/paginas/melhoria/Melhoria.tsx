@@ -17,7 +17,7 @@ const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message
  * foi boa — quem responde isso é o veredito da meta, que a linha mostra ao lado.
  */
 export function tomDaFase(c: Ciclo): string {
-  if (c.phase === 'ENCERRADO') return 'bg-slate-100 text-slate-600';
+  if (c.phase === 'ENCERRADO') return 'bg-superficie-forte text-texto-suave';
   if (c.phase === 'CHECK') return 'bg-aviso-fundo text-aviso';
   return 'bg-marca/10 text-marca';
 }

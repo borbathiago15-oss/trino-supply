@@ -18,7 +18,7 @@ function Score({ score }: { score: number }) {
   return (
     <div className="min-w-[96px]">
       <ScoreBadge score={score} />
-      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100" aria-hidden>
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-superficie-forte" aria-hidden>
         <div className={'h-1.5 rounded-full ' + corDaBarra(score)} style={{ width: `${Math.max(0, Math.min(100, score))}%` }} />
       </div>
     </div>
@@ -33,7 +33,7 @@ function Penalidade({ pontos, rotulo, evidencia }: { pontos: number; rotulo: str
         <span className="inline-flex items-center gap-1 rounded border border-perigo-borda bg-perigo-fundo px-2 py-0.5 text-xs font-semibold text-perigo">
           <strong>−{pontos}</strong> pts
         </span>
-        <span className="text-slate-600">{rotulo}</span>
+        <span className="text-texto-suave">{rotulo}</span>
       </div>
       <div className="sub">{evidencia}</div>
     </div>

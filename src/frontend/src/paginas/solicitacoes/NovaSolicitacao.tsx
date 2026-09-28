@@ -342,14 +342,14 @@ export function NovaSolicitacao() {
                   cada linha vai. Produto do catálogo mostra a dele, travada — quem
                   escolhe a família de um produto cadastrado é o cadastro. */}
               {p ? (
-                <p className="sub mt-2">Família <Badge classe="bg-slate-100 text-slate-600">{p.family}</Badge> — do cadastro do produto.</p>
+                <p className="sub mt-2">Família <Badge classe="bg-superficie-forte text-texto-suave">{p.family}</Badge> — do cadastro do produto.</p>
               ) : l.foraDoCatalogo && (
                 // sem uma segunda lista de família na linha: ela parecia outra busca ao lado da
                 // do catálogo. A família do item de fora é a do filtro da própria busca, e
                 // "Buscar no catálogo" de novo é o jeito de trocá-la
                 <p className="sub mt-2" data-testid="familia-fora-do-catalogo">
                   {l.familia && l.familia !== SEM_CADASTRO
-                    ? <>Família <Badge classe="bg-slate-100 text-slate-600">{l.familia}</Badge> — escolhida na busca.</>
+                    ? <>Família <Badge classe="bg-superficie-forte text-texto-suave">{l.familia}</Badge> — escolhida na busca.</>
                     : 'Sem família: vai como produto não cadastrado. Para classificar, busque de novo escolhendo a família.'}
                 </p>
               )}

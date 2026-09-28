@@ -156,7 +156,7 @@ export function ProcessoDetalhe() {
                       <td>
                         {a.purchaseOrderNumber
                           ? <Badge classe="bg-ok-fundo text-ok">{a.purchaseOrderNumber}</Badge>
-                          : <Badge classe="bg-slate-100 text-slate-600">pendente</Badge>}
+                          : <Badge classe="bg-superficie-forte text-texto-suave">pendente</Badge>}
                       </td>
                       <td className="sub">{a.justification || '—'}</td>
                     </tr>

@@ -238,7 +238,7 @@ function Analises({ dados, filtros, aoFiltrar, aoFiltrarMes }: {
           <TabelaResponsiva linhas={dados.supplierTable} chave={(x) => x.supplier} testid="tabela-fornecedores" minLargura={680} colunas={[
             { titulo: 'Fornecedor', principal: true, render: (x) => x.supplier },
             { titulo: 'Pedidos', render: (x) => quantidade(x.orders) },
-            { titulo: 'Em aberto', render: (x) => (x.open > 0 ? <Badge classe="bg-slate-100 text-slate-600">{x.open}</Badge> : '0') },
+            { titulo: 'Em aberto', render: (x) => (x.open > 0 ? <Badge classe="bg-superficie-forte text-texto-suave">{x.open}</Badge> : '0') },
             { titulo: 'Quantidade', render: (x) => quantidade(x.quantity) },
             { titulo: 'Valor', classe: 'whitespace-nowrap', render: (x) => moeda(x.value) },
             { titulo: 'OTIF', render: (x) => (x.otifPercent != null
@@ -342,7 +342,7 @@ export function DashboardSuprimentos() {
             </div>
 
             {maisFiltros && (
-              <div className="mt-3 grid grid-cols-1 gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2 lg:grid-cols-4"
+              <div className="mt-3 grid grid-cols-1 gap-3 border-t border-borda-suave pt-3 sm:grid-cols-2 lg:grid-cols-4"
                 data-testid="mais-filtros">
                 <Campo id="sd-fornecedor" rotulo="Fornecedor">
                   <select id="sd-fornecedor" {...campo('fornecedor')}>
@@ -416,7 +416,7 @@ export function DashboardSuprimentos() {
               <div className="mt-3 flex flex-wrap gap-1.5" data-testid="filtros-ativos">
                 {chips.map((c) => (
                   <button key={c.campo} type="button"
-                    className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[12px] hover:border-marca"
+                    className="rounded-full border border-borda bg-superficie-suave px-2.5 py-1 text-[12px] hover:border-marca"
                     aria-label={`Remover filtro ${c.rotulo}: ${c.valor}`} onClick={() => remover(c.campo)}>
                     {c.rotulo}: <strong>{c.valor}</strong> ✕
                   </button>

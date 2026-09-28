@@ -17,9 +17,9 @@ const VAZIO: Formulario = { title: '', body: '', startsOn: hojeIso(), endsOn: ho
 
 /** Situação do comunicado hoje, para a lista não obrigar a comparar datas de cabeça. */
 export function situacaoDoComunicado(c: Comunicado, hoje = hojeIso()) {
-  if (!c.active) return { rotulo: 'DESLIGADO', classe: 'bg-slate-100 text-slate-500' };
+  if (!c.active) return { rotulo: 'DESLIGADO', classe: 'bg-superficie-forte text-texto-suave' };
   if (hoje < c.startsOn) return { rotulo: 'AGENDADO', classe: 'bg-aviso-fundo text-aviso' };
-  if (hoje > c.endsOn) return { rotulo: 'ENCERRADO', classe: 'bg-slate-100 text-slate-500' };
+  if (hoje > c.endsOn) return { rotulo: 'ENCERRADO', classe: 'bg-superficie-forte text-texto-suave' };
   return { rotulo: 'NO AR', classe: 'bg-ok-fundo text-ok' };
 }
 

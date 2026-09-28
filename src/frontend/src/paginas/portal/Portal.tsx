@@ -118,7 +118,7 @@ function Lista({ aoAbrir }: { aoAbrir: (c: CotacaoDoPortal) => void }) {
                   <td>{c.kind}</td>
                   <td className="whitespace-nowrap">{data(c.deadline)}</td>
                   <td>
-                    <Badge classe={c.open ? 'bg-ok-fundo text-ok' : 'bg-slate-100 text-slate-500'}>{c.status}</Badge>
+                    <Badge classe={c.open ? 'bg-ok-fundo text-ok' : 'bg-superficie-forte text-texto-suave'}>{c.status}</Badge>
                   </td>
                   <td className="sub">
                     {c.myProposals.length ? `${c.myProposals.length} versão(ões)` : '—'}
@@ -181,7 +181,7 @@ function Detalhe({ cotacao, aoVoltar, aoAtualizar }: {
       <Painel titulo={
         <span className="flex flex-wrap items-center gap-2">
           {cotacao.number}
-          <Badge classe={cotacao.open ? 'bg-ok-fundo text-ok' : 'bg-slate-100 text-slate-500'}>{cotacao.status}</Badge>
+          <Badge classe={cotacao.open ? 'bg-ok-fundo text-ok' : 'bg-superficie-forte text-texto-suave'}>{cotacao.status}</Badge>
         </span>
       } acoes={<button type="button" className="botao-secundario" onClick={aoVoltar}>← Minhas cotações</button>}>
         <Nota>

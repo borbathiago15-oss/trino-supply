@@ -272,7 +272,7 @@ function FragmentoSc({ sc, conduz, usuarioId, marcados, todosMarcados, aoMarcarS
         <td className="min-w-[150px]">
           {sc.blockReason
             ? <>
-                <Badge classe="bg-slate-100 text-slate-600">RETIDA NA APROVAÇÃO</Badge>
+                <Badge classe="bg-superficie-forte text-texto-suave">RETIDA NA APROVAÇÃO</Badge>
                 <div className="sub">{sc.blockReason}</div>
               </>
             : conduz ? <span className="sub">marque os itens ao lado</span> : '—'}

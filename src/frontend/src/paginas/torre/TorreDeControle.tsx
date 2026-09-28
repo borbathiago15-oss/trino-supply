@@ -27,9 +27,9 @@ function KpiFiltro({ rotulo, valor, detalhe, ativo, aoClicar }: {
   return (
     <button type="button" onClick={aoClicar} aria-pressed={ativo}
       className={'rounded-xl border px-4 py-3.5 text-left shadow-sm transition-colors '
-        + (ativo ? 'border-marca bg-marca/5 ring-2 ring-marca/20' : 'border-slate-200/80 bg-white hover:border-marca/40')}>
+        + (ativo ? 'border-marca bg-marca/5 ring-2 ring-marca/20' : 'border-borda/80 bg-superficie hover:border-marca/40')}>
       <div className="rotulo">{rotulo}</div>
-      <div className="mt-1.5 text-3xl font-extrabold leading-none tracking-tight text-slate-900 tabular-nums">{valor}</div>
+      <div className="mt-1.5 text-3xl font-extrabold leading-none tracking-tight text-texto tabular-nums">{valor}</div>
       {detalhe && <div className="sub mt-1.5">{detalhe}</div>}
     </button>
   );

@@ -23,7 +23,7 @@ function ParetoEmBarras({ causas }: { causas: Causa[] }) {
       {causas.map((c) => (
         <div key={c.label} className="grid grid-cols-[minmax(120px,1fr)_2fr_auto] items-center gap-2 text-[12.5px]">
           <span className="truncate" title={c.label}>{c.label}</span>
-          <div className="h-3.5 rounded bg-slate-100">
+          <div className="h-3.5 rounded bg-superficie-forte">
             <div className={'h-3.5 rounded ' + (c.vital ? 'bg-ok' : 'bg-slate-300')}
               style={{ width: `${Math.round(((c.value ?? 0) / maior) * 100)}%` }} />
           </div>

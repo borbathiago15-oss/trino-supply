@@ -116,7 +116,7 @@ export function ProcessosDeCotacao() {
             </thead>
             <tbody>
               {lista.map((q) => {
-                const marca = ROTULO_RFQ[q.status] ?? { rotulo: q.status, classe: 'bg-slate-100 text-slate-600' };
+                const marca = ROTULO_RFQ[q.status] ?? { rotulo: q.status, classe: 'bg-superficie-forte text-texto-suave' };
                 const origem = origemDe(q);
                 const vencedor = vencedorDe(q);
                 return (

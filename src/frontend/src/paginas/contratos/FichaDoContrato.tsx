@@ -73,7 +73,7 @@ export function FichaDoContrato() {
       <Painel titulo={<>
         {f.legalName}
         {temContrato && (
-          <Badge classe={(c.current ? 'bg-ok-fundo text-ok' : 'bg-slate-100 text-slate-500') + ' ml-2 align-middle'}>
+          <Badge classe={(c.current ? 'bg-ok-fundo text-ok' : 'bg-superficie-forte text-texto-suave') + ' ml-2 align-middle'}>
             {c.current ? 'VIGENTE' : 'FORA DA VIGÊNCIA'}
           </Badge>
         )}

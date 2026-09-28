@@ -2,30 +2,64 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+  Os dois temas. Cada variável é um trio RGB para o Tailwind aplicar opacidade (`/70`).
+  O claro é o de sempre (slate); o escuro é o preto da marca com o cartão grafite — e os
+  textos de ok/aviso/perigo clareiam, porque o tom do claro some sobre o fundo escuro.
+*/
+:root {
+  color-scheme: light;
+  --texto: 15 23 42;          /* slate-900 */
+  --texto-suave: 100 116 139; /* slate-500 */
+  --borda: 226 232 240;       /* slate-200 */
+  --borda-suave: 241 245 249; /* slate-100 */
+  --superficie: 255 255 255;
+  --superficie-suave: 248 250 252; /* slate-50 */
+  --superficie-forte: 241 245 249; /* slate-100 */
+  --ok: 4 120 87;        --ok-fundo: 236 253 245;     --ok-borda: 167 243 208;
+  --perigo: 190 18 60;   --perigo-fundo: 255 241 242; --perigo-borda: 254 205 211;
+  --aviso: 180 83 9;     --aviso-fundo: 255 251 235;  --aviso-borda: 253 230 138;
+  --grafico-grade: #f1f5f9; --grafico-eixo: #e2e8f0; --grafico-texto: #64748b; --grafico-escala: #94a3b8;
+}
+:root.dark {
+  color-scheme: dark;
+  --texto: 236 236 236;
+  --texto-suave: 163 163 163;
+  --borda: 46 46 46;
+  --borda-suave: 34 34 34;
+  --superficie: 22 22 22;        /* o cartão: grafite da marca */
+  --superficie-suave: 11 13 15;  /* o fundo: preto da marca */
+  --superficie-forte: 38 38 38;
+  --ok: 52 211 153;      --ok-fundo: 9 40 30;         --ok-borda: 22 83 61;
+  --perigo: 251 113 133; --perigo-fundo: 58 15 24;    --perigo-borda: 122 31 51;
+  --aviso: 251 191 36;   --aviso-fundo: 58 37 8;      --aviso-borda: 138 90 18;
+  --grafico-grade: #262626; --grafico-eixo: #3a3a3a; --grafico-texto: #a3a3a3; --grafico-escala: #7a7a7a;
+}
+
 @layer base {
   html { font-family: theme('fontFamily.sans'); }
   body { @apply bg-superficie-suave text-texto text-[14px] antialiased; }
   input, select, textarea {
-    @apply w-full rounded-lg border border-borda bg-white px-3 py-2 text-[14px] text-texto outline-none
+    @apply w-full rounded-lg border border-borda bg-superficie px-3 py-2 text-[14px] text-texto outline-none
       focus:border-marca focus:ring-2 focus:ring-marca/20 disabled:bg-superficie-suave disabled:text-texto-suave;
   }
   label { @apply block text-[12.5px] font-semibold text-texto-suave mb-1; }
   table { @apply w-full border-collapse text-[13.5px]; }
-  th { @apply text-left text-xs font-semibold uppercase tracking-wider text-slate-500 border-b border-borda px-2.5 py-2; }
-  td { @apply border-b border-slate-100 px-2.5 py-2 align-top; }
+  th { @apply text-left text-xs font-semibold uppercase tracking-wider text-texto-suave border-b border-borda px-2.5 py-2; }
+  td { @apply border-b border-borda-suave px-2.5 py-2 align-top; }
   tr:last-child td { @apply border-b-0; }
-  tbody tr { @apply transition-colors hover:bg-slate-50/70; }
+  tbody tr { @apply transition-colors hover:bg-superficie-suave/70; }
 }
 
 @layer components {
   /* cartão: branco sobre o slate-50 do fundo, borda suave e sombra curta */
-  .painel { @apply bg-white border border-slate-200/80 shadow-sm rounded-xl px-5 py-[18px] mb-4; }
+  .painel { @apply bg-superficie border border-borda/80 shadow-sm rounded-xl px-5 py-[18px] mb-4; }
   .sub { @apply text-[12px] text-texto-suave; }
   /* rótulo de seção e de cartão: o mesmo em toda a aplicação */
-  .rotulo { @apply text-xs font-semibold uppercase tracking-wider text-slate-500; }
+  .rotulo { @apply text-xs font-semibold uppercase tracking-wider text-texto-suave; }
   .botao { @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-[13.5px] font-semibold
     bg-marca text-white shadow-sm hover:bg-marca-escuro disabled:opacity-50 disabled:cursor-not-allowed transition-colors; }
-  .botao-secundario { @apply botao bg-white text-texto border border-borda hover:bg-slate-50 shadow-none; }
+  .botao-secundario { @apply botao bg-superficie text-texto border border-borda hover:bg-superficie-suave shadow-none; }
   .botao-perigo { @apply botao bg-perigo-fundo text-perigo border border-perigo-borda hover:bg-perigo/10 shadow-none; }
   /* ações dentro de tabela: compactas, numa linha só */
   td .botao, td .botao-secundario, td .botao-perigo { @apply px-2.5 py-1.5 text-[12.5px] whitespace-nowrap; }

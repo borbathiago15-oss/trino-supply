@@ -145,7 +145,7 @@ export function Contratos() {
                               : '—'}
                           </td>
                           <td>
-                            <Badge classe={c.current ? 'bg-ok-fundo text-ok' : 'bg-slate-100 text-slate-500'}>
+                            <Badge classe={c.current ? 'bg-ok-fundo text-ok' : 'bg-superficie-forte text-texto-suave'}>
                               {c.current ? 'VIGENTE' : 'FORA DA VIGÊNCIA'}
                             </Badge>
                           </td>

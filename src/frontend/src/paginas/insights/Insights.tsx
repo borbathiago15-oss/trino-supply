@@ -192,7 +192,7 @@ export function Insights() {
               <div className="flex flex-col gap-2" data-testid="lista-insights">
                 {dados.insights.map((i, idx) => (
                   <div key={`${i.code}-${idx}`} data-achado={i.code}
-                    className={'rounded-lg border border-l-4 border-slate-200/80 bg-white px-4 py-3 shadow-sm '
+                    className={'rounded-lg border border-l-4 border-borda/80 bg-superficie px-4 py-3 shadow-sm '
                       + (CLASSE_ACHADO[i.severity] ?? CLASSE_ACHADO.info)}>
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge classe={BADGE_ACHADO[i.severity] ?? BADGE_ACHADO.info}>{i.code}</Badge>

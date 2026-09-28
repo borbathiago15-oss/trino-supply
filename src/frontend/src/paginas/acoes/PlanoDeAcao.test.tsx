@@ -61,7 +61,7 @@ describe('a linha do plano', () => {
     // a pergunta que interessa no plano encerrado é outra: alguém decidiu parar, e quando
     const encerrado = plano({ life: 'ENCERRADO', status: 'ATRASADO' });
     expect(rotuloDaLinha(encerrado)).toBe('Encerrado');
-    expect(tomDaLinha(encerrado)).toContain('slate');
+    expect(tomDaLinha(encerrado)).toContain('texto-suave');
   });
 
   it('encerrado com pendência é dito na própria linha', () => {

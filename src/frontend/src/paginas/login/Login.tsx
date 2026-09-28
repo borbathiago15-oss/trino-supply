@@ -1,3 +1,4 @@
+import { BotaoDeTema } from '@/componentes/BotaoDeTema';
 import { FaixaDaMarca } from '@/componentes/FaixaDaMarca';
 import { HexagonosDaMarca } from '@/componentes/HexagonosDaMarca';
 import { Fragment, useState, type FormEvent, type ReactNode } from 'react';
@@ -134,7 +135,8 @@ export function Login() {
       </section>
 
       {/* painel de acesso */}
-      <section className="flex items-center justify-center bg-superficie px-5 pb-10 pt-7 min-[981px]:px-[clamp(20px,4vw,56px)] min-[981px]:py-10">
+      <section className="relative flex items-center justify-center bg-superficie px-5 pb-10 pt-7 min-[981px]:px-[clamp(20px,4vw,56px)] min-[981px]:py-10">
+        <BotaoDeTema className="absolute right-4 top-4" />
         <div className="w-full max-w-[460px] min-[981px]:max-w-[400px] motion-safe:animate-entrada motion-safe:[animation-delay:.06s]">
           <span aria-hidden="true" className="mb-4 block h-[3px] w-[34px] rounded-sm bg-marca-vermelho" />
           <h1 className="mb-1.5 text-[22px] font-bold -tracking-[.2px]">Acesse sua conta</h1>

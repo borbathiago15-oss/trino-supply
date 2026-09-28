@@ -25,7 +25,7 @@ export const MINIMO_DO_MOTIVO = 20;
 export function tomDoSinal(s: Sinal): string {
   if (s.severidade === 'risco') return 'bg-perigo-fundo text-perigo';
   if (s.severidade === 'atencao') return 'bg-aviso-fundo text-aviso';
-  return 'bg-slate-100 text-texto-suave';
+  return 'bg-superficie-forte text-texto-suave';
 }
 
 /** A trilha das fases. Encerrado não está nela: ele é veredito, e tem botão próprio. */
@@ -81,7 +81,7 @@ function ListaDeAcoes({ acoes }: { acoes: AcaoDoCiclo[] }) {
                 {/* suspensa e vencida diz "suspensa", nunca "atrasada": ela está parada
                     por decisão, e cobrá-la seria culpar a equipe pela decisão da gestão */}
                 <Badge classe={a.late ? 'bg-perigo-fundo text-perigo'
-                  : a.open ? 'bg-slate-100 text-texto-suave' : 'bg-ok-fundo text-ok'}>
+                  : a.open ? 'bg-superficie-forte text-texto-suave' : 'bg-ok-fundo text-ok'}>
                   {a.late ? 'Atrasada' : a.status}
                 </Badge>
               </td>
@@ -186,11 +186,11 @@ function Conteudo({ completo, recarregar, avisar }: {
         </>
       }>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge classe={encerrado ? 'bg-slate-100 text-slate-600' : 'bg-marca/10 text-marca'}>
+          <Badge classe={encerrado ? 'bg-superficie-forte text-texto-suave' : 'bg-marca/10 text-marca'}>
             {c.phaseLabel}
           </Badge>
-          <Badge classe="bg-slate-100 text-texto-suave">{c.scopeLabel}</Badge>
-          {completo.sectorName && <Badge classe="bg-slate-100 text-texto-suave">{completo.sectorName}</Badge>}
+          <Badge classe="bg-superficie-forte text-texto-suave">{c.scopeLabel}</Badge>
+          {completo.sectorName && <Badge classe="bg-superficie-forte text-texto-suave">{completo.sectorName}</Badge>}
           {c.goalMet !== null && (
             <Badge classe={c.goalMet ? 'bg-ok-fundo text-ok' : 'bg-perigo-fundo text-perigo'}>
               {c.goalMet ? 'Meta atingida' : 'Meta não atingida'}

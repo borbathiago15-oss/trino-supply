@@ -24,9 +24,9 @@ function Numero({ rotulo, valor, detalhe, tendencia, tom = 'neutro', testid, met
   const classeTendencia = !v || v.pct === 0 ? 'text-texto-suave'
     : (v.pct > 0) === tendencia!.bomQuandoSobe ? 'text-ok' : 'text-perigo';
   return (
-    <div data-testid={testid} className={`rounded-xl border bg-white px-4 py-4 shadow-sm ${tom === 'atencao' ? 'border-aviso/50' : tom === 'ok' ? 'border-ok/40' : 'border-slate-200/80'}`}>
+    <div data-testid={testid} className={`rounded-xl border bg-superficie px-4 py-4 shadow-sm ${tom === 'atencao' ? 'border-aviso/50' : tom === 'ok' ? 'border-ok/40' : 'border-borda/80'}`}>
       <div className="rotulo">{rotulo}</div>
-      <div className="mt-1.5 text-[30px] font-extrabold leading-none tracking-tight text-slate-900 tabular-nums">{valor}</div>
+      <div className="mt-1.5 text-[30px] font-extrabold leading-none tracking-tight text-texto tabular-nums">{valor}</div>
       <div className="sub mt-2 flex flex-wrap items-center gap-x-2">
         {v && <span className={`font-semibold ${classeTendencia}`}>{v.sinal} {Math.abs(v.pct)}% vs. anterior</span>}
         {detalhe && <span>{detalhe}</span>}
@@ -54,7 +54,7 @@ function FilaDeDecisao({ fila }: { fila: ProcessoParaAprovar[] }) {
             <span className="text-[13px]">{e.fornecedor ?? '—'}</span>
             <strong className="whitespace-nowrap tabular-nums">{e.total != null ? moeda(e.total) : '—'}</strong>
             {espera != null && (
-              <Badge classe={espera >= 5 ? 'bg-perigo-fundo text-perigo' : espera >= 3 ? 'bg-aviso-fundo text-aviso' : 'bg-slate-100 text-slate-600'}>
+              <Badge classe={espera >= 5 ? 'bg-perigo-fundo text-perigo' : espera >= 3 ? 'bg-aviso-fundo text-aviso' : 'bg-superficie-forte text-texto-suave'}>
                 {espera === 0 ? 'hoje' : `${espera} dia(s)`}
               </Badge>
             )}
@@ -114,11 +114,11 @@ export function VisaoDaDiretoria() {
     <>
       <Painel titulo="Como está a compra da empresa" acoes={
         <div className="flex flex-wrap items-center gap-2">
-          <div role="group" aria-label="Período" className="flex gap-1 rounded-lg border border-borda bg-white p-1">
+          <div role="group" aria-label="Período" className="flex gap-1 rounded-lg border border-borda bg-superficie p-1">
             {PERIODOS.map((p) => (
               <button key={p.chave} type="button" aria-pressed={periodo === p.chave} data-periodo={p.chave}
                 onClick={() => setPeriodo(p.chave)}
-                className={`rounded-md px-3 py-1 text-[13px] font-semibold ${periodo === p.chave ? 'bg-marca text-white' : 'text-texto-suave hover:bg-slate-50'}`}>
+                className={`rounded-md px-3 py-1 text-[13px] font-semibold ${periodo === p.chave ? 'bg-marca text-white' : 'text-texto-suave hover:bg-superficie-suave'}`}>
                 {p.rotulo}
               </button>
             ))}

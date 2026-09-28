@@ -33,7 +33,7 @@ export const Nota = ({ children }: { children: ReactNode }) =>
 export function BadgeAtivo({ ativo, rotuloAtivo = 'ATIVO', rotuloInativo = 'INATIVO' }:
   { ativo: boolean; rotuloAtivo?: string; rotuloInativo?: string }) {
   return (
-    <span className={'badge ' + (ativo ? 'bg-ok-fundo text-ok' : 'bg-slate-100 text-slate-500')}>
+    <span className={'badge ' + (ativo ? 'bg-ok-fundo text-ok' : 'bg-superficie-forte text-texto-suave')}>
       {ativo ? rotuloAtivo : rotuloInativo}
     </span>
   );

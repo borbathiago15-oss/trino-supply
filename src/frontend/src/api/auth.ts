@@ -17,9 +17,10 @@ export interface Usuario {
 
 interface RespostaLogin extends Tokens { user: Usuario }
 
-export async function entrar(email: string, password: string): Promise<Usuario> {
+/** `lembrar` guarda a sessão no aparelho em vez de na aba: é o que deixa o app de bolso aberto entre usos. */
+export async function entrar(email: string, password: string, lembrar = false): Promise<Usuario> {
   const data = await api<RespostaLogin>('/api/v1/auth/login', { method: 'POST', body: { email, password } });
-  sessao.set(data);
+  sessao.set(data, lembrar);
   return data.user;
 }
 

@@ -1,4 +1,5 @@
-import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { CascaDoApp, InicioDoApp } from '@/app/CascaDoApp';
+import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { ToastProvider } from '@/componentes/Toast';
 import { AppLayout } from '@/layout/AppLayout';
 import { Login } from '@/paginas/login/Login';
@@ -67,6 +68,13 @@ function Protegida() {
   return <Outlet />;
 }
 
+/** `/app/fornecedores` de um favorito antigo é `/fornecedores` de hoje, com a mesma consulta. */
+function AppAntigo() {
+  const resto = useParams()['*'] ?? '';
+  const { search } = useLocation();
+  return <Navigate to={`/${resto}${search}`} replace />;
+}
+
 /** A raiz leva cada papel para onde o dia dele começa (`paginaInicial`). */
 function Inicio() {
   const { usuario } = useSessao();
@@ -85,6 +93,16 @@ export function Rotas() {
         {/* o cockpit da TV também fica fora do layout: é tela de parede, sem menu
             nem cabeçalho — ninguém navega nela, e cada pixel é área de leitura */}
         <Route path="/cockpit" element={<Cockpit />} />
+        {/* o app de bolso (PWA): as mesmas telas, numa casca com três abas e sem o menu */}
+        <Route path="/app" element={<CascaDoApp />}>
+          <Route index element={<InicioDoApp />} />
+          <Route path="/app/aprovacoes" element={<CentralDeAprovacao />} />
+          <Route path="/app/diretoria" element={<VisaoDaDiretoria />} />
+          <Route path="/app/painel" element={<DashboardSuprimentos />} />
+        </Route>
+        {/* o React já morou em /app (#82), e os favoritos daquela época continuam valendo:
+            o que não é tela do app de bolso cai na mesma tela do sistema */}
+        <Route path="/app/*" element={<AppAntigo />} />
         <Route element={<AppLayout />}>
           <Route index element={<Inicio />} />
           <Route path="/pedidos" element={<PedidosLista />} />

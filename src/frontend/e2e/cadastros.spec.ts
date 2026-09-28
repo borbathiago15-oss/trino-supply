@@ -234,6 +234,7 @@ test.describe('Cadastros (React)', () => {
   });
 
   test('as URLs antigas em /app/ continuam levando à tela certa', async ({ page }) => {
+    // /app hoje é o app de bolso; o que não é tela dele é favorito antigo, e o roteador redireciona
     await abrirAutenticado(page, '/app/fornecedores');
     await expect(page).toHaveURL(/\/fornecedores$/);
     await expect(page.locator('#titulo-pagina')).toHaveText('Fornecedores');

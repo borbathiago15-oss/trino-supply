@@ -4,6 +4,7 @@ import { HexagonosDaMarca } from '@/componentes/HexagonosDaMarca';
 import { Fragment, useState, type FormEvent, type ReactNode } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { entrar, type Usuario } from '@/api/auth';
+import { sessao } from '@/api/sessao';
 import { useSessao } from '@/sessao/SessaoProvider';
 
 /** Traço do ciclo de suprimentos mostrado no lado institucional. */
@@ -50,6 +51,11 @@ function Elo() {
 export const destinoDe = (u: Usuario, de?: string) =>
   u.mustChangePassword ? '/trocar-senha' : de ?? '/pedidos';
 
+/** O app de bolso instalado abre em janela própria (`display-mode: standalone`). */
+export const appInstalado = () => {
+  try { return globalThis.matchMedia?.('(display-mode: standalone)').matches ?? false; } catch { return false; }
+};
+
 export function Login() {
   const { usuario, entrou } = useSessao();
   const navegar = useNavigate();
@@ -57,6 +63,9 @@ export function Login() {
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [mostrar, setMostrar] = useState(false);
+  // vem marcada para quem já pediu, e no app instalado: ele é fechado a cada uso e é
+  // pessoal — no computador, que pode ser compartilhado, a escolha é de quem entra
+  const [lembrar, setLembrar] = useState(() => sessao.lembrada || appInstalado());
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
@@ -66,7 +75,7 @@ export function Login() {
     ev.preventDefault();
     setErro(null); setEnviando(true);
     try {
-      const logado = await entrar(email, senha);
+      const logado = await entrar(email, senha, lembrar);
       entrou(logado);
       navegar(destinoDe(logado, state?.de), { replace: true });
     } catch (e) {
@@ -94,11 +103,13 @@ export function Login() {
             celular o painel é curto e o texto ocupa tudo, e os contornos cairiam em cima dele */}
         <HexagonosDaMarca className="hidden min-[561px]:block" />
 
-        <div className="relative w-full max-w-[520px] motion-safe:animate-entrada">
+        {/* no celular a marca é o centro da tela e ocupa a largura: encostada à esquerda e
+            pequena parecia um logotipo de rodapé; a partir do tablet volta ao alinhamento do painel */}
+        <div className="relative w-full max-w-[520px] text-center min-[561px]:text-left motion-safe:animate-entrada">
           <img
             src="/assets/brand/trino-supply-logo.png" width={640} height={204}
             alt="Trino Supply — Gestão Inteligente de Suprimentos"
-            className="block h-auto w-[min(240px,82%)] min-[561px]:w-[min(280px,70%)] min-[981px]:w-[min(360px,78%)]"
+            className="mx-auto block h-auto w-[min(340px,92%)] min-[561px]:mx-0 min-[561px]:w-[min(280px,70%)] min-[981px]:w-[min(360px,78%)]"
           />
           <p className="mt-3.5 text-[11px] font-bold uppercase tracking-[2px] text-marca-prata min-[561px]:mt-5 min-[561px]:text-[12px] min-[561px]:tracking-[2.4px]">
             Enterprise Supply Management
@@ -167,6 +178,15 @@ export function Login() {
                 {mostrar ? 'Ocultar' : 'Mostrar'}
               </button>
             </div>
+
+            <label htmlFor="lembrar" className="mt-4 flex cursor-pointer items-start gap-2.5 text-[13.5px] font-normal">
+              <input id="lembrar" name="lembrar" type="checkbox" className="mt-0.5 h-4 w-4 flex-none accent-marca"
+                checked={lembrar} onChange={(e) => setLembrar(e.target.checked)} />
+              <span>
+                Manter conectado neste aparelho
+                <span className="block text-[12px] text-texto-suave">Deixe desmarcado em computador compartilhado.</span>
+              </span>
+            </label>
 
             <button type="submit" className="botao mt-[22px] w-full py-3.5 text-[15px]" disabled={enviando}>
               {enviando ? 'Entrando…' : 'Entrar'}

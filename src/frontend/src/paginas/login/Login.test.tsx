@@ -31,7 +31,7 @@ const abrir = () =>
   );
 
 describe('tela de login', () => {
-  beforeEach(() => { sessionStorage.clear(); vi.clearAllMocks(); });
+  beforeEach(() => { sessionStorage.clear(); localStorage.clear(); vi.clearAllMocks(); });
 
   it('mostra a identidade corporativa ao lado do formulário', () => {
     abrir();
@@ -62,8 +62,26 @@ describe('tela de login', () => {
     await usuario.type(document.querySelector('#password')!, 'TrinoSupply@2026!');
     await usuario.click(screen.getByRole('button', { name: 'Entrar' }));
 
-    expect(entrar).toHaveBeenCalledWith('admin@trinosupply.com.br', 'TrinoSupply@2026!');
+    // no navegador a caixa vem desmarcada: a sessão fica na aba
+    expect(entrar).toHaveBeenCalledWith('admin@trinosupply.com.br', 'TrinoSupply@2026!', false);
     await waitFor(() => expect(screen.getByText('Meus pedidos')).toBeInTheDocument());
+  });
+
+  it('"Manter conectado" vai junto na entrada, e vem marcada para quem já pediu', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(entrar).mockResolvedValue(admin);
+    abrir();
+    const caixa = screen.getByRole('checkbox', { name: /Manter conectado neste aparelho/ });
+    expect(caixa).not.toBeChecked();
+    await usuario.click(caixa);
+    await usuario.type(screen.getByLabelText('E-mail'), 'admin@trinosupply.com.br');
+    await usuario.type(document.querySelector('#password')!, 'TrinoSupply@2026!');
+    await usuario.click(screen.getByRole('button', { name: 'Entrar' }));
+    expect(entrar).toHaveBeenCalledWith('admin@trinosupply.com.br', 'TrinoSupply@2026!', true);
+
+    localStorage.setItem('ts.lembrar', '1');      // a escolha da última entrada neste aparelho
+    abrir();
+    expect(screen.getAllByRole('checkbox', { name: /Manter conectado neste aparelho/ }).at(-1)).toBeChecked();
   });
 
   it('senha provisória leva à troca, e não ao destino guardado', () => {

@@ -58,7 +58,8 @@ export interface MesSuprimentos {
   poValue: number;
 }
 
-export interface LinhaRank { label: string; value: number; count: number }
+/** `key` é o que o clique na barra manda como filtro (id, código); sem chave própria, é o rótulo. */
+export interface LinhaRank { label: string; key?: string; value: number; count: number }
 
 export interface Rankings {
   suppliers: LinhaRank[]; buyers: LinhaRank[]; requesters: LinhaRank[];

@@ -32,6 +32,19 @@ for (const t of TAMANHOS) {
       await semRolagemLateral(page, t.width);
     });
 
+    test('painel: os pontos de atenção e as tabelas (ou os cards) aparecem', async ({ page }) => {
+      await abrirAutenticado(page, '/painel');
+      await expect(page.getByTestId('pontos-de-atencao').or(page.getByTestId('sem-pontos'))).toBeVisible();
+      // no celular a tabela dá lugar a um card por linha; no computador é o contrário
+      const tabela = page.getByTestId('painel-comprador');
+      const cards = page.getByTestId('painel-comprador-cards');
+      if (await tabela.count()) {
+        if (t.width < 768) { await expect(cards).toBeVisible(); await expect(tabela).toBeHidden(); }
+        else { await expect(tabela).toBeVisible(); await expect(cards).toBeHidden(); }
+      }
+      await semRolagemLateral(page, t.width);
+    });
+
     test('diretoria: os números e a fila cabem sem rolar de lado', async ({ page }) => {
       await abrirAutenticado(page, '/diretoria');
       await expect(page.locator('#titulo-pagina')).toBeVisible();
@@ -53,4 +66,16 @@ test('painel: os filtros de "Mais filtros" chegam ao servidor e voltam como chip
   const semFiltro = page.waitForResponse((r) => r.url().includes('analytics/supply?') && !r.url().includes('priority='));
   await page.getByRole('button', { name: /Remover filtro Prioridade: Urgente/ }).click();
   expect((await semFiltro).status()).toBe(200);
+});
+
+test('painel: tocar a barra do ranking aplica o filtro cruzado e o chip aparece', async ({ page }) => {
+  await abrirAutenticado(page, '/painel');
+  await expect(page.getByTestId('kpis-painel')).toBeVisible();
+  const barra = page.getByRole('button', { name: /^Filtrar por / }).first();
+  if (await barra.count() === 0) return; // banco sem pedido nem SC: nada para filtrar
+  const nome = (await barra.getAttribute('title'))!.replace('Filtrar por ', '');
+  const consulta = page.waitForResponse((r) => r.url().includes('analytics/supply?'));
+  await barra.click();
+  expect((await consulta).status()).toBe(200);
+  await expect(page.getByTestId('filtros-ativos')).toContainText(nome);
 });

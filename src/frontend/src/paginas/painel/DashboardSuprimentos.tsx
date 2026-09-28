@@ -87,7 +87,7 @@ function Prazos({ familias }: { familias: PrazoFamilia[] }) {
     );
   };
   return (
-    <TabelaResponsiva linhas={familias} chave={(f) => f.family} testid="tabela-prazos" minLargura={900} colunas={[
+    <TabelaResponsiva linhas={familias} chave={(f) => f.family} testid="tabela-prazos" minLargura={900} colunasNoCard={1} colunas={[
       { titulo: 'Família', principal: true, render: (f) => <strong>{f.family}</strong> },
       ...familias[0].stages.map((e, i) => ({ titulo: e.stage, render: (f: PrazoFamilia) => etapa(f, i) })),
       { titulo: 'Total', classe: 'whitespace-nowrap', render: (f) => (

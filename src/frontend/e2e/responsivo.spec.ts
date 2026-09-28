@@ -46,6 +46,11 @@ for (const t of TAMANHOS) {
     test('painel: os pontos de atenção e as tabelas (ou os cards) aparecem', async ({ page }) => {
       await abrirAutenticado(page, '/painel');
       await expect(page.getByTestId('pontos-de-atencao').or(page.getByTestId('sem-pontos'))).toBeVisible();
+      // no card do celular nenhum campo transborda por cima do vizinho: ele quebra a linha
+      await expect(page.getByTestId('kpis-painel')).toBeVisible();
+      const transbordando = await page.evaluate(() => Array.from(document.querySelectorAll('[data-testid$="-cards"] dd'))
+        .filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent));
+      expect(transbordando).toEqual([]);
       // no celular a tabela dá lugar a um card por linha; no computador é o contrário
       const tabela = page.getByTestId('painel-comprador');
       const cards = page.getByTestId('painel-comprador-cards');

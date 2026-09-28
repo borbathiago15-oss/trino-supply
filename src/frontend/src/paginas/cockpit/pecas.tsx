@@ -67,7 +67,7 @@ export function CartaoVital({
   rodape?: React.ReactNode; tom?: string;
 }) {
   return (
-    <section className="flex flex-col justify-between rounded-2xl border border-slate-800 bg-slate-900/90 p-5 shadow-2xl">
+    <section className="flex flex-col justify-between rounded-2xl border border-white/10 bg-fundo-card/90 p-5 shadow-2xl">
       <h2 className="flex items-center gap-2 text-[13px] font-semibold uppercase tracking-wider text-slate-400">
         <span aria-hidden>{icone}</span>{titulo}
       </h2>

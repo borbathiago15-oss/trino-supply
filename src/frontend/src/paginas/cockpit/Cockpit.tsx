@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { HexagonosDaMarca } from '@/componentes/HexagonosDaMarca';
 import { INTERVALO_DO_COCKPIT, obterCockpit, type CockpitDados } from '@/api/torre';
 import { moeda } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
@@ -62,7 +63,7 @@ export function Cockpit() {
 
   if (!dados) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-400">
+      <div className="flex min-h-screen items-center justify-center bg-fundo text-slate-400">
         {erro ? `Sem sinal — ${erro}` : 'Conectando ao cockpit…'}
       </div>
     );
@@ -73,7 +74,8 @@ export function Cockpit() {
   const slaOk = slaAtingido(kpis.slaSemanalPct, kpis.metaSlaPct);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-slate-950 p-5 text-white" data-testid="cockpit">
+    <div className="relative flex h-screen flex-col overflow-hidden bg-fundo p-5 text-white" data-testid="cockpit">
+      <HexagonosDaMarca variante="cantos" opacidade={0.6} />
       {/* NÍVEL 1 — barra de estado */}
       <header className="flex items-center justify-between pb-4">
         <div className="flex items-center gap-4">
@@ -141,7 +143,7 @@ export function Cockpit() {
       <div className="mt-4 flex items-stretch gap-2" data-testid="esteira">
         {pipeline.map((no, i) => (
           <div key={no.etapa} className="flex flex-1 items-center gap-2">
-            <div className={`flex-1 rounded-xl border bg-slate-900/90 px-4 py-3 ${CLASSE_DO_GARGALO[no.gargalo]}`}
+            <div className={`flex-1 rounded-xl border bg-fundo-card/90 px-4 py-3 ${CLASSE_DO_GARGALO[no.gargalo]}`}
               data-etapa={no.etapa} data-gargalo={no.gargalo}>
               <div className="text-[12px] uppercase tracking-wider text-slate-400">{no.rotulo}</div>
               <div className="flex items-baseline gap-2">
@@ -158,7 +160,7 @@ export function Cockpit() {
 
       {/* NÍVEL 4 — radar (60%) e produtividade (40%) */}
       <div className="mt-4 grid min-h-0 flex-1 grid-cols-5 gap-4">
-        <section className="col-span-3 flex min-h-0 flex-col rounded-2xl border border-slate-800 bg-slate-900/90 p-4">
+        <section className="col-span-3 flex min-h-0 flex-col rounded-2xl border border-white/10 bg-fundo-card/90 p-4">
           <h2 className="pb-2 text-[13px] font-semibold uppercase tracking-wider text-slate-400">
             Radar de exceções — ação imediata
           </h2>
@@ -184,7 +186,7 @@ export function Cockpit() {
         </section>
 
         <section className="col-span-2 flex min-h-0 flex-col gap-4">
-          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-800 bg-slate-900/90 p-4">
+          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-white/10 bg-fundo-card/90 p-4">
             <h2 className="pb-2 text-[13px] font-semibold uppercase tracking-wider text-slate-400">
               Produtividade do dia
             </h2>
@@ -215,7 +217,7 @@ export function Cockpit() {
             )}
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-slate-800 bg-slate-900/90 p-4">
+          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-white/10 bg-fundo-card/90 p-4">
             <h2 className="pb-2 text-[13px] font-semibold uppercase tracking-wider text-slate-400">
               Descargas previstas
             </h2>

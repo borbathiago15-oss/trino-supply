@@ -693,6 +693,19 @@ redirecionamento saiu do `Program.cs` e virou a rota `/app/*` do roteador (`AppA
 o servidor engolia o app antes de o React vê-lo. Não é app nativo, de propósito: sem loja, sem
 conta de desenvolvedor, sem segunda base para divergir — publica junto com o sistema.
 
+**A identidade visual é a do Grupo Trino, e mora nos tokens.** Decisão da empresa (2026-09): a
+cor de ação (`marca`) é o **vermelho da seta do logo** (`#9d202c`, o bordô dos botões do site;
+hover `#7e1a23`), e o fundo escuro (`fundo`: menu, login, portal, cockpit) é o **preto da marca**
+(`#0b0d0f`), não um azul-marinho. O laranja, o azul e o verde da faixa de quatro cores
+(`marca.laranja/azul/verde`) são apoio — gráficos, avisos, destaque —, **nunca** a cor de ação.
+`componentes/FaixaDaMarca` é a faixa, num lugar só (sob o logo do menu e no pé do login); a
+paleta dos gráficos (`CORES`) é a mesma faixa, com o **significado das posições preservado**
+(azul informação, verde aprovado, laranja atenção, vermelho rejeitado). O perigo continua rose em
+tinta clara com texto rose: sólido bordô é ação, tinta rose é alerta, e os dois não se confundem.
+O laranja da marca não é fundo de botão com texto branco — não passa no contraste mínimo. As
+telas de trabalho seguem claras (slate-50 e cards brancos): a leitura longa é delas, e o preto é
+da moldura. Tela nova não escolhe cor: usa `marca`, `fundo`, `ok`, `aviso`, `perigo`.
+
 **Cuidado com a palavra "pedido" (D7).** "Tipo de pedido" no vocabulário do usuário é o tipo
 da **solicitação**; no do sistema, "pedido" é a O.C. O teste do menu pegou o rótulo errado — é
 para isso que ele existe.

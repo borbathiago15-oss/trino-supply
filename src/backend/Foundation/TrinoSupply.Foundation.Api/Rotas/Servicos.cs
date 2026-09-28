@@ -43,6 +43,7 @@ public static class Servicos
         servicos.AddScoped<PagamentoService>();
         servicos.AddScoped<HistoricoDePrecoService>();
         servicos.AddScoped<ScoreWeightsService>();
+        servicos.AddScoped<Analytics.MetasDosIndicadoresService>();
         servicos.AddScoped<PrazoDaEtapaService>();
         servicos.AddScoped<TipoDeSolicitacaoService>();
         servicos.AddScoped<AvisoDoUsuarioService>();

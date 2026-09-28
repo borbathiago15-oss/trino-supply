@@ -159,7 +159,8 @@ public static class AnalyticsRotas
             return new FiltroRelatorio(f, t, Preenchido(empresa), Preenchido(centroCusto), compradorId);
         }
 
-        analytics.MapGet("/report", async (RelatorioExecutivoService svc, ClaimsPrincipal p, HttpContext ctx,
+        analytics.MapGet("/report", async (RelatorioExecutivoService svc, MetasDosIndicadoresService metas,
+            ClaimsPrincipal p, HttpContext ctx,
             TimeProvider clock, DateOnly? from, DateOnly? to, string? company, string? costCenter,
             Guid? buyerId, CancellationToken ct) =>
         {
@@ -167,7 +168,15 @@ public static class AnalyticsRotas
                 return Error(ctx, 403, "AN-ERR-900", "Seu papel não acessa o relatório executivo.");
             if (!ModulesOf(p).Contains(AppModules.Compras) && !ModulesOf(p).Contains(AppModules.Insights))
                 return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para este módulo.");
-            return Ok(await svc.GerarAsync(Recorte(clock, from, to, company, costCenter, buyerId), ct), ctx);
+            var rel = await svc.GerarAsync(Recorte(clock, from, to, company, costCenter, buyerId), ct);
+            // a diretoria compara com as mesmas metas do painel, pela mesma régua
+            var goals = await metas.CompararAsync(new Dictionary<string, decimal?>
+            {
+                ["poTotalValue"] = rel.Kpis.Spend,
+                ["saving"] = rel.Kpis.SavingPercent != null ? rel.Kpis.SavingTotal : null,
+                ["otif"] = (decimal?)rel.Kpis.OtifPercent,
+            }, rel.From, rel.To, ct);
+            return Ok(rel with { Goals = goals }, ctx);
         });
 
         analytics.MapGet("/report/pdf", async (RelatorioExecutivoService svc, AppDbContext db,

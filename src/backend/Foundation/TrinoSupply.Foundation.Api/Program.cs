@@ -215,6 +215,7 @@ app.MapSuporte();
 // ---- Cadastros de pagamento: formas e condições -------------------------------
 app.MapPagamentos();
 app.MapPesosDoScore();
+app.MapMetas();
 app.MapPrazosDasEtapas();
 app.MapPlanoDeAcao();
 app.MapMelhoria();

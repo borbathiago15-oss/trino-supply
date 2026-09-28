@@ -136,7 +136,11 @@ public record RelatorioExecutivo(
     IReadOnlyList<TempoDaEtapa> CycleTimes,
     IReadOnlyList<LinhaSavingRateado> SavingByFamily, IReadOnlyList<LinhaSavingRateado> SavingBySupplier,
     BlocoReferencia Reference,
-    OrigemDaDemanda Demand, BlocoBids Bids, BlocoPagamento Payment, AderenciaDaOc Adherence);
+    OrigemDaDemanda Demand, BlocoBids Bids, BlocoPagamento Payment, AderenciaDaOc Adherence)
+{
+    /// <summary>Os números do relatório diante das metas cadastradas; sem meta, o indicador fica de fora.</summary>
+    public IReadOnlyDictionary<string, ComparacaoComMeta>? Goals { get; init; }
+}
 
 /// <summary>
 /// Relatório executivo de compras: os seis blocos que a diretoria pede sobre um mesmo

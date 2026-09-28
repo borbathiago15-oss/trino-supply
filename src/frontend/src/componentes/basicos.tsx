@@ -81,8 +81,8 @@ export function Dado({ rotulo, children }: { rotulo: string; children: ReactNode
  * mês, sobretudo: "valor comprado de agosto" muda inteiro conforme a data. Ela abre por toque,
  * e não por passar o mouse, porque no celular não há mouse.
  */
-export function Kpi({ rotulo, valor, detalhe, definicao }:
-  { rotulo: string; valor: ReactNode; detalhe?: ReactNode; definicao?: string }) {
+export function Kpi({ rotulo, valor, detalhe, definicao, meta }:
+  { rotulo: string; valor: ReactNode; detalhe?: ReactNode; definicao?: string; meta?: ReactNode }) {
   const [aberta, setAberta] = useState(false);
   return (
     <div className="relative min-w-0 rounded-xl border border-slate-200/80 bg-white px-4 py-3.5 shadow-sm">
@@ -94,6 +94,7 @@ export function Kpi({ rotulo, valor, detalhe, definicao }:
       <div className={definicao ? 'rotulo pr-5' : 'rotulo'}>{rotulo}</div>
       <div className="mt-1.5 text-3xl font-extrabold leading-none tracking-tight text-slate-900 tabular-nums">{valor}</div>
       {detalhe && <div className="sub mt-1.5">{detalhe}</div>}
+      {meta}
       {definicao && aberta && <p className="sub mt-1.5 border-t border-slate-100 pt-1.5" data-testid="definicao-kpi">{definicao}</p>}
     </div>
   );

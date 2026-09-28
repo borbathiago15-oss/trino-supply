@@ -30,8 +30,8 @@ public partial class TorreDeControleService
 
     /// <summary>
     /// Ponto de partida da meta mensal de saving, como <c>PrazoDaEtapaService.Padrao</c> é o
-    /// das etapas: vale enquanto ninguém configurar a da empresa. Número na parede sem dono
-    /// vira número que ninguém persegue — está aqui, num lugar só, para ser trocado.
+    /// das etapas: vale enquanto ninguém configurar a da empresa. A meta cadastrada em
+    /// Metas dos indicadores (<c>saving</c>) vence este número — a parede e o painel cobram a mesma.
     /// </summary>
     public const decimal MetaSavingMensal = 50_000m;
 
@@ -171,7 +171,8 @@ public partial class TorreDeControleService
                 SlaSemanalPct: Pct(dentroDoPrazo, medidosNoPrazo) ?? 100,
                 MetaSlaPct: MetaSlaSemanal,
                 SavingMesTotal: saving,
-                MetaSavingMes: MetaSavingMensal,
+                MetaSavingMes: await db.IndicatorGoals.Where(g => g.Indicator == "saving")
+                    .Select(g => (decimal?)g.MonthlyValue).FirstOrDefaultAsync(ct) ?? MetaSavingMensal,
                 OtifGeralPct: otif.Pct,
                 OtifMedidos: otif.Medidos),
             esteira,

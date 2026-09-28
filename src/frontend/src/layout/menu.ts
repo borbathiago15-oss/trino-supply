@@ -165,6 +165,8 @@ export const MENU: GrupoMenu[] = [
     // a régua com que o sistema compara proposta é cadastro como outro qualquer — e fica
     // aqui, e não na tela da cotação, porque vale para toda cotação e não para uma
     { id: 'score-weights', rotulo: 'Pesos do Score', rota: '/pesos-score', modulo: 'COMPRAS', mostrar: ehAdmin },
+    // a meta do card é da empresa, como a régua do score: cadastro do administrador
+    { id: 'indicator-goals', rotulo: 'Metas dos Indicadores', rota: '/metas', modulo: 'COMPRAS', mostrar: ehAdmin },
     // o prazo de cada etapa é a régua com que a Torre marca o estouro — cadastro, como os
     // pesos do score, e pelo mesmo motivo: vale para toda a operação, não para uma tela
     // os dois andam juntos: o tipo classifica o pedido, e o prazo é escolhido pelo tipo

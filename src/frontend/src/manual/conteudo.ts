@@ -499,6 +499,19 @@ export const MANUAIS: Record<string, Manual> = {
       { texto: 'O CNPJ, uma vez gravado, não se troca. Fundir dois cadastros não existe: inative o repetido.' },
     ],
   },
+  'indicator-goals': {
+    paraQueServe: 'As metas mensais dos indicadores que o painel e a diretoria comparam: valor comprado, saving, OTIF, prazos e SCs em atraso.',
+    passos: [
+      'Digite a meta de um mês em cada indicador que tem meta. Deixe vazio o que não tem.',
+      'Clique em "Salvar metas". Os cards passam a mostrar a meta do período e quanto dela foi atingido.',
+    ],
+    regras: [
+      { texto: 'Sem meta cadastrada, o card mostra só o número — nunca uma meta inventada.' },
+      { texto: 'O que soma (valor comprado, saving) multiplica a meta pelos meses do período; o que é média ou taxa usa a mesma meta.' },
+      { texto: 'Verde bate a meta; amarelo está perto (até 20% longe dela); vermelho está longe.' },
+      { codigo: 'MET-ERR-011', texto: 'A meta precisa ser maior que zero. Para tirá-la, deixe o campo vazio.' },
+    ],
+  },
   'score-weights': {
     paraQueServe: 'Os pesos do score multicritério das cotações: preço, entrega, pagamento, OTIF e risco.',
     passos: [

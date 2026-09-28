@@ -645,6 +645,17 @@ decisões seguram a Onda 1:
   valor da barra: no celular não há mouse. `e2e/responsivo.spec.ts` confere painel e diretoria em
   375, 768 e 1440px.
 
+**A meta é da empresa, e sem ela não há comparação.** `IndicatorGoal` guarda um valor **mensal**
+por indicador do catálogo (`MetasDosIndicadores.Catalogo`), editável pelo administrador em
+`/metas`; a linha só existe quando alguém grava, e o campo vazio a apaga. Card de indicador sem
+meta mostra só o número — "85% da meta" sobre meta inventada parece conferido e não é. A régua
+é uma só (`MetasDosIndicadores.Comparar`), perguntada pelo painel e pela diretoria: o que soma
+(valor comprado, saving) multiplica a meta pelos **dias** do período (quinzena cobra meia meta),
+o que é média ou taxa usa a mesma; maior-é-melhor bate a partir de 100% e avisa a partir de 80%,
+menor-é-melhor bate até a meta e avisa até 20% acima. **Sem valor medido não há comparação**:
+saving sem processo no período é "não medido", não "0% da meta". A meta de saving cadastrada vence
+o `MetaSavingMensal` do cockpit, para a parede e o painel cobrarem a mesma.
+
 **A diretoria tem página própria (`/diretoria`), e o relatório abre em três frases.** A Visão da
 diretoria põe na ordem em que um diretor pergunta: cinco números com tendência (gasto, saving,
 o que espera a minha aprovação, exceções, OTIF), o relatório em três frases, a fila de decisão

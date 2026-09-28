@@ -601,11 +601,14 @@ em "aguardando ninguém". O formulário de nova SC pergunta o essencial primeiro
 justificativa, centro, data, prioridade) e recolhe o resto em "Mais detalhes". **O produto se
 escolhe buscando, não rolando**: o campo de sugestões com o acervo inteiro dentro virou um
 seletor que pede família ou duas letras antes de consultar (`SeletorDeProduto`). **A busca é a
-única porta do produto na SC**: o campo de texto na linha parecia uma segunda busca e deixava o
-produto cadastrado entrar como texto solto. Clicar num resultado abre a **ficha**
+única porta do produto cadastrado na SC**: o campo de texto solto na linha parecia uma segunda busca
+e deixava o produto cadastrado entrar como texto. Clicar num resultado abre a **ficha**
 (`FichaDoProduto` — foto, código, família, unidade, fornecedores com C.A.), e é dela que se usa o
-produto; o item **fora do catálogo** sai da própria busca ("não achou?"), com o termo buscado como
-descrição — pedir o que ninguém cadastrou continua possível, mas depois de procurar. As
+produto. O item **fora do catálogo** tem duas portas (decisão da empresa, 2026-09): "não achou?" na
+própria busca, com o termo buscado como descrição, e **"Escrever item fora do catálogo"** na linha,
+para quem já sabe que o item não existe e não quer passar pela busca para dizer isso. As duas abrem
+o **mesmo modo**, explícito — rótulo "Item fora do catálogo", descrição, unidade, quantidade e a
+família (das ativas do cadastro, na própria linha) —, e não um texto solto. As
 **famílias** das telas de pedido (SC, lote, material) são as **ativas do cadastro**
 (`listarFamilias`), não os nomes que aparecem nos produtos: a lista derivada mostrava família
 inativa e escondia a ativa ainda sem produto. A **empresa** da SC é um dos CNPJs ativos do

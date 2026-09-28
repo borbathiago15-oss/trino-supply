@@ -34,8 +34,9 @@ export interface LinhaItem {
   /** Quantidade por tamanho, pelo id da variante. Vazio = nenhum tamanho pedido ainda. */
   porTamanho: Record<string, string>;
   /**
-   * Item fora do catálogo, pedido **depois** de buscar ("não achou?" no seletor). Sem produto
-   * e sem esta marca, a linha ainda não foi preenchida — a busca é a única porta.
+   * Item fora do catálogo: descrito à mão, seja depois de buscar ("não achou?" no seletor),
+   * seja direto na linha ("Escrever item fora do catálogo"). Sem produto e sem esta marca, a
+   * linha ainda não foi preenchida.
    */
   foraDoCatalogo: boolean;
 }
@@ -179,6 +180,14 @@ export function NovaSolicitacao() {
     });
     setSeletor(null);
   }
+  /**
+   * Escrever o item direto na linha, sem buscar (decisão da empresa, 2026-09): quem já sabe que
+   * o item não está cadastrado não precisa passar pela busca para dizer isso. A linha continua
+   * sem campo de texto solto — o modo "fora do catálogo" é explícito, com o rótulo e a família.
+   */
+  function escreverForaDoCatalogo(chave: string) {
+    editarLinha(chave, { escolhido: null, foraDoCatalogo: true, produto: '', familia: '', unidade: '', quantidade: '1', porTamanho: {} });
+  }
   const editarTamanho = (l: LinhaItem, v: TamanhoDoProduto, valor: string) =>
     editarLinha(l.chave, { porTamanho: { ...l.porTamanho, [v.id]: valor } });
   function removerLinha(chave: string) {
@@ -190,7 +199,7 @@ export function NovaSolicitacao() {
     ev.preventDefault();
     if (!form.finalidade) { avisar('Escolha a finalidade da SC: orçamento ou compra.', 'erro'); return; }
     if (linhasSemProduto(linhas).length) {
-      avisar('Há item sem produto: use "Buscar no catálogo" na linha, ou exclua a linha vazia.', 'erro');
+      avisar('Há item sem produto: use "Buscar no catálogo" ou "Escrever item fora do catálogo" na linha, ou exclua a linha vazia.', 'erro');
       return;
     }
     const items = itensDoFormulario(linhas);
@@ -242,10 +251,10 @@ export function NovaSolicitacao() {
             const total = totalDaGrade(l);
             return (
             <div key={l.chave} className="rounded-lg border border-borda p-3" data-linha-item data-produto={p?.baseCode ?? undefined}>
-              {/* Uma porta só para o produto: a busca do catálogo. O item fora do catálogo
-                  também sai dela ("não achou?"), com o termo buscado como descrição — antes o
-                  campo de texto na linha parecia uma segunda busca e deixava o produto
-                  cadastrado entrar como texto solto. */}
+              {/* Duas portas na linha, e nenhuma é um campo de texto solto: a busca do catálogo
+                  (a única porta do produto cadastrado) e "Escrever item fora do catálogo", que
+                  abre o modo de descrição livre com o rótulo e a família à vista. O item de fora
+                  também sai da busca ("não achou?"), com o termo buscado como descrição. */}
               {p ? (
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
@@ -269,7 +278,7 @@ export function NovaSolicitacao() {
                   </div>
                   <Grade2>
                     <Campo rotulo="Descrição do item">
-                      <input aria-label="Descrição do item" required minLength={3}
+                      <input aria-label="Descrição do item" required minLength={3} autoFocus={!l.produto}
                         placeholder="o que você precisa, com medida e especificação"
                         value={l.produto} onChange={(e) => editarLinha(l.chave, { produto: e.target.value })} />
                     </Campo>
@@ -293,8 +302,9 @@ export function NovaSolicitacao() {
               ) : (
                 <div className="flex flex-wrap items-center justify-between gap-2" data-testid="linha-sem-produto">
                   <p className="sub">Nenhum produto escolhido ainda.</p>
-                  <div className="flex gap-1.5">
+                  <div className="flex flex-wrap gap-1.5">
                     <button type="button" className="botao" onClick={() => setSeletor(l.chave)}>Buscar no catálogo</button>
+                    <button type="button" className="botao-secundario" onClick={() => escreverForaDoCatalogo(l.chave)}>Escrever item fora do catálogo</button>
                     <button type="button" className="botao-perigo" onClick={() => removerLinha(l.chave)}>Excluir</button>
                   </div>
                 </div>
@@ -344,14 +354,19 @@ export function NovaSolicitacao() {
               {p ? (
                 <p className="sub mt-2">Família <Badge classe="bg-superficie-forte text-texto-suave">{p.family}</Badge> — do cadastro do produto.</p>
               ) : l.foraDoCatalogo && (
-                // sem uma segunda lista de família na linha: ela parecia outra busca ao lado da
-                // do catálogo. A família do item de fora é a do filtro da própria busca, e
-                // "Buscar no catálogo" de novo é o jeito de trocá-la
-                <p className="sub mt-2" data-testid="familia-fora-do-catalogo">
-                  {l.familia && l.familia !== SEM_CADASTRO
-                    ? <>Família <Badge classe="bg-superficie-forte text-texto-suave">{l.familia}</Badge> — escolhida na busca.</>
-                    : 'Sem família: vai como produto não cadastrado. Para classificar, busque de novo escolhendo a família.'}
-                </p>
+                // a família do item de fora é dita por quem pede, das famílias ativas do cadastro.
+                // Vem preenchida quando o item saiu da busca com uma família no filtro; sem
+                // família, vai como produto não cadastrado (DIVERSOS no servidor)
+                <div className="mt-2 flex flex-wrap items-center gap-2" data-testid="familia-fora-do-catalogo">
+                  <label htmlFor={`familia-${l.chave}`} className="rotulo !mb-0">Família</label>
+                  <select id={`familia-${l.chave}`} className="!w-auto"
+                    value={l.familia && l.familia !== SEM_CADASTRO ? l.familia : ''}
+                    onChange={(e) => editarLinha(l.chave, { familia: e.target.value })}>
+                    <option value="">Não sei / produto não cadastrado</option>
+                    {(dados?.familias ?? []).map((f) => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                  <span className="sub">{l.familia && l.familia !== SEM_CADASTRO ? 'diz para qual lote de compra o item vai.' : 'sem família, vai como produto não cadastrado.'}</span>
+                </div>
               )}
 
               {pendente && (

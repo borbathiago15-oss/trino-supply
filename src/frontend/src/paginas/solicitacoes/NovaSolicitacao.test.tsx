@@ -201,9 +201,8 @@ describe('tela Inclusão de SC', () => {
 
     await descreverForaDoCatalogo(usuario, 'Fita isolante', 'CIVIL');
     expect(screen.getByLabelText('Descrição do item')).toHaveValue('Fita isolante');
-    // a família vem do filtro da busca: a linha não tem uma segunda lista de família
-    expect(screen.getByTestId('familia-fora-do-catalogo')).toHaveTextContent('CIVIL');
-    expect(screen.queryByRole('combobox', { name: /Família de/ })).not.toBeInTheDocument();
+    // a família vem do filtro da busca, e fica na linha para quem quiser trocar
+    expect(within(screen.getByTestId('familia-fora-do-catalogo')).getByRole('combobox', { name: 'Família' })).toHaveValue('CIVIL');
     await usuario.type(screen.getByLabelText('Unidade'), 'RL');
     await usuario.clear(screen.getByLabelText('Quantidade'));
     await usuario.type(screen.getByLabelText('Quantidade'), '3');
@@ -286,7 +285,8 @@ describe('tela Inclusão de SC', () => {
     vi.mocked(criarSolicitacao).mockResolvedValue({ id: 'sc1', number: 'PR-2026-000001' } as never);
     abrir();
     await descreverForaDoCatalogo(usuario, 'Fita isolante');
-    expect(screen.getByTestId('familia-fora-do-catalogo')).toHaveTextContent('Sem família');
+    expect(within(screen.getByTestId('familia-fora-do-catalogo')).getByRole('combobox', { name: 'Família' })).toHaveValue('');
+    expect(screen.getByTestId('familia-fora-do-catalogo')).toHaveTextContent('produto não cadastrado');
     await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'manutenção');
     await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
     await usuario.click(screen.getByRole('radio', { name: /^Compra/ }));
@@ -296,12 +296,36 @@ describe('tela Inclusão de SC', () => {
     })));
   });
 
-  it('a linha nova tem uma porta só: a busca do catálogo', async () => {
+  it('a linha nova tem duas portas — buscar no catálogo ou escrever o item de fora — e nenhum texto solto', async () => {
     abrir();
     const linha = await screen.findByTestId('linha-sem-produto');
     expect(within(linha).getByRole('button', { name: 'Buscar no catálogo' })).toBeInTheDocument();
-    // não há mais campo de texto que parecia uma segunda busca
+    expect(within(linha).getByRole('button', { name: 'Escrever item fora do catálogo' })).toBeInTheDocument();
+    // não há campo de texto que pareça uma segunda busca
     expect(within(linha).queryByRole('textbox')).not.toBeInTheDocument();
+  });
+
+  /** Quem já sabe que o item não está cadastrado escreve direto, sem passar pela busca. */
+  it('"Escrever item fora do catálogo" abre a descrição livre na linha, com a família do cadastro', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(criarSolicitacao).mockResolvedValue({ id: 'sc1', number: 'PR-2026-000001' } as never);
+    abrir();
+    await usuario.click(await screen.findByRole('button', { name: 'Escrever item fora do catálogo' }));
+    expect(screen.queryByTestId('linha-sem-produto')).not.toBeInTheDocument();
+    expect(screen.getByText('Item fora do catálogo')).toBeInTheDocument();
+    const descricao = screen.getByLabelText('Descrição do item');
+    expect(descricao).toHaveValue('');
+    expect(descricao).toHaveFocus();
+    await usuario.type(descricao, 'Fita isolante 19mm');
+    await usuario.selectOptions(screen.getByRole('combobox', { name: 'Família' }), 'CIVIL');
+    await usuario.type(screen.getByLabelText('Unidade'), 'RL');
+    await usuario.type(screen.getByLabelText('Justificativa da solicitação'), 'manutenção');
+    await usuario.selectOptions(screen.getByLabelText('Centro de Custo'), 'BAH-001');
+    await usuario.click(screen.getByRole('radio', { name: /^Compra/ }));
+    await usuario.click(screen.getByRole('button', { name: /Criar rascunho da SC/ }));
+    await waitFor(() => expect(criarSolicitacao).toHaveBeenCalledWith(expect.objectContaining({
+      items: [{ description: 'Fita isolante 19mm', catalogItemId: null, unitOfMeasure: 'RL', quantity: 1, family: 'CIVIL' }],
+    })));
   });
 
   it('linha sem produto barra o envio e diz o que fazer', async () => {

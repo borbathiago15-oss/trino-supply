@@ -103,6 +103,9 @@ public class AnalyticsServiceTests
         Assert.Equal(2, (int)Prop(kpis, "prCount"));
         Assert.Equal(1, (int)Prop(kpis, "approvedCount"));
         Assert.Equal(1, (int)Prop(kpis, "pendingApproval"));
+        // o centro de custo aparece pelo nome, e a chave do clique é o código
+        var centros = (List<object>)Prop(Prop(dash, "rankings"), "costCenters");
+        Assert.Contains(centros, c => (string)Prop(c, "label") == "Filial Recife" && (string)Prop(c, "key") == "CC-NE-01");
         var regions = (List<object>)Prop(Prop(dash, "rankings"), "regions");
         Assert.Equal(2, regions.Count);
         Assert.Contains(regions, r => (string)Prop(r, "label") == "NORDESTE" && (decimal)Prop(r, "value") == 50m);
@@ -194,7 +197,12 @@ public class AnalyticsServiceTests
         var dash = await w.Analytics.SupplyAsync(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 31),
             null, null, null, null, null, null, null, null);
         var compradores = (List<object>)Prop(Prop(dash, "rankings"), "buyers");
-        Assert.Equal("Carla Compradora", (string)Prop(Assert.Single(compradores), "label"));
+        var linha = Assert.Single(compradores);
+        Assert.Equal("Carla Compradora", (string)Prop(linha, "label"));
+        // a chave é o que o clique na barra manda como filtro: o id, não o nome
+        Assert.Equal(Carla.Id.ToString(), (string)Prop(linha, "key"));
+        var fornecedores = (List<object>)Prop(Prop(dash, "rankings"), "suppliers");
+        Assert.Equal(alfa.Id.ToString(), (string)Prop(Assert.Single(fornecedores), "key"));
 
         var daCarla = await w.Analytics.SupplyAsync(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 31),
             null, Carla.Id, null, null, null, null, null, null);

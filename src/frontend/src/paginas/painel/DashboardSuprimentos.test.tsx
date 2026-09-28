@@ -8,7 +8,8 @@ import {
 } from '@/api/painel';
 import { ToastProvider } from '@/componentes/Toast';
 import { AvisosProvider } from '@/sessao/AvisosProvider';
-import { chipsDosFiltros, DashboardSuprimentos, podeVerAnalises } from './DashboardSuprimentos';
+import { chipsDosFiltros, DashboardSuprimentos, periodoDoMes, podeVerAnalises } from './DashboardSuprimentos';
+import { pontosDeAtencao } from './pontosDeAtencao';
 
 vi.mock('@/api/painel', async (importar) => ({
   ...(await importar<typeof import('@/api/painel')>()),
@@ -76,6 +77,23 @@ describe('regras do painel', () => {
       dados({}).filterOptions);
     expect(chips.map((c) => `${c.rotulo}: ${c.valor}`))
       .toEqual(['Fornecedor: Alfa EPIs', 'Centro de custo: Obra Bahia', 'Prioridade: Urgente']);
+  });
+  it('o mês do gráfico vira o período inteiro dele, com o último dia certo', () => {
+    expect(periodoDoMes('2026-02')).toEqual({ de: '2026-02-01', ate: '2026-02-28' });
+    expect(periodoDoMes('2028-02')).toEqual({ de: '2028-02-01', ate: '2028-02-29' });
+    expect(periodoDoMes('2026-09')).toEqual({ de: '2026-09-01', ate: '2026-09-30' });
+  });
+  it('os pontos de atenção saem dos mesmos dados dos cards, do mais urgente ao menos', () => {
+    const d = dados({
+      supplierTable: [{ supplier: 'Beta', orders: 1, quantity: 5, value: 50, open: 0, otifMeasured: 2, otifPercent: 50 }],
+      goals: { poTotalValue: { indicador: 'poTotalValue', metaDoPeriodo: 20000, valor: 28000, atingimento: 140, faixa: 'fora' } },
+    });
+    const pontos = pontosDeAtencao(d);
+    expect(pontos.map((p) => p.chave)).toEqual(['sc-atrasadas', 'meta-poTotalValue', 'otif-baixo', 'pedidos-parados']);
+    expect(pontos[0]).toMatchObject({ tom: 'perigo', destino: '/torre' });
+    expect(pontos[2].texto).toContain('Beta (50%)');
+    // nada fora do padrão: lista vazia, não uma lista de "tudo certo"
+    expect(pontosDeAtencao(dados({ kpis: { ...d.kpis, overdue: 0, poLate: 0 }, supplierTable: [] }))).toEqual([]);
   });
   it('as análises exigem papel e módulo, como no clássico', () => {
     expect(podeVerAnalises({ role: 'PurchasingOfficer', modules: ['COMPRAS'] })).toBe(true);
@@ -187,5 +205,42 @@ describe('tela Dashboard de Suprimentos', () => {
     expect(linhas).toHaveLength(1);
     expect(linhas[0]).toHaveTextContent('140% da meta');
     expect(linhas[0]).toHaveClass('text-perigo');
+  });
+
+  it('tocar a barra do ranking aplica o filtro na hora, e tocar de novo o tira', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(dashboardDeSuprimentos).mockResolvedValue(dados({
+      rankings: { ...dados({}).rankings, suppliers: [{ label: 'Alfa EPIs', key: 's1', value: 28000, count: 6 }] },
+    }));
+    abrir();
+    await screen.findByTestId('painel-comprador');
+    await usuario.click(screen.getByRole('button', { name: 'Filtrar por Alfa EPIs' }));
+    await waitFor(() => expect(dashboardDeSuprimentos).toHaveBeenLastCalledWith(
+      expect.objectContaining({ fornecedor: 's1' }), expect.anything()));
+    // o chip diz o que está valendo, e a linha aparece marcada
+    expect(screen.getByRole('button', { name: /Remover filtro Fornecedor: Alfa EPIs/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Filtrar por Alfa EPIs' })).toHaveAttribute('aria-pressed', 'true');
+
+    await usuario.click(screen.getByRole('button', { name: 'Filtrar por Alfa EPIs' }));
+    await waitFor(() => expect(dashboardDeSuprimentos).toHaveBeenLastCalledWith(
+      expect.objectContaining({ fornecedor: '' }), expect.anything()));
+  });
+
+  it('as tabelas têm um card por linha para o celular, com as mesmas colunas', async () => {
+    vi.mocked(dashboardDeSuprimentos).mockResolvedValue(dados({}));
+    abrir();
+    await screen.findByTestId('tabela-fornecedores');
+    const cards = screen.getByTestId('tabela-fornecedores-cards');
+    expect(within(cards).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(cards).getByText('Alfa EPIs')).toBeInTheDocument();
+    expect(within(cards).getByText('OTIF')).toBeInTheDocument();
+  });
+
+  it('os pontos de atenção aparecem como linha tocável com destino', async () => {
+    vi.mocked(dashboardDeSuprimentos).mockResolvedValue(dados({}));
+    abrir();
+    const lista = await screen.findByTestId('pontos-de-atencao');
+    expect(within(lista).getByRole('link', { name: /1 SC\(s\) com a data de necessidade vencida/ })).toHaveAttribute('href', '/torre');
+    expect(within(lista).getByRole('link', { name: /1 pedido\(s\) em aberto há mais de 7 dias/ })).toHaveAttribute('href', '/pedidos');
   });
 });

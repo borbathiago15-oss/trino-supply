@@ -52,8 +52,11 @@ export const MANUAIS: Record<string, Manual> = {
     passos: [
       'Período, empresa e centro de custo ficam à vista. Os demais (fornecedor, comprador, prioridade, categoria, família…) estão em "Mais filtros" — o número no botão diz quantos deles estão valendo. Clique em "Aplicar filtros".',
       'Cada filtro valendo aparece como etiqueta abaixo dos campos; tocar no ✕ o tira e refaz a conta.',
-      'Os cartões do topo mostram solicitações, aprovações, valor comprado, pedidos em aberto, atrasos e tempos médios. O ⓘ de cada cartão diz de onde o número sai.',
-      'No gráfico, passe o mouse ou toque na barra para ver o valor.',
+      'Os cartões do topo mostram solicitações, aprovações, valor comprado, pedidos em aberto, atrasos e tempos médios. O ⓘ de cada cartão diz de onde o número sai, e a linha colorida compara com a meta cadastrada, quando há.',
+      '"Pontos de atenção" lista o que pede ação no período: SC atrasada, meta longe, OTIF abaixo de 70%, pedido parado, prazo estourado. Toque para ir à tela onde se resolve.',
+      'No gráfico, passe o mouse ou toque na barra para ver o valor; toque no mês (ou de novo na barra) para filtrar o painel por aquele mês.',
+      'Toque numa barra dos rankings (fornecedor, família, comprador…) para filtrar o painel inteiro por ela; toque de novo para tirar.',
+      'No celular, as tabelas viram um card por linha, com as mesmas colunas.',
       'A Central de Avisos lista o que depende de você agora; o número muda sozinho quando o trabalho anda.',
       '"Limpar" volta ao recorte padrão.',
     ],

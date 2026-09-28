@@ -92,7 +92,8 @@ export function Kpi({ rotulo, valor, detalhe, definicao, meta }:
           onClick={() => setAberta((a) => !a)}>ⓘ</button>
       )}
       <div className={definicao ? 'rotulo pr-5' : 'rotulo'}>{rotulo}</div>
-      <div className="mt-1.5 text-3xl font-extrabold leading-none tracking-tight text-texto tabular-nums">{valor}</div>
+      {/* no celular o número encolhe e quebra em vez de ser cortado pelo card */}
+      <div data-valor className="mt-1.5 min-w-0 text-2xl font-extrabold leading-none tracking-tight text-texto tabular-nums [overflow-wrap:anywhere] sm:text-3xl">{valor}</div>
       {detalhe && <div className="sub mt-1.5">{detalhe}</div>}
       {meta}
       {definicao && aberta && <p className="sub mt-1.5 border-t border-borda-suave pt-1.5" data-testid="definicao-kpi">{definicao}</p>}

@@ -706,6 +706,19 @@ O laranja da marca não é fundo de botão com texto branco — não passa no co
 telas de trabalho seguem claras (slate-50 e cards brancos): a leitura longa é delas, e o preto é
 da moldura. Tela nova não escolhe cor: usa `marca`, `fundo`, `ok`, `aviso`, `perigo`.
 
+**Claro ou escuro é escolha de cada pessoa, e mora nos tokens.** As superfícies e os textos das
+telas de trabalho são variáveis CSS com um par por tema (`index.css`: `:root` e `:root.dark`),
+lidas pelo `tailwind.config.ts` (`darkMode: 'class'`): `superficie` (cartão), `superficie-suave`
+(fundo), `superficie-forte` (realce), `texto`, `texto-suave`, `borda`, `borda-suave`, e os
+`ok/aviso/perigo` (texto e tinta trocam; o `forte` não). **Tela nova usa esses nomes** — `bg-white`,
+`text-slate-900`, `border-slate-200` fixos não escurecem, e foi o que 41 telas tiveram de trocar.
+A escolha fica no navegador (`ts.tema`, `tema/tema.ts`), não no cadastro: é preferência de leitura
+e vale por aparelho; sem escolha, segue o sistema operacional. `main.tsx` aplica a classe antes do
+primeiro desenho, para não piscar. O botão (`BotaoDeTema`) está em todo cabeçalho — sistema, app de
+bolso e login — e o rótulo diz o que o toque faz ("Tema escuro"), não o estado. O menu, o portal e
+o cockpit são escuros nos dois temas (`fundo`): são a moldura da marca, não área de leitura longa.
+Os cinzas dos gráficos são `--grafico-*`, pelo mesmo motivo.
+
 **Cuidado com a palavra "pedido" (D7).** "Tipo de pedido" no vocabulário do usuário é o tipo
 da **solicitação**; no do sistema, "pedido" é a O.C. O teste do menu pegou o rótulo errado — é
 para isso que ele existe.

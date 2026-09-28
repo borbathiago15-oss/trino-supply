@@ -122,6 +122,14 @@ describe('visão da diretoria', () => {
     expect(screen.getByTestId('numero-fila')).toHaveTextContent('fila limpa');
   });
 
+  it('quando o servidor recusa os achados, o bloco some em vez de dizer "nenhum achado"', async () => {
+    vi.mocked(relatorioDeInsights).mockRejectedValue(new Error('INS-ERR-900'));
+    abrir();
+    await screen.findByTestId('numero-gasto');
+    expect(screen.queryByTestId('sem-achados')).not.toBeInTheDocument();
+    expect(screen.queryByText('O que chama atenção')).not.toBeInTheDocument();
+  });
+
   it('os achados aparecem com código, título e o caminho para agir', async () => {
     vi.mocked(relatorioDeInsights).mockResolvedValue(insights([
       { code: 'INS-01', kind: 'sobrepreco', severity: 'alta', title: 'Sobrepreço em Luva', evidence: '+22% vs último preço', action: 'Renegociar', view: 'quotations' },

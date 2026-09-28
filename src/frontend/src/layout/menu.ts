@@ -1,5 +1,5 @@
 import {
-  ehAdmin, podeAlmoxarifado, podeAprovarDiretor, podeAprovarGerente, podeComprar, podeConduzirCotacao, podeCriarSc, podeDecidirSc,
+  ehAdmin, podeAlmoxarifado, podeAprovarAlgo, podeComprar, podeConduzirCotacao, podeCriarSc,
   podeManterCatalogo,
   podePedirMaterial, podeTriar, podeVerCompliance, podeVerCotacao, podeVerPedidos, podeVerRelatorios, temModulo,
   type Modulo, type Perfil,
@@ -95,8 +95,7 @@ export const MENU: GrupoMenu[] = [
     // A Central é de quem aprova alguma coisa — SC, Nível 1 ou Nível 2 — e o direito vem do
     // papel, como no servidor (que não pede módulo para decidir). O diretor chegava lá só pelo
     // atalho da Torre, porque o item pedia o módulo APROVACAO e um papel que não era o dele.
-    { id: 'pr-approvals', rotulo: 'Central de Aprovação', rota: '/aprovacoes',
-      mostrar: (u) => podeDecidirSc(u) || podeAprovarGerente(u) || podeAprovarDiretor(u) },
+    { id: 'pr-approvals', rotulo: 'Central de Aprovação', rota: '/aprovacoes', mostrar: podeAprovarAlgo },
   ]},
   { titulo: 'Solicitações de Compra', modulo: 'SOLICITACOES', itens: [
     { rotulo: 'Nova Solicitação', filhos: [

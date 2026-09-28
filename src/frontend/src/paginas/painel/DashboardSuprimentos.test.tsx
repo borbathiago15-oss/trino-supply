@@ -8,7 +8,8 @@ import {
 } from '@/api/painel';
 import { ToastProvider } from '@/componentes/Toast';
 import { AvisosProvider } from '@/sessao/AvisosProvider';
-import { chipsDosFiltros, DashboardSuprimentos, periodoDoMes, podeVerAnalises } from './DashboardSuprimentos';
+import { podeVerAnalises } from '@/dominio/papeis';
+import { chipsDosFiltros, DashboardSuprimentos, periodoDoMes } from './DashboardSuprimentos';
 import { pontosDeAtencao } from './pontosDeAtencao';
 
 vi.mock('@/api/painel', async (importar) => ({

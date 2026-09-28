@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   CLASSE_DO_TOM, destinoDaAcao, DIAS_PARA_DESTACAR_ESPERA, ETAPAS, FILTROS_TORRE_VAZIOS,
   resumoDaSelecao, SELO_DO_PRAZO, tempoParado, torreDeControle,
@@ -191,8 +191,11 @@ export function TorreDeControle() {
   const { avisar } = useToast();
   const triando = podeTriar(usuario);
 
-  const [rascunho, setRascunho] = useState<FiltrosDaTorre>(FILTROS_TORRE_VAZIOS);
-  const [aplicados, setAplicados] = useState<FiltrosDaTorre>(FILTROS_TORRE_VAZIOS);
+  // `?busca=PR-2026-000031` chega de Minhas Solicitações: a Torre abre já no recorte daquela SC
+  const [parametros] = useSearchParams();
+  const iniciais = { ...FILTROS_TORRE_VAZIOS, busca: parametros.get('busca') ?? '' };
+  const [rascunho, setRascunho] = useState<FiltrosDaTorre>(iniciais);
+  const [aplicados, setAplicados] = useState<FiltrosDaTorre>(iniciais);
   const [recarga, setRecarga] = useState(0);
   const [pleito, setPleito] = useState<Pleito | null>(null);
   const { dados, erro, carregando } = useCarregar(

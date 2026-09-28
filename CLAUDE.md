@@ -597,7 +597,11 @@ com Alfa, aguardando o faturamento. Chega até 28/09"). Sai da mesma consulta qu
 (`ProcessStatus`), por isso as duas nunca discordam. Devolvida e rejeitada param a linha e
 mostram o motivo; devolvida devolve a bola ao solicitante (`precisaDoSolicitante`) e os botões
 viram "Corrigir" e "Reenviar". Centro sem aprovador cadastrado é dito na frase, não escondido
-em "aguardando ninguém". O formulário de nova SC pergunta o essencial primeiro (itens,
+em "aguardando ninguém". **A linha leva aonde a SC está** (`destinoDaSc`): o pedido para quem gere
+pedidos, a Central para quem aprova, o processo para quem vê cotação, a Torre (já filtrada,
+`?busca=`) para quem tria — pelas mesmas réguas do menu, e quem não pode abrir nenhuma dessas
+telas não ganha link, porque link para 403 é pior que nenhum. Rascunho e devolvida não têm destino:
+a bola está com quem pediu, e "Editar"/"Corrigir" já estão na linha. O formulário de nova SC pergunta o essencial primeiro (itens,
 justificativa, centro, data, prioridade) e recolhe o resto em "Mais detalhes". **O produto se
 escolhe buscando, não rolando**: o campo de sugestões com o acervo inteiro dentro virou um
 seletor que pede família ou duas letras antes de consultar (`SeletorDeProduto`). **A busca é a

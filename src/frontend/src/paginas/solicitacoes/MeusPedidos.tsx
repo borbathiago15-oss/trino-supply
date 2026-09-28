@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { abrirBlob } from '@/api/cliente';
 import { diasDesde } from '@/api/cotacoes';
 import { listarCentrosCusto, type CentroCusto } from '@/api/centrosCusto';
@@ -18,6 +18,7 @@ import { data, hojeIso, moeda, quantidade } from '@/util/formato';
 import { rolarPara } from '@/util/rolar';
 import { useCarregar } from '@/util/useCarregar';
 import { useDebounce } from '@/util/useDebounce';
+import { cliqueEmControle, destinoDaSc } from './destinoDaSc';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
@@ -102,6 +103,7 @@ export const resumoDosItens = (r: SolicitacaoCompra) =>
  */
 export function MeusPedidos() {
   const usuario = useUsuario();
+  const navegar = useNavigate();
   const { avisar } = useToast();
   const [editando, setEditando] = useState<SolicitacaoCompra | null>(null);
   const [form, setForm] = useState({
@@ -244,10 +246,17 @@ export function MeusPedidos() {
                   const a = r.acompanhamento;
                   const minha = r.requesterId === usuario.id;
                   const devolvida = r.status === 'RETURNED';
+                  // a linha leva aonde a SC está agora (cotação, Central, pedido, Torre), para dar
+                  // sequência sem procurar a SC noutra tela; sem destino a linha é só leitura
+                  const destino = destinoDaSc(r, usuario);
                   return (
-                    <tr key={r.id} data-solicitacao={r.number} data-etapa={a?.etapaAtual}>
+                    <tr key={r.id} data-solicitacao={r.number} data-etapa={a?.etapaAtual} data-destino={destino?.rota}
+                      className={destino ? 'cursor-pointer' : undefined} title={destino?.rotulo}
+                      onClick={(ev) => { if (destino && !cliqueEmControle(ev.target)) navegar(destino.rota); }}>
                       <td className="whitespace-nowrap">
-                        <span className="font-semibold">{r.number}</span>
+                        {destino
+                          ? <Link to={destino.rota} className="font-semibold text-marca hover:underline">{r.number}</Link>
+                          : <span className="font-semibold">{r.number}</span>}
                         {r.purpose === 'ORCAMENTO' && <Badge classe="ml-1 bg-teal-50 text-teal-800">Orçamento</Badge>}
                         <div className="sub">ciclo {r.cycle} · {r.kind === 'CATALOGO' ? 'lote' : 'SC'}</div>
                       </td>
@@ -306,6 +315,9 @@ export function MeusPedidos() {
                         )}
                       </td>
                       <td className="whitespace-nowrap">
+                        {destino && (
+                          <Link to={destino.rota} className="botao-secundario" data-testid="abrir-sc">{destino.rotulo}</Link>
+                        )}
                         {minha && (
                           <div className="flex gap-1.5">
                             {podeEnviar(r) && (

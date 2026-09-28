@@ -60,6 +60,19 @@ const pagina = (p: Partial<PaginaDaTorre> = {}): PaginaDaTorre => ({
 
 const abrir = () => render(<MemoryRouter><TorreDeControle /></MemoryRouter>);
 
+describe('a Torre aberta com ?busca= (de Minhas Solicitações)', () => {
+  it('já consulta e mostra o recorte daquela SC', async () => {
+    vi.resetAllMocks();
+    usuarioAtual = { role: 'PurchasingOfficer', modules: ['COMPRAS'] };
+    vi.mocked(listarResponsaveis).mockResolvedValue([]);
+    vi.mocked(torreDeControle).mockResolvedValue(pagina({ items: [] }));
+    render(<MemoryRouter initialEntries={['/torre?busca=PR-2026-000031']}><TorreDeControle /></MemoryRouter>);
+    await waitFor(() => expect(torreDeControle).toHaveBeenLastCalledWith(
+      expect.objectContaining({ busca: 'PR-2026-000031' }), expect.anything()));
+    expect(screen.getByLabelText(/Buscar/)).toHaveValue('PR-2026-000031');
+  });
+});
+
 describe('Torre de Controle', () => {
   beforeEach(() => {
     vi.resetAllMocks();

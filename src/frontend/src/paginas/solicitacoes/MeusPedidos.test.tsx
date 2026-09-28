@@ -1,12 +1,13 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Usuario } from '@/api/auth';
 import type { AcompanhamentoDaSc, SolicitacaoCompra } from '@/api/solicitacoes';
 import { podeEnviar, podeMexer, situacaoDaSc } from '@/api/solicitacoes';
 import { ToastProvider } from '@/componentes/Toast';
 import { hojeIso } from '@/util/formato';
+import { destinoDaSc } from './destinoDaSc';
 import { andamentoDaSc, dataNoPassado, esperaDesde, MeusPedidos, resumoDosItens } from './MeusPedidos';
 
 vi.mock('@/api/solicitacoes', async (importar) => ({
@@ -22,7 +23,9 @@ vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => eu }));
 import { atualizarSolicitacao, enviarSolicitacao, excluirSolicitacao, listarSolicitacoes } from '@/api/solicitacoes';
 import { listarCentrosCusto } from '@/api/centrosCusto';
 
-const eu: Usuario = { id: 'u1', email: 'ana@t.com', name: 'Ana', role: 'Requester', modules: ['SOLICITACOES'] };
+let eu: Usuario = { id: 'u1', email: 'ana@t.com', name: 'Ana', role: 'Requester', modules: ['SOLICITACOES'] };
+const ana = (): Usuario => ({ id: 'u1', email: 'ana@t.com', name: 'Ana', role: 'Requester', modules: ['SOLICITACOES'] });
+const carla = (): Usuario => ({ id: 'u2', email: 'carla@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['COMPRAS', 'SOLICITACOES', 'APROVACAO'] });
 
 const sc = (p: Partial<SolicitacaoCompra>): SolicitacaoCompra => ({
   id: 'sc-' + (p.number ?? 'SC-1'), number: 'SC-2026-000001', kind: 'AVULSA', status: 'DRAFT', cycle: 1,
@@ -161,6 +164,65 @@ describe('<MeusPedidos />', () => {
     // em andamento, sem nada com o solicitante
     expect(screen.getByTestId('resumo-solicitacoes')).toHaveTextContent('nada esperando por você');
     expect(screen.getByTestId('resumo-solicitacoes')).toHaveTextContent('1 em andamento');
+  });
+
+  describe('a linha leva aonde a SC está', () => {
+    beforeEach(() => { eu = ana(); });
+
+    it('o destino sai da etapa e do que a pessoa pode fazer lá', () => {
+      const emCotacao = sc({ acompanhamento: naAlcada({ etapaAtual: 'cotacao' }) });
+      const naAprovacao = sc({ acompanhamento: naAlcada() });
+      const entregue = sc({ acompanhamento: naAlcada({ etapaAtual: 'entrega', purchaseOrderId: 'po1' }) });
+      const comComprador = sc({ number: 'SC-2026-000031', acompanhamento: naAlcada({ etapaAtual: 'comprador', quotationId: null }) });
+      const rascunho = sc({ acompanhamento: naAlcada({ etapaAtual: 'enviada', precisaDoSolicitante: true, quotationId: null }) });
+
+      // a compradora abre o processo, decide na Central, abre o pedido e acha a SC na Torre
+      expect(destinoDaSc(emCotacao, carla())).toEqual({ rotulo: 'Abrir cotação', rota: '/cotacoes/q1' });
+      expect(destinoDaSc(naAprovacao, carla())).toEqual({ rotulo: 'Decidir na Central', rota: '/aprovacoes' });
+      expect(destinoDaSc(entregue, carla())).toEqual({ rotulo: 'Abrir pedido', rota: '/pedidos/po1' });
+      expect(destinoDaSc(comComprador, carla())).toEqual({ rotulo: 'Abrir na Torre', rota: '/torre?busca=SC-2026-000031' });
+      // a bola está com quem pediu: os botões da linha já são a ação
+      expect(destinoDaSc(rascunho, carla())).toBeNull();
+      // a solicitante não abre nenhuma dessas telas: a linha do tempo é o que ela tem
+      expect(destinoDaSc(emCotacao, ana())).toBeNull();
+      expect(destinoDaSc(entregue, ana())).toBeNull();
+      // sem acompanhamento não há destino
+      expect(destinoDaSc(sc({ acompanhamento: null }), carla())).toBeNull();
+    });
+
+    it('o número vira link, a ação diz aonde vai, e clicar na linha abre', async () => {
+      eu = carla();
+      const usuario = userEvent.setup();
+      vi.mocked(listarSolicitacoes).mockResolvedValue(pagina([
+        sc({ number: 'SC-2026-000005', requesterId: 'u1', status: 'SUBMITTED', acompanhamento: naAlcada({ etapaAtual: 'cotacao' }) }),
+      ]));
+      render(
+        <MemoryRouter initialEntries={['/solicitacoes']}>
+          <ToastProvider>
+            <Routes>
+              <Route path="/solicitacoes" element={<MeusPedidos />} />
+              <Route path="/cotacoes/:id" element={<p>processo aberto</p>} />
+            </Routes>
+          </ToastProvider>
+        </MemoryRouter>,
+      );
+      const linha = (await screen.findByText('SC-2026-000005')).closest('tr')!;
+      expect(within(linha).getByRole('link', { name: 'SC-2026-000005' })).toHaveAttribute('href', '/cotacoes/q1');
+      expect(within(linha).getByTestId('abrir-sc')).toHaveTextContent('Abrir cotação');
+      await usuario.click(within(linha).getByText('Reposição de EPI'));
+      expect(await screen.findByText('processo aberto')).toBeInTheDocument();
+    });
+
+    it('para quem só pede, a linha não vira link', async () => {
+      vi.mocked(listarSolicitacoes).mockResolvedValue(pagina([
+        sc({ number: 'SC-2026-000005', status: 'SUBMITTED', acompanhamento: naAlcada({ etapaAtual: 'cotacao' }) }),
+      ]));
+      montar();
+      const linha = (await screen.findByText('SC-2026-000005')).closest('tr')!;
+      expect(within(linha).queryByRole('link')).not.toBeInTheDocument();
+      expect(within(linha).queryByTestId('abrir-sc')).not.toBeInTheDocument();
+      expect(linha).not.toHaveAttribute('data-destino');
+    });
   });
 
   it('mostra situação, andamento e só oferece ações na SC de quem está logado', async () => {

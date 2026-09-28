@@ -177,6 +177,7 @@ export const MANUAIS: Record<string, Manual> = {
       'A frase embaixo diz com quem a SC está agora (por exemplo, "Aguardando aprovação de Gustavo — Nível 1").',
       'SC devolvida para ajuste mostra o motivo e os botões "Corrigir" e "Reenviar".',
       'Rascunho ou SC ainda não iniciada pode ser excluída.',
+      'Clique na linha (ou no número da SC) para ir aonde ela está: a cotação, a Central de Aprovação, o pedido ou a Torre — conforme a etapa e o que você pode fazer lá. Quem só solicita acompanha pela linha do tempo.',
     ],
     duvidas: [
       { pergunta: 'Minha SC diz que o centro não tem aprovador. E agora?', resposta: 'A fila está parada porque ninguém pode aprovar. Abra um chamado de suporte ou fale com o administrador para cadastrar o aprovador do centro.' },

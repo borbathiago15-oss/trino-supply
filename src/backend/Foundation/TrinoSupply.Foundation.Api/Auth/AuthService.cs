@@ -14,7 +14,13 @@ public class AuthService(AppDbContext db, TokenService tokens, IPasswordHasher<U
     {
         var normalized = email.Trim().ToLowerInvariant();
         var user = await db.Users.SingleOrDefaultAsync(u => u.Email == normalized && u.Active, ct);
-        if (user is null) return null;
+        if (user is null)
+        {
+            // o mesmo custo de PBKDF2 que a senha errada: sem isto, o tempo da resposta dizia
+            // quais e-mails têm conta (auditoria A4)
+            hasher.VerifyHashedPassword(new User(), HashDeReferencia(), password);
+            return null;
+        }
 
         var result = hasher.VerifyHashedPassword(user, user.PasswordHash, password);
         if (result == PasswordVerificationResult.Failed) return null;
@@ -27,6 +33,12 @@ public class AuthService(AppDbContext db, TokenService tokens, IPasswordHasher<U
 
         return await IssueTokensAsync(user, ct);
     }
+
+    private static string? hashDeReferencia;
+
+    /// <summary>Um hash qualquer, calculado uma vez, só para gastar o tempo da verificação.</summary>
+    private string HashDeReferencia() =>
+        hashDeReferencia ??= hasher.HashPassword(new User(), Guid.NewGuid().ToString("N"));
 
     /// <summary>Rotaciona o refresh token. Reuso de token já rotacionado/revogado revoga todos os tokens do usuário.</summary>
     public async Task<AuthTokens?> RefreshAsync(string refreshTokenValue, CancellationToken ct = default)

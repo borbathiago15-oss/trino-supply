@@ -26,10 +26,23 @@ public static class Api
     public static IResult Error(HttpContext ctx, int status, string code, string message) =>
         Results.Json(new { error = new { code, message, correlationId = CorrelationId(ctx) } }, statusCode: status);
 
+    /// <summary>
+    /// A correlação que o cliente mandou volta na resposta e vai para o log — por isso só é
+    /// aceita se parecer um identificador (até 64 caracteres, letras, dígitos e <c>-_.:</c>).
+    /// Qualquer outra coisa é texto de quem envia refletido no corpo e no registro, e cai no
+    /// identificador do próprio servidor (auditoria A8).
+    /// </summary>
     public static string CorrelationId(HttpContext ctx) =>
-        ctx.Request.Headers.TryGetValue("X-Correlation-Id", out var v) && !string.IsNullOrWhiteSpace(v)
+        ctx.Request.Headers.TryGetValue("X-Correlation-Id", out var v) && CorrelacaoValida(v.ToString())
             ? v.ToString()
             : ctx.TraceIdentifier;
+
+    public static bool CorrelacaoValida(string? valor) =>
+        !string.IsNullOrEmpty(valor) && valor.Length <= 64
+        && valor.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.' or ':');
+
+    /// <summary>Duas pessoas gravaram o mesmo registro: não é falha do servidor, é conflito.</summary>
+    public const string CodigoDeConflito = "SYS-ERR-409";
 
     /// <summary>Código da falha que ninguém previu — a única que não tem regra de negócio atrás.</summary>
     public const string CodigoDeFalhaInesperada = "SYS-ERR-500";
@@ -50,6 +63,21 @@ public static class Api
         {
             var falha = ctx.Features.Get<IExceptionHandlerFeature>()?.Error;
             var correlacao = CorrelationId(ctx);
+            // conflito de concorrência é resposta de negócio, não 500 (auditoria A7): quem
+            // perdeu a corrida recarrega e tenta de novo, e o log não enche de "falha"
+            if (falha is Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+            {
+                await Results.Json(new
+                {
+                    error = new
+                    {
+                        code = CodigoDeConflito,
+                        message = "Outra pessoa alterou este registro enquanto você trabalhava nele. Recarregue a tela e tente de novo.",
+                        correlationId = correlacao,
+                    },
+                }, statusCode: 409).ExecuteAsync(ctx);
+                return;
+            }
             ctx.RequestServices.GetRequiredService<ILoggerFactory>()
                 .CreateLogger("TrinoSupply.Falha")
                 .LogError(falha, "Falha não tratada em {Metodo} {Caminho} (correlação {Correlacao})",

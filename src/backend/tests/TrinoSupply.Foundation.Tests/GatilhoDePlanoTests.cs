@@ -202,7 +202,8 @@ public class GatilhoDePlanoTests
         var (svc, relogio) = Servico(db);
         await DiasAsync(db, svc, relogio, GatilhoDePlanoService.DiasParaOGatilho, Achado());
 
-        var lista = await new PlanoDeAcaoService(db, relogio).ListarAsync(new FiltroDePlanos());
+        var lista = await new PlanoDeAcaoService(db, relogio).ListarAsync(
+            new Actor(Guid.NewGuid(), "Gustavo", Roles.SupplyManager), new FiltroDePlanos());
         var plano = Assert.Single(lista.Itens);
         Assert.Equal("Gatilho automático", plano.CreatedByLabel);
         Assert.Equal(SituacaoDoPlano.Pendente, PlanoDoPlano.Situacao(plano, DateOnly.FromDateTime(relogio.Agora.UtcDateTime)));

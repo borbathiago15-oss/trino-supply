@@ -18,6 +18,8 @@ using static TrinoSupply.Foundation.Api.Rotas.Anexos;
 using TrinoSupply.Foundation.Api.Rotas;
 
 var builder = WebApplication.CreateBuilder(args);
+// o cabeçalho "Server: Kestrel" só diz a quem sonda com o que está falando (auditoria A8)
+builder.WebHost.ConfigureKestrel(k => k.AddServerHeader = false);
 
 // ---- Configuração -----------------------------------------------------------
 var jwtOptions = new JwtOptions();

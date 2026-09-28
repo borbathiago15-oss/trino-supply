@@ -15,16 +15,26 @@ namespace TrinoSupply.Foundation.Api.Rotas;
 /// </summary>
 public static class Anexos
 {
+    /// <summary>Só imagem — a foto do produto não é lugar de planilha nem de PDF.</summary>
+    public static readonly string[] SoImagem = ["image/png", "image/jpeg", "image/webp"];
+
+    /// <param name="supplierId">O fornecedor dono do arquivo, quando houver: é por ele que o
+    /// download do Portal confere que o fornecedor só alcança o que é dele.</param>
+    /// <param name="rotuloPadrao">Quem enviou, quando o token não traz nome.</param>
+    /// <param name="tiposAceitos">Recorte da lista geral, para a rota que aceita menos (imagem).</param>
     public static async Task<(StoredDocument? doc, UserError? error)> StoreUploadAsync(
         HttpRequest request, AppDbContext db, TimeProvider clock, ClaimsPrincipal p,
-        string entityType, Guid entityId)
+        string entityType, Guid entityId, Guid? supplierId = null, string rotuloPadrao = "Suprimentos",
+        IReadOnlyCollection<string>? tiposAceitos = null)
     {
         if (!request.HasFormContentType) return (null, new("DOC-ERR-001", "Envie o arquivo como multipart/form-data."));
         var form = await request.ReadFormAsync();
         var file = form.Files.FirstOrDefault();
         if (file is null || file.Length == 0) return (null, new("DOC-ERR-001", "Nenhum arquivo enviado."));
         if (file.Length > StoredDocument.MaxSizeBytes) return (null, new("DOC-ERR-002", "Arquivo acima de 10 MB."));
-        if (!StoredDocument.AllowedContentTypes.Contains(file.ContentType))
+        if (tiposAceitos is not null && !tiposAceitos.Contains(file.ContentType))
+            return (null, new("DOC-ERR-003", "Formato não permitido: envie uma imagem PNG, JPG ou WEBP."));
+        if (tiposAceitos is null && !StoredDocument.AllowedContentTypes.Contains(file.ContentType))
             return (null, new("DOC-ERR-003", "Formato não permitido: envie PDF, planilha (XLSX/XLS/CSV), imagem ou DOCX."));
 
         using var ms = new MemoryStream();
@@ -39,8 +49,8 @@ public static class Anexos
         var doc = new StoredDocument
         {
             FileName = Path.GetFileName(file.FileName), ContentType = file.ContentType, SizeBytes = file.Length,
-            Content = conteudo, EntityType = entityType, EntityId = entityId,
-            UploadedByLabel = p.FindFirstValue("name") ?? "Suprimentos", UploadedAt = clock.GetUtcNow(),
+            Content = conteudo, EntityType = entityType, EntityId = entityId, SupplierId = supplierId,
+            UploadedByLabel = p.FindFirstValue("name") ?? rotuloPadrao, UploadedAt = clock.GetUtcNow(),
         };
         db.StoredDocuments.Add(doc);
         return (doc, null);

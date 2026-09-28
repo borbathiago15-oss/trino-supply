@@ -464,11 +464,32 @@ pipeline justamente para uma rota nova não nascer sem elas.
   `unsafe-inline` em script — o `index.html` não tem script embutido, e é isso que faz
   XSS injetado não executar —, `nosniff`, `frame-ancestors 'none'`, `Referrer-Policy` e
   `Permissions-Policy`. Resposta de `/api` sai com `no-store`.
+- **O upload tem uma porta só** (`Rotas/Anexos.StoreUploadAsync`): tamanho, lista de tipos e
+  assinatura valem igual para SC, proposta (interna e do Portal), documento de fornecedor e foto
+  de produto (esta com `tiposAceitos: SoImagem`). Cinco rotas liam o formulário por conta própria
+  e gravavam só pelo tipo declarado. `AnexosTests` falha se uma rota nova ler `ReadFormAsync`
+  fora da lista de exceções justificadas.
+- **O plano de ação herda a visibilidade do ciclo** (`PlanoDeAcaoService.VisiveisAsync`): plano de
+  ciclo que a pessoa não enxerga responde **404** na lista, no `?cycleId=` e na abertura — antes o
+  plano entregava problema, causa e ações do ciclo restrito. **Enxergar não é editar**
+  (`PodeConduzir`, `AP-ERR-902`): mexe no plano o administrador, o gestor de suprimentos, quem o
+  criou, os responsáveis e quem conduz o ciclo; quem responde por uma ação atualiza o avanço dela
+  (`PodeMexerNaAcao`). A leitura devolve `canEdit`, e a tela esconde o que o servidor recusaria.
+- **Login sem conta custa o mesmo que senha errada** (verificação contra um hash de referência):
+  o tempo da resposta não diz quais e-mails existem. O JWT aceita **só HS256** (`ValidAlgorithms`).
+  Conflito de concorrência responde **409 `SYS-ERR-409`**, não 500. O `X-Correlation-Id` do
+  cliente só é refletido se parecer identificador (≤64, letras, dígitos e `-_.:`), e a resposta
+  não leva `Server: Kestrel`.
 - **HTTPS atrás do proxy.** O Railway termina o TLS na borda e o contêiner recebe HTTP:
   o esquema verdadeiro vem no `X-Forwarded-Proto`. A decisão de redirecionar e de mandar
   HSTS acontece **antes** do `UseForwardedHeaders`, que consome esse cabeçalho — lendo
   depois dele, o valor já não existe. Sem o cabeçalho não se redireciona nada, que é o
   que evita laço em desenvolvimento e no healthcheck.
+  O `UseForwardedHeaders` **confia no salto imediato** (`KnownNetworks`/`KnownProxies` limpos,
+  `ForwardLimit = 1`): o padrão confia só em loopback, e o proxy do Railway não é loopback — o
+  IP do cliente nunca era aplicado, e o rate limit do login (por IP) contava **todo mundo** como
+  o proxy. Com `ForwardLimit = 1` vale só o último endereço do `X-Forwarded-For`, o que o proxy
+  acrescentou; o que o cliente inventa antes dele é ignorado.
 - **Dependência vulnerável trava o CI** no que vai para produção (`src/frontend` e o
   projeto .NET). O monorepo `platform/` não é implantado e fica fora do gate.
 

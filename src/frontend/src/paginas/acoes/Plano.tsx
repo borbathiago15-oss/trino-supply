@@ -56,6 +56,9 @@ function Conteudo({ completo, recarregar, avisar }: {
 }) {
   const p = completo.plan;
   const encerrado = p.life === 'ENCERRADO';
+  // o servidor diz se quem olha conduz o plano; a tela esconde o que ele recusaria (AP-ERR-902)
+  const conduz = completo.canEdit !== false;
+  const travado = encerrado || !conduz;
   const [aba, setAba] = useState<Aba>('Ações');
   const [salvando, setSalvando] = useState(false);
   const [encerrando, setEncerrando] = useState(false);
@@ -81,7 +84,7 @@ function Conteudo({ completo, recarregar, avisar }: {
                 'Plano reaberto — quem o encerrou deixou de valer.', 'Falha ao reabrir.')}>
               Reabrir
             </button>
-          : <button type="button" className="botao" onClick={() => setEncerrando(true)}>
+          : conduz && <button type="button" className="botao" onClick={() => setEncerrando(true)}>
               Encerrar plano
             </button>
       }>
@@ -97,6 +100,12 @@ function Conteudo({ completo, recarregar, avisar }: {
             <Badge classe="bg-perigo-fundo text-perigo">Encerrado com ação em aberto</Badge>
           )}
         </div>
+        {!conduz && (
+          <p className="mt-3 rounded-lg bg-superficie-suave p-3 text-[13px]" data-testid="so-acompanha">
+            Você acompanha este plano. Editar é de quem o conduz: quem o criou, os responsáveis,
+            o gestor de suprimentos e o administrador. Se uma ação é sua, o avanço dela você atualiza.
+          </p>
+        )}
         <Grade2 className="mt-3">
           <Dado rotulo="Problema">{p.problem ?? '—'}</Dado>
           <Dado rotulo="Por quê">{p.businessReason ?? '—'}</Dado>
@@ -133,23 +142,23 @@ function Conteudo({ completo, recarregar, avisar }: {
         </div>
       }>
         {aba === 'Ações' && (
-          <Acoes completo={completo} encerrado={encerrado} usuarios={usuarios}
+          <Acoes completo={completo} encerrado={encerrado} conduz={conduz} usuarios={usuarios}
             salvando={salvando} comAviso={comAviso} />
         )}
         {aba === 'Estratégico' && (
-          <Estrategico completo={completo} encerrado={encerrado}
+          <Estrategico completo={completo} encerrado={travado}
             salvando={salvando} comAviso={comAviso} />
         )}
         {aba === 'Riscos' && (
-          <Riscos completo={completo} encerrado={encerrado}
+          <Riscos completo={completo} encerrado={travado}
             salvando={salvando} comAviso={comAviso} />
         )}
         {aba === 'Causa raiz' && (
-          <CausaRaiz completo={completo} encerrado={encerrado}
+          <CausaRaiz completo={completo} encerrado={travado}
             salvando={salvando} comAviso={comAviso} />
         )}
         {aba === 'Lições' && (
-          <Licoes completo={completo} salvando={salvando} comAviso={comAviso} />
+          <Licoes completo={completo} somenteLeitura={!conduz} salvando={salvando} comAviso={comAviso} />
         )}
       </Painel>
 
@@ -197,8 +206,8 @@ interface AbaProps {
   comAviso: (acao: () => Promise<unknown>, ok: string, padrao: string) => Promise<void>;
 }
 
-function Acoes({ completo, encerrado, usuarios, salvando, comAviso }:
-  AbaProps & { usuarios: UsuarioPicker[] }) {
+function Acoes({ completo, encerrado, conduz, usuarios, salvando, comAviso }:
+  AbaProps & { conduz: boolean; usuarios: UsuarioPicker[] }) {
   const p = completo.plan;
   const [titulo, setTitulo] = useState('');
   const [responsavel, setResponsavel] = useState('');
@@ -248,7 +257,7 @@ function Acoes({ completo, encerrado, usuarios, salvando, comAviso }:
                       </Badge>
                     </td>
                     <td className="whitespace-nowrap">
-                      {!encerrado && a.open && (
+                      {!encerrado && a.open && (conduz || a.canEdit) && (
                         <div className="flex gap-1.5">
                           <button type="button" className="botao-secundario"
                             onClick={() => void comAviso(
@@ -268,7 +277,7 @@ function Acoes({ completo, encerrado, usuarios, salvando, comAviso }:
           </div>
         )}
 
-      {!encerrado && (
+      {!encerrado && conduz && (
         <form onSubmit={incluir} className="mt-4">
           <Grade2>
             <Campo id="ac-titulo" rotulo="O quê">
@@ -536,7 +545,8 @@ function CausaRaiz({ completo, encerrado, salvando, comAviso }: AbaProps) {
 
 // ---- aba: lições ----------------------------------------------------------
 
-function Licoes({ completo, salvando, comAviso }: Omit<AbaProps, 'encerrado'>) {
+function Licoes({ completo, somenteLeitura, salvando, comAviso }:
+  Omit<AbaProps, 'encerrado'> & { somenteLeitura: boolean }) {
   const p = completo.plan;
   const l = completo.lessons;
   const [form, setForm] = useState({
@@ -583,7 +593,9 @@ function Licoes({ completo, salvando, comAviso }: Omit<AbaProps, 'encerrado'>) {
           <textarea id="li-recomendacao" rows={2} {...campo('recommendation')} />
         </Campo>
       </Grade2>
-      <button type="submit" className="botao mt-4" disabled={salvando}>Salvar lições</button>
+      {!somenteLeitura && (
+        <button type="submit" className="botao mt-4" disabled={salvando}>Salvar lições</button>
+      )}
     </form>
   );
 }

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TrinoSupply.Foundation.Api.Acoes;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Infrastructure;
+using TrinoSupply.Foundation.Api.Melhoria;
 using TrinoSupply.Foundation.Api.Procurement;
 
 namespace TrinoSupply.Foundation.Tests;
@@ -496,11 +497,81 @@ public class PlanoDeAcaoTests
         Assert.Null(erro);
         await PlanoAsync(svc, dono.Id);
 
-        var pagina = await svc.ListarAsync(new FiltroDePlanos(Situacao: SituacaoDoPlano.Atrasado));
+        var pagina = await svc.ListarAsync(Carla, new FiltroDePlanos(Situacao: SituacaoDoPlano.Atrasado));
 
         Assert.Equal([atrasado.Code], pagina.Itens.Select(p => p.Code));
         // e o placar do topo conta a mesma coisa que a lista abre
         Assert.Equal(1, pagina.Placar.Atrasados);
         Assert.Equal(2, pagina.Placar.Total);
+    }
+
+    // ---- quem alcança o plano (auditoria A3) ---------------------------------
+
+    /// <summary>
+    /// Um ciclo que a Carla não enxerga — de outra pessoa, sem setor, sem ela acompanhando — e o
+    /// plano dele. Antes, <c>?cycleId=</c> entregava problema, causa e ações do ciclo que ela
+    /// recebia 404 ao abrir.
+    /// </summary>
+    private static async Task<(ActionPlan plano, User outra)> PlanoDeCicloRestritoAsync(AppDbContext db)
+    {
+        var outra = new User { Email = "o@t.dev", Name = "Olga Operações", PasswordHash = "x", Role = Roles.Requester };
+        db.Users.Add(outra);
+        var ciclo = new ImprovementCycle
+        {
+            Code = "PDCA-2026-001", Title = "Afastamentos no turno da noite",
+            CreatedBy = outra.Id, CreatedByLabel = outra.Name, OwnerId = outra.Id,
+            CreatedAt = Agora, UpdatedAt = Agora,
+        };
+        db.ImprovementCycles.Add(ciclo);
+        var plano = new ActionPlan
+        {
+            Code = "AP-2026-900", Title = "Plano do ciclo restrito", CycleId = ciclo.Id,
+            CreatedBy = outra.Id, CreatedByLabel = outra.Name, CreatedAt = Agora, UpdatedAt = Agora,
+        };
+        db.ActionPlans.Add(plano);
+        await db.SaveChangesAsync();
+        return (plano, outra);
+    }
+
+    [Fact]
+    public async Task O_plano_de_um_ciclo_que_a_pessoa_nao_ve_nao_aparece_nem_abre()
+    {
+        var (svc, db, dono) = Mundo();
+        // a visibilidade do ciclo lê o papel do cadastro, e o User nasce administrador
+        dono.Role = Roles.PurchasingOfficer;
+        var (restrito, outra) = await PlanoDeCicloRestritoAsync(db);
+        var livre = await PlanoAsync(svc, dono.Id);
+
+        var pagina = await svc.ListarAsync(Carla, new FiltroDePlanos());
+        Assert.Equal([livre.Code], pagina.Itens.Select(p => p.Code));
+        // pedir pelo ciclo não abre a porta
+        Assert.Empty((await svc.ListarAsync(Carla, new FiltroDePlanos(CicloId: restrito.CycleId))).Itens);
+        Assert.Null(await svc.AbrirAsync(Carla, restrito.Id));
+
+        // quem conduz o ciclo continua vendo, e o administrador vê tudo
+        Assert.NotNull(await svc.AbrirAsync(new Actor(outra.Id, outra.Name, outra.Role), restrito.Id));
+        var admin = new Actor(Guid.NewGuid(), "Admin", Roles.SystemAdministrator);
+        Assert.Equal(2, (await svc.ListarAsync(admin, new FiltroDePlanos())).Itens.Count);
+    }
+
+    [Fact]
+    public async Task Enxergar_nao_e_editar_quem_conduz_e_que_mexe_no_plano()
+    {
+        var (svc, db, dono) = Mundo();
+        var plano = await svc.AbrirAsync((await PlanoAsync(svc, dono.Id)).Id);
+        var bruno = new Actor(Guid.NewGuid(), "Bruno Comprador", Roles.PurchasingOfficer);
+
+        Assert.True(PlanoDeAcaoService.PodeConduzir(plano!, Carla));        // criou e responde
+        Assert.False(PlanoDeAcaoService.PodeConduzir(plano!, bruno));       // só tem o módulo
+        Assert.True(PlanoDeAcaoService.PodeConduzir(plano!, bruno with { Role = Roles.SupplyManager }));
+        Assert.True(PlanoDeAcaoService.PodeConduzir(plano!, bruno with { Role = Roles.SystemAdministrator }));
+        // no plano de um ciclo, quem conduz o ciclo conduz o plano
+        Assert.True(PlanoDeAcaoService.PodeConduzir(plano!, bruno, donoDoCiclo: bruno.Id));
+
+        // a ação tem mais um dono: quem responde por ela atualiza o próprio avanço
+        var (acao, _) = await svc.CriarAcaoAsync(Carla, plano!.Id, Dados(dono.Id));
+        acao!.ResponsibleId = bruno.Id;
+        Assert.True(PlanoDeAcaoService.PodeMexerNaAcao(acao, plano, bruno));
+        Assert.False(PlanoDeAcaoService.PodeConduzir(plano, bruno));
     }
 }

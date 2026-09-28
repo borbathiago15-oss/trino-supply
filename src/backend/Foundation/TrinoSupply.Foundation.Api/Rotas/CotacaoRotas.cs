@@ -5,6 +5,7 @@ using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Infrastructure;
 using TrinoSupply.Foundation.Api.Procurement;
 using TrinoSupply.Foundation.Api.Users;
+using static TrinoSupply.Foundation.Api.Rotas.Anexos;
 using static TrinoSupply.Foundation.Api.Rotas.Api;
 using static TrinoSupply.Foundation.Api.Rotas.Vistas;
 
@@ -671,23 +672,12 @@ public static class CotacaoRotas
             if (PortalSupplierId(p) is not { } sid) return Error(ctx, 403, "RFQ-ERR-050", "Acesso exclusivo do Portal do Fornecedor.");
             var proposal = await db.Proposals.SingleOrDefaultAsync(x => x.Id == proposalId && x.SupplierId == sid);
             if (proposal is null) return Error(ctx, 404, "RFQ-ERR-404", "Proposta não encontrada.");
-            if (!request.HasFormContentType) return Error(ctx, 400, "DOC-ERR-001", "Envie o arquivo como multipart/form-data.");
-            var form = await request.ReadFormAsync();
-            var file = form.Files.FirstOrDefault();
-            if (file is null || file.Length == 0) return Error(ctx, 400, "DOC-ERR-001", "Nenhum arquivo enviado.");
-            if (file.Length > StoredDocument.MaxSizeBytes) return Error(ctx, 400, "DOC-ERR-002", "Arquivo acima de 10 MB.");
-            if (!StoredDocument.AllowedContentTypes.Contains(file.ContentType))
-                return Error(ctx, 400, "DOC-ERR-003", "Formato não permitido: envie PDF, imagem (PNG/JPG) ou Office (XLSX/DOCX).");
-            using var ms = new MemoryStream();
-            await file.CopyToAsync(ms);
-            var doc = new StoredDocument
-            {
-                FileName = Path.GetFileName(file.FileName), ContentType = file.ContentType, SizeBytes = file.Length,
-                Content = ms.ToArray(), EntityType = "PROPOSAL", EntityId = proposal.Id, SupplierId = sid,
-                UploadedByLabel = p.FindFirstValue("name") ?? "Fornecedor", UploadedAt = clock.GetUtcNow(),
-            };
-            db.StoredDocuments.Add(doc);
-            proposal.AttachmentDocumentId = doc.Id;
+            // quem envia aqui é de fora da empresa: é a porta que mais precisa da conferência
+            // pelo conteúdo (DOC-ERR-004), e não pode ter uma leitura própria que a pule
+            var (doc, erro) = await StoreUploadAsync(request, db, clock, p, "PROPOSAL", proposal.Id,
+                supplierId: sid, rotuloPadrao: "Fornecedor");
+            if (erro is not null) return Error(ctx, 400, erro.Code, erro.Message);
+            proposal.AttachmentDocumentId = doc!.Id;
             proposal.AttachmentFileName = doc.FileName;
             await db.SaveChangesAsync();
             return Ok(new { documentId = doc.Id, fileName = doc.FileName }, ctx);
@@ -703,24 +693,10 @@ public static class CotacaoRotas
                 return Error(ctx, 403, "RFQ-ERR-900", "Seu papel não conduz o processo de cotação.");
             var proposal = await db.Proposals.SingleOrDefaultAsync(x => x.Id == proposalId && x.QuotationId == id);
             if (proposal is null) return Error(ctx, 404, "RFQ-ERR-404", "Proposta não encontrada neste processo.");
-            if (!request.HasFormContentType) return Error(ctx, 400, "DOC-ERR-001", "Envie o arquivo como multipart/form-data.");
-            var form = await request.ReadFormAsync();
-            var file = form.Files.FirstOrDefault();
-            if (file is null || file.Length == 0) return Error(ctx, 400, "DOC-ERR-001", "Nenhum arquivo enviado.");
-            if (file.Length > StoredDocument.MaxSizeBytes) return Error(ctx, 400, "DOC-ERR-002", "Arquivo acima de 10 MB.");
-            if (!StoredDocument.AllowedContentTypes.Contains(file.ContentType))
-                return Error(ctx, 400, "DOC-ERR-003", "Formato não permitido: envie PDF, planilha (XLSX/XLS/CSV), imagem ou DOCX.");
-
-            using var ms = new MemoryStream();
-            await file.CopyToAsync(ms);
-            var doc = new StoredDocument
-            {
-                FileName = Path.GetFileName(file.FileName), ContentType = file.ContentType, SizeBytes = file.Length,
-                Content = ms.ToArray(), EntityType = "PROPOSAL", EntityId = proposal.Id, SupplierId = proposal.SupplierId,
-                UploadedByLabel = p.FindFirstValue("name") ?? "Suprimentos", UploadedAt = clock.GetUtcNow(),
-            };
-            db.StoredDocuments.Add(doc);
-            proposal.AttachmentDocumentId = doc.Id;
+            var (doc, erro) = await StoreUploadAsync(request, db, clock, p, "PROPOSAL", proposal.Id,
+                supplierId: proposal.SupplierId);
+            if (erro is not null) return Error(ctx, 400, erro.Code, erro.Message);
+            proposal.AttachmentDocumentId = doc!.Id;
             proposal.AttachmentFileName = doc.FileName;
 
             // registra no histórico do processo: a cotação recebida ficou arquivada

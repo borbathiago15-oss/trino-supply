@@ -66,13 +66,13 @@ public class PlanoDeAcaoService(AppDbContext db, TimeProvider clock)
 
     // ---- leitura -------------------------------------------------------------
 
-    public async Task<PaginaDePlanos> ListarAsync(FiltroDePlanos f, CancellationToken ct = default)
+    public async Task<PaginaDePlanos> ListarAsync(Actor quem, FiltroDePlanos f, CancellationToken ct = default)
     {
         var hoje = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
 
         // filtro na entidade; a situação depende de data E progresso, então sai depois — mas
         // sobre o recorte já cortado no banco, e não sobre a base inteira
-        var consulta = db.ActionPlans.AsQueryable();
+        var consulta = await VisiveisAsync(quem, ct);
         if (!string.IsNullOrWhiteSpace(f.Prioridade))
         {
             var p = f.Prioridade.Trim().ToUpperInvariant();
@@ -143,6 +143,64 @@ public class PlanoDeAcaoService(AppDbContext db, TimeProvider clock)
             .Include(p => p.RootCauses)
             .Include(p => p.Lessons)
             .SingleOrDefaultAsync(p => p.Id == id, ct);
+
+    // ---- quem alcança o plano -------------------------------------------------
+
+    /// <summary>
+    /// O plano de um ciclo de melhoria <b>herda a visibilidade do ciclo</b>. Sem isso,
+    /// <c>?cycleId=</c> entregava o problema, a causa raiz e as ações de um ciclo que a mesma
+    /// pessoa recebia 404 ao abrir — a regra "a visibilidade do ciclo é um predicado só" era
+    /// contornada pelo plano. Plano sem ciclo continua sendo de quem tem o módulo.
+    /// </summary>
+    public async Task<IQueryable<ActionPlan>> VisiveisAsync(Actor quem, CancellationToken ct = default)
+    {
+        if (quem.Role == Roles.SystemAdministrator) return db.ActionPlans;
+        var ciclos = await (await new Melhoria.CicloDeMelhoriaService(db, clock).VisiveisAsync(quem, ct))
+            .Select(c => c.Id).ToArrayAsync(ct);
+        return db.ActionPlans.Where(p => p.CycleId == null || ciclos.Contains(p.CycleId.Value));
+    }
+
+    /// <summary>O plano completo, se <paramref name="quem"/> o enxerga; fora disso, nulo — a rota responde 404.</summary>
+    public async Task<ActionPlan?> AbrirAsync(Actor quem, Guid id, CancellationToken ct = default)
+    {
+        if (!await (await VisiveisAsync(quem, ct)).AnyAsync(p => p.Id == id, ct)) return null;
+        return await AbrirAsync(id, ct);
+    }
+
+    /// <summary>
+    /// Quem conduz o plano: o administrador, o gestor de suprimentos (que distribui o plano
+    /// aberto pelo gatilho, sem responsável), quem o criou, quem responde por ele e, no plano
+    /// de um ciclo, quem conduz o ciclo. Enxergar não é editar: quem acompanha o ciclo lê o
+    /// plano, mas não o encerra.
+    /// </summary>
+    public static bool PodeConduzir(ActionPlan p, Actor quem, Guid? donoDoCiclo = null, Guid? criadorDoCiclo = null) =>
+        quem.Role is Roles.SystemAdministrator or Roles.SupplyManager
+        || p.CreatedBy == quem.Id
+        || p.Responsibles.Any(r => r.UserId == quem.Id)
+        || (donoDoCiclo is { } dono && dono == quem.Id)
+        || (criadorDoCiclo is { } criador && criador == quem.Id);
+
+    /// <summary>A ação tem mais um dono: quem responde por ela atualiza o próprio avanço.</summary>
+    public static bool PodeMexerNaAcao(ActionItem a, ActionPlan p, Actor quem, Guid? donoDoCiclo = null, Guid? criadorDoCiclo = null) =>
+        a.ResponsibleId == quem.Id || PodeConduzir(p, quem, donoDoCiclo, criadorDoCiclo);
+
+    public Task<ActionItem?> AcaoAsync(Guid id, CancellationToken ct = default) =>
+        db.ActionItems.AsNoTracking().SingleOrDefaultAsync(a => a.Id == id, ct);
+
+    /// <summary><see cref="PodeConduzir"/> com o ciclo buscado no banco.</summary>
+    public async Task<bool> PodeConduzirAsync(ActionPlan p, Actor quem, CancellationToken ct = default)
+    {
+        var (dono, criador) = await ConducaoDoCicloAsync(p, ct);
+        return PodeConduzir(p, quem, dono, criador);
+    }
+
+    public async Task<(Guid? dono, Guid? criador)> ConducaoDoCicloAsync(ActionPlan p, CancellationToken ct = default)
+    {
+        if (p.CycleId is not { } cicloId) return (null, null);
+        var ciclo = await db.ImprovementCycles.Where(c => c.Id == cicloId)
+            .Select(c => new { c.OwnerId, c.CreatedBy }).SingleOrDefaultAsync(ct);
+        return (ciclo?.OwnerId, ciclo?.CreatedBy);
+    }
 
     private async Task<List<OpcaoDeResponsavel>> ResponsaveisAsync(CancellationToken ct)
     {

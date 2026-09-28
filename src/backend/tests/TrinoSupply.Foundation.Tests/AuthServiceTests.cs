@@ -140,4 +140,54 @@ public class AuthServiceTests
 
         Assert.Null(await svc.LoginAsync("admin@trino.test", "Hx8@baseSegura!"));
     }
+
+    // ---- auditoria A4 e A14 ----------------------------------------------------
+
+    private sealed class HasherQueConta : IPasswordHasher<User>
+    {
+        private readonly PasswordHasher<User> real = new();
+        public int Verificacoes { get; private set; }
+        public string HashPassword(User user, string password) => real.HashPassword(user, password);
+        public PasswordVerificationResult VerifyHashedPassword(User user, string hashedPassword, string providedPassword)
+        {
+            Verificacoes++;
+            return real.VerifyHashedPassword(user, hashedPassword, providedPassword);
+        }
+    }
+
+    [Fact]
+    public async Task Email_sem_conta_gasta_a_mesma_verificacao_que_a_senha_errada()
+    {
+        // pelo tempo da resposta dava para saber quais e-mails têm conta: o inexistente
+        // voltava sem calcular PBKDF2, e a senha errada levava o custo inteiro
+        var (_, db, clock, _) = Build();
+        var hasher = new HasherQueConta();
+        var svc = new AuthService(db, new TokenService(Jwt), hasher, clock);
+
+        Assert.Null(await svc.LoginAsync("ninguem@trino.test", "Hx8@baseSegura!"));
+        Assert.Equal(1, hasher.Verificacoes);
+        Assert.Null(await svc.LoginAsync("admin@trino.test", "senha-errada"));
+        Assert.Equal(2, hasher.Verificacoes);
+    }
+
+    [Fact]
+    public async Task Token_com_outro_algoritmo_e_recusado_mesmo_com_a_chave_certa()
+    {
+        var (svc, _, _, _) = Build();
+        var parametros = TokenService.BuildValidationParameters(Jwt);
+        parametros.ValidateLifetime = false;
+        var leitor = new JwtSecurityTokenHandler();
+
+        var emitido = await svc.LoginAsync("admin@trino.test", "Hx8@baseSegura!");
+        leitor.ValidateToken(emitido!.AccessToken, parametros, out _);
+
+        var chave = new Microsoft.IdentityModel.Tokens.SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(Jwt.Secret));
+        var outro = leitor.WriteToken(new JwtSecurityToken(Jwt.Issuer, Jwt.Audience,
+            [new System.Security.Claims.Claim("sub", Guid.NewGuid().ToString())],
+            expires: DateTime.UtcNow.AddMinutes(5),
+            signingCredentials: new Microsoft.IdentityModel.Tokens.SigningCredentials(
+                chave, Microsoft.IdentityModel.Tokens.SecurityAlgorithms.HmacSha384)));
+        Assert.ThrowsAny<Microsoft.IdentityModel.Tokens.SecurityTokenException>(
+            () => leitor.ValidateToken(outro, parametros, out _));
+    }
 }

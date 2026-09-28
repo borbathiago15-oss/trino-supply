@@ -36,6 +36,8 @@ public class EnvelopeDeFalhaTests
                 app.UseEndpoints(rotas =>
                 {
                     rotas.MapGet("/estoura", void () => throw new InvalidOperationException("boom"));
+                    rotas.MapGet("/conflito", void () =>
+                        throw new Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException("corrida"));
                     rotas.MapGet("/ok", () => Results.Json(new { data = "ok" }));
                 });
             });
@@ -86,5 +88,40 @@ public class EnvelopeDeFalhaTests
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
         var corpo = await res.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("ok", corpo.GetProperty("data").GetString());
+    }
+
+    /// <summary>Auditoria A7: duas pessoas gravando o mesmo registro é conflito, não falha do servidor.</summary>
+    [Fact]
+    public async Task Conflito_de_concorrencia_responde_409_e_nao_500()
+    {
+        var http = await ServidorQueQuebraAsync();
+
+        var res = await http.GetAsync("/conflito");
+
+        Assert.Equal(HttpStatusCode.Conflict, res.StatusCode);
+        var corpo = await res.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(TrinoSupply.Foundation.Api.Rotas.Api.CodigoDeConflito,
+            corpo.GetProperty("error").GetProperty("code").GetString());
+    }
+
+    /// <summary>
+    /// Auditoria A8: a correlação do cliente volta no corpo e vai para o log. Só entra se
+    /// parecer um identificador — texto arbitrário não é refletido.
+    /// </summary>
+    [Theory]
+    [InlineData("<script>alert(1)</script>")]
+    [InlineData("linha\r\nfalsa")]
+    [InlineData("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")]
+    public async Task Correlacao_que_nao_parece_identificador_nao_e_refletida(string enviada)
+    {
+        var http = await ServidorQueQuebraAsync();
+        http.DefaultRequestHeaders.TryAddWithoutValidation("X-Correlation-Id", enviada);
+
+        var res = await http.GetAsync("/estoura");
+
+        var corpo = await res.Content.ReadFromJsonAsync<JsonElement>();
+        var devolvida = corpo.GetProperty("error").GetProperty("correlationId").GetString();
+        Assert.NotEqual(enviada, devolvida);
+        Assert.False(string.IsNullOrWhiteSpace(devolvida));
     }
 }

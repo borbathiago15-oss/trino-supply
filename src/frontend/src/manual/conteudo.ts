@@ -346,6 +346,7 @@ export const MANUAIS: Record<string, Manual> = {
     regras: [
       { texto: 'Toda ação pertence a um plano.' },
       { texto: 'Ação suspensa não conta como atrasada: ela está parada por decisão.' },
+      { texto: 'O plano de um ciclo de melhoria só aparece para quem enxerga o ciclo.' },
     ],
   },
   'plan-detail': {
@@ -360,6 +361,7 @@ export const MANUAIS: Record<string, Manual> = {
     regras: [
       { codigo: 'AC-ERR-014', texto: 'Suspender ou cancelar uma ação exige o motivo.' },
       { codigo: 'AP-ERR-020', texto: 'Plano encerrado não se edita. Reabrir é do gestor ou do administrador.' },
+      { codigo: 'AP-ERR-902', texto: 'Enxergar não é editar: quem conduz o plano (quem criou, os responsáveis, o gestor, o administrador e quem conduz o ciclo) é que mexe nele. Quem responde por uma ação atualiza o avanço dela.' },
       { texto: 'Sem investimento, o ROI fica vazio — não zero.' },
       { texto: 'Encerrar é decisão: um plano a 100% continua ativo até alguém encerrá-lo.' },
     ],

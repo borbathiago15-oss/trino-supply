@@ -31,6 +31,8 @@ export interface Acao {
   status: StatusDaAcao; statusReason: string | null;
   progress: number; late: boolean; daysLate: number | null; open: boolean;
   completedAt: string | null; createdByLabel: string; createdAt: string;
+  /** Só na leitura do plano: quem responde pela ação atualiza o próprio avanço. */
+  canEdit?: boolean | null;
 }
 
 /** O plano — o projeto, com as ações dentro dele. */
@@ -97,6 +99,11 @@ export interface OpcoesDoPlano {
 
 export interface PlanoCompleto {
   plan: Plano;
+  /**
+   * Enxergar não é editar (AP-ERR-902): quem acompanha o ciclo lê o plano, e quem o conduz —
+   * criador, responsáveis, gestor, administrador e quem conduz o ciclo — é que mexe nele.
+   */
+  canEdit?: boolean;
   items: Acao[];
   risks: Risco[];
   rootCause: CausaRaizDoPlano | null;

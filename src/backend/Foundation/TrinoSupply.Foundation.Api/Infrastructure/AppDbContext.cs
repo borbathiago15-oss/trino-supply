@@ -49,6 +49,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ProposalItem> ProposalItems => Set<ProposalItem>();
     public DbSet<PaymentMethod> PaymentMethods => Set<PaymentMethod>();
     public DbSet<ScoreWeights> ScoreWeights => Set<ScoreWeights>();
+    public DbSet<Analytics.IndicatorGoal> IndicatorGoals => Set<Analytics.IndicatorGoal>();
     public DbSet<StageSla> StageSlas => Set<StageSla>();
     public DbSet<RequestType> RequestTypes => Set<RequestType>();
     public DbSet<UserNotice> UserNotices => Set<UserNotice>();
@@ -795,6 +796,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // o nome é a identidade do cadastro: é por ele que a proposta antiga
             // continua legível, e é ele que não pode repetir
             e.HasIndex(m => m.Name).IsUnique();
+        });
+
+        modelBuilder.Entity<Analytics.IndicatorGoal>(e =>
+        {
+            // uma linha por indicador que TEM meta: sem linha, o card fica sem comparação
+            e.ToTable("indicator_goal", "procurement");
+            e.HasKey(g => g.Id);
+            e.Property(g => g.Id).HasColumnName("id");
+            e.Property(g => g.Indicator).HasColumnName("indicator").HasMaxLength(40).IsRequired();
+            e.Property(g => g.MonthlyValue).HasColumnName("monthly_value").HasPrecision(18, 2);
+            e.Property(g => g.UpdatedAt).HasColumnName("updated_at");
+            e.Property(g => g.UpdatedByLabel).HasColumnName("updated_by_label").HasMaxLength(200);
+            e.HasIndex(g => g.Indicator).IsUnique();
         });
 
         modelBuilder.Entity<ScoreWeights>(e =>

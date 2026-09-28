@@ -460,8 +460,19 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
             clients = ccByCode.Values.Where(c => c.ClientName != null).Select(c => c.ClientName!).Distinct().OrderBy(x => x).ToList(),
         };
 
+        // a meta é do número que o card mostra — e a comparação sai da régua única das metas
+        var goals = await new MetasDosIndicadoresService(db, clock).CompararAsync(new Dictionary<string, decimal?>
+        {
+            ["poTotalValue"] = kpis.poTotalValue,
+            // sem processo no período o saving não foi medido: "não medido" não é "abaixo da meta"
+            ["saving"] = quotes.Count > 0 ? saving.total : null,
+            ["avgApprovalDays"] = (decimal?)kpis.avgApprovalDays,
+            ["avgReceiveDays"] = (decimal?)kpis.avgReceiveDays,
+            ["overdue"] = kpis.overdue,
+        }, from, to, ct);
+
         return new { from, to, kpis, months, rankings, supplierTable, leadTimes, saving, buyerPanel, filterOptions,
-            indicators = DefinicoesDosIndicadores };
+            indicators = DefinicoesDosIndicadores, goals };
     }
 
     /// <summary>

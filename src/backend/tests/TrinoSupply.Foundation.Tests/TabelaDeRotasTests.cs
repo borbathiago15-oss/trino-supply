@@ -71,6 +71,7 @@ public class TabelaDeRotasTests
         // escapavam de toda conferência daqui — inclusive a de exigir autenticação
         app.MapPagamentos();
         app.MapPesosDoScore();
+        app.MapMetas();
         app.MapPrazosDasEtapas();
         app.MapPlanoDeAcao();
         app.MapMelhoria();

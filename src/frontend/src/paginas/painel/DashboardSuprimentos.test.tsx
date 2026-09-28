@@ -177,4 +177,15 @@ describe('tela Dashboard de Suprimentos', () => {
     await usuario.click(screen.getByRole('button', { name: 'Como é calculado: Valor comprado' }));
     expect(screen.getByTestId('definicao-kpi')).toHaveTextContent('pela data da aprovação');
   });
+
+  it('o card com meta mostra a meta do período na cor da faixa; sem meta, só o número', async () => {
+    vi.mocked(dashboardDeSuprimentos).mockResolvedValue(dados({
+      goals: { poTotalValue: { indicador: 'poTotalValue', metaDoPeriodo: 20000, valor: 28000, atingimento: 140, faixa: 'fora' } },
+    }));
+    abrir();
+    const linhas = await screen.findAllByTestId('linha-da-meta');
+    expect(linhas).toHaveLength(1);
+    expect(linhas[0]).toHaveTextContent('140% da meta');
+    expect(linhas[0]).toHaveClass('text-perigo');
+  });
 });

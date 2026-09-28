@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { BADGE_ACHADO, relatorioDeInsights, type Achado } from '@/api/analytics';
 import { comparacaoDaEscolha, diasDesde, processosParaMinhaAprovacao, type ProcessoParaAprovar } from '@/api/cotacoes';
 import { FILTROS_RELATORIO_VAZIOS, relatorioExecutivo, type RelatorioExecutivo } from '@/api/relatorios';
 import { variacao } from '@/api/painel';
 import { Badge, Carregando, Erro, Painel } from '@/componentes/basicos';
+import { LinhaDaMeta } from '@/componentes/LinhaDaMeta';
 import { enderecoDoId } from '@/layout/menu';
 import { resumoExecutivo } from '@/paginas/relatorios/resumoExecutivo';
 import { moeda, quantidade } from '@/util/formato';
@@ -14,8 +15,8 @@ import { intervaloDoPeriodo, PERIODOS, type Periodo } from './periodo';
 const pct = (v: number | null | undefined) => (v == null ? '—' : `${quantidade(v)}%`);
 
 /** Um número grande com a tendência ao lado — o formato em que a diretoria lê. */
-function Numero({ rotulo, valor, detalhe, tendencia, tom = 'neutro', testid }: {
-  rotulo: string; valor: string; detalhe?: string; testid: string;
+function Numero({ rotulo, valor, detalhe, tendencia, tom = 'neutro', testid, meta }: {
+  rotulo: string; valor: string; detalhe?: string; testid: string; meta?: ReactNode;
   tendencia?: { atual: number; anterior: number; bomQuandoSobe: boolean } | null;
   tom?: 'neutro' | 'atencao' | 'ok';
 }) {
@@ -30,6 +31,7 @@ function Numero({ rotulo, valor, detalhe, tendencia, tom = 'neutro', testid }: {
         {v && <span className={`font-semibold ${classeTendencia}`}>{v.sinal} {Math.abs(v.pct)}% vs. anterior</span>}
         {detalhe && <span>{detalhe}</span>}
       </div>
+      {meta}
     </div>
   );
 }
@@ -145,10 +147,12 @@ export function VisaoDaDiretoria() {
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-5" data-testid="numeros-da-diretoria">
               <Numero testid="numero-gasto" rotulo="Gasto no período" valor={moeda(r.kpis.spend)}
                 detalhe={`${quantidade(r.kpis.orders)} pedido(s) · ${quantidade(r.kpis.suppliers)} fornecedor(es)`}
-                tendencia={{ atual: r.kpis.spend, anterior: r.previous.spend, bomQuandoSobe: false }} />
+                tendencia={{ atual: r.kpis.spend, anterior: r.previous.spend, bomQuandoSobe: false }}
+                meta={<LinhaDaMeta comparacao={r.goals?.poTotalValue} formatar={moeda} />} />
               <Numero testid="numero-saving" rotulo="Saving negociado" valor={moeda(r.kpis.savingTotal)}
                 detalhe={r.kpis.savingPercent != null ? `${pct(r.kpis.savingPercent)} da primeira proposta` : 'sem processo negociado'}
-                tendencia={{ atual: r.kpis.savingTotal, anterior: r.previous.savingTotal, bomQuandoSobe: true }} tom="ok" />
+                tendencia={{ atual: r.kpis.savingTotal, anterior: r.previous.savingTotal, bomQuandoSobe: true }} tom="ok"
+                meta={<LinhaDaMeta comparacao={r.goals?.saving} formatar={moeda} />} />
               <Numero testid="numero-fila" rotulo="Aguardando a sua aprovação"
                 valor={quantidade(fila.length)} tom={fila.length ? 'atencao' : 'neutro'}
                 detalhe={fila.length ? `${moeda(valorDaFila)}${maisAntiga != null && maisAntiga > 0 ? ` · a mais antiga há ${maisAntiga} dia(s)` : ''}` : 'fila limpa'} />
@@ -157,7 +161,8 @@ export function VisaoDaDiretoria() {
               <Numero testid="numero-otif" rotulo="Entrega no prazo (OTIF)" valor={pct(r.kpis.otifPercent)}
                 detalhe={r.kpis.otifPercent == null ? 'sem entrega medida' : `antes ${pct(r.previous.otifPercent)}`}
                 tendencia={r.kpis.otifPercent != null && r.previous.otifPercent != null
-                  ? { atual: r.kpis.otifPercent, anterior: r.previous.otifPercent, bomQuandoSobe: true } : null} />
+                  ? { atual: r.kpis.otifPercent, anterior: r.previous.otifPercent, bomQuandoSobe: true } : null}
+                meta={<LinhaDaMeta comparacao={r.goals?.otif} formatar={pct} />} />
             </div>
             <ol className="mt-4 list-decimal space-y-1 pl-5 text-[14px]" data-testid="resumo-da-diretoria">
               {resumoExecutivo(r).map((frase) => <li key={frase}>{frase}</li>)}

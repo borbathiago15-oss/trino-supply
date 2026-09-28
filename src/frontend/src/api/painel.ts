@@ -127,6 +127,8 @@ export interface DashboardSuprimentos {
   filterOptions: OpcoesFiltro;
   /** A data que prende cada indicador ao mês, dita pelo servidor (a mesma que a conta usa). */
   indicators?: Record<string, string>;
+  /** Só os indicadores com meta cadastrada e valor medido. */
+  goals?: Record<string, import('./metas').ComparacaoComMeta>;
 }
 
 export interface FiltrosPainel {

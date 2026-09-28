@@ -70,6 +70,7 @@ GET /api/v1/quotations/{id:guid}/price-history
 GET /api/v1/quotations/{id:guid}/score-map
 GET /api/v1/quotations/{id:guid}/timeline
 GET /api/v1/request-types/
+GET /api/v1/indicator-goals/
 GET /api/v1/score-weights/
 GET /api/v1/sectors/
 GET /api/v1/stage-sla/
@@ -192,6 +193,7 @@ PUT /api/v1/company
 PUT /api/v1/improvement-cycles/{id:guid}/tools
 PUT /api/v1/improvement-cycles/{id:guid}/watchers
 PUT /api/v1/quotations/{id:guid}/suppliers/{supplierId:guid}/deadline
+PUT /api/v1/indicator-goals/
 PUT /api/v1/score-weights/
 PUT /api/v1/stage-sla/
 PUT /api/v1/suppliers/{id:guid}/contract

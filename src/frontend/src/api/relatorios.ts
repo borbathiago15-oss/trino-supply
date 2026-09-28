@@ -179,6 +179,8 @@ export interface AderenciaDaOc {
 }
 
 export interface RelatorioExecutivo {
+  /** Os números do relatório diante das metas cadastradas; sem meta, o indicador fica de fora. */
+  goals?: Record<string, import('./metas').ComparacaoComMeta> | null;
   from: string;
   to: string;
   companyLabel: string | null;

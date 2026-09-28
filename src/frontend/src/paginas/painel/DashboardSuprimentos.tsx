@@ -11,6 +11,7 @@ import { useAvisos } from '@/sessao/AvisosProvider';
 import { useUsuario } from '@/sessao/SessaoProvider';
 import { moeda, quantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
+import { LinhaDaMeta } from '@/componentes/LinhaDaMeta';
 import { CentralDeAvisos } from './CentralDeAvisos';
 import { TrilhaDoProcesso } from './TrilhaDoProcesso';
 
@@ -114,6 +115,9 @@ function Analises({ dados }: { dados: Dados }) {
   ];
   const sv = dados.saving;
   const def = (chave: string) => dados.indicators?.[chave];
+  const meta = (chave: string, formatar: (v: number) => string) =>
+    <LinhaDaMeta comparacao={dados.goals?.[chave]} formatar={formatar} />;
+  const dias = (v: number) => `${v.toLocaleString('pt-BR')} d`;
 
   return (
     <>
@@ -128,15 +132,15 @@ function Analises({ dados }: { dados: Dados }) {
           definicao={def('approvedCount')} />
         <Kpi rotulo="Aguardando aprovação" valor={quantidade(k.pendingApproval)} definicao={def('pendingApproval')} />
         <Kpi rotulo="Em atraso" valor={quantidade(k.overdue)} detalhe="data de necessidade vencida"
-          definicao={def('overdue')} />
+          definicao={def('overdue')} meta={meta('overdue', quantidade)} />
         <Kpi rotulo="Tempo médio de aprovação" valor={k.avgApprovalDays != null ? `${k.avgApprovalDays} d` : '—'}
-          definicao={def('avgApprovalDays')} />
+          definicao={def('avgApprovalDays')} meta={meta('avgApprovalDays', dias)} />
         <Kpi rotulo="Valor comprado" valor={moedaCurta(k.poTotalValue)} detalhe={`${quantidade(k.poCount)} pedido(s) · pela data da aprovação`}
-          definicao={def('poTotalValue')} />
+          definicao={def('poTotalValue')} meta={meta('poTotalValue', moedaCurta)} />
         <Kpi rotulo="Pedidos em aberto" valor={quantidade(k.poOpen)}
           detalhe={k.poLate > 0 ? `${k.poLate} há +7 dias` : 'nenhum atrasado'} definicao={def('poOpen')} />
         <Kpi rotulo="Tempo médio de entrega" valor={k.avgReceiveDays != null ? `${k.avgReceiveDays} d` : '—'}
-          detalhe="aprovação → recebimento" definicao={def('avgReceiveDays')} />
+          detalhe="aprovação → recebimento" definicao={def('avgReceiveDays')} meta={meta('avgReceiveDays', dias)} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -170,6 +174,7 @@ function Analises({ dados }: { dados: Dados }) {
                 {moeda(sv.total)} economizados em {quantidade(sv.processes)} negociação(ões) — {sv.percent}% sobre {moeda(sv.baseline)}
               </strong>
               <div className="sub">Primeiras propostas {moeda(sv.baseline)} → fechado {moeda(sv.closed)}</div>
+              {meta('saving', moeda)}
               {sv.referenceOrders > 0 && (
                 <div className="sub">
                   Saving de referência (× último preço pago): <strong>{moeda(sv.referenceTotal)}</strong> em {quantidade(sv.referenceOrders)} pedido(s)

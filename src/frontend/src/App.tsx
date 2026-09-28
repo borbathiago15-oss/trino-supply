@@ -9,6 +9,7 @@ import { Familias } from '@/paginas/familias/Familias';
 import { FormasDePagamento } from '@/paginas/pagamentos/FormasDePagamento';
 import { CondicoesDePagamento } from '@/paginas/pagamentos/CondicoesDePagamento';
 import { PesosDoScore } from '@/paginas/score/PesosDoScore';
+import { MetasDosIndicadores } from '@/paginas/metas/MetasDosIndicadores';
 import { PrazosDasEtapas } from '@/paginas/torre/PrazosDasEtapas';
 import { TiposDeSolicitacao } from '@/paginas/torre/TiposDeSolicitacao';
 import { Fornecedores } from '@/paginas/fornecedores/Fornecedores';
@@ -94,6 +95,7 @@ export function Rotas() {
           <Route path="/formas-pagamento" element={<FormasDePagamento />} />
           <Route path="/condicoes-pagamento" element={<CondicoesDePagamento />} />
           <Route path="/pesos-score" element={<PesosDoScore />} />
+          <Route path="/metas" element={<MetasDosIndicadores />} />
           <Route path="/prazos-etapas" element={<PrazosDasEtapas />} />
           <Route path="/tipos-solicitacao" element={<TiposDeSolicitacao />} />
           <Route path="/centros-custo" element={<CentrosCusto />} />

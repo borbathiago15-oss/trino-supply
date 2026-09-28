@@ -1,3 +1,4 @@
+import { FaixaDaMarca } from '@/componentes/FaixaDaMarca';
 import { Fragment, useState, type FormEvent, type ReactNode } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { entrar, type Usuario } from '@/api/auth';
@@ -17,12 +18,12 @@ const PASSOS: { rotulo: string; desenho: ReactNode }[] = [
 
 function Passo({ rotulo, desenho, ultimo }: { rotulo: string; desenho: ReactNode; ultimo: boolean }) {
   return (
-    <div role="listitem" className="flex items-center gap-[7px] text-[12.5px] text-[#d7e0ee] min-[981px]:gap-3 min-[981px]:text-[14px]">
+    <div role="listitem" className="flex items-center gap-[7px] text-[12.5px] text-[#e3e3e3] min-[981px]:gap-3 min-[981px]:text-[14px]">
       <span
         aria-hidden="true"
         className={`grid h-[26px] flex-[0_0_26px] place-items-center rounded-lg border bg-white/[.04]
           min-[981px]:h-[34px] min-[981px]:flex-[0_0_34px] min-[981px]:rounded-[10px]
-          ${ultimo ? 'border-marca-vermelho/55 text-[#ff6b6b]' : 'border-white/[.16] text-[#b9c6da]'}`}
+          ${ultimo ? 'border-marca-vermelho/55 text-[#ff6b6b]' : 'border-white/[.16] text-[#bdbdbd]'}`}
       >
         <svg viewBox="0 0 24 24" {...ICONE} className="h-3.5 w-3.5 min-[981px]:h-[18px] min-[981px]:w-[18px]">{desenho}</svg>
       </span>
@@ -78,14 +79,14 @@ export function Login() {
       {/* lado institucional: marca, propósito e ciclo de suprimentos */}
       <section
         className="relative flex flex-col justify-center gap-5 overflow-hidden
-          bg-gradient-to-b from-marca-navy2 to-[#04142f] px-[18px] pb-5 pt-[22px] text-[#e8edf6]
+          bg-gradient-to-b from-fundo-card to-fundo px-[18px] pb-5 pt-[22px] text-[#ececec]
           min-[561px]:gap-5 min-[561px]:bg-none min-[561px]:px-6 min-[561px]:pb-6 min-[561px]:pt-7
           min-[981px]:gap-11 min-[981px]:px-[clamp(28px,4.5vw,72px)] min-[981px]:py-14"
       >
         {/* a partir do tablet o fundo vira o radial da marca; no celular fica o degradê simples acima */}
         <div
           aria-hidden="true" className="pointer-events-none absolute inset-0 hidden min-[561px]:block"
-          style={{ background: 'radial-gradient(120% 95% at 12% 0%, #0a2450 0%, #04142f 55%, #020c1e 100%)' }}
+          style={{ background: 'radial-gradient(120% 95% at 12% 0%, #1d1d1d 0%, #0b0d0f 55%, #040607 100%)' }}
         />
         {/* malha discreta de conexões — só CSS, sem imagem de fundo */}
         <div
@@ -109,7 +110,7 @@ export function Login() {
           <p className="mt-3.5 text-[11px] font-bold uppercase tracking-[2px] text-marca-prata min-[561px]:mt-5 min-[561px]:text-[12px] min-[561px]:tracking-[2.4px]">
             Enterprise Supply Management
           </p>
-          <p className="mt-3 hidden max-w-[46ch] text-[13.5px] leading-relaxed text-[#cfd9e8] min-[561px]:block min-[561px]:text-[14.5px] min-[981px]:text-[15.5px]">
+          <p className="mt-3 hidden max-w-[46ch] text-[13.5px] leading-relaxed text-[#c9c9c9] min-[561px]:block min-[561px]:text-[14.5px] min-[981px]:text-[15.5px]">
             Uma plataforma integrada para gestão de suprimentos, compras, fornecedores, contratos e estoque.
           </p>
         </div>
@@ -119,7 +120,7 @@ export function Login() {
           className="relative flex w-full max-w-[520px] flex-row flex-wrap items-center gap-x-1.5 gap-y-2
             motion-safe:animate-entrada min-[981px]:flex-col min-[981px]:flex-nowrap min-[981px]:items-stretch min-[981px]:gap-0.5"
         >
-          <div aria-hidden="true" className="mb-0.5 w-full text-[11px] font-bold uppercase tracking-[1.6px] text-[#7c8ba5] min-[981px]:mb-2.5">
+          <div aria-hidden="true" className="mb-0.5 w-full text-[11px] font-bold uppercase tracking-[1.6px] text-[#8a8a8a] min-[981px]:mb-2.5">
             Do pedido ao resultado
           </div>
           {PASSOS.map((p, i) => (
@@ -133,10 +134,11 @@ export function Login() {
         <div className="relative hidden w-full max-w-[520px] border-t border-white/[.12] pt-4 min-[561px]:block min-[981px]:mt-auto motion-safe:animate-entrada">
           <span className="text-[13px] font-extrabold tracking-[3px] text-white">GRUPO TRINO</span>
           <span aria-hidden="true" className="mt-1.5 block h-0.5 w-[42px] bg-marca-vermelho" />
-          <span className="mt-2.5 block max-w-[44ch] text-[12px] text-[#93a2ba] min-[561px]:text-[13px]">
+          <span className="mt-2.5 block max-w-[44ch] text-[12px] text-[#9a9a9a] min-[561px]:text-[13px]">
             O Trino Supply é a plataforma corporativa de suprimentos do Grupo Trino.
           </span>
         </div>
+        <FaixaDaMarca className="absolute inset-x-0 bottom-0 !rounded-none" altura="h-1.5" />
       </section>
 
       {/* painel de acesso */}

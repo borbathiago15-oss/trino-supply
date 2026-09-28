@@ -1,8 +1,12 @@
 import { useId, useState, type MouseEvent } from 'react';
 import { moeda, quantidade } from '@/util/formato';
 
-/** Paleta das séries — a mesma ordem de cores do sistema clássico. */
-export const CORES = ['#94a3b8', '#2563eb', '#0d9488', '#16a34a', '#f59e0b', '#dc2626'];
+/**
+ * Paleta das séries: a faixa de quatro cores do Grupo Trino, na ordem em que o sistema já
+ * usava as posições — 1 azul (informação), 2 bordô, 3 verde (aprovado), 4 laranja (atenção),
+ * 5 vermelho (rejeitado). O significado das posições fica; só a tinta é a da marca.
+ */
+export const CORES = ['#94a3b8', '#67a6dd', '#9d202c', '#a6bf38', '#df8e24', '#bd1622'];
 
 export interface Serie { nome: string; cor: string; valores: number[] }
 

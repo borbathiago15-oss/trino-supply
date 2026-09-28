@@ -4,10 +4,11 @@ import { contagemPorItem, ehSubgrupo, itensVisiveis, localizar, type ItemMenu, t
 import { useAvisos } from '@/sessao/AvisosProvider';
 import { useUsuario } from '@/sessao/SessaoProvider';
 import { LinkAbaNova } from '@/componentes/LinkAbaNova';
+import { FaixaDaMarca } from '@/componentes/FaixaDaMarca';
 
 const classeItem = (ativo: boolean, recuo: number) =>
   `flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[13.5px] font-medium transition-colors ` +
-  `${ativo ? 'bg-marca text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'} ` +
+  `${ativo ? 'bg-marca text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white'} ` +
   (recuo === 1 ? 'pl-5' : recuo === 2 ? 'pl-8 text-[13px]' : '');
 
 function Folha({ item, recuo, ativo, pendente }: {
@@ -63,7 +64,7 @@ function Subgrupo({ sub, aberto, alternar, itemAtual, pendencias, recuo = 1 }: {
       <button type="button" onClick={alternar}
         className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[13.5px] font-semibold `
           + (recuo === 1 ? 'pl-5 ' : '')
-          + (aberto ? 'text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white')}>
+          + (aberto ? 'text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white')}>
         <span>{sub.rotulo}</span>
         {!aberto && <Fechado total={somar(sub.filhos, pendencias)} />}
         <span className="text-[10px] opacity-80">{aberto ? '▾' : '▸'}</span>
@@ -113,9 +114,10 @@ export function Sidebar({ aberto = false, aoFechar }: { aberto?: boolean; aoFech
         + 'fixed inset-y-0 left-0 z-40 transition-transform lg:static lg:z-auto lg:translate-x-0 '
         + (aberto ? 'translate-x-0 shadow-2xl' : '-translate-x-full')}
       aria-label="Menu">
-      <Link to="/painel" className="block px-2 pb-4 pt-1">
+      <Link to="/painel" className="block px-2 pb-3 pt-1">
         <img src="/assets/brand/trino-supply-mark.png" width={420} height={108} alt="Trino Supply" className="h-auto w-[196px] max-w-full" />
       </Link>
+      <FaixaDaMarca className="mb-3" />
       <nav className="flex flex-1 flex-col gap-0.5">
         {grupos.map((g) => {
           // o topo não tem cabeçalho de grupo, mas tem subgrupo (Dashboard) — e até
@@ -133,7 +135,7 @@ export function Sidebar({ aberto = false, aoFechar }: { aberto?: boolean; aoFech
             <div key={g.titulo}>
               <button type="button" onClick={() => setEscolha({ grupo: aberto ? null : g.titulo, sub: null })}
                 className={`mt-2 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-[11.5px] font-bold uppercase tracking-wide ` +
-                  (aberto ? 'text-white' : 'text-slate-400 hover:bg-slate-800 hover:text-white')}>
+                  (aberto ? 'text-white' : 'text-slate-400 hover:bg-white/10 hover:text-white')}>
                 <span>{g.titulo}</span>
                 {!aberto && <Fechado total={somar(g.itens, pendencias)} />}
                 <span className="text-[10px] opacity-80">{aberto ? '▾' : '▸'}</span>

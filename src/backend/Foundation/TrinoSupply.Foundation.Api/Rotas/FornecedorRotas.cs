@@ -176,28 +176,16 @@ public static class FornecedorRotas
         {
             if (!SupplierService.CanMaintain(RoleOf(p)))
                 return Error(ctx, 403, "SUP-ERR-900", "Seu papel não mantém documentos de fornecedor.");
-            if (!request.HasFormContentType) return Error(ctx, 400, "DOC-ERR-001", "Envie o arquivo como multipart/form-data.");
-            var form = await request.ReadFormAsync();
-            var file = form.Files.FirstOrDefault();
-            if (file is null || file.Length == 0) return Error(ctx, 400, "DOC-ERR-001", "Nenhum arquivo enviado.");
-            if (file.Length > StoredDocument.MaxSizeBytes) return Error(ctx, 400, "DOC-ERR-002", "Arquivo acima de 10 MB.");
-            if (!StoredDocument.AllowedContentTypes.Contains(file.ContentType))
-                return Error(ctx, 400, "DOC-ERR-003", "Formato não permitido: envie PDF, imagem ou documento Office.");
-
-            using var ms = new MemoryStream();
-            await file.CopyToAsync(ms);
-            var stored = new StoredDocument
-            {
-                FileName = Path.GetFileName(file.FileName), ContentType = file.ContentType, SizeBytes = file.Length,
-                Content = ms.ToArray(), EntityType = "FORNECEDOR_CERTIDAO", EntityId = id,
-                UploadedByLabel = p.FindFirstValue("name") ?? "Cadastro", UploadedAt = clock.GetUtcNow(),
-            };
-            db.StoredDocuments.Add(stored);
+            var (stored, erro) = await StoreUploadAsync(request, db, clock, p, "FORNECEDOR_CERTIDAO", id,
+                rotuloPadrao: "Cadastro");
+            if (erro is not null) return Error(ctx, 400, erro.Code, erro.Message);
             await db.SaveChangesAsync();
 
+            // o formulário já foi lido pelo helper: os campos vêm da mesma leitura
+            var form = await request.ReadFormAsync();
             DateOnly? validade = DateOnly.TryParse(form["validUntil"], out var v) ? v : null;
             var (doc, error) = await svc.AddDocumentAsync(id, form["type"], form["label"], validade,
-                stored.Id, stored.FileName, stored.UploadedByLabel);
+                stored!.Id, stored.FileName, stored.UploadedByLabel);
             return error is not null ? Error(ctx, error.Code == "SUP-ERR-404" ? 404 : 422, error.Code, error.Message)
                 : Ok(new { id = doc!.Id, documentId = stored.Id, fileName = stored.FileName }, ctx);
         }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole())

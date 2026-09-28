@@ -250,6 +250,7 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
             if (error is not null) return (null, error);
             pr.Items.Add(item!);
         }
+        if (ErroDeTamanho(pr) is { } tamanho) return (null, tamanho);
         db.Requisitions.Add(pr);
         await db.SaveChangesAsync(ct);
         return (pr, null); // EVT-001 RequisitionCreated (outbox: incremento futuro)
@@ -328,6 +329,7 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         if (clearBudget) pr!.Budget = null;
         else if (budget is not null) pr!.Budget = budget > 0 ? budget : null;
 
+        if (ErroDeTamanho(pr!) is { } tamanho) return (null, tamanho);
         await TouchAndSaveAsync(pr!, ct);
         return (pr, null);
     }
@@ -467,6 +469,7 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
         if (catalogError is not null) return (null, catalogError);
         var (item, itemError) = BuildItem(input, pr.Items.Count == 0 ? 1 : pr.Items.Max(i => i.Sequence) + 1, clock.GetUtcNow(), catalogItems!);
         if (itemError is not null) return (null, itemError);
+        if (TamanhoDeTexto.Conferir(db, item!, "PR-ERR-031", RotulosDoTexto) is { } tamanho) return (null, tamanho);
         item!.RequisitionId = pr.Id;
         db.RequisitionItems.Add(item); // Add explícito: chave pré-gerada em pai já rastreado ficaria Modified
         pr.Items.Add(item);
@@ -585,6 +588,29 @@ public class RequisitionService(AppDbContext db, IPrNumberGenerator numbers, Cat
             CreatedAt = now,
         }, null);
     }
+
+    /// <summary>Os nomes que a tela mostra, para a mensagem dizer o que encurtar.</summary>
+    private static readonly Dictionary<string, string> RotulosDoTexto = new()
+    {
+        [nameof(PurchaseRequisition.Justification)] = "A justificativa",
+        [nameof(PurchaseRequisition.InternalNotes)] = "A observação interna",
+        [nameof(PurchaseRequisition.UrgencyReason)] = "O motivo da urgência",
+        [nameof(PurchaseRequisition.UrgencyImpact)] = "O impacto de não comprar",
+        [nameof(PurchaseRequisition.DeliveryLocation)] = "O local de entrega",
+        [nameof(PurchaseRequisition.CostCenter)] = "O centro de custo",
+        [nameof(PurchaseRequisition.NeedType)] = "O tipo da SC",
+        [nameof(RequisitionItem.Description)] = "A descrição do item",
+        [nameof(RequisitionItem.Notes)] = "A observação do item",
+        [nameof(RequisitionItem.UnitOfMeasure)] = "A unidade do item",
+    };
+
+    /// <summary>
+    /// PR-ERR-031: texto maior que a coluna, dito antes de gravar e com o nome do campo (auditoria A6).
+    /// </summary>
+    private UserError? ErroDeTamanho(PurchaseRequisition pr) =>
+        TamanhoDeTexto.Conferir(db, pr, "PR-ERR-031", RotulosDoTexto)
+        ?? pr.Items.Select(i => TamanhoDeTexto.Conferir(db, i, "PR-ERR-031", RotulosDoTexto))
+            .FirstOrDefault(e => e is not null);
 
     private async Task TouchAndSaveAsync(PurchaseRequisition pr, CancellationToken ct)
     {

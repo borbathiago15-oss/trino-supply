@@ -65,6 +65,7 @@ const completo = (p: Partial<PlanoCompleto> = {}): PlanoCompleto => ({
   risks: p.risks ?? [risco({})],
   rootCause: p.rootCause ?? null,
   lessons: p.lessons ?? null,
+  canEdit: p.canEdit ?? true,
 });
 
 const montar = () => render(
@@ -231,5 +232,21 @@ describe('<PlanoDetalhe />', () => {
     await waitFor(() => expect(salvarCausaRaiz).toHaveBeenCalledWith('p1', {
       method: 'CINCO_PORQUES', mainCause: 'Sem limite afixado',
     }));
+  });
+
+  it('quem só acompanha lê o plano sem os botões que o servidor recusaria (AP-ERR-902)', async () => {
+    vi.mocked(abrirPlano).mockResolvedValue(completo({
+      canEdit: false,
+      items: [acao({ id: 'a1', number: 'AC-1' }), acao({ id: 'a2', number: 'AC-2', canEdit: true })],
+    }));
+    montar();
+    expect(await screen.findByTestId('so-acompanha')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Encerrar plano' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Incluir ação' })).not.toBeInTheDocument();
+    // a ação que é dela, ela atualiza; a dos outros, não
+    const tabela = screen.getByTestId('acoes-do-plano');
+    const linhas = within(tabela).getAllByRole('row').slice(1);
+    expect(within(linhas[0]).queryByRole('button', { name: 'Concluir' })).not.toBeInTheDocument();
+    expect(within(linhas[1]).getByRole('button', { name: 'Concluir' })).toBeInTheDocument();
   });
 });

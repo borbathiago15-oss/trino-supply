@@ -263,24 +263,10 @@ public static class SolicitacaoRotas
             if (await svc.ChangeWindowErrorAsync(pr) is { } windowError)
                 return Error(ctx, 409, windowError.Code, windowError.Message);
 
-            if (!request.HasFormContentType) return Error(ctx, 400, "DOC-ERR-001", "Envie o arquivo como multipart/form-data.");
-            var form = await request.ReadFormAsync();
-            var file = form.Files.FirstOrDefault();
-            if (file is null || file.Length == 0) return Error(ctx, 400, "DOC-ERR-001", "Nenhum arquivo enviado.");
-            if (file.Length > StoredDocument.MaxSizeBytes) return Error(ctx, 400, "DOC-ERR-002", "Arquivo acima de 10 MB.");
-            if (!StoredDocument.AllowedContentTypes.Contains(file.ContentType))
-                return Error(ctx, 400, "DOC-ERR-003", "Formato não permitido: envie PDF, planilha (XLSX/XLS/CSV), imagem ou DOCX.");
-
-            using var ms = new MemoryStream();
-            await file.CopyToAsync(ms);
-            var now = clock.GetUtcNow();
-            var doc = new StoredDocument
-            {
-                FileName = Path.GetFileName(file.FileName), ContentType = file.ContentType, SizeBytes = file.Length,
-                Content = ms.ToArray(), EntityType = "REQUISITION", EntityId = pr.Id,
-                UploadedByLabel = actor.Label, UploadedAt = now,
-            };
-            db.StoredDocuments.Add(doc);
+            var (doc, erro) = await StoreUploadAsync(request, db, clock, p, "REQUISITION", pr.Id,
+                rotuloPadrao: actor.Label);
+            if (erro is not null) return Error(ctx, 400, erro.Code, erro.Message);
+            var now = doc!.UploadedAt;
             var attachment = new RequisitionAttachment
             {
                 RequisitionId = pr.Id, DocumentId = doc.Id, FileName = doc.FileName,

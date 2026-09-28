@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using TrinoSupply.Foundation.Api.Acoes;
 using TrinoSupply.Foundation.Api.Domain;
+using TrinoSupply.Foundation.Api.Procurement;
 using static TrinoSupply.Foundation.Api.Rotas.Api;
 
 namespace TrinoSupply.Foundation.Api.Rotas;
@@ -27,7 +28,7 @@ public static class PlanoDeAcaoRotas
         planos.AddEndpointFilter(RejectSupplierRole());
         planos.AddEndpointFilter(RequireModules(AppModules.PlanoAcao));
 
-        static object Acao(ActionItem a, DateOnly hoje) => new
+        static object Acao(ActionItem a, DateOnly hoje, bool? canEdit = null) => new
         {
             id = a.Id, number = a.Number, seq = a.Seq, planId = a.PlanId, title = a.Title,
             reason = a.Reason, area = a.Area, supportArea = a.SupportArea,
@@ -44,6 +45,7 @@ public static class PlanoDeAcaoRotas
             daysLate = PlanoDeAcao.DiasDeAtraso(a, hoje),
             open = PlanoDeAcao.Aberta(a),
             completedAt = a.CompletedAt, createdByLabel = a.CreatedByLabel, createdAt = a.CreatedAt,
+            canEdit,
         };
 
         static object Resumo(ActionPlan p, DateOnly hoje) => new
@@ -89,11 +91,35 @@ public static class PlanoDeAcaoRotas
             status = r.Status,
         };
 
+        // O plano alheio: quem não o enxerga recebe 404, e não 403 — o plano de um ciclo restrito
+        // não confirma nem que existe. Enxergar não é editar: fora de quem conduz, 403 AP-ERR-902.
+        static async Task<IResult?> BarrarPlanoAsync(Guid id, PlanoDeAcaoService svc, Actor quem,
+            HttpContext ctx, CancellationToken ct)
+        {
+            var plano = await svc.AbrirAsync(quem, id, ct);
+            if (plano is null) return Error(ctx, 404, "AP-ERR-404", "Plano não encontrado.");
+            return await svc.PodeConduzirAsync(plano, quem, ct) ? null : SemConducao(ctx);
+        }
+
+        static async Task<IResult?> BarrarAcaoAsync(Guid itemId, PlanoDeAcaoService svc, Actor quem,
+            HttpContext ctx, CancellationToken ct)
+        {
+            var acao = await svc.AcaoAsync(itemId, ct);
+            var plano = acao is null ? null : await svc.AbrirAsync(quem, acao.PlanId, ct);
+            if (acao is null || plano is null) return Error(ctx, 404, "AC-ERR-404", "Ação não encontrada.");
+            var (dono, criador) = await svc.ConducaoDoCicloAsync(plano, ct);
+            return PlanoDeAcaoService.PodeMexerNaAcao(acao, plano, quem, dono, criador) ? null : SemConducao(ctx);
+        }
+
+        static IResult SemConducao(HttpContext ctx) => Error(ctx, 403, "AP-ERR-902",
+            "Você acompanha este plano, mas editar é de quem o conduz: quem o criou, os responsáveis, "
+            + "o gestor de suprimentos e o administrador.");
+
         planos.MapGet("/", async (PlanoDeAcaoService svc, TimeProvider clock, HttpContext ctx,
-            string? q, string? status, string? priority, string? costCenter, string? area,
+            ClaimsPrincipal p, string? q, string? status, string? priority, string? costCenter, string? area,
             Guid? responsibleId, bool? closed, Guid? cycleId, CancellationToken ct) =>
         {
-            var pagina = await svc.ListarAsync(new FiltroDePlanos(
+            var pagina = await svc.ListarAsync(BuildActor(p)!, new FiltroDePlanos(
                 q, status, priority, costCenter, area, responsibleId, closed, cycleId), ct);
             var hoje = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
             return Ok(new
@@ -115,17 +141,23 @@ public static class PlanoDeAcaoRotas
         });
 
         planos.MapGet("/{id:guid}", async (Guid id, PlanoDeAcaoService svc, TimeProvider clock,
-            HttpContext ctx, CancellationToken ct) =>
+            ClaimsPrincipal p, HttpContext ctx, CancellationToken ct) =>
         {
-            var plano = await svc.AbrirAsync(id, ct);
+            var quem = BuildActor(p)!;
+            var plano = await svc.AbrirAsync(quem, id, ct);
             if (plano is null) return Error(ctx, 404, "AP-ERR-404", "Plano não encontrado.");
+            // a tela antecipa o 403: quem só acompanha vê o plano sem os botões de editar
+            var (dono, criador) = await svc.ConducaoDoCicloAsync(plano, ct);
+            var conduz = PlanoDeAcaoService.PodeConduzir(plano, quem, dono, criador);
             var hoje = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
             var causa = plano.RootCauses.FirstOrDefault();
             var licao = plano.Lessons.FirstOrDefault();
             return Ok(new
             {
                 plan = Resumo(plano, hoje),
-                items = plano.Items.OrderBy(i => i.Seq).Select(i => Acao(i, hoje)),
+                canEdit = conduz,
+                items = plano.Items.OrderBy(i => i.Seq).Select(i =>
+                    Acao(i, hoje, PlanoDeAcaoService.PodeMexerNaAcao(i, plano, quem, dono, criador))),
                 risks = plano.Risks.OrderByDescending(SeveridadeDoRisco.Pontos).Select(Risco),
                 rootCause = causa is null ? null : new
                 {
@@ -156,6 +188,7 @@ public static class PlanoDeAcaoRotas
         {
             if (!PlanoDeAcaoService.CanManage(RoleOf(p)))
                 return Error(ctx, 403, "AP-ERR-900", "Seu papel não mantém plano de ação.");
+            if (await BarrarPlanoAsync(id, svc, BuildActor(p)!, ctx, ct) is { } barradoPlano) return barradoPlano;
             var (plano, erro) = await svc.AtualizarPlanoAsync(id, body.Dados(), ct);
             return erro is not null
                 ? Error(ctx, erro.Code switch { "AP-ERR-404" => 404, "AP-ERR-020" => 409, _ => 400 },
@@ -171,6 +204,7 @@ public static class PlanoDeAcaoRotas
         {
             if (!PlanoDeAcaoService.CanManage(RoleOf(p)))
                 return Error(ctx, 403, "AP-ERR-900", "Seu papel não mantém plano de ação.");
+            if (await BarrarPlanoAsync(id, svc, BuildActor(p)!, ctx, ct) is { } barradoPlano) return barradoPlano;
             var (plano, erro) = await svc.EncerrarAsync(BuildActor(p)!, id, body?.EvidenceNote, ct);
             return erro is not null
                 ? Error(ctx, erro.Code == "AP-ERR-404" ? 404 : 400, erro.Code, erro.Message)
@@ -183,6 +217,8 @@ public static class PlanoDeAcaoRotas
             if (!PlanoDeAcaoService.CanReopen(RoleOf(p)))
                 return Error(ctx, 403, "AP-ERR-901",
                     "Reabrir um plano encerrado é do gestor ou do administrador.");
+            if (await svc.AbrirAsync(BuildActor(p)!, id, ct) is null)
+                return Error(ctx, 404, "AP-ERR-404", "Plano não encontrado.");
             var (plano, erro) = await svc.ReabrirAsync(id, ct);
             return erro is not null
                 ? Error(ctx, erro.Code == "AP-ERR-404" ? 404 : 400, erro.Code, erro.Message)
@@ -197,6 +233,7 @@ public static class PlanoDeAcaoRotas
         {
             if (!PlanoDeAcaoService.CanManage(RoleOf(p)))
                 return Error(ctx, 403, "AP-ERR-900", "Seu papel não mantém plano de ação.");
+            if (await BarrarPlanoAsync(id, svc, BuildActor(p)!, ctx, ct) is { } barradoPlano) return barradoPlano;
             var (acao, erro) = await svc.CriarAcaoAsync(BuildActor(p)!, id, body.Dados(), ct);
             if (erro is not null)
                 return Error(ctx, erro.Code switch { "AP-ERR-404" => 404, "AP-ERR-020" => 409, _ => 400 },
@@ -211,6 +248,7 @@ public static class PlanoDeAcaoRotas
         {
             if (!PlanoDeAcaoService.CanManage(RoleOf(p)))
                 return Error(ctx, 403, "AP-ERR-900", "Seu papel não mantém plano de ação.");
+            if (await BarrarAcaoAsync(itemId, svc, BuildActor(p)!, ctx, ct) is { } barradoAcao) return barradoAcao;
             var (acao, erro) = await svc.AtualizarAcaoAsync(itemId, body.Dados(), body.RealizedGain, ct);
             return erro is not null
                 ? Error(ctx, erro.Code switch { "AC-ERR-404" => 404, "AP-ERR-020" => 409, _ => 400 },
@@ -226,6 +264,7 @@ public static class PlanoDeAcaoRotas
         {
             if (!PlanoDeAcaoService.CanManage(RoleOf(p)))
                 return Error(ctx, 403, "AP-ERR-900", "Seu papel não mantém plano de ação.");
+            if (await BarrarAcaoAsync(itemId, svc, BuildActor(p)!, ctx, ct) is { } barradoAcao) return barradoAcao;
             var (acao, erro) = await svc.MudarStatusAsync(itemId, body.Status, body.Reason, body.Progress, ct);
             return erro is not null
                 ? Error(ctx, erro.Code switch { "AC-ERR-404" => 404, "AP-ERR-020" => 409, _ => 400 },
@@ -240,6 +279,7 @@ public static class PlanoDeAcaoRotas
         {
             if (!PlanoDeAcaoService.CanManage(RoleOf(p)))
                 return Error(ctx, 403, "AP-ERR-900", "Seu papel não mantém plano de ação.");
+            if (await BarrarPlanoAsync(id, svc, BuildActor(p)!, ctx, ct) is { } barradoPlano) return barradoPlano;
             var (risco, erro) = await svc.SalvarRiscoAsync(id, body.Id, body.Description ?? "",
                 body.Probability, body.Impact, body.Mitigation, body.ResponsibleId, body.Status, ct);
             return erro is not null
@@ -253,6 +293,7 @@ public static class PlanoDeAcaoRotas
         {
             if (!PlanoDeAcaoService.CanManage(RoleOf(p)))
                 return Error(ctx, 403, "AP-ERR-900", "Seu papel não mantém plano de ação.");
+            if (await BarrarPlanoAsync(id, svc, BuildActor(p)!, ctx, ct) is { } barradoPlano) return barradoPlano;
             var erro = await svc.ApagarRiscoAsync(id, riskId, ct);
             return erro is not null
                 ? Error(ctx, erro.Code == "AP-ERR-404" ? 404 : 409, erro.Code, erro.Message)
@@ -264,6 +305,7 @@ public static class PlanoDeAcaoRotas
         {
             if (!PlanoDeAcaoService.CanManage(RoleOf(p)))
                 return Error(ctx, 403, "AP-ERR-900", "Seu papel não mantém plano de ação.");
+            if (await BarrarPlanoAsync(id, svc, BuildActor(p)!, ctx, ct) is { } barradoPlano) return barradoPlano;
             var (causa, erro) = await svc.SalvarCausaRaizAsync(id, body.Method, body.ContentJson, body.MainCause, ct);
             return erro is not null
                 ? Error(ctx, erro.Code == "AP-ERR-404" ? 404 : 409, erro.Code, erro.Message)
@@ -275,6 +317,7 @@ public static class PlanoDeAcaoRotas
         {
             if (!PlanoDeAcaoService.CanManage(RoleOf(p)))
                 return Error(ctx, 403, "AP-ERR-900", "Seu papel não mantém plano de ação.");
+            if (await BarrarPlanoAsync(id, svc, BuildActor(p)!, ctx, ct) is { } barradoPlano) return barradoPlano;
             var (licao, _) = await svc.SalvarLicoesAsync(id, body.WhatWorked, body.WhatFailed,
                 body.Lessons, body.BestPractice, body.NextSteps, body.Recommendation, ct);
             return Ok(new

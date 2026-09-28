@@ -78,7 +78,16 @@ dotnet run
 
 ```bash
 curl -s https://SEU-DOMINIO/health
-# {"status":"healthy", ..., "database":"up", "setupComplete":true}
+# {"status":"healthy","database":"up"}
+```
+
+Sem sessão, o `/health` responde só o estado. O commit no ar, o horário de subida e o
+`setupComplete` vão para quem chega com sessão — é o que impede um estranho de saber qual
+versão está rodando:
+
+```bash
+curl -s -H "Authorization: Bearer <access token>" https://SEU-DOMINIO/health
+# {"status":"healthy", ..., "setupComplete":true, "commit":"…", "startedAt":"…"}
 ```
 
 `database` é o que importa: o endpoint pergunta ao PostgreSQL antes de responder,

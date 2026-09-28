@@ -1,3 +1,4 @@
+using System.Net;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Hosting;
@@ -113,5 +114,61 @@ public class SegurancaHttpTests
         var outro = new HttpRequestMessage(HttpMethod.Get, "http://trino.exemplo/pedidos");
         outro.Headers.Add("X-Forwarded-Proto", "https");
         Assert.Null(Cabecalho(await dev.SendAsync(outro), "Strict-Transport-Security"));
+    }
+
+    /// <summary>
+    /// O IP que o rate limit enxerga (A1 da auditoria). O proxy do Railway chega ao contêiner
+    /// por um endereço da rede dele, que não é loopback: se o <c>X-Forwarded-For</c> dele for
+    /// ignorado, todo cliente vira o IP do proxy, e dez senhas erradas de qualquer um travam o
+    /// login da empresa inteira. A configuração antiga (<c>KnownNetworks = { }</c>) não limpava
+    /// a lista padrão — só confiava em loopback, que é justamente o caso que nunca acontece lá.
+    /// </summary>
+    private static async Task<HttpClient> ServidorAtrasDoProxyAsync(string ipDoProxy)
+    {
+        var host = await new HostBuilder()
+            .ConfigureWebHost(web => web
+                .UseTestServer()
+                .Configure(app =>
+                {
+                    // o TestServer não tem conexão de verdade: o endereço de quem chega é o do proxy
+                    app.Use((ctx, next) => { ctx.Connection.RemoteIpAddress = IPAddress.Parse(ipDoProxy); return next(); });
+                    app.UsarHttpsAtrasDoProxy(producao: true);
+                    app.Run(ctx => ctx.Response.WriteAsync(ctx.Connection.RemoteIpAddress?.ToString() ?? ""));
+                }))
+            .StartAsync();
+        return host.GetTestClient();
+    }
+
+    private static async Task<string> IpVistoAsync(HttpClient cliente, string? xff)
+    {
+        var pedido = new HttpRequestMessage(HttpMethod.Get, "/api/v1/auth/login");
+        pedido.Headers.Add("X-Forwarded-Proto", "https");
+        if (xff is not null) pedido.Headers.Add("X-Forwarded-For", xff);
+        return await (await cliente.SendAsync(pedido)).Content.ReadAsStringAsync();
+    }
+
+    [Fact]
+    public async Task Atras_do_proxy_o_ip_do_cliente_e_o_que_o_proxy_informou()
+    {
+        var cliente = await ServidorAtrasDoProxyAsync("10.12.0.7");
+        Assert.Equal("203.0.113.9", await IpVistoAsync(cliente, "203.0.113.9"));
+        // dois clientes diferentes são dois baldes de rate limit, e não um só
+        Assert.Equal("198.51.100.4", await IpVistoAsync(cliente, "198.51.100.4"));
+    }
+
+    [Fact]
+    public async Task So_o_ultimo_salto_vale_e_o_que_o_cliente_inventa_antes_dele_nao()
+    {
+        // o cliente manda "1.1.1.1" para fugir do limite; o proxy acrescenta o IP real no fim.
+        // Com ForwardLimit = 1 só o salto do proxy conta
+        var cliente = await ServidorAtrasDoProxyAsync("10.12.0.7");
+        Assert.Equal("203.0.113.9", await IpVistoAsync(cliente, "1.1.1.1, 203.0.113.9"));
+    }
+
+    [Fact]
+    public async Task Sem_cabecalho_do_proxy_o_ip_e_o_da_conexao()
+    {
+        var cliente = await ServidorAtrasDoProxyAsync("10.12.0.7");
+        Assert.Equal("10.12.0.7", await IpVistoAsync(cliente, null));
     }
 }

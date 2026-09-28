@@ -159,4 +159,26 @@ public class CatalogImportTests
         Assert.Equal(2, result.Errors);
         Assert.Equal(2, await db.CatalogItems.CountAsync());
     }
+
+    /// <summary>
+    /// Auditoria A2: XML repetido comprime mais de cem vezes. Uma planilha de poucos KB que
+    /// abre 51 MB é recusada — e a importação responde 400 (IMP-ERR-002), não consome a memória.
+    /// </summary>
+    [Fact]
+    public void Planilha_que_descompacta_alem_do_teto_e_recusada()
+    {
+        using var ms = new MemoryStream();
+        using (var zip = new System.IO.Compression.ZipArchive(ms, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var entrada = zip.CreateEntry("xl/worksheets/sheet1.xml", System.IO.Compression.CompressionLevel.Fastest);
+            using var s = entrada.Open();
+            var bloco = new byte[1024 * 1024];
+            Array.Fill(bloco, (byte)' ');
+            for (var i = 0; i < 51; i++) s.Write(bloco);
+        }
+        Assert.True(ms.Length < 1024 * 1024);
+        ms.Position = 0;
+
+        Assert.Throws<InvalidDataException>(() => SpreadsheetReader.Read(ms, "bomba.xlsx"));
+    }
 }

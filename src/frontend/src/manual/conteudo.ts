@@ -140,6 +140,7 @@ export const MANUAIS: Record<string, Manual> = {
       { texto: 'Prioridade urgente pede a justificativa da urgência e o impacto de não comprar.' },
       { codigo: 'PR-ERR-023', texto: 'A empresa precisa ser um dos CNPJs ativos do cadastro (Estrutura da Empresa → Empresas).' },
       { codigo: 'PR-ERR-024', texto: 'A finalidade (orçamento ou compra) é obrigatória. O comprador pode corrigi-la na Torre até a SC entrar em cotação (PR-ERR-025).' },
+      { codigo: 'PR-ERR-031', texto: 'Cada texto tem limite: a justificativa e a observação, 2.000 caracteres; o motivo e o impacto da urgência, 500; a descrição do item, 500. O campo para de aceitar no limite.' },
     ],
     duvidas: [
       { pergunta: 'Onde a SC vai ser entregue?', resposta: 'No local de entrega escolhido. A lista junta os almoxarifados e os centros de custo que recebem material — quem paga e quem recebe podem ser diferentes.' },
@@ -346,6 +347,7 @@ export const MANUAIS: Record<string, Manual> = {
     regras: [
       { texto: 'Toda ação pertence a um plano.' },
       { texto: 'Ação suspensa não conta como atrasada: ela está parada por decisão.' },
+      { texto: 'O plano de um ciclo de melhoria só aparece para quem enxerga o ciclo.' },
     ],
   },
   'plan-detail': {
@@ -360,6 +362,7 @@ export const MANUAIS: Record<string, Manual> = {
     regras: [
       { codigo: 'AC-ERR-014', texto: 'Suspender ou cancelar uma ação exige o motivo.' },
       { codigo: 'AP-ERR-020', texto: 'Plano encerrado não se edita. Reabrir é do gestor ou do administrador.' },
+      { codigo: 'AP-ERR-902', texto: 'Enxergar não é editar: quem conduz o plano (quem criou, os responsáveis, o gestor, o administrador e quem conduz o ciclo) é que mexe nele. Quem responde por uma ação atualiza o avanço dela.' },
       { texto: 'Sem investimento, o ROI fica vazio — não zero.' },
       { texto: 'Encerrar é decisão: um plano a 100% continua ativo até alguém encerrá-lo.' },
     ],

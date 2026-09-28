@@ -70,6 +70,10 @@ public class CicloDeMelhoriaService(AppDbContext db, TimeProvider clock)
     /// entrava na lista de qualquer perfil só por não ter centro vinculado.
     /// </para>
     /// </summary>
+    /// <summary><see cref="VisiveisAsync(User, CancellationToken)"/> a partir do ator do token.</summary>
+    public async Task<IQueryable<ImprovementCycle>> VisiveisAsync(Actor ator, CancellationToken ct = default) =>
+        await VisiveisAsync(await EuAsync(ator, ct), ct);
+
     public async Task<IQueryable<ImprovementCycle>> VisiveisAsync(User eu, CancellationToken ct = default)
     {
         if (eu.Role == Roles.SystemAdministrator) return db.ImprovementCycles;

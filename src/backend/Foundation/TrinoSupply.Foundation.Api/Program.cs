@@ -18,6 +18,8 @@ using static TrinoSupply.Foundation.Api.Rotas.Anexos;
 using TrinoSupply.Foundation.Api.Rotas;
 
 var builder = WebApplication.CreateBuilder(args);
+// o cabeçalho "Server: Kestrel" só diz a quem sonda com o que está falando (auditoria A8)
+builder.WebHost.ConfigureKestrel(k => k.AddServerHeader = false);
 
 // ---- Configuração -----------------------------------------------------------
 var jwtOptions = new JwtOptions();
@@ -167,20 +169,12 @@ app.Use(async (ctx, next) =>
 var commit = VersaoImplantada.Commit();
 var iniciadoEm = DateTimeOffset.UtcNow;
 
-app.MapGet("/health", async (AppDbContext db, CancellationToken ct) =>
+app.MapGet("/health", async (AppDbContext db, HttpContext ctx, CancellationToken ct) =>
 {
     var banco = await db.Database.CanConnectAsync(ct);
-    return Results.Json(new
-    {
-        status = banco ? "healthy" : "degraded",
-        service = "trino-supply-foundation",
-        database = banco ? "up" : "down",
-        setupComplete = seedOk,
-        commit,
-        commitShort = VersaoImplantada.Curto(commit),
-        startedAt = iniciadoEm,
-        timestamp = DateTimeOffset.UtcNow,
-    }, statusCode: banco ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
+    return Results.Json(
+        Saude.Corpo(banco, ctx.User.Identity?.IsAuthenticated == true, seedOk, commit, iniciadoEm, DateTimeOffset.UtcNow),
+        statusCode: banco ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
 });
 
 // ---- Autenticação: login, refresh, sessão e troca de senha ------------------

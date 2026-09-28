@@ -112,13 +112,23 @@ public static class Seguranca
             await next();
         });
 
-        // e só então o esquema verdadeiro passa a valer para o resto do app
-        return app.UseForwardedHeaders(new ForwardedHeadersOptions
+        // e só então o esquema e o IP verdadeiros passam a valer para o resto do app —
+        // inclusive para o rate limit, que particiona pelo RemoteIpAddress
+        var opcoes = new ForwardedHeadersOptions
         {
             ForwardedHeaders = ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedFor,
-            // o proxy é o do Railway, e não um endereço que possamos fixar aqui; a rede é
-            // dele e o contêiner só é alcançável por ele
-            KnownNetworks = { }, KnownProxies = { },
-        });
+            // só o salto do proxy que termina o TLS: o que o cliente escreveu antes dele no
+            // X-Forwarded-For é ignorado, senão bastaria inventar um IP por tentativa para
+            // fugir do limite do login
+            ForwardLimit = 1,
+        };
+        // O proxy é o do Railway, e não um endereço que possamos fixar aqui; a rede é dele e
+        // o contêiner só é alcançável por ele. As listas precisam ser LIMPAS: o padrão confia
+        // só em loopback, e `KnownNetworks = { }` num inicializador não remove nada — foi o
+        // que fez todo cliente virar o IP do proxy e um balde só de rate limit para a empresa
+        // inteira (auditoria A1).
+        opcoes.KnownNetworks.Clear();
+        opcoes.KnownProxies.Clear();
+        return app.UseForwardedHeaders(opcoes);
     }
 }

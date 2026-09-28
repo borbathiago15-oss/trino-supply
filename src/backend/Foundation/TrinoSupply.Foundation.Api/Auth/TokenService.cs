@@ -89,5 +89,7 @@ public class TokenService(JwtOptions options)
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Secret)),
         ValidateLifetime = true,
         ClockSkew = TimeSpan.FromSeconds(30),
+        // o token é assinado só com HS256: aceitar outro algoritmo não tem uso legítimo (auditoria A14)
+        ValidAlgorithms = [SecurityAlgorithms.HmacSha256],
     };
 }

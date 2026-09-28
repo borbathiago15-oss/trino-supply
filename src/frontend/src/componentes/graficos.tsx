@@ -145,7 +145,7 @@ export function GraficoColunas({ rotulos, series, empilhado = false, formatar = 
         </g>
         {rotulos.map((lb, i) => (
           <text key={lb} x={32 + i * vao + (empilhado ? 13 : series.length * 6.5)} y={A - 8} fontSize="9.5"
-            fill={aoClicarRotulo ? '#2563eb' : '#64748b'} textAnchor="middle"
+            fill={aoClicarRotulo ? '#9d202c' : '#64748b'} textAnchor="middle"
             style={aoClicarRotulo ? { cursor: 'pointer' } : undefined}
             onClick={aoClicarRotulo ? (e) => { e.stopPropagation(); aoClicarRotulo(lb); } : undefined}>
             {rotuloDoMes(lb)}

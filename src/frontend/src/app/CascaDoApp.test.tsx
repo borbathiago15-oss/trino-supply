@@ -13,12 +13,22 @@ vi.mock('@/layout/BarraDeAjuda', () => ({ BarraDeAjuda: () => null }));
 const perfil = (role: Usuario['role'], modules: Usuario['modules'] = ['COMPRAS', 'SOLICITACOES', 'APROVACAO']) =>
   ({ role, modules });
 
-describe('as abas do app seguem o menu do sistema', () => {
-  it('o diretor aprova e lê a visão da diretoria; o painel do comprador ele não tem nem no sistema', () => {
-    expect(abasDoApp(perfil('Director', [])).map((a) => a.rotulo)).toEqual(['Aprovar', 'Diretoria']);
+describe('as abas do app são as três telas, para quem o servidor deixa ler', () => {
+  it('o diretor tem as três: no sistema o menu troca o painel pela visão da diretoria, mas a permissão é a mesma', () => {
+    expect(abasDoApp(perfil('Director')).map((a) => a.rotulo)).toEqual(['Aprovar', 'Diretoria', 'Dashboard']);
+  });
+  it('o comprador e o gestor têm as três', () => {
+    expect(abasDoApp(perfil('PurchasingOfficer')).map((a) => a.rotulo)).toEqual(['Aprovar', 'Diretoria', 'Dashboard']);
+    expect(abasDoApp(perfil('SupplyManager')).map((a) => a.rotulo)).toEqual(['Aprovar', 'Diretoria', 'Dashboard']);
   });
   it('o administrador vê as três', () => {
     expect(abasDoApp(perfil('SystemAdministrator')).map((a) => a.rotulo)).toEqual(['Aprovar', 'Diretoria', 'Dashboard']);
+  });
+  it('o auditor lê e não aprova: só as duas de leitura', () => {
+    expect(abasDoApp(perfil('Auditor')).map((a) => a.rotulo)).toEqual(['Diretoria', 'Dashboard']);
+  });
+  it('sem os módulos das rotas, a aba não abre — o servidor a recusaria', () => {
+    expect(abasDoApp(perfil('Director', [])).map((a) => a.rotulo)).toEqual(['Aprovar']);
   });
   it('quem só solicita não tem aba nenhuma', () => {
     expect(abasDoApp(perfil('Requester', ['SOLICITACOES']))).toEqual([]);
@@ -38,13 +48,13 @@ const abrir = (rota: string) => render(
 
 describe('<CascaDoApp />', () => {
   it('abre na primeira aba, com as abas embaixo e a saída para o sistema completo', async () => {
-    eu = { id: 'u1', email: 'd@t.com', name: 'Diana', role: 'Director', modules: [] };
+    eu = { id: 'u1', email: 'd@t.com', name: 'Diana', role: 'Director', modules: ['COMPRAS', 'APROVACAO'] };
     abrir('/app');
     expect(await screen.findByText('central')).toBeInTheDocument();
     const abas = screen.getByTestId('abas-do-app');
     expect(abas).toHaveTextContent('Aprovar');
     expect(abas).toHaveTextContent('Diretoria');
-    expect(abas).not.toHaveTextContent('Dashboard');
+    expect(abas).toHaveTextContent('Dashboard');
     expect(screen.getByRole('link', { name: 'Sistema' })).toHaveAttribute('href', '/');
   });
 

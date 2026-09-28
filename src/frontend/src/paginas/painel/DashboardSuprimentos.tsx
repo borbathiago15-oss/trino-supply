@@ -6,7 +6,7 @@ import {
 import { Badge, Carregando, Erro, Kpi, Painel, Vazio } from '@/componentes/basicos';
 import { Campo } from '@/componentes/formulario';
 import { CORES, GraficoColunas, Legenda, ListaBarras, moedaCurta, type Serie } from '@/componentes/graficos';
-import { podeComprar, podeDecidirSc, temModulo } from '@/dominio/papeis';
+import { podeVerAnalises } from '@/dominio/papeis';
 import { useAvisos } from '@/sessao/AvisosProvider';
 import { useUsuario } from '@/sessao/SessaoProvider';
 import { moeda, quantidade } from '@/util/formato';
@@ -17,11 +17,6 @@ import { Link } from 'react-router-dom';
 import { pontosDeAtencao } from './pontosDeAtencao';
 import { CentralDeAvisos } from './CentralDeAvisos';
 import { TrilhaDoProcesso } from './TrilhaDoProcesso';
-
-/** Mesma regra do `canSeeSupplyAnalytics()` do legado: papel e módulo. */
-export const podeVerAnalises = (u: Parameters<typeof podeComprar>[0]) =>
-  (podeDecidirSc(u) || podeComprar(u) || u.role === 'Auditor')
-  && (temModulo(u, 'SOLICITACOES') || temModulo(u, 'APROVACAO') || temModulo(u, 'COMPRAS'));
 
 const ROTULO_PRIORIDADE: Record<string, string> = { NORMAL: 'Normal', URGENT: 'Urgente', LOW: 'Baixa', HIGH: 'Alta' };
 

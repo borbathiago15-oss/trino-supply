@@ -97,7 +97,9 @@ export function VisaoDaDiretoria() {
       relatorio: await relatorioExecutivo(
         { ...FILTROS_RELATORIO_VAZIOS, de, ate, centroCusto, comprador }, signal),
       fila: await processosParaMinhaAprovacao(signal).catch(() => [] as ProcessoParaAprovar[]),
-      achados: await relatorioDeInsights(periodo === 'ano' ? 12 : 3, signal).then((r) => r.insights).catch(() => [] as Achado[]),
+      // nulo é "não pude ler", que não é "nenhum achado": o comprador chega aqui pelo app de bolso
+      // sem o módulo Insights, e dizer-lhe "nada chama atenção" seria inventar uma leitura
+      achados: await relatorioDeInsights(periodo === 'ano' ? 12 : 3, signal).then((r) => r.insights).catch(() => null as Achado[] | null),
     };
   }, [periodo, centroCusto, comprador]);
 
@@ -181,7 +183,7 @@ export function VisaoDaDiretoria() {
         </Painel>
       )}
 
-      {dados && (
+      {dados?.achados && (
         <Painel titulo="O que chama atenção">
           {!dados.achados.length && (
             <p className="sub" data-testid="sem-achados">Nenhum achado no período: nada de sobrepreço, fracionamento, urgência recorrente ou concentração.</p>

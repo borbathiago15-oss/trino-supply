@@ -684,10 +684,15 @@ e a tabela outra.
 **O app de bolso (`/app`) é o mesmo sistema, não um segundo.** Três telas — Central de
 Aprovação, Visão da diretoria e Dashboard — numa casca com abas embaixo (`app/CascaDoApp.tsx`),
 instalável pelo `public/manifest.webmanifest` (`start_url: /app`, `standalone`). Mesma sessão,
-mesmas páginas React e mesmas regras: quem vê cada aba é `abasDoApp`, que pergunta ao
-`itensVisiveis` do menu — o app **não tem permissão própria**, senão uma aba abriria para quem o
-menu esconde. O diretor tem Aprovar e Diretoria; o comprador, Aprovar e Dashboard; quem não tem
-nenhuma recebe o caminho para o sistema completo. O manual é o da tela (`telaDaRota` tira o
+mesmas páginas React e mesmas regras: quem vê cada aba é `abasDoApp`, e a régua é **a do servidor**
+(`podeAprovarAlgo`, `podeVerRelatorios`, `podeVerAnalises`, em `dominio/papeis.ts`, espelhos de
+`CanView` das rotas) — não a do menu do sistema. O menu esconde o Dashboard do diretor e a Visão da
+diretoria do comprador por **navegação** (cada papel começa o dia na tela dele), não por permissão;
+a primeira versão do app seguia o menu e dava duas abas a cada um, e o app foi pedido com as três.
+Diretor, gestor, comprador e administrador têm as três; o auditor, as duas de leitura; quem não tem
+nenhuma recebe o caminho para o sistema completo. Aba que o servidor recusaria continua não
+existindo — é por isso que a Visão da diretoria esconde "O que chama atenção" quando o Insights é
+recusado, em vez de dizer "nenhum achado". O manual é o da tela (`telaDaRota` tira o
 `/app`). O React já morou em `/app` (#82) e o servidor redirecionava `/app/*` para `/*`; o
 redirecionamento saiu do `Program.cs` e virou a rota `/app/*` do roteador (`AppAntigo`), porque
 o servidor engolia o app antes de o React vê-lo. Não é app nativo, de propósito: sem loja, sem

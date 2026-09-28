@@ -86,6 +86,23 @@ export const podeVerCotacao = (u: Perfil) =>
 export const podeVerCompliance = (u: Perfil) => entre(u, 'Auditor', 'SupplyManager', 'Director', 'SystemAdministrator');
 
 /**
+ * A Central de Aprovação é de quem aprova alguma coisa — SC, Nível 1 ou Nível 2 — e o direito
+ * vem do papel, como no servidor (que não pede módulo para decidir). O menu do sistema e as abas
+ * do app perguntam aqui, para as duas portas concordarem sobre a mesma pessoa.
+ */
+export const podeAprovarAlgo = (u: Perfil) => podeDecidirSc(u) || podeAprovarGerente(u) || podeAprovarDiretor(u);
+
+/**
+ * O Dashboard de Suprimentos — mesma regra de `AnalyticsService.CanViewSupply` (papel) somada
+ * aos módulos da rota `/analytics/supply`: Solicitações, Aprovação **ou** Compras. É a régua do
+ * servidor, não a do menu: no menu o diretor não vê o painel por escolha de navegação (a Visão
+ * da diretoria o substitui), não por permissão — e o app de bolso mostra a ele os dois.
+ */
+export const podeVerAnalises = (u: Perfil) =>
+  (podeDecidirSc(u) || podeComprar(u) || u.role === 'Auditor' || u.role === 'Director')
+  && (temModulo(u, 'SOLICITACOES') || temModulo(u, 'APROVACAO') || temModulo(u, 'COMPRAS'));
+
+/**
  * Relatórios de compras — mesmo critério de `RelatorioExecutivoService.CanView`
  * (papel) somado ao dos módulos da rota: Compras **ou** Insights. O menu não pode
  * abrir uma tela que o servidor vai recusar, nem esconder uma que ele aceitaria.

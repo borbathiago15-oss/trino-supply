@@ -687,7 +687,10 @@ lê). Cada ponto é a linha inteira tocável, com destino. **A tabela vira um ca
 celular** (`componentes/TabelaResponsiva`), das **mesmas** colunas — o corte é por CSS, então o DOM
 tem as duas: o `testid` é da tabela, os cards ficam em `${testid}-cards`. Largura mínima é da
 tabela (`minLargura`), nunca da célula: `min-w-[150px]` numa grade de duas colunas estourava os
-375px, e a página rolava de lado.
+375px, e a página rolava de lado. **No card, o campo quebra a linha em vez de transbordar**
+(`min-w-0` no item e no `dd`): sem isso o campo mais largo que a célula era pintado por cima do
+vizinho — foi o prazo por família, que empilha meta, real, mediana e um selo em meia tela. Esse
+campo pede a largura inteira (`colunasNoCard={1}`); dois por linha é para valor curto.
 
 **A meta é da empresa, e sem ela não há comparação.** `IndicatorGoal` guarda um valor **mensal**
 por indicador do catálogo (`MetasDosIndicadores.Catalogo`), editável pelo administrador em

@@ -18,7 +18,7 @@ vi.mock('@/api/estoque', async (importar) => ({
 }));
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => eu }));
 
-import { obterPedido, registrarOc } from '@/api/pedidos';
+import { lancarNota, obterPedido, registrarOc } from '@/api/pedidos';
 import { listarLocais } from '@/api/estoque';
 
 let eu: Usuario = {
@@ -28,7 +28,7 @@ let eu: Usuario = {
 const pedido = (p: Partial<PedidoCompra>): PedidoCompra => ({
   id: 'po1', number: 'PO-2026-000001', status: 'EMITIDO', supplierId: 's1', supplierName: 'Alfa',
   sourcePrNumber: 'SC-2026-000001', quotationNumber: null, paymentTerms: null, deliveryDays: null,
-  freightValue: null, families: ['EPI'], notes: null, totalValue: 1500, issuedByLabel: 'Carla',
+  freightValue: null, families: ['EPI'], notes: null, totalValue: 1500, itemsValue: 1500, adjustmentsValue: 0, invoicedValue: 0, invoiceBalance: 1500, issuedByLabel: 'Carla',
   receivedByLabel: null, receivedAt: null, cancelReason: null, createdAt: '2026-09-01T10:00:00Z',
   erpNumber: null, noErpReason: null, erpIssuedOn: null, promisedDate: null,
   onTime: null, inFull: null, otif: null, referenceSavingTotal: null, erpDocumentId: null,
@@ -209,6 +209,56 @@ describe('O.C. parcial: várias O.C.s do ERP no mesmo pedido', () => {
     expect(linha.querySelector('[data-etapa="oc"]')).toHaveAttribute('data-situacao', 'feita');
     expect(linha.querySelector('[data-etapa="faturamento"]')).toHaveAttribute('data-situacao', 'atual');
     expect(linha.querySelector('[data-etapa="entrega"]')).toHaveAttribute('data-situacao', 'pendente');
+  });
+});
+
+describe('o total aprovado é o teto do faturamento', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    eu = { id: 'u1', email: 'carla@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['COMPRAS'] };
+    vi.mocked(listarLocais).mockResolvedValue([]);
+  });
+
+  it('o cabeçalho diz de onde sai o total: o item a 1.900 e o total a 1.800 é o desconto da proposta', async () => {
+    vi.mocked(obterPedido).mockResolvedValue(pedido({
+      totalValue: 1800, itemsValue: 1900, adjustmentsValue: -100, freightValue: 0,
+      invoiceBalance: 1800,
+      items: [{ ...pedido({}).items[0], quantity: 1, unitPrice: 1900 }],
+    }));
+    abrir();
+    const composicao = await screen.findByTestId('composicao-do-total');
+    expect(composicao).toHaveTextContent(/itens R\$\s1\.900,00 · frete R\$\s0,00 · desconto R\$\s100,00/);
+  });
+
+  it('mostra o saldo a faturar, e o campo do valor não aceita nota acima dele', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(obterPedido).mockResolvedValue(pedido({
+      erpNumber: '663', erpPending: false, invoicedValue: 1000, invoiceBalance: 500,
+      invoices: [{ id: 'n1', number: '100', issuedOn: '2026-09-02', value: 1000, documentId: null, fileName: null, createdByLabel: 'Carla', createdAt: '2026-09-02T10:00:00Z' }],
+    }));
+    abrir();
+    expect(await screen.findByTestId('saldo-a-faturar')).toHaveTextContent(/saldo a faturar R\$\s500,00/);
+
+    await usuario.type(screen.getByLabelText('Número da NF'), '101');
+    const valor = screen.getByLabelText('Valor (R$)');
+    expect(valor).toBeRequired();                       // sem valor não há como abater o saldo
+    await usuario.type(valor, '600');
+    expect(valor).toBeInvalid();                        // o teto do campo é o saldo (PO-ERR-060)
+    await usuario.click(screen.getByRole('button', { name: 'Lançar NF' }));
+    expect(lancarNota).not.toHaveBeenCalled();
+    await usuario.clear(valor);
+    await usuario.type(valor, '500');
+    expect(valor).toBeValid();
+  });
+
+  it('com o saldo zerado não há formulário: as notas já somam o aprovado', async () => {
+    vi.mocked(obterPedido).mockResolvedValue(pedido({
+      erpNumber: '663', erpPending: false, invoicedValue: 1500, invoiceBalance: 0,
+      invoices: [{ id: 'n1', number: '100', issuedOn: '2026-09-02', value: 1500, documentId: null, fileName: null, createdByLabel: 'Carla', createdAt: '2026-09-02T10:00:00Z' }],
+    }));
+    abrir();
+    expect(await screen.findByTestId('faturamento-completo')).toHaveTextContent('não há saldo para outra NF');
+    expect(screen.queryByLabelText('Número da NF')).not.toBeInTheDocument();
   });
 });
 

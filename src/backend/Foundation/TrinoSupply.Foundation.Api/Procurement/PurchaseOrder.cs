@@ -79,6 +79,26 @@ public class PurchaseOrder
     /// </summary>
     public bool HasErpPending => NoErpReason is null && Items.Any(i => ErpCovered(i.Id) < i.Quantity);
 
+    // ---- o dinheiro do pedido (derivado) ---------------------------------------
+    /// <summary>Soma dos itens (preço × quantidade), antes do frete, dos impostos e do desconto.</summary>
+    public decimal ItemsValue => Items.Sum(i => (i.UnitPrice ?? 0) * i.Quantity);
+
+    /// <summary>
+    /// O que separa "itens + frete" do total aprovado: impostos e outros custos da proposta
+    /// menos o desconto negociado. Negativo é desconto. Sem isto a tela mostrava o item a
+    /// 1.900 e o total a 1.800 e parecia que alguém tinha mexido no valor.
+    /// </summary>
+    public decimal AdjustmentsValue => TotalValue - ItemsValue - (FreightValue ?? 0);
+
+    /// <summary>Quanto o fornecedor já faturou: a soma das notas fiscais lançadas.</summary>
+    public decimal InvoicedValue => Invoices.Sum(i => i.Value ?? 0);
+
+    /// <summary>
+    /// O saldo a faturar: o total aprovado menos as notas já lançadas. A nota que passar dele
+    /// é recusada (PO-ERR-060) — o que foi aprovado é o teto do que se paga.
+    /// </summary>
+    public decimal InvoiceBalance => TotalValue - InvoicedValue;
+
     // ---- OTIF (derivado; nada é persistido além da data prometida) -----------
     /// <summary>Entrega no prazo: encerrada até a data prometida. Null enquanto não encerrar (ou sem data).</summary>
     public bool? OnTime => DeliveryCompletedAt is null || PromisedDate is null

@@ -490,6 +490,38 @@ public class PurchaseOrderServiceTests
         Assert.Equal(PurchaseOrderStatus.Invoiced, atualizado.Status);   // faturado, aguardando entrega
     }
 
+    /// <summary>
+    /// O valor aprovado é o teto do que se paga: as notas podem ser várias, mas a soma nunca
+    /// passa do pedido. Antes uma NF de 1.959 entrava num pedido aprovado por 1.800.
+    /// </summary>
+    [Fact]
+    public async Task A_soma_das_notas_nao_passa_do_valor_aprovado_do_pedido()
+    {
+        var w = await BuildAsync();
+        var (order, _) = await w.Pos.CreateAsync(Carla, w.Fornecedor.Id, null,
+            [new PoItemInput("Detergente neutro", 10, "UN", 3.5m, w.Detergente.Id)], null);   // aprovado: 35,00
+        await w.Pos.RegisterErpOrderAsync(Carla, order!.Id, "663", null);
+
+        // sem valor não há como abater o saldo
+        var (_, semValor) = await w.Pos.AddInvoiceAsync(Carla, order.Id, "1001", null, null);
+        Assert.Equal("PO-ERR-053", semValor!.Code);
+
+        var (_, e1) = await w.Pos.AddInvoiceAsync(Carla, order.Id, "1001", null, 20m);
+        Assert.Null(e1);
+        var (_, excede) = await w.Pos.AddInvoiceAsync(Carla, order.Id, "1002", null, 16m);   // só restam 15
+        Assert.Equal("PO-ERR-060", excede!.Code);
+        Assert.Contains(35m.ToString("0.00"), excede.Message);   // a mensagem diz o aprovado…
+        Assert.Contains(15m.ToString("0.00"), excede.Message);   // …e o saldo
+        var (_, e2) = await w.Pos.AddInvoiceAsync(Carla, order.Id, "1002", null, 15m);      // fecha exatamente
+        Assert.Null(e2);
+
+        var atualizado = await w.Pos.GetAsync(order.Id);
+        Assert.Equal(35m, atualizado!.InvoicedValue);
+        Assert.Equal(0m, atualizado.InvoiceBalance);
+        var (_, semSaldo) = await w.Pos.AddInvoiceAsync(Carla, order.Id, "1003", null, 0.01m);
+        Assert.Equal("PO-ERR-060", semSaldo!.Code);
+    }
+
     [Fact]
     public async Task Entrega_parcial_mantem_o_saldo_pendente_e_a_total_encerra()
     {

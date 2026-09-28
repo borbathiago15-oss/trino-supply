@@ -132,7 +132,7 @@ public static class PedidoRotas
             var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
             var (invoice, error) = await svc.AddInvoiceAsync(actor, id, body.Number, body.IssuedOn, body.Value);
             return error is not null
-                ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, "PO-ERR-054" => 422, _ => 400 }, error.Code, error.Message)
+                ? Error(ctx, error.Code switch { "PO-ERR-404" => 404, "PO-ERR-040" => 409, "PO-ERR-054" or "PO-ERR-060" => 422, _ => 400 }, error.Code, error.Message)
                 : Results.Json(new { data = new { id = invoice!.Id, number = invoice.Number, issuedOn = invoice.IssuedOn },
                                       correlationId = CorrelationId(ctx) }, statusCode: 201);
         });

@@ -4,7 +4,7 @@ import { abrirBlob } from '@/api/cliente';
 import { baixarDocumento } from '@/api/documentos';
 import { listarLocais, type LocalEstoque } from '@/api/estoque';
 import {
-  anexarNota, anexarOcDocumento, entradaBloqueada, lancarNota, linhaDoTempo, obterPedido, pdfPedido,
+  anexarNota, anexarOcDocumento, composicaoDoTotal, entradaBloqueada, lancarNota, linhaDoTempo, obterPedido, pdfPedido,
   pedidoEncerrado, registrarEntrega, registrarOc, ROTULO_SITUACAO,
   type CoberturaDaOc, type EtapaDoPedido, type PedidoCompra, type SituacaoDaEtapa,
 } from '@/api/pedidos';
@@ -49,7 +49,10 @@ export function PedidoDetalhe() {
         titulo={<>Pedido {pedido.number} — {pedido.supplierName} <Badge classe={classe + ' ml-2 align-middle'}>{rotulo}</Badge></>}
         acoes={<button type="button" className="botao-secundario" onClick={abrirPdf}>PDF da OC</button>}>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <Dado rotulo="Total">{moeda(pedido.totalValue)}</Dado>
+          <Dado rotulo="Total aprovado">
+            {moeda(pedido.totalValue)}
+            {composicaoDoTotal(pedido, moeda) && <div className="sub" data-testid="composicao-do-total">{composicaoDoTotal(pedido, moeda)}</div>}
+          </Dado>
           <Dado rotulo="Origem">{pedido.sourcePrNumber ?? '—'}{pedido.quotationNumber && <div className="sub">{pedido.quotationNumber}</div>}</Dado>
           <Dado rotulo="Famílias">{pedido.families.length ? pedido.families.join(', ') : '—'}</Dado>
           <Dado rotulo="Emitido">{dataHora(pedido.createdAt)}{pedido.issuedByLabel && <div className="sub">por {pedido.issuedByLabel}</div>}</Dado>
@@ -312,11 +315,19 @@ function NotasFiscais({ pedido, podeLancar, aoSalvar, abrirDocumento }:
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [salvando, setSalvando] = useState(false);
 
+  const semSaldo = pedido.invoiceBalance <= 0;
+
   async function lancar(ev: FormEvent) {
     ev.preventDefault();
+    const valorDaNota = parseFloat(valor);
+    // a tela antecipa o que o servidor recusaria (PO-ERR-060): o aprovado é o teto do que se paga
+    if (valorDaNota > pedido.invoiceBalance) {
+      avisar(`A NF de ${moeda(valorDaNota)} ultrapassa o saldo a faturar de ${moeda(pedido.invoiceBalance)}: o pedido foi aprovado por ${moeda(pedido.totalValue)}.`, 'erro');
+      return;
+    }
     setSalvando(true);
     try {
-      const nf = await lancarNota(pedido.id, { number: numero, issuedOn: dataNf || null, value: valor ? parseFloat(valor) : null });
+      const nf = await lancarNota(pedido.id, { number: numero, issuedOn: dataNf || null, value: valorDaNota });
       if (arquivo) await anexarNota(pedido.id, nf.id, arquivo);
       setNumero(''); setValor(''); setArquivo(null);
       avisar('Nota fiscal lançada.');
@@ -343,12 +354,20 @@ function NotasFiscais({ pedido, podeLancar, aoSalvar, abrirDocumento }:
             </tbody>
           </table>
         </div>
-      ) : <Vazio>Nenhuma nota fiscal lançada. Uma OC pode ter mais de uma.</Vazio>}
-      {podeLancar && (
+      ) : <Vazio>Nenhuma nota fiscal lançada. Uma OC pode ter mais de uma, desde que a soma não passe do aprovado.</Vazio>}
+      <p className="sub mt-3" data-testid="saldo-a-faturar">
+        Faturado {moeda(pedido.invoicedValue)} de {moeda(pedido.totalValue)} aprovados · saldo a faturar <strong>{moeda(pedido.invoiceBalance)}</strong>
+      </p>
+      {podeLancar && semSaldo && (
+        <p className="mt-2 rounded-lg bg-ok-fundo px-3 py-2 text-ok" data-testid="faturamento-completo">
+          As notas já somam o valor aprovado: não há saldo para outra NF.
+        </p>
+      )}
+      {podeLancar && !semSaldo && (
         <form onSubmit={lancar} className="mt-4 grid grid-cols-1 items-end gap-3 md:grid-cols-[1fr_170px_170px_1fr_auto]">
           <div><label htmlFor="nf-numero">Número da NF</label><input id="nf-numero" required value={numero} onChange={(e) => setNumero(e.target.value)} /></div>
           <div><label htmlFor="nf-data">Emissão</label><input id="nf-data" type="date" value={dataNf} onChange={(e) => setDataNf(e.target.value)} /></div>
-          <div><label htmlFor="nf-valor">Valor (R$)</label><input id="nf-valor" type="number" min="0" step="0.01" value={valor} onChange={(e) => setValor(e.target.value)} /></div>
+          <div><label htmlFor="nf-valor">Valor (R$)</label><input id="nf-valor" type="number" required min="0" max={pedido.invoiceBalance} step="0.01" value={valor} onChange={(e) => setValor(e.target.value)} /></div>
           <div><label htmlFor="nf-arquivo">Anexo (XML/PDF)</label><input id="nf-arquivo" type="file" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} /></div>
           <button type="submit" className="botao" disabled={salvando}>{salvando ? 'Lançando…' : 'Lançar NF'}</button>
         </form>

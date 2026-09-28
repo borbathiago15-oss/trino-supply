@@ -183,7 +183,12 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
         return (order, null);
     }
 
-    /// <summary>Nota fiscal do faturamento: uma OC pode receber mais de uma.</summary>
+    /// <summary>
+    /// Nota fiscal do faturamento: uma OC pode receber mais de uma, e a soma delas nunca passa
+    /// do total aprovado (PO-ERR-060). O valor aprovado no Nível 2 é o teto do que se paga: uma
+    /// nota acima dele entrava calada e o pedido "fechava" por mais do que a diretoria assinou.
+    /// Por isso o valor da nota é obrigatório — sem ele não há como abater o saldo.
+    /// </summary>
     public async Task<(PurchaseOrderInvoice? invoice, UserError? error)> AddInvoiceAsync(
         Actor actor, Guid id, string? number, DateOnly? issuedOn, decimal? value, CancellationToken ct = default)
     {
@@ -196,7 +201,13 @@ public class PurchaseOrderService(AppDbContext db, InventoryService inventory, T
         if (order.ErpNumber is null && order.NoErpReason is null)
             return (null, new("PO-ERR-052",
                 "Registre primeiro a OC do ERP — ou a observação de por que ela não foi gerada — para depois lançar a nota fiscal."));
-        if (value is < 0) return (null, new("PO-ERR-053", "O valor da nota não pode ser negativo."));
+        if (value is null)
+            return (null, new("PO-ERR-053", "Informe o valor da nota fiscal: é ele que abate o saldo aprovado do pedido."));
+        if (value < 0) return (null, new("PO-ERR-053", "O valor da nota não pode ser negativo."));
+        if (value > order.InvoiceBalance)
+            return (null, new("PO-ERR-060",
+                $"A NF {number.Trim()} de {value:0.00} ultrapassa o saldo a faturar do pedido: aprovado {order.TotalValue:0.00}, "
+                + $"já faturado {order.InvoicedValue:0.00}, saldo {order.InvoiceBalance:0.00}. O que foi aprovado é o teto do que se paga."));
 
         var now = clock.GetUtcNow();
         var invoice = new PurchaseOrderInvoice

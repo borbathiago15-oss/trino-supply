@@ -662,7 +662,9 @@ decisões seguram a Onda 1:
   Empresa e prioridade são da SC, e o pedido responde por **todas** as SCs de onde veio. Sem base
   no período anterior a variação **não aparece** — "sem base" não é "cresceu 100%". Toque revela o
   valor da barra: no celular não há mouse. `e2e/responsivo.spec.ts` confere painel e diretoria em
-  375, 768 e 1440px.
+  375, 768 e 1440px — inclusive que **nenhum número grande é cortado** pelo card (`[data-valor]`,
+  em `Kpi` e no `Numero` da diretoria): no celular o card tem meia tela, o número encolhe e, se
+  ainda não couber, quebra — "R$ 4.719,2" na tela é um valor que não é o valor.
 
 **O clique no gráfico é filtro; o detalhe é botão.** No toque não dá para distinguir clique de
 ícone, então a regra é uma para os três tamanhos: tocar a barra do ranking aplica o filtro global

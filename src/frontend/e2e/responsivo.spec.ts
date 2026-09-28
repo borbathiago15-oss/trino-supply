@@ -15,6 +15,16 @@ const TAMANHOS = [
 const semRolagemLateral = async (page: Page, largura: number) =>
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(largura);
 
+/**
+ * Nenhum número grande pode ser cortado pelo próprio card: "R$ 4.719,2" na tela é um valor que
+ * não é o valor. O card encolhe o número no celular e o deixa quebrar antes de cortar.
+ */
+const semNumeroCortado = async (page: Page) => {
+  const cortados = await page.evaluate(() => Array.from(document.querySelectorAll('[data-valor]'))
+    .filter((el) => el.scrollWidth > el.clientWidth + 1).map((el) => el.textContent));
+  expect(cortados).toEqual([]);
+};
+
 for (const t of TAMANHOS) {
   test.describe(`${t.nome} (${t.width}px)`, () => {
     test.use({ viewport: { width: t.width, height: t.height } });
@@ -25,6 +35,7 @@ for (const t of TAMANHOS) {
       await expect(page.getByTestId('filtros-principais').getByLabel('Empresa')).toBeVisible();
       await expect(page.getByRole('img', { name: 'Valor comprado por mês' })).toBeVisible();
       await semRolagemLateral(page, t.width);
+      await semNumeroCortado(page);
 
       // abrir "Mais filtros" não pode empurrar a página para o lado
       await page.getByRole('button', { name: 'Mais filtros' }).click();
@@ -50,6 +61,7 @@ for (const t of TAMANHOS) {
       await expect(page.locator('#titulo-pagina')).toBeVisible();
       await expect(page.getByTestId('numero-gasto')).toBeVisible();
       await semRolagemLateral(page, t.width);
+      await semNumeroCortado(page);
     });
   });
 }

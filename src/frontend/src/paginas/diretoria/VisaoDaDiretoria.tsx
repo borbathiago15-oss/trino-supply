@@ -15,18 +15,22 @@ import { intervaloDoPeriodo, PERIODOS, type Periodo } from './periodo';
 const pct = (v: number | null | undefined) => (v == null ? '—' : `${quantidade(v)}%`);
 
 /** Um número grande com a tendência ao lado — o formato em que a diretoria lê. */
-function Numero({ rotulo, valor, detalhe, tendencia, tom = 'neutro', testid, meta }: {
+function Numero({ rotulo, valor, detalhe, tendencia, tom = 'neutro', testid, meta, largo = false }: {
   rotulo: string; valor: string; detalhe?: string; testid: string; meta?: ReactNode;
   tendencia?: { atual: number; anterior: number; bomQuandoSobe: boolean } | null;
   tom?: 'neutro' | 'atencao' | 'ok';
+  /** Valor em dinheiro: no celular ocupa a linha inteira, senão "R$ 29.526,00" não cabe em meia tela. */
+  largo?: boolean;
 }) {
   const v = tendencia && tendencia.anterior > 0 ? variacao(tendencia.atual, tendencia.anterior) : null;
   const classeTendencia = !v || v.pct === 0 ? 'text-texto-suave'
     : (v.pct > 0) === tendencia!.bomQuandoSobe ? 'text-ok' : 'text-perigo';
   return (
-    <div data-testid={testid} className={`rounded-xl border bg-superficie px-4 py-4 shadow-sm ${tom === 'atencao' ? 'border-aviso/50' : tom === 'ok' ? 'border-ok/40' : 'border-borda/80'}`}>
+    <div data-testid={testid} className={`rounded-xl border bg-superficie px-4 py-4 shadow-sm ${largo ? 'col-span-2 sm:col-span-1' : ''} ${tom === 'atencao' ? 'border-aviso/50' : tom === 'ok' ? 'border-ok/40' : 'border-borda/80'}`}>
       <div className="rotulo">{rotulo}</div>
-      <div className="mt-1.5 text-[30px] font-extrabold leading-none tracking-tight text-texto tabular-nums">{valor}</div>
+      {/* no celular o card tem meia tela: o número encolhe e, se ainda não couber, quebra —
+          cortado ("R$ 4.719,2") diz um valor que não é o valor */}
+      <div data-valor className="mt-1.5 min-w-0 text-[24px] font-extrabold leading-none tracking-tight text-texto tabular-nums [overflow-wrap:anywhere] sm:text-[30px]">{valor}</div>
       <div className="sub mt-2 flex flex-wrap items-center gap-x-2">
         {v && <span className={`font-semibold ${classeTendencia}`}>{v.sinal} {Math.abs(v.pct)}% vs. anterior</span>}
         {detalhe && <span>{detalhe}</span>}
@@ -126,14 +130,14 @@ export function VisaoDaDiretoria() {
             ))}
           </div>
           {/* as opções saem do próprio relatório: lista montada à parte divergiria do que ele conta */}
-          <select aria-label="Centro de custo" className="!w-[200px] !py-1.5 !text-[13px]"
+          <select aria-label="Centro de custo" className="!w-[210px] max-w-full !py-1.5 !text-[13px]"
             value={centroCusto} onChange={(e) => setCentroCusto(e.target.value)}>
             <option value="">Todos os centros</option>
             {(r?.filterOptions.costCenters ?? []).map((c) => (
               <option key={c.code} value={c.code}>{c.code} — {c.name}</option>
             ))}
           </select>
-          <select aria-label="Comprador" className="!w-[180px] !py-1.5 !text-[13px]"
+          <select aria-label="Comprador" className="!w-[210px] max-w-full !py-1.5 !text-[13px]"
             value={comprador} onChange={(e) => setComprador(e.target.value)}>
             <option value="">Todos os compradores</option>
             {(r?.filterOptions.buyers ?? []).map((b) => (
@@ -147,11 +151,11 @@ export function VisaoDaDiretoria() {
         {r && (
           <>
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-5" data-testid="numeros-da-diretoria">
-              <Numero testid="numero-gasto" rotulo="Gasto no período" valor={moeda(r.kpis.spend)}
+              <Numero testid="numero-gasto" largo rotulo="Gasto no período" valor={moeda(r.kpis.spend)}
                 detalhe={`${quantidade(r.kpis.orders)} pedido(s) · ${quantidade(r.kpis.suppliers)} fornecedor(es)`}
                 tendencia={{ atual: r.kpis.spend, anterior: r.previous.spend, bomQuandoSobe: false }}
                 meta={<LinhaDaMeta comparacao={r.goals?.poTotalValue} formatar={moeda} />} />
-              <Numero testid="numero-saving" rotulo="Saving negociado" valor={moeda(r.kpis.savingTotal)}
+              <Numero testid="numero-saving" largo rotulo="Saving negociado" valor={moeda(r.kpis.savingTotal)}
                 detalhe={r.kpis.savingPercent != null ? `${pct(r.kpis.savingPercent)} da primeira proposta` : 'sem processo negociado'}
                 tendencia={{ atual: r.kpis.savingTotal, anterior: r.previous.savingTotal, bomQuandoSobe: true }} tom="ok"
                 meta={<LinhaDaMeta comparacao={r.goals?.saving} formatar={moeda} />} />

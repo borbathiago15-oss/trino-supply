@@ -19,7 +19,9 @@ describe('o manual cobre o sistema inteiro', () => {
 
   it('toda rota dentro do app resolve para uma tela com manual', () => {
     // as de fora da casca não têm cabeçalho, e por isso não têm o botão
-    const fora = new Set(['/login', '/portal', '/trocar-senha', '/cockpit', '*']);
+    // '/app' só redireciona para a primeira aba, que tem o manual da tela dela; '/app/*' é o
+    // favorito antigo, que vira a tela do sistema
+    const fora = new Set(['/login', '/portal', '/trocar-senha', '/cockpit', '/app', '/app/*', '*']);
     const rotas = [...rotasDoApp.matchAll(/<Route path="([^"]+)"/g)].map((m) => m[1]).filter((r) => !fora.has(r));
     expect(rotas.length).toBeGreaterThan(30);
     const sem = rotas.filter((r) => !telaDaRota(r.replace(/:[a-z]+/g, 'abc-123')).manual);

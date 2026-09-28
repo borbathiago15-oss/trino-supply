@@ -230,10 +230,6 @@ app.MapCotacoes();
 // ==== Documentos: download autorizado por papel e vínculo ====================
 app.MapDocumentos();
 
-app.MapGet("/app/{**resto}", (string? resto, HttpContext ctx) =>
-    Results.Redirect($"/{resto}{ctx.Request.QueryString}")).AllowAnonymous();
-app.MapGet("/app", () => Results.Redirect("/")).AllowAnonymous();
-
 // Frontend React: qualquer rota que não seja arquivo cai no index.html dele, e o
 // roteador do navegador assume dali. O `nonfile` impede que o fallback engula o
 // próprio JS — sem ele, o bundle voltaria como HTML.

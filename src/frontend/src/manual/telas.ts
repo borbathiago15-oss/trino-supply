@@ -33,7 +33,8 @@ export interface TelaAtual {
  * (`/torre?x=1` e `/torre/qualquer` caem na Torre), como o título do cabeçalho já faz.
  */
 export function telaDaRota(pathname: string): TelaAtual {
-  const caminho = pathname.replace(/\/+$/, '') || '/';
+  // o app de bolso usa as mesmas telas: /app/painel é o painel, com o mesmo manual
+  const caminho = pathname.replace(/\/+$/, '').replace(/^\/app(?=\/)/, '') || '/';
   const folhas = folhasDoMenu();
   const achar = (item: ItemMenu | undefined): TelaAtual | null =>
     item ? { chave: item.id, rotulo: item.rotulo, manual: MANUAIS[item.id] ?? null } : null;

@@ -667,6 +667,18 @@ explicação de cada um recolhida em "como é calculado" e bloco vazio em uma li
 `resumoExecutivo` gera as três frases dos mesmos números dos blocos: a frase nunca diz uma coisa
 e a tabela outra.
 
+**O app de bolso (`/app`) é o mesmo sistema, não um segundo.** Três telas — Central de
+Aprovação, Visão da diretoria e Dashboard — numa casca com abas embaixo (`app/CascaDoApp.tsx`),
+instalável pelo `public/manifest.webmanifest` (`start_url: /app`, `standalone`). Mesma sessão,
+mesmas páginas React e mesmas regras: quem vê cada aba é `abasDoApp`, que pergunta ao
+`itensVisiveis` do menu — o app **não tem permissão própria**, senão uma aba abriria para quem o
+menu esconde. O diretor tem Aprovar e Diretoria; o comprador, Aprovar e Dashboard; quem não tem
+nenhuma recebe o caminho para o sistema completo. O manual é o da tela (`telaDaRota` tira o
+`/app`). O React já morou em `/app` (#82) e o servidor redirecionava `/app/*` para `/*`; o
+redirecionamento saiu do `Program.cs` e virou a rota `/app/*` do roteador (`AppAntigo`), porque
+o servidor engolia o app antes de o React vê-lo. Não é app nativo, de propósito: sem loja, sem
+conta de desenvolvedor, sem segunda base para divergir — publica junto com o sistema.
+
 **Cuidado com a palavra "pedido" (D7).** "Tipo de pedido" no vocabulário do usuário é o tipo
 da **solicitação**; no do sistema, "pedido" é a O.C. O teste do menu pegou o rótulo errado — é
 para isso que ele existe.

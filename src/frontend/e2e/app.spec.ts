@@ -35,7 +35,13 @@ test.describe('App de bolso (375px)', () => {
     await expect(page.getByTestId('kpis-painel')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
 
-    // o menu do sistema não aparece no app
+    // o menu do sistema não aparece no app, e não há aba que leve a ele
     await expect(page.getByRole('button', { name: 'Abrir o menu' })).toHaveCount(0);
+    await expect(abas.getByRole('link', { name: 'Sistema' })).toHaveCount(0);
+    // o link da diretoria para a Central fica dentro do app
+    await abas.getByRole('link', { name: 'Diretoria' }).click();
+    await page.getByRole('link', { name: 'Central de Aprovação →' }).click();
+    await expect(page).toHaveURL(/\/app\/aprovacoes$/);
+    await expect(abas).toBeVisible();
   });
 });

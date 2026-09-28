@@ -712,7 +712,15 @@ Diretor, gestor, comprador e administrador têm as três; o auditor, as duas de 
 nenhuma recebe o caminho para o sistema completo. Aba que o servidor recusaria continua não
 existindo — é por isso que a Visão da diretoria esconde "O que chama atenção" quando o Insights é
 recusado, em vez de dizer "nenhum achado". O manual é o da tela (`telaDaRota` tira o
-`/app`). O React já morou em `/app` (#82) e o servidor redirecionava `/app/*` para `/*`; o
+`/app`). **O app não tem saída para o sistema completo**: a aba "Sistema" abria o menu inteiro no
+celular, e as três páginas têm links para rotas do sistema ("Decidir →" vai a `/aprovacoes`, "Ver
+processo completo" a `/cotacoes/:id`). `app/EscopoDoApp` mora **no roteador, acima das rotas** —
+a casca desmonta no instante em que a rota sai de `/app`, e de dentro dela não há como segurar a
+saída — e reescreve o link para uma das três telas para a rota do app, devolvendo à origem, com o
+aviso, o que não existe no app. Só a casca e as três abas contam como app (`ehTelaDoApp`): o
+favorito antigo `/app/fornecedores` não é, senão o redirecionamento dele entraria em laço. Endereço
+digitado recarrega a página e zera o guarda: ele não prende quem abriu o sistema de propósito.
+O React já morou em `/app` (#82) e o servidor redirecionava `/app/*` para `/*`; o
 redirecionamento saiu do `Program.cs` e virou a rota `/app/*` do roteador (`AppAntigo`), porque
 o servidor engolia o app antes de o React vê-lo. Não é app nativo, de propósito: sem loja, sem
 conta de desenvolvedor, sem segunda base para divergir — publica junto com o sistema.

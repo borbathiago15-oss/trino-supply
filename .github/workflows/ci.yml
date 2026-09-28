@@ -289,8 +289,9 @@ jobs:
           curl -sf http://127.0.0.1:5099/health || (cat /tmp/api.log; exit 1)
           # o build do React tem de estar sendo servido pelo .NET, na raiz
           curl -sf http://127.0.0.1:5099/pedidos | grep -q '<div id="root">'
-          # e as URLs antigas continuam levando à tela certa
-          curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:5099/app/pedidos | grep -q '^30'
+          # /app é o app de bolso, servido pelo mesmo index.html; a URL antiga (/app/pedidos)
+          # é o roteador quem leva à tela certa, e o E2E de cadastros é quem confere isso
+          curl -sf http://127.0.0.1:5099/app/pedidos | grep -q '<div id="root">'
 
       - name: Instalar o Chromium do Playwright
         working-directory: src/frontend

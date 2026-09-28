@@ -51,7 +51,7 @@ export function AppLayout() {
               </button>
               <h1 className="truncate text-xl font-bold tracking-tight text-texto sm:text-2xl" id="titulo-pagina">{titulo}</h1>
             </div>
-            <div className="flex items-center gap-2.5 text-[13px] text-texto-suave">
+            <div className="flex min-w-0 flex-wrap items-center justify-end gap-2.5 text-[13px] text-texto-suave">
               {/* o sino vem antes do nome: é o que muda, e o nome é o que fica */}
               <CaixaDeAvisos />
               {/* no celular o nome sozinho basta: o papel ocupa a linha inteira sem dizer muito */}

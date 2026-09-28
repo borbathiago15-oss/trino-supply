@@ -46,7 +46,7 @@ describe('vereditoDaLinha', () => {
   });
 
   it('encerrado é cinza: ele diz que a decisão foi tomada, não que foi boa', () => {
-    expect(tomDaFase(ciclo({ phase: 'ENCERRADO' }))).toContain('slate');
+    expect(tomDaFase(ciclo({ phase: 'ENCERRADO' }))).toContain('texto-suave');
   });
 });
 

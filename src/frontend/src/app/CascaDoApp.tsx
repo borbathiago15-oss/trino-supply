@@ -1,4 +1,4 @@
-import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { BarraDeAjuda } from '@/layout/BarraDeAjuda';
 import { BotaoDeTema } from '@/componentes/BotaoDeTema';
 import { AvisosProvider } from '@/sessao/AvisosProvider';
@@ -9,7 +9,8 @@ import { abasDoApp } from './abas';
  * O app de bolso: três telas — aprovar, a visão da diretoria e o dashboard —, com as abas
  * embaixo, onde o polegar alcança. É o mesmo sistema (mesma sessão, mesmas regras, mesmo
  * servidor), instalado na tela do celular pelo manifesto; não há segunda base de código para
- * divergir da primeira. Quem precisa de outra tela tem o link para o sistema completo.
+ * divergir da primeira. E não tem saída para o resto do sistema: a aba "Sistema" abria o menu
+ * inteiro no celular, e `EscopoDoApp` segura os links das três telas que apontam para fora.
  */
 export function CascaDoApp() {
   const usuario = useUsuario();
@@ -44,7 +45,8 @@ export function CascaDoApp() {
             ? (
               <div className="rounded-xl border border-borda bg-superficie p-5 text-[14px]" data-testid="app-sem-abas">
                 O app é para aprovar e acompanhar a compra, e o seu perfil não tem nenhuma dessas telas.
-                <div className="mt-3"><Link className="botao" to="/">Abrir o sistema completo</Link></div>
+                {/* recarrega a página de propósito: é a única saída do app, e o guarda do escopo nasce zerado */}
+                <div className="mt-3"><a className="botao" href="/">Abrir o sistema completo</a></div>
               </div>
             )
             : <Outlet />}
@@ -62,9 +64,6 @@ export function CascaDoApp() {
                   </NavLink>
                 </li>
               ))}
-              <li className="flex-1">
-                <Link to="/" className="block py-3 text-center text-[13px] font-semibold text-texto-suave">Sistema</Link>
-              </li>
             </ul>
           </nav>
         )}

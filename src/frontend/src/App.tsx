@@ -1,4 +1,5 @@
 import { CascaDoApp, InicioDoApp } from '@/app/CascaDoApp';
+import { EscopoDoApp } from '@/app/EscopoDoApp';
 import { BrowserRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router-dom';
 import { ToastProvider } from '@/componentes/Toast';
 import { AppLayout } from '@/layout/AppLayout';
@@ -84,6 +85,9 @@ function Inicio() {
 
 export function Rotas() {
   return (
+    <>
+    {/* segura a navegação que sairia do app de bolso: as três telas ficam, o resto não entra */}
+    <EscopoDoApp />
     <Routes>
       <Route path="/login" element={<Login />} />
       {/* o portal é do fornecedor: sessão própria, sem o menu nem a sessão interna */}
@@ -153,6 +157,7 @@ export function Rotas() {
       </Route>
       <Route path="*" element={<Inicio />} />
     </Routes>
+    </>
   );
 }
 

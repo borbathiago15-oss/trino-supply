@@ -55,7 +55,8 @@ describe('<CascaDoApp />', () => {
     expect(abas).toHaveTextContent('Aprovar');
     expect(abas).toHaveTextContent('Diretoria');
     expect(abas).toHaveTextContent('Dashboard');
-    expect(screen.getByRole('link', { name: 'Sistema' })).toHaveAttribute('href', '/');
+    // sem saída para o sistema completo: o app é só as três telas
+    expect(screen.queryByRole('link', { name: 'Sistema' })).not.toBeInTheDocument();
   });
 
   it('perfil sem nenhuma das telas recebe o caminho para o sistema, e não uma tela vazia', () => {

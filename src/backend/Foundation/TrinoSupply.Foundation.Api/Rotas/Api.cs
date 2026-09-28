@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Http.Metadata;
 using TrinoSupply.Foundation.Api.Domain;
+using TrinoSupply.Foundation.Api.Infrastructure;
 using TrinoSupply.Foundation.Api.Inventory;
 using TrinoSupply.Foundation.Api.Procurement;
 
@@ -44,6 +45,9 @@ public static class Api
     /// <summary>Duas pessoas gravaram o mesmo registro: não é falha do servidor, é conflito.</summary>
     public const string CodigoDeConflito = "SYS-ERR-409";
 
+    /// <summary>Texto acima do limite que o serviço não conferiu: a rede do <c>SaveChanges</c>.</summary>
+    public const string CodigoDeTextoLongo = "SYS-ERR-400";
+
     /// <summary>Código da falha que ninguém previu — a única que não tem regra de negócio atrás.</summary>
     public const string CodigoDeFalhaInesperada = "SYS-ERR-500";
 
@@ -65,6 +69,14 @@ public static class Api
             var correlacao = CorrelationId(ctx);
             // conflito de concorrência é resposta de negócio, não 500 (auditoria A7): quem
             // perdeu a corrida recarrega e tenta de novo, e o log não enche de "falha"
+            if (falha is TextoAcimaDoLimiteException)
+            {
+                await Results.Json(new
+                {
+                    error = new { code = CodigoDeTextoLongo, message = falha.Message, correlationId = correlacao },
+                }, statusCode: 400).ExecuteAsync(ctx);
+                return;
+            }
             if (falha is Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
             {
                 await Results.Json(new

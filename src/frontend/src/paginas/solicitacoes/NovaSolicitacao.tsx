@@ -374,7 +374,7 @@ export function NovaSolicitacao() {
           que precisa de todos, e é aí que ele desiste ou inventa.
         */}
         <Campo id="sc-justificativa" rotulo="Justificativa da solicitação" className="mt-5">
-          <input id="sc-justificativa" required placeholder="Por que esta compra é necessária?" {...campo('justificativa')} />
+          <input id="sc-justificativa" required maxLength={2000} placeholder="Por que esta compra é necessária?" {...campo('justificativa')} />
         </Campo>
 
         <div className="mt-3 grid gap-3 md:grid-cols-3">
@@ -401,10 +401,10 @@ export function NovaSolicitacao() {
         {urgente && (
           <Grade2 className="mt-3" >
             <Campo id="sc-urg-motivo" rotulo="Justificativa da urgência" dica="(obrigatória)">
-              <input id="sc-urg-motivo" required placeholder="ex.: parada de linha na obra" {...campo('urgenciaMotivo')} />
+              <input id="sc-urg-motivo" required maxLength={500} placeholder="ex.: parada de linha na obra" {...campo('urgenciaMotivo')} />
             </Campo>
             <Campo id="sc-urg-impacto" rotulo="Impacto se não comprar" dica="(obrigatório)">
-              <input id="sc-urg-impacto" required placeholder="ex.: equipe parada e multa contratual" {...campo('urgenciaImpacto')} />
+              <input id="sc-urg-impacto" required maxLength={500} placeholder="ex.: equipe parada e multa contratual" {...campo('urgenciaImpacto')} />
             </Campo>
           </Grade2>
         )}
@@ -461,7 +461,7 @@ export function NovaSolicitacao() {
           </Grade2>
 
           <Campo id="sc-observacao" rotulo="Observação Interna" className="mt-3">
-            <textarea id="sc-observacao" rows={3} {...campo('observacao')} />
+            <textarea id="sc-observacao" rows={3} maxLength={2000} {...campo('observacao')} />
           </Campo>
 
           <Campo id="sc-anexos" className="mt-3" rotulo="Anexos"

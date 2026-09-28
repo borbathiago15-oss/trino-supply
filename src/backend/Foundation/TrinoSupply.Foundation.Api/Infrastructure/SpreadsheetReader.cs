@@ -12,6 +12,14 @@ namespace TrinoSupply.Foundation.Api.Infrastructure;
 public static class SpreadsheetReader
 {
     private const int MaxRows = 20000;
+
+    /// <summary>
+    /// Teto do que uma parte do .xlsx pode ocupar <b>descompactada</b> (auditoria A2). O upload
+    /// tem 10 MB, mas XML repetido comprime mais de cem vezes: sem teto, uma planilha pequena
+    /// vira gigabytes na memória do servidor. O tamanho declarado no ZIP é conferido antes de
+    /// abrir, e a leitura é cortada no teto — o cabeçalho do ZIP é escrito por quem envia.
+    /// </summary>
+    public const long MaxBytesPorParte = 50L * 1024 * 1024;
     private static readonly XNamespace Main = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 
     public static List<string[]> Read(Stream stream, string fileName)
@@ -63,7 +71,7 @@ public static class SpreadsheetReader
                     ?? zip.Entries.FirstOrDefault(e => e.FullName.StartsWith("xl/worksheets/sheet"))
                     ?? throw new InvalidDataException("Planilha sem aba legível.");
 
-        using var sheetStream = sheet.Open();
+        using var sheetStream = AbrirComTeto(sheet);
         var doc = XDocument.Load(sheetStream);
         var rows = new List<string[]>();
         foreach (var row in doc.Descendants(Main + "row").Take(MaxRows))
@@ -97,11 +105,47 @@ public static class SpreadsheetReader
     {
         var entry = zip.GetEntry("xl/sharedStrings.xml");
         if (entry is null) return [];
-        using var s = entry.Open();
+        using var s = AbrirComTeto(entry);
         var doc = XDocument.Load(s);
         return doc.Descendants(Main + "si")
             .Select(si => si.Descendants(Main + "t").Aggregate("", (a, t) => a + t.Value))
             .ToList();
+    }
+
+    private static Stream AbrirComTeto(ZipArchiveEntry entry)
+    {
+        if (entry.Length > MaxBytesPorParte)
+            throw new InvalidDataException($"{entry.FullName} passa de {MaxBytesPorParte / (1024 * 1024)} MB descompactado.");
+        return new LeituraComTeto(entry.Open(), MaxBytesPorParte);
+    }
+
+    /// <summary>Lê até o teto e recusa o que passar — vale mesmo quando o ZIP mente o tamanho.</summary>
+    private sealed class LeituraComTeto(Stream interno, long teto) : Stream
+    {
+        private long lidos;
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => lidos; set => throw new NotSupportedException(); }
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var n = interno.Read(buffer, offset, count);
+            lidos += n;
+            if (lidos > teto) throw new InvalidDataException("Parte da planilha passa do limite descompactado.");
+            return n;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) interno.Dispose();
+            base.Dispose(disposing);
+        }
     }
 
     /// <summary>"B7" → 1 (índice da coluna, base zero).</summary>

@@ -6,6 +6,19 @@ namespace TrinoSupply.Foundation.Api.Infrastructure;
 
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
+    // texto acima do limite da coluna vira 400 com o campo, e não 500 do banco (auditoria A6)
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        TamanhoDeTexto.GarantirNoRastreador(ChangeTracker);
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        TamanhoDeTexto.GarantirNoRastreador(ChangeTracker);
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<PurchaseRequisition> Requisitions => Set<PurchaseRequisition>();
@@ -1363,7 +1376,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(t => t.TokenHash).HasColumnName("token_hash").HasMaxLength(64).IsRequired();
             e.Property(t => t.ExpiresAt).HasColumnName("expires_at");
             e.Property(t => t.CreatedAt).HasColumnName("created_at");
-            e.Property(t => t.RevokedAt).HasColumnName("revoked_at");
+            // token de concorrência (auditoria A7): duas renovações com o mesmo refresh token
+            // leem "não revogado" ao mesmo tempo; a segunda a gravar recebe o conflito, em vez
+            // de abrir uma segunda sessão. Só muda o UPDATE (WHERE revoked_at = ...), não a tabela.
+            e.Property(t => t.RevokedAt).HasColumnName("revoked_at").IsConcurrencyToken();
             e.Property(t => t.ReplacedById).HasColumnName("replaced_by_id");
             e.HasIndex(t => t.TokenHash).IsUnique();
             e.HasIndex(t => t.UserId);

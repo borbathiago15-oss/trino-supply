@@ -480,6 +480,20 @@ pipeline justamente para uma rota nova não nascer sem elas.
   Conflito de concorrência responde **409 `SYS-ERR-409`**, não 500. O `X-Correlation-Id` do
   cliente só é refletido se parecer identificador (≤64, letras, dígitos e `-_.:`), e a resposta
   não leva `Server: Kestrel`.
+- **Texto acima do limite é 400, não 500** (A6). O limite é o do modelo (`HasMaxLength`), e
+  `Infrastructure/TamanhoDeTexto.cs` o lê: a SC confere antes de gravar e diz o campo
+  (`PR-ERR-031`), e o `SaveChanges` do `AppDbContext` é a rede para quem ainda não confere —
+  lança `TextoAcimaDoLimiteException`, que o envelope devolve como `SYS-ERR-400`. Repetir os
+  números no serviço daria dois donos para o mesmo limite.
+- **A renovação do refresh token não abre duas sessões** (A7): `RevokedAt` é token de
+  concorrência, e a segunda renovação simultânea recebe 409. Só muda o `UPDATE`, não a tabela —
+  por isso não houve migration.
+- **A planilha da importação tem teto descompactado** (`SpreadsheetReader.MaxBytesPorParte`,
+  50 MB por parte): confere o tamanho declarado no ZIP e corta a leitura no teto, porque o
+  cabeçalho do ZIP é escrito por quem envia.
+- **O `/health` anônimo responde só o estado** (`Infrastructure/Saude.cs`). Commit, horário de
+  subida e `setupComplete` vão só para quem chega com sessão — a verificação da entrega continua
+  possível com o token.
 - **HTTPS atrás do proxy.** O Railway termina o TLS na borda e o contêiner recebe HTTP:
   o esquema verdadeiro vem no `X-Forwarded-Proto`. A decisão de redirecionar e de mandar
   HSTS acontece **antes** do `UseForwardedHeaders`, que consome esse cabeçalho — lendo

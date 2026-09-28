@@ -140,6 +140,7 @@ export const MANUAIS: Record<string, Manual> = {
       { texto: 'Prioridade urgente pede a justificativa da urgência e o impacto de não comprar.' },
       { codigo: 'PR-ERR-023', texto: 'A empresa precisa ser um dos CNPJs ativos do cadastro (Estrutura da Empresa → Empresas).' },
       { codigo: 'PR-ERR-024', texto: 'A finalidade (orçamento ou compra) é obrigatória. O comprador pode corrigi-la na Torre até a SC entrar em cotação (PR-ERR-025).' },
+      { codigo: 'PR-ERR-031', texto: 'Cada texto tem limite: a justificativa e a observação, 2.000 caracteres; o motivo e o impacto da urgência, 500; a descrição do item, 500. O campo para de aceitar no limite.' },
     ],
     duvidas: [
       { pergunta: 'Onde a SC vai ser entregue?', resposta: 'No local de entrega escolhido. A lista junta os almoxarifados e os centros de custo que recebem material — quem paga e quem recebe podem ser diferentes.' },

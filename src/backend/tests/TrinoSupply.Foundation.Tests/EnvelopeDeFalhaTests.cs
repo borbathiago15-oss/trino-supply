@@ -36,6 +36,8 @@ public class EnvelopeDeFalhaTests
                 app.UseEndpoints(rotas =>
                 {
                     rotas.MapGet("/estoura", void () => throw new InvalidOperationException("boom"));
+                    rotas.MapGet("/texto-longo", void () =>
+                        throw new TrinoSupply.Foundation.Api.Infrastructure.TextoAcimaDoLimiteException("O campo Name passa de 200 caracteres."));
                     rotas.MapGet("/conflito", void () =>
                         throw new Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException("corrida"));
                     rotas.MapGet("/ok", () => Results.Json(new { data = "ok" }));
@@ -123,5 +125,19 @@ public class EnvelopeDeFalhaTests
         var devolvida = corpo.GetProperty("error").GetProperty("correlationId").GetString();
         Assert.NotEqual(enviada, devolvida);
         Assert.False(string.IsNullOrWhiteSpace(devolvida));
+    }
+
+    /// <summary>Auditoria A6: texto acima do limite é erro de quem enviou (400, com o campo), não do servidor.</summary>
+    [Fact]
+    public async Task Texto_acima_do_limite_responde_400_com_o_campo()
+    {
+        var http = await ServidorQueQuebraAsync();
+
+        var res = await http.GetAsync("/texto-longo");
+
+        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+        var erro = (await res.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("error");
+        Assert.Equal(TrinoSupply.Foundation.Api.Rotas.Api.CodigoDeTextoLongo, erro.GetProperty("code").GetString());
+        Assert.Contains("Name", erro.GetProperty("message").GetString());
     }
 }

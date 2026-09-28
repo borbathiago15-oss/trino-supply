@@ -109,6 +109,9 @@ export interface OpcoesFiltro {
   regions: string[];
   managers: string[];
   clients: string[];
+  companies?: string[];
+  categories?: string[];
+  priorities?: string[];
 }
 
 export interface DashboardSuprimentos {
@@ -122,22 +125,37 @@ export interface DashboardSuprimentos {
   saving: Saving | null;
   buyerPanel: LinhaComprador[];
   filterOptions: OpcoesFiltro;
+  /** A data que prende cada indicador ao mês, dita pelo servidor (a mesma que a conta usa). */
+  indicators?: Record<string, string>;
 }
 
 export interface FiltrosPainel {
   de: string; ate: string; fornecedor: string; comprador: string; solicitante: string;
   familia: string; centroCusto: string; regional: string; gerente: string; cliente: string;
+  empresa: string; categoria: string; prioridade: string;
 }
 
 export const FILTROS_PAINEL_VAZIOS: FiltrosPainel = {
   de: '', ate: '', fornecedor: '', comprador: '', solicitante: '',
   familia: '', centroCusto: '', regional: '', gerente: '', cliente: '',
+  empresa: '', categoria: '', prioridade: '',
 };
 
 const PARAMETRO: Record<keyof FiltrosPainel, string> = {
   de: 'from', ate: 'to', fornecedor: 'supplierId', comprador: 'buyerId', solicitante: 'requesterId',
   familia: 'family', centroCusto: 'costCenter', regional: 'region', gerente: 'manager', cliente: 'client',
+  empresa: 'company', categoria: 'category', prioridade: 'priority',
 };
+
+/**
+ * Os filtros sempre à vista. Os outros valem igual — globais, na mesma consulta —, mas moram em
+ * "Mais filtros": quatorze campos abertos ocupavam meia tela e inviabilizavam o celular.
+ */
+export const FILTROS_PRINCIPAIS: (keyof FiltrosPainel)[] = ['de', 'ate', 'empresa', 'centroCusto'];
+
+/** Quantos filtros escondidos em "Mais filtros" estão valendo — o número vai no botão. */
+export const filtrosEscondidosAtivos = (f: FiltrosPainel) =>
+  (Object.keys(f) as (keyof FiltrosPainel)[]).filter((k) => !FILTROS_PRINCIPAIS.includes(k) && f[k] !== '').length;
 
 export function consultaDoPainel(f: FiltrosPainel) {
   const q = new URLSearchParams();

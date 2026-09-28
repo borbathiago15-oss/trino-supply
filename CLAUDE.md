@@ -626,6 +626,25 @@ produto, e apagá-la com produto dentro os deixaria numa família que o cadastro
 próxima edição deles seria recusada. A foto do produto é do catálogo, e **todo papel interno** a
 baixa: quem pede precisa ver o que está pedindo.
 
+**O Dashboard de Suprimentos evolui o `/painel` e a `/diretoria` — não nasce ao lado.** Duas telas
+para o mesmo número desmentiriam a regra de que o indicador tem o mesmo valor em todo lugar. Três
+decisões seguram a Onda 1:
+- **Cada indicador diz a data que o prende ao mês** (`AnalyticsService.DefinicoesDosIndicadores`,
+  devolvido em `indicators` e aberto pelo ⓘ do card). O **valor comprado** conta pela **data da
+  aprovação** (decisão da empresa, 2026-09): o pedido nasce ali, é quando o dinheiro fica
+  comprometido, e a data da O.C. do ERP deixaria de fora o pedido fechado com justificativa
+  (PO-BR-011). Mudar a âncora é mudar a definição junto — a frase e a conta vêm do mesmo lugar.
+- **O comprador do pedido é quem conduziu a compra**, pela mesma régua de `CompradorDe`: quem
+  escolheu o vencedor, senão quem abriu o processo, e só no pedido lançado direto quem o lançou.
+  Contar por `IssuedBy` punha o diretor no ranking de compradores, porque o pedido nasce na
+  aprovação dele. O comprador vê a **empresa inteira** (decisão da empresa, 2026-09).
+- **Os filtros são globais, e três ficam à vista** (`FILTROS_PRINCIPAIS`: período, empresa, centro
+  de custo); o resto mora em "Mais filtros", com o contador no botão e um chip por filtro valendo.
+  Empresa e prioridade são da SC, e o pedido responde por **todas** as SCs de onde veio. Sem base
+  no período anterior a variação **não aparece** — "sem base" não é "cresceu 100%". Toque revela o
+  valor da barra: no celular não há mouse. `e2e/responsivo.spec.ts` confere painel e diretoria em
+  375, 768 e 1440px.
+
 **A diretoria tem página própria (`/diretoria`), e o relatório abre em três frases.** A Visão da
 diretoria põe na ordem em que um diretor pergunta: cinco números com tendência (gasto, saving,
 o que espera a minha aprovação, exceções, OTIF), o relatório em três frases, a fila de decisão

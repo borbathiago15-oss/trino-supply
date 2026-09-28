@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
-  classeDeFaixa, dashboardDeSuprimentos, FILTROS_PAINEL_VAZIOS, variacao,
-  type DashboardSuprimentos as Dados, type FiltrosPainel, type PrazoFamilia, type Rankings,
+  classeDeFaixa, dashboardDeSuprimentos, FILTROS_PAINEL_VAZIOS, filtrosEscondidosAtivos, variacao,
+  type DashboardSuprimentos as Dados, type FiltrosPainel, type OpcoesFiltro, type PrazoFamilia, type Rankings,
 } from '@/api/painel';
 import { Badge, Carregando, Erro, Kpi, Painel, Vazio } from '@/componentes/basicos';
 import { Campo } from '@/componentes/formulario';
@@ -18,6 +18,32 @@ import { TrilhaDoProcesso } from './TrilhaDoProcesso';
 export const podeVerAnalises = (u: Parameters<typeof podeComprar>[0]) =>
   (podeDecidirSc(u) || podeComprar(u) || u.role === 'Auditor')
   && (temModulo(u, 'SOLICITACOES') || temModulo(u, 'APROVACAO') || temModulo(u, 'COMPRAS'));
+
+const ROTULO_PRIORIDADE: Record<string, string> = { NORMAL: 'Normal', URGENT: 'Urgente', LOW: 'Baixa', HIGH: 'Alta' };
+
+const ROTULO_FILTRO: Record<keyof FiltrosPainel, string> = {
+  de: 'De', ate: 'Até', empresa: 'Empresa', centroCusto: 'Centro de custo', fornecedor: 'Fornecedor',
+  comprador: 'Comprador', solicitante: 'Solicitante', prioridade: 'Prioridade', categoria: 'Categoria',
+  familia: 'Família', regional: 'Regional', gerente: 'Gerente', cliente: 'Cliente',
+};
+
+/**
+ * Os filtros que estão valendo, com o nome no lugar do identificador. As datas ficam de fora:
+ * o período está sempre à vista nos dois primeiros campos.
+ */
+export function chipsDosFiltros(f: FiltrosPainel, fo?: OpcoesFiltro) {
+  const nome = (k: keyof FiltrosPainel, v: string) => {
+    if (k === 'fornecedor') return fo?.suppliers.find((x) => x.id === v)?.label ?? v;
+    if (k === 'comprador') return fo?.buyers.find((x) => x.id === v)?.label ?? v;
+    if (k === 'solicitante') return fo?.requesters.find((x) => x.id === v)?.label ?? v;
+    if (k === 'centroCusto') return fo?.costCenters.find((x) => x.code === v)?.name ?? v;
+    if (k === 'prioridade') return ROTULO_PRIORIDADE[v] ?? v;
+    return v;
+  };
+  return (Object.keys(f) as (keyof FiltrosPainel)[])
+    .filter((k) => k !== 'de' && k !== 'ate' && f[k] !== '')
+    .map((k) => ({ campo: k, rotulo: ROTULO_FILTRO[k], valor: nome(k, f[k]) }));
+}
 
 const PAINEIS_RANK: { titulo: string; campo: keyof Rankings; cor: string }[] = [
   { titulo: 'Fornecedores por valor comprado', campo: 'suppliers', cor: CORES[1] },
@@ -87,22 +113,30 @@ function Analises({ dados }: { dados: Dados }) {
     { nome: 'Rascunho', cor: CORES[0], valores: dados.months.map((m) => m.draft) },
   ];
   const sv = dados.saving;
+  const def = (chave: string) => dados.indicators?.[chave];
 
   return (
     <>
-      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
-        <Kpi rotulo="Solicitações" valor={quantidade(k.prCount)}
-          detalhe={<span className={v.classe}>{v.sinal} {Math.abs(v.pct)}% vs período anterior ({quantidade(k.prPrevCount)})</span>} />
-        <Kpi rotulo="Valor solicitado" valor={moedaCurta(k.prTotalValue)} />
-        <Kpi rotulo="Aprovadas" valor={quantidade(k.approvedCount)} detalhe={moedaCurta(k.approvedValue)} />
-        <Kpi rotulo="Aguardando aprovação" valor={quantidade(k.pendingApproval)} />
-        <Kpi rotulo="Em atraso" valor={quantidade(k.overdue)} detalhe="data de necessidade vencida" />
-        <Kpi rotulo="Tempo médio de aprovação" valor={k.avgApprovalDays != null ? `${k.avgApprovalDays} d` : '—'} />
-        <Kpi rotulo="Pedidos de compra" valor={quantidade(k.poCount)} detalhe={moedaCurta(k.poTotalValue)} />
+      <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5" data-testid="kpis-painel">
+        <Kpi rotulo="Solicitações" valor={quantidade(k.prCount)} definicao={def('prCount')}
+          detalhe={k.prPrevCount > 0
+            ? <span className={v.classe}>{v.sinal} {Math.abs(v.pct)}% vs período anterior ({quantidade(k.prPrevCount)})</span>
+            // sem base anterior a variação não é calculável — "▲ 100%" diria um crescimento que ninguém mediu
+            : <span className="sub">sem base no período anterior</span>} />
+        <Kpi rotulo="Valor solicitado" valor={moedaCurta(k.prTotalValue)} definicao={def('prTotalValue')} />
+        <Kpi rotulo="Aprovadas" valor={quantidade(k.approvedCount)} detalhe={moedaCurta(k.approvedValue)}
+          definicao={def('approvedCount')} />
+        <Kpi rotulo="Aguardando aprovação" valor={quantidade(k.pendingApproval)} definicao={def('pendingApproval')} />
+        <Kpi rotulo="Em atraso" valor={quantidade(k.overdue)} detalhe="data de necessidade vencida"
+          definicao={def('overdue')} />
+        <Kpi rotulo="Tempo médio de aprovação" valor={k.avgApprovalDays != null ? `${k.avgApprovalDays} d` : '—'}
+          definicao={def('avgApprovalDays')} />
+        <Kpi rotulo="Valor comprado" valor={moedaCurta(k.poTotalValue)} detalhe={`${quantidade(k.poCount)} pedido(s) · pela data da aprovação`}
+          definicao={def('poTotalValue')} />
         <Kpi rotulo="Pedidos em aberto" valor={quantidade(k.poOpen)}
-          detalhe={k.poLate > 0 ? `${k.poLate} há +7 dias` : 'nenhum atrasado'} />
+          detalhe={k.poLate > 0 ? `${k.poLate} há +7 dias` : 'nenhum atrasado'} definicao={def('poOpen')} />
         <Kpi rotulo="Tempo médio de entrega" valor={k.avgReceiveDays != null ? `${k.avgReceiveDays} d` : '—'}
-          detalhe="emissão → recebimento" />
+          detalhe="aprovação → recebimento" definicao={def('avgReceiveDays')} />
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -111,7 +145,7 @@ function Analises({ dados }: { dados: Dados }) {
           <GraficoColunas rotulos={meses} series={porSituacao} empilhado
             titulo="Solicitações por mês, por situação" />
         </Painel>
-        <Painel titulo="Valor comprado por mês (pedidos)">
+        <Painel titulo="Valor comprado por mês — pela data da aprovação">
           <GraficoColunas rotulos={meses} formatar={moedaCurta} titulo="Valor comprado por mês"
             series={[{ nome: 'Valor comprado', cor: CORES[1], valores: dados.months.map((m) => m.poValue) }]} />
         </Painel>
@@ -274,6 +308,14 @@ export function DashboardSuprimentos() {
   const fo = dados?.filterOptions;
 
   function limpar() { setRascunho(FILTROS_PAINEL_VAZIOS); setAplicados(FILTROS_PAINEL_VAZIOS); }
+  // o chip é do filtro que está valendo: tirá-lo refaz a consulta na hora
+  function remover(k: keyof FiltrosPainel) {
+    const sem = { ...aplicados, [k]: '' };
+    setAplicados(sem); setRascunho(sem);
+  }
+  const [maisFiltros, setMaisFiltros] = useState(false);
+  const escondidos = filtrosEscondidosAtivos(aplicados);
+  const chips = chipsDosFiltros(aplicados, fo);
 
   return (
     <>
@@ -283,64 +325,107 @@ export function DashboardSuprimentos() {
       {veAnalises && (
         <>
           <Painel titulo="Filtros">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="filtros-principais">
               <Campo id="sd-de" rotulo="De"><input id="sd-de" type="date" {...campo('de')} /></Campo>
               <Campo id="sd-ate" rotulo="Até"><input id="sd-ate" type="date" {...campo('ate')} /></Campo>
-              <Campo id="sd-fornecedor" rotulo="Fornecedor">
-                <select id="sd-fornecedor" {...campo('fornecedor')}>
-                  <option value="">Todos</option>
-                  {(fo?.suppliers ?? []).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-                </select>
-              </Campo>
-              <Campo id="sd-comprador" rotulo="Comprador">
-                <select id="sd-comprador" {...campo('comprador')}>
-                  <option value="">Todos</option>
-                  {(fo?.buyers ?? []).map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
-                </select>
-              </Campo>
-              <Campo id="sd-solicitante" rotulo="Solicitante">
-                <select id="sd-solicitante" {...campo('solicitante')}>
-                  <option value="">Todos</option>
-                  {(fo?.requesters ?? []).map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-                </select>
-              </Campo>
-              <Campo id="sd-familia" rotulo="Família">
-                <select id="sd-familia" {...campo('familia')}>
+              <Campo id="sd-empresa" rotulo="Empresa">
+                <select id="sd-empresa" {...campo('empresa')}>
                   <option value="">Todas</option>
-                  {(fo?.families ?? []).map((f) => <option key={f} value={f}>{f}</option>)}
+                  {(fo?.companies ?? []).map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </Campo>
               <Campo id="sd-cc" rotulo="Centro de custo">
                 <select id="sd-cc" {...campo('centroCusto')}>
                   <option value="">Todos</option>
                   {(fo?.costCenters ?? []).map((c) => (
-                    <option key={c.code} value={c.code}>{c.code} — {c.name}</option>
+                    <option key={c.code} value={c.code}>{c.name} ({c.code})</option>
                   ))}
                 </select>
               </Campo>
-              <Campo id="sd-regional" rotulo="Regional">
-                <select id="sd-regional" {...campo('regional')}>
-                  <option value="">Todas</option>
-                  {(fo?.regions ?? []).map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </Campo>
-              <Campo id="sd-gerente" rotulo="Gerente">
-                <select id="sd-gerente" {...campo('gerente')}>
-                  <option value="">Todos</option>
-                  {(fo?.managers ?? []).map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </Campo>
-              <Campo id="sd-cliente" rotulo="Cliente">
-                <select id="sd-cliente" {...campo('cliente')}>
-                  <option value="">Todos</option>
-                  {(fo?.clients ?? []).map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </Campo>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
+
+            {maisFiltros && (
+              <div className="mt-3 grid grid-cols-1 gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2 lg:grid-cols-4"
+                data-testid="mais-filtros">
+                <Campo id="sd-fornecedor" rotulo="Fornecedor">
+                  <select id="sd-fornecedor" {...campo('fornecedor')}>
+                    <option value="">Todos</option>
+                    {(fo?.suppliers ?? []).map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                  </select>
+                </Campo>
+                <Campo id="sd-comprador" rotulo="Comprador">
+                  <select id="sd-comprador" {...campo('comprador')}>
+                    <option value="">Todos</option>
+                    {(fo?.buyers ?? []).map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+                  </select>
+                </Campo>
+                <Campo id="sd-solicitante" rotulo="Solicitante">
+                  <select id="sd-solicitante" {...campo('solicitante')}>
+                    <option value="">Todos</option>
+                    {(fo?.requesters ?? []).map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+                  </select>
+                </Campo>
+                <Campo id="sd-prioridade" rotulo="Prioridade">
+                  <select id="sd-prioridade" {...campo('prioridade')}>
+                    <option value="">Todas</option>
+                    {(fo?.priorities ?? []).map((x) => <option key={x} value={x}>{ROTULO_PRIORIDADE[x] ?? x}</option>)}
+                  </select>
+                </Campo>
+                <Campo id="sd-categoria" rotulo="Categoria">
+                  <select id="sd-categoria" {...campo('categoria')}>
+                    <option value="">Todas</option>
+                    {(fo?.categories ?? []).map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </Campo>
+                <Campo id="sd-familia" rotulo="Família">
+                  <select id="sd-familia" {...campo('familia')}>
+                    <option value="">Todas</option>
+                    {(fo?.families ?? []).map((f) => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </Campo>
+                <Campo id="sd-regional" rotulo="Regional">
+                  <select id="sd-regional" {...campo('regional')}>
+                    <option value="">Todas</option>
+                    {(fo?.regions ?? []).map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </Campo>
+                <Campo id="sd-gerente" rotulo="Gerente">
+                  <select id="sd-gerente" {...campo('gerente')}>
+                    <option value="">Todos</option>
+                    {(fo?.managers ?? []).map((m) => <option key={m} value={m}>{m}</option>)}
+                  </select>
+                </Campo>
+                <Campo id="sd-cliente" rotulo="Cliente">
+                  <select id="sd-cliente" {...campo('cliente')}>
+                    <option value="">Todos</option>
+                    {(fo?.clients ?? []).map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </Campo>
+              </div>
+            )}
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <button type="button" className="botao" onClick={() => setAplicados(rascunho)}>Aplicar filtros</button>
+              <button type="button" className="botao-secundario" aria-expanded={maisFiltros}
+                onClick={() => setMaisFiltros((m) => !m)}>
+                {maisFiltros ? 'Menos filtros' : 'Mais filtros'}
+                {escondidos > 0 && <span className="ml-1.5 rounded-full bg-marca px-1.5 text-[11px] text-white"
+                  data-testid="contador-filtros">{escondidos}</span>}
+              </button>
               <button type="button" className="botao-secundario" onClick={limpar}>Limpar</button>
             </div>
+
+            {chips.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5" data-testid="filtros-ativos">
+                {chips.map((c) => (
+                  <button key={c.campo} type="button"
+                    className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[12px] hover:border-marca"
+                    aria-label={`Remover filtro ${c.rotulo}: ${c.valor}`} onClick={() => remover(c.campo)}>
+                    {c.rotulo}: <strong>{c.valor}</strong> ✕
+                  </button>
+                ))}
+              </div>
+            )}
           </Painel>
 
           {erro && <Painel><Erro>{erro}</Erro></Painel>}

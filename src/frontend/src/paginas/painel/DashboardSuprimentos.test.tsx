@@ -3,10 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import type { Usuario } from '@/api/auth';
-import { consultaDoPainel, FILTROS_PAINEL_VAZIOS, variacao, type DashboardSuprimentos as Dados } from '@/api/painel';
+import {
+  consultaDoPainel, FILTROS_PAINEL_VAZIOS, filtrosEscondidosAtivos, variacao, type DashboardSuprimentos as Dados,
+} from '@/api/painel';
 import { ToastProvider } from '@/componentes/Toast';
 import { AvisosProvider } from '@/sessao/AvisosProvider';
-import { DashboardSuprimentos, podeVerAnalises } from './DashboardSuprimentos';
+import { chipsDosFiltros, DashboardSuprimentos, podeVerAnalises } from './DashboardSuprimentos';
 
 vi.mock('@/api/painel', async (importar) => ({
   ...(await importar<typeof import('@/api/painel')>()),
@@ -62,6 +64,18 @@ describe('regras do painel', () => {
     expect(consultaDoPainel(FILTROS_PAINEL_VAZIOS).toString()).toBe('');
     expect(consultaDoPainel({ ...FILTROS_PAINEL_VAZIOS, de: '2026-01-01', centroCusto: 'BAH-001' }).toString())
       .toBe('from=2026-01-01&costCenter=BAH-001');
+  });
+  it('o botão conta só os filtros escondidos em "Mais filtros"', () => {
+    // período, empresa e centro de custo estão à vista: contá-los no botão diria que há algo escondido
+    expect(filtrosEscondidosAtivos({ ...FILTROS_PAINEL_VAZIOS, de: '2026-01-01', centroCusto: 'BAH-001' })).toBe(0);
+    expect(filtrosEscondidosAtivos({ ...FILTROS_PAINEL_VAZIOS, fornecedor: 's1', prioridade: 'URGENT' })).toBe(2);
+  });
+  it('o chip mostra o nome, não o identificador, e deixa o período de fora', () => {
+    const chips = chipsDosFiltros(
+      { ...FILTROS_PAINEL_VAZIOS, de: '2026-01-01', fornecedor: 's1', centroCusto: 'BAH-001', prioridade: 'URGENT' },
+      dados({}).filterOptions);
+    expect(chips.map((c) => `${c.rotulo}: ${c.valor}`))
+      .toEqual(['Fornecedor: Alfa EPIs', 'Centro de custo: Obra Bahia', 'Prioridade: Urgente']);
   });
   it('as análises exigem papel e módulo, como no clássico', () => {
     expect(podeVerAnalises({ role: 'PurchasingOfficer', modules: ['COMPRAS'] })).toBe(true);
@@ -129,5 +143,38 @@ describe('tela Dashboard de Suprimentos', () => {
     expect(await screen.findByTestId('lista-avisos')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Aplicar filtros' })).not.toBeInTheDocument();
     expect(dashboardDeSuprimentos).not.toHaveBeenCalled();
+  });
+
+  it('três filtros à vista; o resto em "Mais filtros", com o contador e o chip para tirar', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(dashboardDeSuprimentos).mockResolvedValue(dados({}));
+    abrir();
+    await screen.findByTestId('painel-comprador');
+    expect(screen.getByLabelText('Empresa')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Fornecedor')).not.toBeInTheDocument();
+
+    await usuario.click(screen.getByRole('button', { name: 'Mais filtros' }));
+    await usuario.selectOptions(screen.getByLabelText('Fornecedor'), 's1');
+    await usuario.click(screen.getByRole('button', { name: 'Aplicar filtros' }));
+    expect(await screen.findByTestId('contador-filtros')).toHaveTextContent('1');
+
+    await usuario.click(screen.getByRole('button', { name: /Remover filtro Fornecedor: Alfa EPIs/ }));
+    await waitFor(() => expect(dashboardDeSuprimentos).toHaveBeenLastCalledWith(
+      expect.objectContaining({ fornecedor: '' }), expect.anything()));
+    expect(screen.queryByTestId('contador-filtros')).not.toBeInTheDocument();
+  });
+
+  it('o card diz de que data é o número, e sem base anterior não inventa variação', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(dashboardDeSuprimentos).mockResolvedValue(dados({
+      kpis: { ...dados({}).kpis, prPrevCount: 0 },
+      indicators: { poTotalValue: 'Valor comprado: pedidos pela data da aprovação da compra.' },
+    }));
+    abrir();
+    expect(await screen.findByText('sem base no período anterior')).toBeInTheDocument();
+    expect(screen.queryByText(/100% vs período anterior/)).not.toBeInTheDocument();
+    // a definição abre por toque, não por passar o mouse
+    await usuario.click(screen.getByRole('button', { name: 'Como é calculado: Valor comprado' }));
+    expect(screen.getByTestId('definicao-kpi')).toHaveTextContent('pela data da aprovação');
   });
 });

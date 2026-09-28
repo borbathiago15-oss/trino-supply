@@ -73,6 +73,8 @@ export function GraficoColunas({ rotulos, series, empilhado = false, formatar = 
   const y = (v: number) => (A - base) - (v / max) * (A - topo - base);
   const gradiente = (si: number) => `url(#${id}-g${si})`;
   const mostrar = (texto: string) => (e: MouseEvent<SVGElement>) => setDica({ ...posicao(e), texto });
+  // no toque não há "passar o mouse": tocar a barra fixa o valor, e tocar fora dela o solta
+  const tocar = (texto: string) => (e: MouseEvent<SVGElement>) => { e.stopPropagation(); setDica({ ...posicao(e), texto }); };
 
   if (!rotulos.length) return <p className="sub py-6 text-center">Sem dados no período.</p>;
 
@@ -82,7 +84,7 @@ export function GraficoColunas({ rotulos, series, empilhado = false, formatar = 
       {/* altura máxima e alinhamento à esquerda: com um ou dois meses o gráfico não estica
           até a largura da tela — era o que fazia o rótulo do mês virar um título */}
       <svg viewBox={`0 0 ${L} ${A}`} style={{ width: '100%', maxHeight: 260 }} preserveAspectRatio="xMinYMid meet"
-        role="img" aria-label={titulo} onMouseLeave={() => setDica(null)}>
+        role="img" aria-label={titulo} onMouseLeave={() => setDica(null)} onClick={() => setDica(null)}>
         <defs>
           {series.map((s, si) => (
             <linearGradient key={s.nome} id={`${id}-g${si}`} x1="0" y1="0" x2="0" y2="1">
@@ -115,13 +117,13 @@ export function GraficoColunas({ rotulos, series, empilhado = false, formatar = 
                     return (
                       <rect key={s.nome} x={x0} y={y(acumulado)} width={26} height={Math.max(1, altura - 1) + SOBRA}
                         rx={RAIO} fill={gradiente(si)} aria-label={rotulo}
-                        onMouseEnter={mostrar(rotulo)} onMouseMove={mostrar(rotulo)} />
+                        onMouseEnter={mostrar(rotulo)} onMouseMove={mostrar(rotulo)} onClick={tocar(rotulo)} />
                     );
                   }
                   return (
                     <rect key={s.nome} x={x0 + si * 13} y={y(v)} width={11}
                       height={Math.max(v > 0 ? 2 : 0, altura) + SOBRA} rx={RAIO} fill={gradiente(si)} aria-label={rotulo}
-                      onMouseEnter={mostrar(rotulo)} onMouseMove={mostrar(rotulo)} />
+                      onMouseEnter={mostrar(rotulo)} onMouseMove={mostrar(rotulo)} onClick={tocar(rotulo)} />
                   );
                 })}
               </g>

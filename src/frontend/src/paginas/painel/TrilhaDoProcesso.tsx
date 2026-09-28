@@ -57,16 +57,16 @@ function Passo({ etapa, numero }: { etapa: EtapaNaTela; numero: number }) {
   const parado = etapa.pendente > 0;
   // três estados: com trabalho parado (em destaque), ao alcance (neutro) e fora do alcance
   // do usuário (tracejado e apagado — está no mapa, mas não é dele)
-  const classe = 'flex min-w-0 flex-1 basis-[176px] items-center gap-2.5 rounded-lg border bg-white px-3 py-2.5 text-left '
-    + (parado ? 'border-aviso-borda shadow-sm' : etapa.alcancavel ? 'border-slate-200' : 'border-dashed border-slate-200 opacity-60');
+  const classe = 'flex min-w-0 flex-1 basis-[176px] items-center gap-2.5 rounded-lg border bg-superficie px-3 py-2.5 text-left '
+    + (parado ? 'border-aviso-borda shadow-sm' : etapa.alcancavel ? 'border-borda' : 'border-dashed border-borda opacity-60');
 
   const conteudo = (
     <>
       <span className={'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold '
-        + (parado ? 'bg-marca text-white' : 'bg-slate-100 text-slate-500')}>
+        + (parado ? 'bg-marca text-white' : 'bg-superficie-forte text-texto-suave')}>
         {numero}
       </span>
-      <span className="min-w-0 flex-1 text-[13px] font-semibold leading-tight text-slate-800">{etapa.rotulo}</span>
+      <span className="min-w-0 flex-1 text-[13px] font-semibold leading-tight text-texto">{etapa.rotulo}</span>
       {parado && (
         <span data-testid={`parado-${etapa.rotulo}`}
           className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">{etapa.pendente}</span>
@@ -79,7 +79,7 @@ function Passo({ etapa, numero }: { etapa: EtapaNaTela; numero: number }) {
     return <span className={classe} data-etapa={etapa.rotulo}>{conteudo}</span>;
 
   return (
-    <Link to={etapa.rota} className={classe + ' transition-colors hover:border-marca/40 hover:bg-slate-50'} data-etapa={etapa.rotulo}>
+    <Link to={etapa.rota} className={classe + ' transition-colors hover:border-marca/40 hover:bg-superficie-suave'} data-etapa={etapa.rotulo}>
       {conteudo}
     </Link>
   );

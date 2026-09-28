@@ -107,11 +107,11 @@ export function GraficoColunas({ rotulos, series, empilhado = false, formatar = 
         </defs>
         {[0.5, 1].map((f) => (
           <g key={f}>
-            <line x1="28" y1={y(max * f)} x2={L} y2={y(max * f)} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
-            <text x="0" y={y(max * f) + 3} fontSize="9" fill="#94a3b8">{formatar(max * f)}</text>
+            <line x1="28" y1={y(max * f)} x2={L} y2={y(max * f)} stroke="var(--grafico-grade)" strokeWidth="1" strokeDasharray="3 3" />
+            <text x="0" y={y(max * f) + 3} fontSize="9" fill="var(--grafico-escala)">{formatar(max * f)}</text>
           </g>
         ))}
-        <line x1="28" y1={A - base} x2={L} y2={A - base} stroke="#e2e8f0" strokeWidth="1" />
+        <line x1="28" y1={A - base} x2={L} y2={A - base} stroke="var(--grafico-eixo)" strokeWidth="1" />
         <g clipPath={`url(#${id}-area)`}>
           {rotulos.map((lb, i) => {
             const x0 = 32 + i * vao;
@@ -145,7 +145,7 @@ export function GraficoColunas({ rotulos, series, empilhado = false, formatar = 
         </g>
         {rotulos.map((lb, i) => (
           <text key={lb} x={32 + i * vao + (empilhado ? 13 : series.length * 6.5)} y={A - 8} fontSize="9.5"
-            fill={aoClicarRotulo ? '#9d202c' : '#64748b'} textAnchor="middle"
+            fill={aoClicarRotulo ? '#9d202c' : 'var(--grafico-texto)'} textAnchor="middle"
             style={aoClicarRotulo ? { cursor: 'pointer' } : undefined}
             onClick={aoClicarRotulo ? (e) => { e.stopPropagation(); aoClicarRotulo(lb); } : undefined}>
             {rotuloDoMes(lb)}
@@ -188,7 +188,7 @@ export function ListaBarras({ linhas, formatar = moeda, cor = CORES[1], aoClicar
         const conteudo = (
           <>
             <span className={`truncate ${marcada === chave(r) ? 'font-semibold text-marca' : 'text-texto-suave'}`}>{r.label}</span>
-            <span className="h-2.5 overflow-hidden rounded-full bg-slate-100">
+            <span className="h-2.5 overflow-hidden rounded-full bg-superficie-forte">
               <span className="block h-2.5 rounded-full"
                 style={{ width: `${Math.max(2, (r.value / max) * 100)}%`, background: `linear-gradient(90deg, ${cor}b8, ${cor})` }} />
             </span>
@@ -198,7 +198,7 @@ export function ListaBarras({ linhas, formatar = moeda, cor = CORES[1], aoClicar
         const classe = 'grid w-full grid-cols-[minmax(0,1fr)_2fr_auto] items-center gap-2 text-left text-[12.5px]';
         return aoClicar
           // botão, não div com onClick: o alvo é a linha inteira (fácil de tocar) e chega pelo teclado
-          ? <button key={chave(r)} type="button" className={`${classe} -mx-1 rounded-md px-1 py-0.5 hover:bg-slate-50`}
+          ? <button key={chave(r)} type="button" className={`${classe} -mx-1 rounded-md px-1 py-0.5 hover:bg-superficie-suave`}
               title={`Filtrar por ${r.label}`} aria-label={`Filtrar por ${r.label}`} aria-pressed={marcada === chave(r)}
               onClick={() => aoClicar(r)}>{conteudo}</button>
           : <div key={chave(r)} className={classe} title={`${r.label}: ${formatar(r.value)}`}>{conteudo}</div>;

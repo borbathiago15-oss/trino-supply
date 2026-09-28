@@ -4,6 +4,7 @@ import { LimiteErro } from '@/componentes/LimiteErro';
 import { Sidebar } from './Sidebar';
 import { ModalDeComunicados } from '@/componentes/Comunicados';
 import { AvisosProvider } from '@/sessao/AvisosProvider';
+import { BotaoDeTema } from '@/componentes/BotaoDeTema';
 import { CaixaDeAvisos } from './CaixaDeAvisos';
 import { BarraDeAjuda } from './BarraDeAjuda';
 import { useSessao, useUsuario } from '@/sessao/SessaoProvider';
@@ -48,7 +49,7 @@ export function AppLayout() {
                 className="botao-secundario shrink-0 !px-2.5 !py-1.5 text-[16px] leading-none lg:hidden">
                 ☰
               </button>
-              <h1 className="truncate text-xl font-bold tracking-tight text-slate-900 sm:text-2xl" id="titulo-pagina">{titulo}</h1>
+              <h1 className="truncate text-xl font-bold tracking-tight text-texto sm:text-2xl" id="titulo-pagina">{titulo}</h1>
             </div>
             <div className="flex items-center gap-2.5 text-[13px] text-texto-suave">
               {/* o sino vem antes do nome: é o que muda, e o nome é o que fica */}
@@ -62,6 +63,7 @@ export function AppLayout() {
               </span>
               {/* o manual e o chamado da tela aberta — no cabeçalho, para nenhuma tela nascer sem eles */}
               <BarraDeAjuda />
+              <BotaoDeTema />
               <button type="button" className="botao-perigo !py-1.5" onClick={async () => { await sair(); navegar('/login', { replace: true }); }}>Sair</button>
             </div>
           </div>

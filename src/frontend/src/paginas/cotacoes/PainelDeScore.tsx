@@ -5,7 +5,7 @@ import { useCarregar } from '@/util/useCarregar';
 
 /** Verde no primeiro colocado; o resto fica neutro para não parecer semáforo de aprovação. */
 const classeDoScore = (lider: boolean) =>
-  lider ? 'bg-ok-fundo text-ok' : 'bg-slate-100 text-slate-600';
+  lider ? 'bg-ok-fundo text-ok' : 'bg-superficie-forte text-texto-suave';
 
 /**
  * Comparação multicritério das propostas.

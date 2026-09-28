@@ -19,14 +19,14 @@ const pct = (v: number | null | undefined) => (v == null ? '—' : `${quantidade
 
 /** Curva ABC: A concentra 80% do gasto, B chega a 95%, C é a cauda. */
 const CLASSE_ABC: Record<'A' | 'B' | 'C', string> = {
-  A: 'bg-ok-fundo text-ok', B: 'bg-aviso-fundo text-aviso', C: 'bg-slate-100 text-slate-600',
+  A: 'bg-ok-fundo text-ok', B: 'bg-aviso-fundo text-aviso', C: 'bg-superficie-forte text-texto-suave',
 };
 
 /** Barra proporcional: a fatia de cada linha lida de relance, sem virar gráfico. */
 function Fatia({ percent }: { percent: number }) {
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 w-16 shrink-0 rounded-full bg-slate-100">
+      <div className="h-1.5 w-16 shrink-0 rounded-full bg-superficie-forte">
         <div className="h-1.5 rounded-full bg-marca" style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
       </div>
       <span className="whitespace-nowrap">{pct(percent)}</span>
@@ -80,11 +80,11 @@ export const ABAS: { chave: Aba; rotulo: string; blocos: string }[] = [
 /** Catorze blocos em cinco abas: a rolagem de cinco telas virou uma escolha. */
 function Abas({ valor, aoMudar }: { valor: Aba; aoMudar: (a: Aba) => void }) {
   return (
-    <div role="tablist" aria-label="Blocos do relatório" className="mb-4 flex flex-wrap gap-1 rounded-xl border border-borda bg-white p-1">
+    <div role="tablist" aria-label="Blocos do relatório" className="mb-4 flex flex-wrap gap-1 rounded-xl border border-borda bg-superficie p-1">
       {ABAS.map((a) => (
         <button key={a.chave} type="button" role="tab" aria-selected={valor === a.chave} data-aba={a.chave}
           onClick={() => aoMudar(a.chave)}
-          className={`rounded-lg px-3 py-1.5 text-[13px] font-semibold ${valor === a.chave ? 'bg-marca text-white' : 'text-texto-suave hover:bg-slate-50'}`}>
+          className={`rounded-lg px-3 py-1.5 text-[13px] font-semibold ${valor === a.chave ? 'bg-marca text-white' : 'text-texto-suave hover:bg-superficie-suave'}`}>
           {a.rotulo} <span className={`text-[11px] font-normal ${valor === a.chave ? 'text-white/80' : ''}`}>({a.blocos})</span>
         </button>
       ))}
@@ -140,13 +140,13 @@ function Reguas({ r }: { r: RelatorioExecutivo }) {
       {REGUAS.map((g) => {
         const regua = r.savingRulers[g.chave];
         return (
-          <div key={g.chave} data-regua={g.chave} className="rounded-xl border border-slate-200/80 bg-white px-4 py-3.5 shadow-sm">
+          <div key={g.chave} data-regua={g.chave} className="rounded-xl border border-borda/80 bg-superficie px-4 py-3.5 shadow-sm">
             <div className="rotulo">{g.titulo}</div>
             {regua.processes === 0 ? (
               <p className="mt-2 text-[13px] text-texto-suave">{g.ausente}</p>
             ) : (
               <>
-                <div className="mt-1.5 text-3xl font-extrabold leading-none tracking-tight text-slate-900 tabular-nums">
+                <div className="mt-1.5 text-3xl font-extrabold leading-none tracking-tight text-texto tabular-nums">
                   {moeda(regua.saving)}
                 </div>
                 <div className="sub mt-1.5">
@@ -478,9 +478,9 @@ function Blocos({ r, aba, aoMudar }: { r: RelatorioExecutivo; aba: Aba; aoMudar:
               </tbody>
             </table>
           </div>
-          <div data-testid="relatorio-escopo" className="rounded-xl border border-slate-200/80 bg-white px-4 py-3.5 shadow-sm">
+          <div data-testid="relatorio-escopo" className="rounded-xl border border-borda/80 bg-superficie px-4 py-3.5 shadow-sm">
             <div className="rotulo">Materiais × serviços</div>
-            <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-slate-100" aria-hidden>
+            <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-superficie-forte" aria-hidden>
               <div className="h-3 bg-marca" style={{ width: `${r.demand.scope.materialsPercent}%` }} />
               <div className="h-3 bg-aviso-forte" style={{ width: `${r.demand.scope.servicesPercent}%` }} />
             </div>

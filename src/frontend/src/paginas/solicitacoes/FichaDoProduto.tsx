@@ -16,14 +16,14 @@ function Foto({ documentId, descricao }: { documentId: string | null; descricao:
     return () => { vivo = false; };
   }, [documentId]);
 
-  const moldura = 'flex h-44 w-44 shrink-0 items-center justify-center rounded-lg border border-borda bg-slate-50';
+  const moldura = 'flex h-44 w-44 shrink-0 items-center justify-center rounded-lg border border-borda bg-superficie-suave';
   if (!documentId || falhou) return <div className={moldura}><span className="sub text-center">sem foto no cadastro</span></div>;
   if (!url) return <div className={moldura + ' animate-pulse'} />;
   return <img src={url} alt={descricao} data-testid="foto-do-produto" className="h-44 w-44 shrink-0 rounded-lg border border-borda object-contain" />;
 }
 
 const Linha = ({ rotulo, children }: { rotulo: string; children: React.ReactNode }) => (
-  <div className="flex gap-2 border-b border-slate-100 py-1.5 text-[13px]">
+  <div className="flex gap-2 border-b border-borda-suave py-1.5 text-[13px]">
     <dt className="w-40 shrink-0 text-texto-suave">{rotulo}</dt>
     <dd className="min-w-0 flex-1">{children}</dd>
   </div>
@@ -52,7 +52,7 @@ export function FichaDoProduto({ produto, aoUsar, aoVoltar }:
           <div className="flex flex-col gap-4 sm:flex-row">
             <Foto documentId={foto} descricao={produto.description} />
             <div className="min-w-0 flex-1">
-              <h3 className="text-[16px] font-bold text-slate-900">{produto.description}</h3>
+              <h3 className="text-[16px] font-bold text-texto">{produto.description}</h3>
               <p className="sub mb-2">{produto.baseCode ?? primeiro.code}</p>
               <dl>
                 <Linha rotulo="Família">{ficha.family}</Linha>

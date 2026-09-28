@@ -184,7 +184,7 @@ export function Fornecedores() {
                       <td>
                         {temContrato ? (
                           <>
-                            <Badge classe={f.contract.current ? 'bg-ok-fundo text-ok' : 'bg-slate-100 text-slate-500'}>
+                            <Badge classe={f.contract.current ? 'bg-ok-fundo text-ok' : 'bg-superficie-forte text-texto-suave'}>
                               {f.contract.current ? 'VIGENTE' : 'FORA DA VIGÊNCIA'}
                             </Badge>
                             <div className="sub">

@@ -24,7 +24,7 @@ export function Painel({ titulo, acoes, children, className = '', id }:
     <section id={id} className={'painel ' + className}>
       {(titulo || acoes) && (
         <header className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          {titulo && <h2 className="text-[15px] font-bold tracking-tight text-slate-900">{titulo}</h2>}
+          {titulo && <h2 className="text-[15px] font-bold tracking-tight text-texto">{titulo}</h2>}
           {acoes && <div className="flex flex-wrap gap-2">{acoes}</div>}
         </header>
       )}
@@ -45,9 +45,9 @@ export const Carregando = ({ texto = 'Carregando…' }: { texto?: string }) =>
 export function Vazio({ children, titulo, icone = 'caixa', testid }:
   { children: ReactNode; titulo?: string; icone?: 'caixa' | 'ok'; testid?: string }) {
   return (
-    <div data-testid={testid} className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center">
+    <div data-testid={testid} className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-borda px-4 py-8 text-center">
       <span className="text-slate-300">{ICONE[icone]}</span>
-      {titulo && <p className="font-semibold text-slate-700">{titulo}</p>}
+      {titulo && <p className="font-semibold text-texto">{titulo}</p>}
       <p className="max-w-md text-[13.5px] text-texto-suave">{children}</p>
     </div>
   );
@@ -85,17 +85,17 @@ export function Kpi({ rotulo, valor, detalhe, definicao, meta }:
   { rotulo: string; valor: ReactNode; detalhe?: ReactNode; definicao?: string; meta?: ReactNode }) {
   const [aberta, setAberta] = useState(false);
   return (
-    <div className="relative min-w-0 rounded-xl border border-slate-200/80 bg-white px-4 py-3.5 shadow-sm">
+    <div className="relative min-w-0 rounded-xl border border-borda/80 bg-superficie px-4 py-3.5 shadow-sm">
       {definicao && (
         <button type="button" className="absolute right-2 top-2 rounded-full p-1 text-[12px] leading-none text-texto-suave hover:text-marca"
           aria-label={`Como é calculado: ${rotulo}`} aria-expanded={aberta} title={definicao}
           onClick={() => setAberta((a) => !a)}>ⓘ</button>
       )}
       <div className={definicao ? 'rotulo pr-5' : 'rotulo'}>{rotulo}</div>
-      <div className="mt-1.5 text-3xl font-extrabold leading-none tracking-tight text-slate-900 tabular-nums">{valor}</div>
+      <div className="mt-1.5 text-3xl font-extrabold leading-none tracking-tight text-texto tabular-nums">{valor}</div>
       {detalhe && <div className="sub mt-1.5">{detalhe}</div>}
       {meta}
-      {definicao && aberta && <p className="sub mt-1.5 border-t border-slate-100 pt-1.5" data-testid="definicao-kpi">{definicao}</p>}
+      {definicao && aberta && <p className="sub mt-1.5 border-t border-borda-suave pt-1.5" data-testid="definicao-kpi">{definicao}</p>}
     </div>
   );
 }

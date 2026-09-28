@@ -26,7 +26,7 @@ type Aba = (typeof ABAS)[number];
 export function tomDaSeveridade(s: Risco['severity']): string {
   if (s === 'CRITICO') return 'bg-perigo-fundo text-perigo';
   if (s === 'ALTO') return 'bg-aviso-fundo text-aviso';
-  if (s === 'MEDIO') return 'bg-slate-100 text-texto-suave';
+  if (s === 'MEDIO') return 'bg-superficie-forte text-texto-suave';
   return 'bg-ok-fundo text-ok';
 }
 
@@ -89,11 +89,11 @@ function Conteudo({ completo, recarregar, avisar }: {
             </button>
       }>
         <div className="flex flex-wrap items-center gap-2">
-          <Badge classe={encerrado ? 'bg-slate-100 text-slate-600' : 'bg-marca/10 text-marca'}>
+          <Badge classe={encerrado ? 'bg-superficie-forte text-texto-suave' : 'bg-marca/10 text-marca'}>
             {encerrado ? 'Encerrado' : ROTULO_SITUACAO[p.status as SituacaoDoPlano]}
           </Badge>
-          <Badge classe="bg-slate-100 text-texto-suave">Prioridade {p.priority}</Badge>
-          {p.areas.map((a) => <Badge key={a} classe="bg-slate-100 text-texto-suave">{a}</Badge>)}
+          <Badge classe="bg-superficie-forte text-texto-suave">Prioridade {p.priority}</Badge>
+          {p.areas.map((a) => <Badge key={a} classe="bg-superficie-forte text-texto-suave">{a}</Badge>)}
           {/* a contradição aparece: encerrar com pendência pode ser a decisão certa, mas
               fica à vista de quem abrir o plano depois */}
           {p.closedWithPending && (
@@ -252,7 +252,7 @@ function Acoes({ completo, encerrado, conduz, usuarios, salvando, comAviso }:
                     <td>
                       <Badge classe={a.late ? 'bg-perigo-fundo text-perigo'
                         : a.status === 'CONCLUIDA' ? 'bg-ok-fundo text-ok'
-                        : 'bg-slate-100 text-texto-suave'}>
+                        : 'bg-superficie-forte text-texto-suave'}>
                         {rotuloDaAcao(a)}
                       </Badge>
                     </td>

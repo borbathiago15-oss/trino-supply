@@ -9,7 +9,7 @@ import { useToast } from '@/componentes/Toast';
 
 const MARCA: Record<SituacaoLinha, { rotulo: string; classe: string }> = {
   NOVO: { rotulo: 'NOVO', classe: 'bg-ok-fundo text-ok' },
-  DUPLICADO: { rotulo: 'JÁ EXISTE', classe: 'bg-slate-100 text-slate-600' },
+  DUPLICADO: { rotulo: 'JÁ EXISTE', classe: 'bg-superficie-forte text-texto-suave' },
   ERRO: { rotulo: 'ERRO', classe: 'bg-perigo-fundo text-perigo' },
 };
 

@@ -76,7 +76,7 @@ export function Chamado() {
       <Painel titulo={`${t.number} — ${t.subject}`} acoes={
         <Badge classe={TOM_DA_SITUACAO[t.status]}>{rotuloDaSituacao(t, c.souDoSuporte)}</Badge>
       }>
-        <p className="mb-2 text-[14px] font-semibold text-slate-800" data-testid="a-vez-de">{aVezDe(c)}</p>
+        <p className="mb-2 text-[14px] font-semibold text-texto" data-testid="a-vez-de">{aVezDe(c)}</p>
         <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-[13px] sm:grid-cols-2">
           <div><dt className="inline text-texto-suave">Tela: </dt>
             <dd className="inline">{t.screen ? <Link to={t.screen}>{t.screenLabel}</Link> : t.screenLabel}</dd></div>
@@ -93,9 +93,9 @@ export function Chamado() {
         <ol className="space-y-3" data-testid="conversa">
           {c.messages.map((m) => (
             <li key={m.id}
-              className={'rounded-lg border px-4 py-3 ' + (m.fromSupport ? 'border-blue-100 bg-blue-50/60 sm:ml-10' : 'border-slate-200 bg-white sm:mr-10')}>
+              className={'rounded-lg border px-4 py-3 ' + (m.fromSupport ? 'border-blue-100 bg-blue-50/60 sm:ml-10' : 'border-borda bg-superficie sm:mr-10')}>
               <p className="mb-1 text-[12px] text-texto-suave">
-                <strong className="text-slate-700">{m.authorLabel}</strong>
+                <strong className="text-texto">{m.authorLabel}</strong>
                 {m.fromSupport && ' · suporte'} · {dataHora(m.createdAt)}
               </p>
               <p className="whitespace-pre-wrap text-[13.5px]">{m.text}</p>
@@ -112,7 +112,7 @@ export function Chamado() {
           ))}
         </ol>
 
-        <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
+        <div className="mt-4 space-y-3 border-t border-borda-suave pt-4">
           <Campo id="ch-resposta" rotulo={resolvido ? 'Responder (reabre o chamado)' : 'Responder'}>
             <textarea id="ch-resposta" rows={4} maxLength={4000} value={texto} onChange={(e) => setTexto(e.target.value)} />
           </Campo>

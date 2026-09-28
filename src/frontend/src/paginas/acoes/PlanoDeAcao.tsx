@@ -18,11 +18,11 @@ const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message
  * Encerrado é cinza — ele diz que alguém parou de acompanhar, não que deu certo.
  */
 export function tomDaLinha(p: Plano): string {
-  if (p.life === 'ENCERRADO') return 'bg-slate-100 text-slate-600';
+  if (p.life === 'ENCERRADO') return 'bg-superficie-forte text-texto-suave';
   if (p.status === 'ATRASADO') return 'bg-perigo-fundo text-perigo';
   if (p.status === 'CONCLUIDO') return 'bg-ok-fundo text-ok';
-  if (p.status === 'CANCELADO') return 'bg-slate-100 text-slate-500';
-  return 'bg-slate-100 text-texto-suave';
+  if (p.status === 'CANCELADO') return 'bg-superficie-forte text-texto-suave';
+  return 'bg-superficie-forte text-texto-suave';
 }
 
 /**

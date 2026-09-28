@@ -24,7 +24,7 @@ export function Dialogo({ titulo, children, acoes, aoFechar, largura = 'max-w-[5
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4"
       onMouseDown={(ev) => { if (ev.target === ev.currentTarget) aoFechar(); }}>
       <div ref={caixa} role="dialog" aria-modal="true" aria-label={titulo}
-        className={`w-full ${largura} rounded-painel bg-white p-6 shadow-xl`}>
+        className={`w-full ${largura} rounded-painel bg-superficie p-6 shadow-xl`}>
         <h2 className="mb-3 text-[16px] font-bold">{titulo}</h2>
         <div className="text-[13.5px]">{children}</div>
         <div className="mt-5 flex flex-wrap justify-end gap-2">

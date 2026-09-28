@@ -274,14 +274,14 @@ export function CardDeDecisao({ q, usuarioId, aoDecidir }: {
   const alcada = alcadaDe(q.status);
   const conflito = alcada ? conflitoDeSegregacao(q, usuarioId, alcada) : null;
   const espera = diasDesde(d?.waitingSince ?? q.managerApproval?.at ?? null);
-  const esperaClasse = espera == null ? '' : espera >= 5 ? 'bg-perigo-fundo text-perigo' : espera >= 3 ? 'bg-aviso-fundo text-aviso' : 'bg-slate-100 text-slate-600';
+  const esperaClasse = espera == null ? '' : espera >= 5 ? 'bg-perigo-fundo text-perigo' : espera >= 3 ? 'bg-aviso-fundo text-aviso' : 'bg-superficie-forte text-texto-suave';
   const urgente = d?.priority === 'URGENT';
   const penalidades = d?.compliancePenalties ?? [];
   const acimaDoOrcamento = d?.budget != null && escolha.total != null && escolha.total > d.budget;
   const saving = q.saving;
 
   return (
-    <li data-processo={q.number} data-nivel={d?.level ?? ''} className="rounded-xl border border-borda bg-white p-4 shadow-sm">
+    <li data-processo={q.number} data-nivel={d?.level ?? ''} className="rounded-xl border border-borda bg-superficie p-4 shadow-sm">
       {/* cabeçalho: o que é, quanto custa, há quanto tempo espera */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
@@ -302,7 +302,7 @@ export function CardDeDecisao({ q, usuarioId, aoDecidir }: {
         </div>
         <div className="text-right">
           <div className="rotulo">Valor da compra</div>
-          <div className="text-[22px] font-bold leading-tight text-slate-900" data-testid="valor-da-compra">
+          <div className="text-[22px] font-bold leading-tight text-texto" data-testid="valor-da-compra">
             {escolha.total != null ? moeda(escolha.total) : '—'}
           </div>
           {d?.budget != null && (
@@ -315,7 +315,7 @@ export function CardDeDecisao({ q, usuarioId, aoDecidir }: {
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         {/* quem pediu e por quê */}
-        <div className="rounded-lg bg-slate-50 px-3 py-2">
+        <div className="rounded-lg bg-superficie-suave px-3 py-2">
           <div className="rotulo">Quem pediu e por quê</div>
           <div className="text-[13.5px]"><strong>{d?.requesterLabel || '—'}</strong>{d?.neededBy && <span className="sub"> · precisa até {data(d.neededBy)}</span>}</div>
           <div className="text-[13px]">{q.justification || '—'}</div>
@@ -331,7 +331,7 @@ export function CardDeDecisao({ q, usuarioId, aoDecidir }: {
         </div>
 
         {/* o que o comprador escolheu */}
-        <div className="rounded-lg bg-slate-50 px-3 py-2">
+        <div className="rounded-lg bg-superficie-suave px-3 py-2">
           <div className="rotulo">Escolha do comprador</div>
           <div className="text-[13.5px]"><strong>{escolha.fornecedor ?? '—'}</strong>
             {escolha.deliveryDays != null && <span className="sub"> · entrega em {escolha.deliveryDays} dia(s)</span>}

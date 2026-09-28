@@ -19,7 +19,7 @@ export function CabecalhoDoProcesso({ processo: q, usuarioId, aoDefinirProduto }
   /** Presente quando quem olha pode transformar o item digitado em produto (RFQ-ERR-026). */
   aoDefinirProduto?: (item: ItemDoProcesso) => void;
 }) {
-  const marca = ROTULO_RFQ[q.status] ?? { rotulo: q.status, classe: 'bg-slate-100 text-slate-600' };
+  const marca = ROTULO_RFQ[q.status] ?? { rotulo: q.status, classe: 'bg-superficie-forte text-texto-suave' };
   const origem = q.sourcePrNumbers.length ? q.sourcePrNumbers : (q.sourcePrNumber ? [q.sourcePrNumber] : []);
   // "Aguardando Aprovador 01" diz a etapa; o nome ao lado diz de quem — sem rolar até o caminho
   const atual = q.caminho?.find((e) => e.situacao === 'atual');

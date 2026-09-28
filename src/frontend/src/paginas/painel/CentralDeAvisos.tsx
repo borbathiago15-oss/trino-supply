@@ -34,14 +34,14 @@ const ICONE: Record<Aviso['severity'], JSX.Element> = {
  */
 function Cartao({ aviso }: { aviso: Aviso }) {
   const sev = CLASSE_AVISO[aviso.severity] ? aviso.severity : 'info';
-  const classe = 'flex items-center gap-3 rounded-lg border border-l-4 border-slate-200/80 bg-white px-4 py-3 shadow-sm '
-    + 'transition-colors hover:bg-slate-50 ' + CLASSE_AVISO[sev];
+  const classe = 'flex items-center gap-3 rounded-lg border border-l-4 border-borda/80 bg-superficie px-4 py-3 shadow-sm '
+    + 'transition-colors hover:bg-superficie-suave ' + CLASSE_AVISO[sev];
 
   return (
     <Link to={enderecoDoId(aviso.view)} className={classe} data-aviso={aviso.kind}>
       <span className="shrink-0">{ICONE[sev]}</span>
-      <span className="min-w-0 flex-1 text-[13.5px] font-medium text-slate-700">{aviso.text}</span>
-      <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-[12.5px] font-bold text-slate-700">{aviso.count}</span>
+      <span className="min-w-0 flex-1 text-[13.5px] font-medium text-texto">{aviso.text}</span>
+      <span className="shrink-0 rounded-full bg-superficie-forte px-2.5 py-0.5 text-[12.5px] font-bold text-texto">{aviso.count}</span>
       <span className="hidden shrink-0 text-[12.5px] font-semibold text-marca sm:inline">Ver itens →</span>
     </Link>
   );

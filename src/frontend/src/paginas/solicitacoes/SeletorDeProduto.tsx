@@ -101,7 +101,7 @@ export function SeletorDeProduto({ familias, aoEscolher, aoDescrever, aoFechar }
                 <button type="button" data-produto={p.baseCode ?? p.sizes[0]?.code}
                   title="Ver a ficha do produto"
                   onClick={() => setAberto(p)}
-                  className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-1 py-2.5 text-left hover:bg-slate-50">
+                  className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-1 py-2.5 text-left hover:bg-superficie-suave">
                   <span className="font-semibold">{p.description}</span>
                   <span className="sub">{p.baseCode ?? p.sizes[0]?.code} · {p.family} · {p.unitOfMeasure}</span>
                   {p.hasGrade && (

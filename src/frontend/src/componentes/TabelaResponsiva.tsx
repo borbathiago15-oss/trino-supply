@@ -44,7 +44,7 @@ export function TabelaResponsiva<T>({ linhas, colunas, chave, testid, minLargura
       </div>
       <ul className="flex flex-col gap-2 md:hidden" data-testid={`${testid}-cards`}>
         {linhas.map((l) => (
-          <li key={chave(l)} className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
+          <li key={chave(l)} className="rounded-lg border border-borda bg-superficie px-3 py-2.5">
             <div className="text-[14px] font-semibold">{principal.render(l)}</div>
             <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-1 text-[12.5px]">
               {demais.map((c) => (

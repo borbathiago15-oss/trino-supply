@@ -645,6 +645,20 @@ decisões seguram a Onda 1:
   valor da barra: no celular não há mouse. `e2e/responsivo.spec.ts` confere painel e diretoria em
   375, 768 e 1440px.
 
+**O clique no gráfico é filtro; o detalhe é botão.** No toque não dá para distinguir clique de
+ícone, então a regra é uma para os três tamanhos: tocar a barra do ranking aplica o filtro global
+daquela linha (a `key` que o `Rank` devolve — id do fornecedor, código do centro; sem chave própria,
+o rótulo), tocar de novo o tira, e tocar o mês (ou de novo a barra do mês) fecha o período naquele
+mês (`periodoDoMes`). O chip que já existia é o que mostra o filtro valendo. **Os Pontos de
+Atenção saem do mesmo `dados`** dos cards (`pontosDeAtencao`), sem consulta própria: SC atrasada,
+meta longe, OTIF < 70%, pedido parado há 7 dias, prazo estourado — do mais urgente ao menos, oito
+no máximo, e vazio quando nada chama atenção (uma lista que chama atenção com tudo é a que ninguém
+lê). Cada ponto é a linha inteira tocável, com destino. **A tabela vira um card por linha no
+celular** (`componentes/TabelaResponsiva`), das **mesmas** colunas — o corte é por CSS, então o DOM
+tem as duas: o `testid` é da tabela, os cards ficam em `${testid}-cards`. Largura mínima é da
+tabela (`minLargura`), nunca da célula: `min-w-[150px]` numa grade de duas colunas estourava os
+375px, e a página rolava de lado.
+
 **A meta é da empresa, e sem ela não há comparação.** `IndicatorGoal` guarda um valor **mensal**
 por indicador do catálogo (`MetasDosIndicadores.Catalogo`), editável pelo administrador em
 `/metas`; a linha só existe quando alguém grava, e o campo vazio a apaga. Card de indicador sem

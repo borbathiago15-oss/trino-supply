@@ -214,9 +214,11 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
         }
 
         // ---- rankings -----------------------------------------------------------
-        static List<object> Rank<T>(IEnumerable<T> src, Func<T, string?> label, Func<T, decimal> value) =>
+        // a `key` é o que o clique na barra manda de volta como filtro (o id do fornecedor, o
+        // código do centro); sem chave própria, o rótulo é a chave — família, regional, cliente
+        static List<object> Rank<T>(IEnumerable<T> src, Func<T, string?> label, Func<T, decimal> value, Func<T, string?>? key = null) =>
             src.GroupBy(x => label(x) ?? "—")
-               .Select(g => new { label = g.Key, value = g.Sum(value), count = g.Count() })
+               .Select(g => new { label = g.Key, key = key is null ? g.Key : key(g.First()) ?? g.Key, value = g.Sum(value), count = g.Count() })
                .OrderByDescending(x => x.value).Take(10).Cast<object>().ToList();
 
         string CcNameOf(string code) => ccByCode.TryGetValue(code.ToUpperInvariant(), out var c) && !string.IsNullOrWhiteSpace(c.Name) ? c.Name : code;
@@ -239,13 +241,13 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
 
         var rankings = new
         {
-            suppliers = Rank(activePos, o => o.SupplierName, o => o.TotalValue),
-            buyers = Rank(activePos, o => CompradorDoPedido(o).Label, o => o.TotalValue),
-            requesters = Rank(prs, r => r.RequesterLabel, r => r.TotalEstimatedValue),
+            suppliers = Rank(activePos, o => o.SupplierName, o => o.TotalValue, o => o.SupplierId.ToString()),
+            buyers = Rank(activePos, o => CompradorDoPedido(o).Label, o => o.TotalValue, o => CompradorDoPedido(o).Id.ToString()),
+            requesters = Rank(prs, r => r.RequesterLabel, r => r.TotalEstimatedValue, r => r.RequesterId.ToString()),
             families = Rank(prItemValues, x => x.Family, x => x.Value),
             categories = Rank(poItemValues, x => CategoryOf(x.Family), x => x.Value),
             // o nome, não o código: é o que a diretoria reconhece (o código fica no filtro)
-            costCenters = Rank(prs, r => CcNameOf(r.CostCenter), r => r.TotalEstimatedValue),
+            costCenters = Rank(prs, r => CcNameOf(r.CostCenter), r => r.TotalEstimatedValue, r => r.CostCenter),
             regions = Rank(prs, r => RegionOf(r.CostCenter), r => r.TotalEstimatedValue),
             managers = Rank(prs, r => ManagerOf(r.CostCenter), r => r.TotalEstimatedValue),
             clients = Rank(prs, r => ClientOf(r.CostCenter), r => r.TotalEstimatedValue),

@@ -12,6 +12,9 @@ import { useUsuario } from '@/sessao/SessaoProvider';
 import { moeda, quantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
 import { LinhaDaMeta } from '@/componentes/LinhaDaMeta';
+import { TabelaResponsiva } from '@/componentes/TabelaResponsiva';
+import { Link } from 'react-router-dom';
+import { pontosDeAtencao } from './pontosDeAtencao';
 import { CentralDeAvisos } from './CentralDeAvisos';
 import { TrilhaDoProcesso } from './TrilhaDoProcesso';
 
@@ -46,64 +49,70 @@ export function chipsDosFiltros(f: FiltrosPainel, fo?: OpcoesFiltro) {
     .map((k) => ({ campo: k, rotulo: ROTULO_FILTRO[k], valor: nome(k, f[k]) }));
 }
 
-const PAINEIS_RANK: { titulo: string; campo: keyof Rankings; cor: string }[] = [
-  { titulo: 'Fornecedores por valor comprado', campo: 'suppliers', cor: CORES[1] },
-  { titulo: 'Famílias por valor solicitado', campo: 'families', cor: CORES[3] },
-  { titulo: 'Spend por categoria (O.C.s)', campo: 'categories', cor: CORES[2] },
-  { titulo: 'Compradores por valor', campo: 'buyers', cor: CORES[2] },
-  { titulo: 'Solicitantes por valor', campo: 'requesters', cor: CORES[1] },
-  { titulo: 'Regionais por valor solicitado', campo: 'regions', cor: CORES[3] },
-  { titulo: 'Gerentes por valor solicitado', campo: 'managers', cor: CORES[2] },
-  { titulo: 'Clientes por valor solicitado', campo: 'clients', cor: CORES[1] },
-  { titulo: 'Centros de custo por valor', campo: 'costCenters', cor: CORES[3] },
+// cada ranking sabe qual filtro global o clique na sua barra aplica (filtro cruzado)
+const PAINEIS_RANK: { titulo: string; campo: keyof Rankings; cor: string; filtro: keyof FiltrosPainel }[] = [
+  { titulo: 'Fornecedores por valor comprado', campo: 'suppliers', cor: CORES[1], filtro: 'fornecedor' },
+  { titulo: 'Famílias por valor solicitado', campo: 'families', cor: CORES[3], filtro: 'familia' },
+  { titulo: 'Spend por categoria (O.C.s)', campo: 'categories', cor: CORES[2], filtro: 'categoria' },
+  { titulo: 'Compradores por valor', campo: 'buyers', cor: CORES[2], filtro: 'comprador' },
+  { titulo: 'Solicitantes por valor', campo: 'requesters', cor: CORES[1], filtro: 'solicitante' },
+  { titulo: 'Regionais por valor solicitado', campo: 'regions', cor: CORES[3], filtro: 'regional' },
+  { titulo: 'Gerentes por valor solicitado', campo: 'managers', cor: CORES[2], filtro: 'gerente' },
+  { titulo: 'Clientes por valor solicitado', campo: 'clients', cor: CORES[1], filtro: 'cliente' },
+  { titulo: 'Centros de custo por valor', campo: 'costCenters', cor: CORES[3], filtro: 'centroCusto' },
 ];
+
+/** O mês do gráfico (`2026-09`) como período de filtro: do primeiro ao último dia. */
+export function periodoDoMes(mes: string): { de: string; ate: string } {
+  const [ano, m] = mes.split('-').map(Number);
+  const ultimo = new Date(Date.UTC(ano, m, 0)).getUTCDate();
+  return { de: `${mes}-01`, ate: `${mes}-${String(ultimo).padStart(2, '0')}` };
+}
 
 function Prazos({ familias }: { familias: PrazoFamilia[] }) {
   if (!familias.length)
     return <Vazio>Defina os prazos-meta em Cadastros → Famílias de Produtos para acompanhar meta × realizado.</Vazio>;
+  const etapa = (f: PrazoFamilia, i: number) => {
+    const e = f.stages[i];
+    if (!e) return <span className="sub">—</span>;
+    return (
+      <div className="md:min-w-[150px]">
+        {e.target != null ? `meta ${e.target}d` : <span className="sub">sem meta</span>}
+        <div className={e.late ? 'text-[12px] font-bold text-perigo' : 'sub'}>
+          {e.actual != null ? `real ${e.actual}d${e.late ? ' ⚠' : ''}` : 'sem dado'}
+        </div>
+        {e.median != null && <div className="sub">mediana {e.median}d</div>}
+        {e.withinSlaPct != null && (
+          <div className="mt-0.5">
+            <Badge classe={classeDeFaixa(e.withinSlaPct, 80, 50)}>{e.withinSlaPct}% no prazo</Badge>
+            <span className="sub"> ({e.measured})</span>
+          </div>
+        )}
+      </div>
+    );
+  };
   return (
-    <div className="overflow-x-auto">
-      <table data-testid="tabela-prazos" className="min-w-[900px]">
-        <thead>
-          <tr>
-            <th>Família</th>
-            {familias[0].stages.map((e) => <th key={e.stage}>{e.stage}</th>)}
-            <th>Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {familias.map((f) => (
-            <tr key={f.family}>
-              <td><strong>{f.family}</strong></td>
-              {f.stages.map((e) => (
-                <td key={e.stage} className="min-w-[150px]">
-                  {e.target != null ? `meta ${e.target}d` : <span className="sub">sem meta</span>}
-                  <div className={e.late ? 'text-[12px] font-bold text-perigo' : 'sub'}>
-                    {e.actual != null ? `real ${e.actual}d${e.late ? ' ⚠' : ''}` : 'sem dado'}
-                  </div>
-                  {e.median != null && <div className="sub">mediana {e.median}d</div>}
-                  {e.withinSlaPct != null && (
-                    <div className="mt-0.5">
-                      <Badge classe={classeDeFaixa(e.withinSlaPct, 80, 50)}>{e.withinSlaPct}% no prazo</Badge>
-                      <span className="sub"> ({e.measured})</span>
-                    </div>
-                  )}
-                </td>
-              ))}
-              <td className="whitespace-nowrap">
-                {f.targetTotal != null ? <strong>meta {f.targetTotal}d</strong> : <span className="sub">—</span>}
-                <div className="sub">{f.actualTotal != null ? `real ${f.actualTotal}d` : 'sem dado'}</div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <TabelaResponsiva linhas={familias} chave={(f) => f.family} testid="tabela-prazos" minLargura={900} colunas={[
+      { titulo: 'Família', principal: true, render: (f) => <strong>{f.family}</strong> },
+      ...familias[0].stages.map((e, i) => ({ titulo: e.stage, render: (f: PrazoFamilia) => etapa(f, i) })),
+      { titulo: 'Total', classe: 'whitespace-nowrap', render: (f) => (
+        <>
+          {f.targetTotal != null ? <strong>meta {f.targetTotal}d</strong> : <span className="sub">—</span>}
+          <div className="sub">{f.actualTotal != null ? `real ${f.actualTotal}d` : 'sem dado'}</div>
+        </>
+      ) },
+    ]} />
   );
 }
 
-function Analises({ dados }: { dados: Dados }) {
+function Analises({ dados, filtros, aoFiltrar, aoFiltrarMes }: {
+  dados: Dados;
+  filtros: FiltrosPainel;
+  aoFiltrar: (campo: keyof FiltrosPainel, valor: string) => void;
+  aoFiltrarMes: (mes: string) => void;
+}) {
   const k = dados.kpis;
+  const pontos = pontosDeAtencao(dados);
   const v = variacao(k.prCount, k.prPrevCount);
   const meses = dados.months.map((m) => m.month);
   const porSituacao: Serie[] = [
@@ -143,14 +152,35 @@ function Analises({ dados }: { dados: Dados }) {
           detalhe="aprovação → recebimento" definicao={def('avgReceiveDays')} meta={meta('avgReceiveDays', dias)} />
       </div>
 
+      <Painel titulo="Pontos de atenção">
+        {pontos.length === 0
+          ? <p className="sub" data-testid="sem-pontos">Nada chama atenção no período filtrado.</p>
+          : (
+            <ul className="flex flex-col gap-1.5" data-testid="pontos-de-atencao">
+              {pontos.map((p) => {
+                const classe = `block rounded-lg border px-3 py-2.5 text-[13.5px] ${p.tom === 'perigo'
+                  ? 'border-perigo/30 bg-perigo-fundo text-perigo' : 'border-aviso/30 bg-aviso-fundo text-aviso'}`;
+                return (
+                  <li key={p.chave}>
+                    {/* o alvo é a linha inteira, com altura de toque: no celular é onde o dedo cai */}
+                    {p.destino
+                      ? <Link to={p.destino} className={`${classe} hover:brightness-95`}>{p.texto} <span aria-hidden>→</span></Link>
+                      : <div className={classe}>{p.texto}</div>}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+      </Painel>
+
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <Painel titulo="Solicitações por mês — situação">
           <Legenda series={porSituacao} />
           <GraficoColunas rotulos={meses} series={porSituacao} empilhado
-            titulo="Solicitações por mês, por situação" />
+            titulo="Solicitações por mês, por situação" aoClicarRotulo={aoFiltrarMes} />
         </Painel>
         <Painel titulo="Valor comprado por mês — pela data da aprovação">
-          <GraficoColunas rotulos={meses} formatar={moedaCurta} titulo="Valor comprado por mês"
+          <GraficoColunas rotulos={meses} formatar={moedaCurta} titulo="Valor comprado por mês" aoClicarRotulo={aoFiltrarMes}
             series={[{ nome: 'Valor comprado', cor: CORES[1], valores: dados.months.map((m) => m.poValue) }]} />
         </Painel>
       </div>
@@ -158,7 +188,9 @@ function Analises({ dados }: { dados: Dados }) {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {PAINEIS_RANK.map((p) => (
           <Painel key={p.campo} titulo={p.titulo}>
-            <ListaBarras linhas={dados.rankings?.[p.campo] ?? []} cor={p.cor} />
+            {/* filtro cruzado: tocar a barra aplica o filtro daquela linha em todo o painel */}
+            <ListaBarras linhas={dados.rankings?.[p.campo] ?? []} cor={p.cor} marcada={filtros[p.filtro] || undefined}
+              aoClicar={(l) => aoFiltrar(p.filtro, l.key ?? l.label)} />
           </Painel>
         ))}
       </div>
@@ -181,25 +213,14 @@ function Analises({ dados }: { dados: Dados }) {
                 </div>
               )}
             </div>
-            <div className="overflow-x-auto">
-              <table data-testid="tabela-saving" className="min-w-[720px]">
-                <thead>
-                  <tr><th>Processo</th><th>Fornecedor</th><th>1ª proposta</th><th>Fechado</th><th>Ganho</th><th>Negociado por</th></tr>
-                </thead>
-                <tbody>
-                  {sv.items.map((x) => (
-                    <tr key={x.number}>
-                      <td>{x.number}</td>
-                      <td>{x.supplier || '—'}</td>
-                      <td className="whitespace-nowrap">{moeda(x.baseline)}</td>
-                      <td className="whitespace-nowrap">{moeda(x.closed)}</td>
-                      <td className="whitespace-nowrap"><strong>{moeda(x.value)}</strong></td>
-                      <td className="sub">{x.byLabel || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TabelaResponsiva linhas={sv.items} chave={(x) => x.number} testid="tabela-saving" minLargura={720} colunas={[
+              { titulo: 'Processo', principal: true, render: (x) => x.number },
+              { titulo: 'Fornecedor', render: (x) => x.supplier || '—' },
+              { titulo: '1ª proposta', classe: 'whitespace-nowrap', render: (x) => moeda(x.baseline) },
+              { titulo: 'Fechado', classe: 'whitespace-nowrap', render: (x) => moeda(x.closed) },
+              { titulo: 'Ganho', classe: 'whitespace-nowrap', render: (x) => <strong>{moeda(x.value)}</strong> },
+              { titulo: 'Negociado por', classe: 'sub', render: (x) => x.byLabel || '—' },
+            ]} />
           </>
         )}
       </Painel>
@@ -214,31 +235,16 @@ function Analises({ dados }: { dados: Dados }) {
       <Painel titulo="Fornecedor — pedidos no período">
         {!dados.supplierTable?.length && <Vazio>Nenhum pedido de compra no período.</Vazio>}
         {dados.supplierTable?.length > 0 && (
-          <div className="overflow-x-auto">
-            <table data-testid="tabela-fornecedores" className="min-w-[680px]">
-              <thead>
-                <tr><th>Fornecedor</th><th>Pedidos</th><th>Em aberto</th><th>Quantidade</th><th>Valor</th><th>OTIF</th></tr>
-              </thead>
-              <tbody>
-                {dados.supplierTable.map((s) => (
-                  <tr key={s.supplier}>
-                    <td>{s.supplier}</td>
-                    <td>{quantidade(s.orders)}</td>
-                    <td>{s.open > 0 ? <Badge classe="bg-slate-100 text-slate-600">{s.open}</Badge> : '0'}</td>
-                    <td>{quantidade(s.quantity)}</td>
-                    <td className="whitespace-nowrap">{moeda(s.value)}</td>
-                    <td>
-                      {s.otifPercent != null
-                        ? <Badge classe={classeDeFaixa(s.otifPercent, 90, 70)} title={`${s.otifMeasured} entrega(s) medida(s)`}>
-                            {s.otifPercent}%
-                          </Badge>
-                        : <span className="sub">sem medição</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <TabelaResponsiva linhas={dados.supplierTable} chave={(x) => x.supplier} testid="tabela-fornecedores" minLargura={680} colunas={[
+            { titulo: 'Fornecedor', principal: true, render: (x) => x.supplier },
+            { titulo: 'Pedidos', render: (x) => quantidade(x.orders) },
+            { titulo: 'Em aberto', render: (x) => (x.open > 0 ? <Badge classe="bg-slate-100 text-slate-600">{x.open}</Badge> : '0') },
+            { titulo: 'Quantidade', render: (x) => quantidade(x.quantity) },
+            { titulo: 'Valor', classe: 'whitespace-nowrap', render: (x) => moeda(x.value) },
+            { titulo: 'OTIF', render: (x) => (x.otifPercent != null
+              ? <Badge classe={classeDeFaixa(x.otifPercent, 90, 70)} title={`${x.otifMeasured} entrega(s) medida(s)`}>{x.otifPercent}%</Badge>
+              : <span className="sub">sem medição</span>) },
+          ]} />
         )}
       </Painel>
 
@@ -249,44 +255,21 @@ function Analises({ dados }: { dados: Dados }) {
         </p>
         {!dados.buyerPanel?.length && <Vazio>Nenhum processo de compra no período.</Vazio>}
         {dados.buyerPanel?.length > 0 && (
-          <div className="overflow-x-auto">
-            <table data-testid="painel-comprador" className="min-w-[900px]">
-              <thead>
-                <tr>
-                  <th>Comprador</th><th>Score</th><th>Processos</th><th>Com O.C.</th><th>Valor comprado</th>
-                  <th>Saving</th><th>Dias até a O.C.</th><th>Backlog atual</th><th>OTIF</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dados.buyerPanel.map((b) => (
-                  <tr key={b.label}>
-                    <td>{b.label}</td>
-                    <td>
-                      {b.compositeScore != null
-                        ? <Badge classe={classeDeFaixa(b.compositeScore, 85, 65)}
-                            title="OTIF 40 · agilidade 40 · saving 20 — relativo ao período">
-                            {b.compositeScore}
-                          </Badge>
-                        : <span className="sub">—</span>}
-                    </td>
-                    <td>{quantidade(b.processes)}</td>
-                    <td>{quantidade(b.closed)}</td>
-                    <td className="whitespace-nowrap">{moeda(b.poValue)}</td>
-                    <td className="whitespace-nowrap">
-                      {b.savingTotal > 0 ? <strong>{moeda(b.savingTotal)}</strong> : moeda(0)}
-                    </td>
-                    <td>{b.avgDaysToPo != null ? `${b.avgDaysToPo}d` : <span className="sub">—</span>}</td>
-                    <td>{b.backlog > 0 ? <Badge classe="bg-aviso-fundo text-aviso">{quantidade(b.backlog)}</Badge> : '0'}</td>
-                    <td>
-                      {b.otifPercent != null
-                        ? <Badge classe={classeDeFaixa(b.otifPercent, 90, 70)}>{b.otifPercent}%</Badge>
-                        : <span className="sub">sem medição</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <TabelaResponsiva linhas={dados.buyerPanel} chave={(b) => b.label} testid="painel-comprador" minLargura={900} colunas={[
+            { titulo: 'Comprador', principal: true, render: (b) => b.label },
+            { titulo: 'Score', render: (b) => (b.compositeScore != null
+              ? <Badge classe={classeDeFaixa(b.compositeScore, 85, 65)} title="OTIF 40 · agilidade 40 · saving 20 — relativo ao período">{b.compositeScore}</Badge>
+              : <span className="sub">—</span>) },
+            { titulo: 'Processos', render: (b) => quantidade(b.processes) },
+            { titulo: 'Com O.C.', render: (b) => quantidade(b.closed) },
+            { titulo: 'Valor comprado', classe: 'whitespace-nowrap', render: (b) => moeda(b.poValue) },
+            { titulo: 'Saving', classe: 'whitespace-nowrap', render: (b) => (b.savingTotal > 0 ? <strong>{moeda(b.savingTotal)}</strong> : moeda(0)) },
+            { titulo: 'Dias até a O.C.', render: (b) => (b.avgDaysToPo != null ? `${b.avgDaysToPo}d` : <span className="sub">—</span>) },
+            { titulo: 'Backlog atual', render: (b) => (b.backlog > 0 ? <Badge classe="bg-aviso-fundo text-aviso">{quantidade(b.backlog)}</Badge> : '0') },
+            { titulo: 'OTIF', render: (b) => (b.otifPercent != null
+              ? <Badge classe={classeDeFaixa(b.otifPercent, 90, 70)}>{b.otifPercent}%</Badge>
+              : <span className="sub">sem medição</span>) },
+          ]} />
         )}
       </Painel>
     </>
@@ -319,6 +302,15 @@ export function DashboardSuprimentos() {
     setAplicados(sem); setRascunho(sem);
   }
   const [maisFiltros, setMaisFiltros] = useState(false);
+  // filtro cruzado: o toque na barra aplica na hora, sem passar pelo "Aplicar" — a barra é a escolha
+  function filtrar(campo: keyof FiltrosPainel, valor: string) {
+    const novo = { ...aplicados, [campo]: aplicados[campo] === valor ? '' : valor };
+    setAplicados(novo); setRascunho(novo);
+  }
+  function filtrarMes(mes: string) {
+    const novo = { ...aplicados, ...periodoDoMes(mes) };
+    setAplicados(novo); setRascunho(novo);
+  }
   const escondidos = filtrosEscondidosAtivos(aplicados);
   const chips = chipsDosFiltros(aplicados, fo);
 
@@ -435,7 +427,7 @@ export function DashboardSuprimentos() {
 
           {erro && <Painel><Erro>{erro}</Erro></Painel>}
           {carregando && !dados && <Painel><Carregando texto="Apurando o período…" /></Painel>}
-          {dados && <Analises dados={dados} />}
+          {dados && <Analises dados={dados} filtros={aplicados} aoFiltrar={filtrar} aoFiltrarMes={filtrarMes} />}
         </>
       )}
     </>

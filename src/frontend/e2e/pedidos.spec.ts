@@ -49,6 +49,8 @@ test.describe('Pedidos de Compra (React)', () => {
     await page.getByRole('button', { name: 'Lançar NF' }).click();
     await expect(page.getByTestId('tabela-notas')).toContainText('000123');
     await expect(detalhe).toHaveAttribute('data-situacao', 'FATURADO');
+    // a NF fechou exatamente o aprovado (10 × 12,50 + 4 × 18 = 197): não há saldo para outra
+    await expect(page.getByTestId('faturamento-completo')).toContainText('não há saldo para outra NF');
 
     // entrega parcial: só a luva chega
     await page.getByLabel('Chegou agora: Luva nitrílica tamanho M').fill('10');

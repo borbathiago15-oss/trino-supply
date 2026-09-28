@@ -49,6 +49,9 @@ public static class Vistas
         paymentTerms = o.PaymentTerms, deliveryDays = o.DeliveryDays, freightValue = o.FreightValue,
         families = FamiliasDoPedido(o.Families),
         notes = o.Notes, totalValue = o.TotalValue,
+        // a composição do total e o saldo a faturar saem da entidade: uma régua só para a tela e a regra
+        itemsValue = o.ItemsValue, adjustmentsValue = o.AdjustmentsValue,
+        invoicedValue = o.InvoicedValue, invoiceBalance = o.InvoiceBalance,
         issuedByLabel = o.IssuedByLabel, receivedByLabel = o.ReceivedByLabel, receivedAt = o.ReceivedAt,
         cancelReason = o.CancelReason, createdAt = o.CreatedAt,
         erpNumber = o.ErpNumber, erpIssuedOn = o.ErpIssuedOn,

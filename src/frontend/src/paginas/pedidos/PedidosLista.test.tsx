@@ -15,7 +15,7 @@ import { listarPedidos } from '@/api/pedidos';
 const pedido = (p: Partial<PedidoCompra>): PedidoCompra => ({
   id: 'id-' + p.number, number: 'PO-1', status: 'EMITIDO', supplierId: 's', supplierName: 'Fornecedor A',
   sourcePrNumber: 'SC-2026-000001', quotationNumber: null, paymentTerms: null, deliveryDays: null, freightValue: null,
-  families: ['EPI'], notes: null, totalValue: 1500, issuedByLabel: null, receivedByLabel: null, receivedAt: null,
+  families: ['EPI'], notes: null, totalValue: 1500, itemsValue: 1500, adjustmentsValue: 0, invoicedValue: 0, invoiceBalance: 1500, issuedByLabel: null, receivedByLabel: null, receivedAt: null,
   cancelReason: null, createdAt: '2026-09-01T10:00:00Z', erpNumber: null, noErpReason: null, erpIssuedOn: null, promisedDate: null,
   onTime: null, inFull: null, otif: null, referenceSavingTotal: null, erpDocumentId: null, erpFileName: null,
   deliveryCompletedAt: null, pendingDelivery: true, inactiveCatalogCodes: null, invoices: [],

@@ -255,13 +255,16 @@ export const MANUAIS: Record<string, Manual> = {
     paraQueServe: 'Tudo o que acontece depois da aprovação, numa linha do tempo de três passos: 1 O.C. → 2 Faturamento → 3 Entrega.',
     passos: [
       '1. Registre a O.C. fechada no ERP SENIOR: número, data e anexo. Ela pode cobrir o pedido inteiro ou parte dos itens.',
-      '2. Lance as notas fiscais do fornecedor.',
+      '2. Lance as notas fiscais do fornecedor, com o valor de cada uma. Podem ser várias, desde que a soma não passe do total aprovado — a tela mostra o saldo a faturar.',
       '3. Confirme a entrega com "Registrar entrega", ou "Encerrar saldo" quando o restante não vai chegar.',
     ],
     regras: [
       { codigo: 'RFQ-ERR-040', texto: 'A O.C. nunca é emitida pelo sistema: ela é fechada no ERP e aqui só se registra o número.' },
       { codigo: 'PO-ERR-054', texto: 'Sem O.C. do ERP, a compra não fecha — a não ser com a observação dizendo por quê (mínimo de 10 caracteres). O número nunca é inventado.' },
       { codigo: 'PO-ERR-059', texto: 'A soma das O.C.s não passa do pedido; a mensagem diz quanto falta.' },
+      { codigo: 'PO-ERR-060', texto: 'A soma das notas fiscais não passa do total aprovado no Nível 2: o aprovado é o teto do que se paga. A mensagem diz o aprovado, o faturado e o saldo.' },
+      { codigo: 'PO-ERR-053', texto: 'Toda nota precisa do valor — é ele que abate o saldo.' },
+      { texto: 'O cabeçalho diz de onde sai o total aprovado: itens, frete, impostos e desconto da proposta. Item a 1.900 com total a 1.800 é desconto, não erro.' },
     ],
   },
   contracts: {

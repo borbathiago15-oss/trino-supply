@@ -38,7 +38,7 @@ describe('pedidos', () => {
 const pedido = (p: Partial<PedidoCompra>): PedidoCompra => normalizarPedido({
   id: 'po1', number: 'PO-1', status: 'EMITIDO', supplierId: 's1', supplierName: 'Alfa',
   sourcePrNumber: null, quotationNumber: null, paymentTerms: null, deliveryDays: null, freightValue: null,
-  families: [], notes: null, totalValue: 10, issuedByLabel: null, receivedByLabel: null, receivedAt: null,
+  families: [], notes: null, totalValue: 10, itemsValue: 10, adjustmentsValue: 0, invoicedValue: 0, invoiceBalance: 10, issuedByLabel: null, receivedByLabel: null, receivedAt: null,
   cancelReason: null, createdAt: '2026-09-01T10:00:00Z', erpNumber: null, erpIssuedOn: null, noErpReason: null,
   erpPending: true, erpDocuments: [], promisedDate: null, onTime: null, inFull: null, otif: null,
   referenceSavingTotal: null, erpDocumentId: null, erpFileName: null, deliveryCompletedAt: null,

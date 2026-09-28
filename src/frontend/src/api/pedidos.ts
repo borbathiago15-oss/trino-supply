@@ -62,6 +62,14 @@ export interface PedidoCompra {
   families: string[];
   notes: string | null;
   totalValue: number;
+  /** Soma dos itens (preço × quantidade), antes do frete, dos impostos e do desconto. */
+  itemsValue: number;
+  /** Impostos e outros custos da proposta menos o desconto negociado; negativo é desconto. */
+  adjustmentsValue: number;
+  /** A soma das notas fiscais lançadas. */
+  invoicedValue: number;
+  /** O total aprovado menos as notas: a NF que passar dele é recusada (PO-ERR-060). */
+  invoiceBalance: number;
   issuedByLabel: string | null;
   receivedByLabel: string | null;
   receivedAt: string | null;
@@ -144,10 +152,32 @@ export function normalizarPedido(bruto: PedidoCompra): PedidoCompra {
     erpPendingQuantity: i.erpPendingQuantity ?? Math.max(0, i.quantity - (i.erpCoveredQuantity ?? 0)),
   }));
   const erpDocuments = (bruto.erpDocuments ?? []).map((d) => ({ ...d, items: d.items ?? [] }));
+  const invoices = bruto.invoices ?? [];
+  // a composição do total e o saldo a faturar vêm do servidor; a conta aqui é só para a resposta antiga
+  const itemsValue = bruto.itemsValue ?? items.reduce((a, i) => a + (i.unitPrice ?? 0) * i.quantity, 0);
+  const invoicedValue = bruto.invoicedValue ?? invoices.reduce((a, i) => a + (i.value ?? 0), 0);
   return {
-    ...bruto, families: listaDeFamilias(bruto.families), invoices: bruto.invoices ?? [], items, erpDocuments,
+    ...bruto, families: listaDeFamilias(bruto.families), invoices, items, erpDocuments,
     erpPending: bruto.erpPending ?? (bruto.noErpReason == null && items.some((i) => i.erpPendingQuantity > 0)),
+    itemsValue,
+    adjustmentsValue: bruto.adjustmentsValue ?? bruto.totalValue - itemsValue - (bruto.freightValue ?? 0),
+    invoicedValue,
+    invoiceBalance: bruto.invoiceBalance ?? bruto.totalValue - invoicedValue,
   };
+}
+
+/**
+ * De onde sai o total aprovado, em uma linha: "itens R$ 1.900,00 · desconto R$ 100,00". O item
+ * a 1.900 e o total a 1.800 pareciam um valor mexido por alguém; era o desconto da proposta,
+ * que a tela não mostrava. Vazio quando o total é a soma dos itens sem mais nada.
+ */
+export function composicaoDoTotal(o: Pick<PedidoCompra, 'totalValue' | 'itemsValue' | 'adjustmentsValue' | 'freightValue'>, moeda: (v: number) => string): string {
+  if (o.itemsValue === o.totalValue && !o.freightValue && o.adjustmentsValue === 0) return '';
+  const partes = [`itens ${moeda(o.itemsValue)}`];
+  if (o.freightValue != null) partes.push(`frete ${moeda(o.freightValue)}`);
+  if (o.adjustmentsValue < 0) partes.push(`desconto ${moeda(-o.adjustmentsValue)}`);
+  else if (o.adjustmentsValue > 0) partes.push(`impostos e outros ${moeda(o.adjustmentsValue)}`);
+  return partes.join(' · ');
 }
 
 /** As três etapas que vêm depois da aprovação, na ordem em que acontecem. */

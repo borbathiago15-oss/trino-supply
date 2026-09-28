@@ -116,6 +116,18 @@ o usuário descobrir no erro do servidor:
   ainda há saldo sem O.C. **e** sem observação: a observação (PO-BR-011) fecha o restante e
   as O.C.s já registradas ficam. A regra vive em `Procurement/OcDoErp.cs`, chamada pelos dois
   caminhos.
+- **O valor aprovado é o teto do que se paga (`PO-ERR-060`).** A nota fiscal pode ser mais de
+  uma, mas a soma delas nunca passa do `TotalValue` do pedido — o que a diretoria assinou. Uma NF
+  de 1.959 entrava calada num pedido aprovado por 1.800, e o pedido "fechava" por mais do que a
+  alçada aprovou. O saldo é derivado na entidade (`InvoicedValue`, `InvoiceBalance`), a mesma
+  régua que a tela mostra ("saldo a faturar") e que a regra cobra; por isso o valor da nota passou
+  a ser **obrigatório** (`PO-ERR-053`) — sem ele não há como abater o saldo. A mensagem diz o
+  aprovado, o faturado e o saldo, em vez de só recusar. A nota que **já entrou** acima do teto
+  antes da regra não é corrigida por migration: é caso de auditoria, não de dado. A O.C. do ERP
+  **não tem valor** — só número, data e cobertura por item —, e o `TotalValue` do pedido não se
+  edita depois da aprovação: o que parecia "O.C. registrada por 1.900" era o preço unitário da
+  proposta ao lado do total com desconto; a tela agora mostra a **composição** (`ItemsValue`,
+  frete, `AdjustmentsValue` = impostos e outros − desconto), derivada, sem coluna nova.
 - **IC-ERR-023** — EPI/EPC só circula com C.A. válido no par produto-fornecedor.
 - **Tamanho é produto, e a grade é o cadastro dele de uma vez.** A bota 38 e a 39 têm código,
   preço e C.A. próprios — são compras diferentes —, então cada tamanho é um `CatalogItem`, e o

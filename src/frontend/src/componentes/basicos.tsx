@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 /** Ícones dos estados vazios, inline: 48px, traço fino, sem dependência nova. */
 const ICONE: Record<'caixa' | 'ok', ReactNode> = {
@@ -76,12 +76,25 @@ export function Dado({ rotulo, children }: { rotulo: string; children: ReactNode
 }
 
 /** Cartão de indicador: rótulo, número grande e a leitura em uma linha. */
-export function Kpi({ rotulo, valor, detalhe }: { rotulo: string; valor: ReactNode; detalhe?: ReactNode }) {
+/**
+ * Um número com o nome dele. A `definicao` diz de onde o número sai — a data que o prende ao
+ * mês, sobretudo: "valor comprado de agosto" muda inteiro conforme a data. Ela abre por toque,
+ * e não por passar o mouse, porque no celular não há mouse.
+ */
+export function Kpi({ rotulo, valor, detalhe, definicao }:
+  { rotulo: string; valor: ReactNode; detalhe?: ReactNode; definicao?: string }) {
+  const [aberta, setAberta] = useState(false);
   return (
-    <div className="rounded-xl border border-slate-200/80 bg-white px-4 py-3.5 shadow-sm">
-      <div className="rotulo">{rotulo}</div>
+    <div className="relative min-w-0 rounded-xl border border-slate-200/80 bg-white px-4 py-3.5 shadow-sm">
+      {definicao && (
+        <button type="button" className="absolute right-2 top-2 rounded-full p-1 text-[12px] leading-none text-texto-suave hover:text-marca"
+          aria-label={`Como é calculado: ${rotulo}`} aria-expanded={aberta} title={definicao}
+          onClick={() => setAberta((a) => !a)}>ⓘ</button>
+      )}
+      <div className={definicao ? 'rotulo pr-5' : 'rotulo'}>{rotulo}</div>
       <div className="mt-1.5 text-3xl font-extrabold leading-none tracking-tight text-slate-900 tabular-nums">{valor}</div>
       {detalhe && <div className="sub mt-1.5">{detalhe}</div>}
+      {definicao && aberta && <p className="sub mt-1.5 border-t border-slate-100 pt-1.5" data-testid="definicao-kpi">{definicao}</p>}
     </div>
   );
 }

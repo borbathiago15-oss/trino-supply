@@ -15,6 +15,27 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
 {
     private const int Cap = 5000; // janela analítica MVP; paginação analítica é evolução
 
+    /// <summary>
+    /// A data que prende cada indicador a um mês, dita no rótulo (decisão da empresa, 2026-09).
+    /// "Valor comprado de agosto" muda inteiro conforme a data: a da aprovação é quando o
+    /// dinheiro fica comprometido, e toda compra aprovada entra — a da O.C. do ERP deixaria de
+    /// fora o pedido fechado com justificativa (PO-BR-011). O pedido nasce na aprovação do
+    /// Nível 2, por isso a data dele é a da aprovação. Mudar a âncora aqui muda a tela junto.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> DefinicoesDosIndicadores = new Dictionary<string, string>
+    {
+        ["prCount"] = "SCs criadas no período (data de criação da SC).",
+        ["prTotalValue"] = "Valor estimado das SCs criadas no período (data de criação da SC).",
+        ["approvedCount"] = "SCs criadas no período que já estão aprovadas (data de criação da SC).",
+        ["pendingApproval"] = "SCs criadas no período que ainda aguardam aprovação (data de criação da SC).",
+        ["overdue"] = "SCs do período com a data de necessidade vencida e a compra ainda aberta.",
+        ["avgApprovalDays"] = "Dias do envio à decisão das SCs do período.",
+        ["poTotalValue"] = "Valor comprado: pedidos pela data da aprovação da compra, que é quando o pedido nasce. Cancelados não entram.",
+        ["poOpen"] = "Pedidos aprovados no período ainda sem entrega (data da aprovação).",
+        ["avgReceiveDays"] = "Dias da aprovação do pedido ao recebimento, nos pedidos do período.",
+        ["saving"] = "Ganho de negociação dos processos das SCs do período, contra a primeira proposta do vencedor.",
+    };
+
     public static bool CanViewSupply(string role) =>
         role is Roles.Approver or Roles.PurchasingOfficer or Roles.SupplyManager
              or Roles.Director or Roles.Auditor or Roles.SystemAdministrator;
@@ -22,6 +43,7 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
     public async Task<object> SupplyAsync(
         DateOnly from, DateOnly to, Guid? supplierId, Guid? buyerId, Guid? requesterId,
         string? family, string? costCenter, string? region, string? manager, string? client,
+        string? company = null, string? category = null, string? priority = null,
         CancellationToken ct = default)
     {
         var fromDt = new DateTimeOffset(from.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
@@ -45,22 +67,73 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
         string? FamilyOf(Guid? catalogItemId) =>
             catalogItemId is not null && familyById.TryGetValue(catalogItemId.Value, out var f) ? f : null;
 
+        // categoria (V2-P3): agrupador de famílias — é também filtro global
+        var categoryByFamily = (await db.ProductFamilies
+                .Select(f => new { f.Name, f.Category }).ToListAsync(ct))
+            .ToDictionary(x => x.Name, x => x.Category, StringComparer.OrdinalIgnoreCase);
+        string CategoryOf(string familyName) =>
+            categoryByFamily.TryGetValue(familyName, out var c) && !string.IsNullOrWhiteSpace(c)
+                ? c! : "SEM CATEGORIA";
+        bool ItemNaCategoria(Guid? catalogItemId) =>
+            category is null || string.Equals(CategoryOf(FamilyOf(catalogItemId) ?? "SEM FAMÍLIA"), category, StringComparison.OrdinalIgnoreCase);
+
+        // empresa e prioridade são da SC: o pedido responde pelas SCs de onde veio
+        bool ScMatches(string cc, string? scCompany, string scPriority) =>
+            CcMatches(cc)
+            && (company is null || string.Equals(scCompany, company, StringComparison.OrdinalIgnoreCase))
+            && (priority is null || string.Equals(scPriority, priority, StringComparison.OrdinalIgnoreCase));
+        var filtraPelaSc = costCenter is not null || region is not null || manager is not null || client is not null
+                           || company is not null || priority is not null;
+
         // ---- pedidos de compra (POs) na janela -----------------------------------
         var pos = await db.PurchaseOrders.Include(o => o.Items)
             .Where(o => o.CreatedAt >= fromDt && o.CreatedAt < toDt)
             .OrderByDescending(o => o.CreatedAt).Take(Cap).ToListAsync(ct);
-        var sourcePrIds = pos.Where(o => o.SourcePrId != null).Select(o => o.SourcePrId!.Value).ToList();
-        var sourceCcById = (await db.Requisitions
+        // o processo de cada pedido: diz quem conduziu a compra e de quais SCs ela veio
+        var quotationIds = pos.Where(o => o.QuotationId != null).Select(o => o.QuotationId!.Value).Distinct().ToArray();
+        var processoDoPedido = (await db.Quotations.Where(q => quotationIds.Contains(q.Id))
+                .Select(q => new
+                {
+                    q.Id, q.SourcePrId, q.SelectedBy, q.SelectedByLabel, q.CreatedBy, q.CreatedByLabel,
+                    ItemPrIds = q.Items.Where(i => i.SourcePrId != null).Select(i => i.SourcePrId!.Value).ToList(),
+                }).ToListAsync(ct))
+            .ToDictionary(x => x.Id);
+        List<Guid> ScsDoPedido(PurchaseOrder o)
+        {
+            var ids = new List<Guid>();
+            if (o.SourcePrId is { } sc) ids.Add(sc);
+            if (o.QuotationId is { } qid && processoDoPedido.TryGetValue(qid, out var q))
+            {
+                ids.Add(q.SourcePrId);
+                ids.AddRange(q.ItemPrIds);
+            }
+            return ids.Distinct().ToList();
+        }
+        // o comprador do pedido é quem conduziu a compra — a mesma régua de
+        // TorreDeControleService.CompradorDe. O pedido nasce na aprovação do Nível 2, então
+        // quem o "emitiu" é o aprovador; sem processo (lançado direto), é quem o lançou.
+        (Guid Id, string Label) CompradorDoPedido(PurchaseOrder o)
+        {
+            if (o.QuotationId is { } qid && processoDoPedido.TryGetValue(qid, out var q))
+            {
+                if (q.SelectedBy is { } quem && !string.IsNullOrWhiteSpace(q.SelectedByLabel)) return (quem, q.SelectedByLabel!);
+                if (!string.IsNullOrWhiteSpace(q.CreatedByLabel)) return (q.CreatedBy, q.CreatedByLabel);
+            }
+            return (o.IssuedBy, o.IssuedByLabel);
+        }
+        var sourcePrIds = pos.SelectMany(ScsDoPedido).Distinct().ToArray();
+        var scDoPedidoById = (await db.Requisitions
                 .Where(r => sourcePrIds.Contains(r.Id))
-                .Select(r => new { r.Id, r.CostCenter }).ToListAsync(ct))
-            .ToDictionary(x => x.Id, x => x.CostCenter);
+                .Select(r => new { r.Id, r.CostCenter, r.Company, r.Priority }).ToListAsync(ct))
+            .ToDictionary(x => x.Id);
 
         pos = pos.Where(o =>
                 (supplierId is null || o.SupplierId == supplierId) &&
-                (buyerId is null || o.IssuedBy == buyerId) &&
+                (buyerId is null || CompradorDoPedido(o).Id == buyerId) &&
                 (family is null || o.Items.Any(i => string.Equals(FamilyOf(i.CatalogItemId), family, StringComparison.OrdinalIgnoreCase))) &&
-                ((costCenter is null && region is null && manager is null && client is null) ||
-                 (o.SourcePrId is not null && sourceCcById.TryGetValue(o.SourcePrId.Value, out var cc) && CcMatches(cc))))
+                (category is null || o.Items.Any(i => ItemNaCategoria(i.CatalogItemId))) &&
+                (!filtraPelaSc || ScsDoPedido(o).Any(id =>
+                    scDoPedidoById.TryGetValue(id, out var sc) && ScMatches(sc.CostCenter, sc.Company, sc.Priority))))
             .ToList();
 
         // ---- requisições (PRs) na janela ----------------------------------------
@@ -71,8 +144,9 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
                 .OrderByDescending(r => r.CreatedAt).Take(Cap).ToListAsync(ct);
             return list.Where(r =>
                     (requesterId is null || r.RequesterId == requesterId) &&
-                    CcMatches(r.CostCenter) &&
-                    (family is null || r.Items.Any(i => string.Equals(FamilyOf(i.CatalogItemId), family, StringComparison.OrdinalIgnoreCase))))
+                    ScMatches(r.CostCenter, r.Company, r.Priority) &&
+                    (family is null || r.Items.Any(i => string.Equals(FamilyOf(i.CatalogItemId), family, StringComparison.OrdinalIgnoreCase))) &&
+                    (category is null || r.Items.Any(i => ItemNaCategoria(i.CatalogItemId))))
                 .ToList();
         }
         var prs = await LoadPrsAsync(fromDt, toDt);
@@ -145,6 +219,7 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
                .Select(g => new { label = g.Key, value = g.Sum(value), count = g.Count() })
                .OrderByDescending(x => x.value).Take(10).Cast<object>().ToList();
 
+        string CcNameOf(string code) => ccByCode.TryGetValue(code.ToUpperInvariant(), out var c) && !string.IsNullOrWhiteSpace(c.Name) ? c.Name : code;
         string RegionOf(string code) => ccByCode.TryGetValue(code.ToUpperInvariant(), out var c) ? c.Region ?? "SEM REGIONAL" : "SEM REGIONAL";
         string ManagerOf(string code) => ccByCode.TryGetValue(code.ToUpperInvariant(), out var c) ? c.ManagerName ?? "SEM GERENTE" : "SEM GERENTE";
         string ClientOf(string code) => ccByCode.TryGetValue(code.ToUpperInvariant(), out var c) ? c.ClientName ?? "SEM CLIENTE" : "SEM CLIENTE";
@@ -156,13 +231,6 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
             Value = (i.EstimatedUnitPrice ?? 0) * i.Quantity,
         })).ToList();
 
-        // categoria (V2-P3): agrupador de famílias — o spend real das O.C.s consolidado por categoria
-        var categoryByFamily = (await db.ProductFamilies
-                .Select(f => new { f.Name, f.Category }).ToListAsync(ct))
-            .ToDictionary(x => x.Name, x => x.Category, StringComparer.OrdinalIgnoreCase);
-        string CategoryOf(string familyName) =>
-            categoryByFamily.TryGetValue(familyName, out var c) && !string.IsNullOrWhiteSpace(c)
-                ? c! : "SEM CATEGORIA";
         var poItemValues = activePos.SelectMany(o => o.Items.Select(i => new
         {
             Family = FamilyOf(i.CatalogItemId) ?? "SEM FAMÍLIA",
@@ -172,11 +240,12 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
         var rankings = new
         {
             suppliers = Rank(activePos, o => o.SupplierName, o => o.TotalValue),
-            buyers = Rank(activePos, o => o.IssuedByLabel, o => o.TotalValue),
+            buyers = Rank(activePos, o => CompradorDoPedido(o).Label, o => o.TotalValue),
             requesters = Rank(prs, r => r.RequesterLabel, r => r.TotalEstimatedValue),
             families = Rank(prItemValues, x => x.Family, x => x.Value),
             categories = Rank(poItemValues, x => CategoryOf(x.Family), x => x.Value),
-            costCenters = Rank(prs, r => r.CostCenter, r => r.TotalEstimatedValue),
+            // o nome, não o código: é o que a diretoria reconhece (o código fica no filtro)
+            costCenters = Rank(prs, r => CcNameOf(r.CostCenter), r => r.TotalEstimatedValue),
             regions = Rank(prs, r => RegionOf(r.CostCenter), r => r.TotalEstimatedValue),
             managers = Rank(prs, r => ManagerOf(r.CostCenter), r => r.TotalEstimatedValue),
             clients = Rank(prs, r => ClientOf(r.CostCenter), r => r.TotalEstimatedValue),
@@ -334,7 +403,7 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
                 var comOc = g.Where(q => q.PurchaseOrderId is not null
                                          && poCreatedAt.ContainsKey(q.PurchaseOrderId!.Value)).ToList();
                 var slaDias = comOc.Select(q => (poCreatedAt[q.PurchaseOrderId!.Value] - q.CreatedAt).TotalDays).ToList();
-                var minhasPos = activePos.Where(o => o.IssuedByLabel == g.Key).ToList();
+                var minhasPos = activePos.Where(o => CompradorDoPedido(o).Label == g.Key).ToList();
                 var otifMedidas = minhasPos.Where(o => o.Otif is not null).ToList();
                 return new
                 {
@@ -367,8 +436,20 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
         {
             suppliers = await db.Suppliers.Where(s => s.Active)
                 .Select(s => new { id = s.Id, label = s.TradeName ?? s.LegalName }).OrderBy(x => x.label).ToListAsync(ct),
-            buyers = await db.PurchaseOrders.Select(o => new { id = o.IssuedBy, label = o.IssuedByLabel })
-                .Distinct().OrderBy(x => x.label).Take(200).ToListAsync(ct),
+            // quem conduz compra: quem escolheu vencedor, quem abriu processo e quem lançou
+            // pedido direto — a mesma gente que CompradorDoPedido pode devolver
+            buyers = (await db.Quotations.Where(q => q.SelectedBy != null && q.SelectedByLabel != null)
+                        .Select(q => new { id = q.SelectedBy!.Value, label = q.SelectedByLabel! }).Distinct().ToListAsync(ct))
+                .Concat(await db.Quotations.Select(q => new { id = q.CreatedBy, label = q.CreatedByLabel }).Distinct().ToListAsync(ct))
+                .Concat(await db.PurchaseOrders.Where(o => o.QuotationId == null)
+                        .Select(o => new { id = o.IssuedBy, label = o.IssuedByLabel }).Distinct().ToListAsync(ct))
+                .Where(x => !string.IsNullOrWhiteSpace(x.label))
+                .DistinctBy(x => x.id).OrderBy(x => x.label).Take(200).ToList(),
+            companies = await db.Requisitions.Where(r => r.Company != null && r.Company != "")
+                .Select(r => r.Company!).Distinct().OrderBy(x => x).Take(200).ToListAsync(ct),
+            categories = categoryByFamily.Values.Where(c => !string.IsNullOrWhiteSpace(c)).Select(c => c!)
+                .Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList(),
+            priorities = RequisitionPriorities.All,
             requesters = await db.Requisitions.Select(r => new { id = r.RequesterId, label = r.RequesterLabel })
                 .Distinct().OrderBy(x => x.label).Take(200).ToListAsync(ct),
             families = await db.CatalogItems.Select(i => i.Family).Distinct().OrderBy(f => f).ToListAsync(ct),
@@ -379,7 +460,8 @@ public class AnalyticsService(AppDbContext db, TimeProvider clock)
             clients = ccByCode.Values.Where(c => c.ClientName != null).Select(c => c.ClientName!).Distinct().OrderBy(x => x).ToList(),
         };
 
-        return new { from, to, kpis, months, rankings, supplierTable, leadTimes, saving, buyerPanel, filterOptions };
+        return new { from, to, kpis, months, rankings, supplierTable, leadTimes, saving, buyerPanel, filterOptions,
+            indicators = DefinicoesDosIndicadores };
     }
 
     /// <summary>

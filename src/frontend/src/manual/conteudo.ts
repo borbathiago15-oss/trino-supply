@@ -50,10 +50,17 @@ export const MANUAIS: Record<string, Manual> = {
   'supply-dash': {
     paraQueServe: 'O painel do comprador: volume de solicitações e pedidos, prazos, saving e a Central de Avisos com o que está aberto para você agir.',
     passos: [
-      'Ajuste os filtros (período, centro de custo, família, comprador, fornecedor…) e clique em "Aplicar filtros".',
-      'Os cartões do topo mostram solicitações, aprovações, pedidos em aberto, atrasos e tempos médios.',
+      'Período, empresa e centro de custo ficam à vista. Os demais (fornecedor, comprador, prioridade, categoria, família…) estão em "Mais filtros" — o número no botão diz quantos deles estão valendo. Clique em "Aplicar filtros".',
+      'Cada filtro valendo aparece como etiqueta abaixo dos campos; tocar no ✕ o tira e refaz a conta.',
+      'Os cartões do topo mostram solicitações, aprovações, valor comprado, pedidos em aberto, atrasos e tempos médios. O ⓘ de cada cartão diz de onde o número sai.',
+      'No gráfico, passe o mouse ou toque na barra para ver o valor.',
       'A Central de Avisos lista o que depende de você agora; o número muda sozinho quando o trabalho anda.',
       '"Limpar" volta ao recorte padrão.',
+    ],
+    regras: [
+      { texto: 'O valor comprado conta pela data da aprovação da compra, que é quando o pedido nasce — e não pela data da O.C. do ERP, que deixaria de fora o pedido fechado com justificativa.' },
+      { texto: 'O comprador de um pedido é quem conduziu a compra (escolheu o vencedor), e não quem aprovou.' },
+      { texto: 'Sem base no período anterior, a variação não aparece: "sem base" é diferente de "cresceu 100%".' },
     ],
     duvidas: [
       { pergunta: 'Qual a diferença entre a Central de Avisos e o sino?', resposta: 'A Central conta o que está aberto agora. O sino guarda fatos datados — "esta SC passou a ser sua" — que continuam lá até você marcar como lido.' },

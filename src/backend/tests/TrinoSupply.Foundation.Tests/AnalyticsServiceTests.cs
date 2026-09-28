@@ -165,4 +165,92 @@ public class AnalyticsServiceTests
         var soLimpeza = await w.Analytics.StockAsync(null, "MATERIAL DE LIMPEZA", 6);
         Assert.Equal(0, (int)Prop(Prop(soLimpeza, "kpis"), "stockoutCount"));
     }
+
+    // ---- Dashboard de Suprimentos, onda 1: filtros globais e o comprador certo ----
+
+    private static readonly Actor Diana = new(Guid.NewGuid(), "Diana Diretora", Roles.Director);
+
+    [Fact]
+    public async Task O_comprador_do_pedido_e_quem_conduziu_a_compra_e_nao_quem_aprovou()
+    {
+        // o pedido nasce na aprovação do Nível 2: quem o "emite" é a diretora. Contar por ela
+        // punha a diretoria no ranking de compradores e tirava de Carla a compra que ela cotou
+        var w = Build();
+        var (alfa, _) = await w.Sup.CreateAsync(Carla.Id, "Alfa LTDA", "Alfa", "12345678000190", null, "81 3333-1000");
+        var (pr, _) = await w.Prs.CreateAsync(Ana, "Limpeza", "CC-01", "NORMAL", null, [new ItemInput("Detergente", 10, "UN", 5, null)]);
+        var processo = new Quotation
+        {
+            Number = "RFQ-2026-000001", SourcePrId = pr!.Id, CreatedBy = Carla.Id, CreatedByLabel = Carla.Label,
+            SelectedBy = Carla.Id, SelectedByLabel = Carla.Label,
+        };
+        w.Db.Quotations.Add(processo);
+        await w.Db.SaveChangesAsync();
+        var (pedido, erro) = await w.Pos.CreateAsync(Diana, alfa!.Id, null, [new PoItemInput("Detergente", 10, "UN", 5, null)], null);
+        Assert.Null(erro);
+        pedido!.QuotationId = processo.Id;
+        pedido.SourcePrId = pr.Id;
+        await w.Db.SaveChangesAsync();
+
+        var dash = await w.Analytics.SupplyAsync(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 31),
+            null, null, null, null, null, null, null, null);
+        var compradores = (List<object>)Prop(Prop(dash, "rankings"), "buyers");
+        Assert.Equal("Carla Compradora", (string)Prop(Assert.Single(compradores), "label"));
+
+        var daCarla = await w.Analytics.SupplyAsync(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 31),
+            null, Carla.Id, null, null, null, null, null, null);
+        Assert.Equal(1, (int)Prop(Prop(daCarla, "kpis"), "poCount"));
+        var daDiana = await w.Analytics.SupplyAsync(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 31),
+            null, Diana.Id, null, null, null, null, null, null);
+        Assert.Equal(0, (int)Prop(Prop(daDiana, "kpis"), "poCount"));
+    }
+
+    [Fact]
+    public async Task Empresa_e_prioridade_filtram_as_SCs_e_os_pedidos_que_vieram_delas()
+    {
+        var w = Build();
+        var (alfa, _) = await w.Sup.CreateAsync(Carla.Id, "Alfa LTDA", "Alfa", "12345678000190", null, "81 3333-1000");
+        var (daMatriz, _) = await w.Prs.CreateAsync(Ana, "Matriz", "CC-01", "NORMAL", null, [new ItemInput("Papel", 4, "PC", 25, null)]);
+        var (daFilial, _) = await w.Prs.CreateAsync(Ana, "Filial", "CC-01", "NORMAL", null, [new ItemInput("Caneta", 10, "UN", 2, null)]);
+        daMatriz!.Company = "TRINO MATRIZ LTDA";
+        daFilial!.Company = "TRINO FILIAL LTDA";
+        daFilial.Priority = "URGENT";
+        await w.Db.SaveChangesAsync();
+        var (p1, _) = await w.Pos.CreateAsync(Carla, alfa!.Id, null, [new PoItemInput("Papel", 4, "PC", 25, null)], null);
+        var (p2, _) = await w.Pos.CreateAsync(Carla, alfa.Id, null, [new PoItemInput("Caneta", 10, "UN", 2, null)], null);
+        p1!.SourcePrId = daMatriz.Id;
+        p2!.SourcePrId = daFilial.Id;
+        await w.Db.SaveChangesAsync();
+
+        async Task<object> Kpis(string? empresa = null, string? prioridade = null) =>
+            Prop(await w.Analytics.SupplyAsync(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 31),
+                null, null, null, null, null, null, null, null, company: empresa, priority: prioridade), "kpis");
+
+        var matriz = await Kpis(empresa: "TRINO MATRIZ LTDA");
+        Assert.Equal(1, (int)Prop(matriz, "prCount"));
+        Assert.Equal(100m, (decimal)Prop(matriz, "poTotalValue"));
+        var urgentes = await Kpis(prioridade: "URGENT");
+        Assert.Equal(1, (int)Prop(urgentes, "prCount"));
+        Assert.Equal(20m, (decimal)Prop(urgentes, "poTotalValue"));
+    }
+
+    [Fact]
+    public async Task Categoria_filtra_pelo_agrupador_das_familias()
+    {
+        var w = Build();
+        w.Db.ProductFamilies.AddRange(
+            new ProductFamily { Name = "MATERIAL DE LIMPEZA", Category = "FACILITIES", Active = true },
+            new ProductFamily { Name = "EPI", Category = "SEGURANÇA", Active = true });
+        await w.Db.SaveChangesAsync();
+        var (det, _) = await w.Catalog.CreateAsync(Carla.Id, "LMP-001", "Detergente", "MATERIAL DE LIMPEZA", "UN", 4m);
+        var (luva, _) = await w.Catalog.CreateAsync(Carla.Id, "EPI-001", "Luva nitrílica", "EPI", "PR", 3m);
+        await w.Prs.CreateAsync(Ana, "Limpeza", "CC-01", "NORMAL", null, [new ItemInput("Detergente", 10, "UN", 4, null, CatalogItemId: det!.Id)]);
+        await w.Prs.CreateAsync(Ana, "EPI", "CC-01", "NORMAL", null, [new ItemInput("Luva", 20, "PR", 3, null, CatalogItemId: luva!.Id)]);
+
+        var seguranca = await w.Analytics.SupplyAsync(new DateOnly(2026, 8, 1), new DateOnly(2026, 8, 31),
+            null, null, null, null, null, null, null, null, category: "SEGURANÇA");
+        Assert.Equal(1, (int)Prop(Prop(seguranca, "kpis"), "prCount"));
+        // cada indicador diz de que data é: é o que impede dois números "certos" de discordar
+        var definicoes = (IReadOnlyDictionary<string, string>)Prop(seguranca, "indicators");
+        Assert.Contains("aprovação", definicoes["poTotalValue"]);
+    }
 }

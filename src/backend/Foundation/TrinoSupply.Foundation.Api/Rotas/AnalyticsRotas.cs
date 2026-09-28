@@ -38,7 +38,8 @@ public static class AnalyticsRotas
         analytics.MapGet("/supply", async (TrinoSupply.Foundation.Api.Analytics.AnalyticsService svc,
             ClaimsPrincipal p, HttpContext ctx, TimeProvider clock,
             DateOnly? from, DateOnly? to, Guid? supplierId, Guid? buyerId, Guid? requesterId,
-            string? family, string? costCenter, string? region, string? manager, string? client) =>
+            string? family, string? costCenter, string? region, string? manager, string? client,
+            string? company, string? category, string? priority) =>
         {
             if (!TrinoSupply.Foundation.Api.Analytics.AnalyticsService.CanViewSupply(RoleOf(p)))
                 return Error(ctx, 403, "AN-ERR-900", "Seu papel não acessa o dashboard de suprimentos.");
@@ -49,7 +50,8 @@ public static class AnalyticsRotas
             var f = from ?? new DateOnly(today.Year, today.Month, 1).AddMonths(-11);
             var t = to ?? today;
             if (t < f) (f, t) = (t, f);
-            return Ok(await svc.SupplyAsync(f, t, supplierId, buyerId, requesterId, family, costCenter, region, manager, client), ctx);
+            return Ok(await svc.SupplyAsync(f, t, supplierId, buyerId, requesterId, family, costCenter, region, manager, client,
+                company, category, priority), ctx);
         });
 
         // Procurement Insights (V2-P3): achados determinísticos + visão executiva + backlog

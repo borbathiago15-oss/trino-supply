@@ -738,6 +738,16 @@ O React já morou em `/app` (#82) e o servidor redirecionava `/app/*` para `/*`;
 redirecionamento saiu do `Program.cs` e virou a rota `/app/*` do roteador (`AppAntigo`), porque
 o servidor engolia o app antes de o React vê-lo. Não é app nativo, de propósito: sem loja, sem
 conta de desenvolvedor, sem segunda base para divergir — publica junto com o sistema.
+**O ícone do app é o logo do Trino Supply, empilhado sobre o preto da marca** (`app-icon-512`,
+`app-icon-192`, `app-icon-maskable-512` e o `apple-touch-icon`, em `public/assets/brand`). Ele
+nasce de `trino-supply-logo.png`, a única arte em resolução decente do repositório: o hexágono com a
+seta em cima e "TRINO SUPPLY" embaixo, porque o logo deitado num quadrado deixa o hexágono do
+tamanho de um detalhe. O ícone anterior era o "C" ampliado de uma imagem pequena — serrilhado e
+encostado na borda —, e o splash o mostrava cortado num fundo branco. O `background_color` do
+manifesto é o **mesmo preto** do ícone: o splash é o ícone sobre essa cor, e com as duas iguais a
+tela de abertura vira o logo inteiro num fundo só, como o login. O `maskable` guarda a zona segura
+(16% de folga) para o recorte redondo do Android não comer o hexágono. O E2E do app confere que
+cada ícone declarado existe, é PNG e tem o tamanho que diz.
 
 **A identidade visual é a do Grupo Trino, e mora nos tokens.** Decisão da empresa (2026-09): a
 cor de ação (`marca`) é o **vermelho da seta do logo** (`#9d202c`, o bordô dos botões do site;

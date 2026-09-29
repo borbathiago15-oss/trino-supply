@@ -16,6 +16,23 @@ test.describe('App de bolso (375px)', () => {
     const m = await r.json();
     expect(m.start_url).toBe('/app');
     expect(m.display).toBe('standalone');
+
+    // o splash é o ícone sobre o background_color: os dois no preto da marca, como o login,
+    // para o logo aparecer inteiro num fundo só — e cada ícone declarado existe, é PNG e tem
+    // o tamanho que diz (ícone que não carrega vira o "C" cortado da tela de abertura)
+    expect(m.background_color).toBe('#0b0d0f');
+    expect(m.theme_color).toBe('#0b0d0f');
+    expect(m.icons.map((i: { purpose: string }) => i.purpose).sort()).toEqual(['any', 'any', 'maskable']);
+    for (const icone of m.icons as { src: string; sizes: string; type: string }[]) {
+      const r = await request.get(icone.src);
+      expect(r.status(), icone.src).toBe(200);
+      expect(r.headers()['content-type'], icone.src).toContain('image/png');
+      const png = await r.body();
+      // largura e altura ficam no cabeçalho IHDR, nos bytes 16–23
+      const largura = png.readUInt32BE(16);
+      const altura = png.readUInt32BE(20);
+      expect(`${largura}x${altura}`, icone.src).toBe(icone.sizes);
+    }
   });
 
   test('abre na Central, e as abas levam à diretoria e ao dashboard', async ({ page }) => {

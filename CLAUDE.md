@@ -748,6 +748,18 @@ manifesto é o **mesmo preto** do ícone: o splash é o ícone sobre essa cor, e
 tela de abertura vira o logo inteiro num fundo só, como o login. O `maskable` guarda a zona segura
 (16% de folga) para o recorte redondo do Android não comer o hexágono. O E2E do app confere que
 cada ícone declarado existe, é PNG e tem o tamanho que diz.
+**Atualizar o app não passa por loja nem por reinstalar.** Cada abertura já carrega o que está no
+ar — o `index.html` sai com `no-cache` e os arquivos do Vite têm hash no nome. O buraco é a página
+que **já estava aberta** durante o deploy (o app que o Android guardou na memória, a aba deixada de
+manhã), que segue no código antigo e pode chamar uma API que não existe mais. `versao/AvisoDeNovaVersao`
+é a resposta: a versão desta página é o **primeiro commit** que o `/health` disse a ela, e quando
+uma consulta posterior (ao voltar à vista, e a cada cinco minutos com a página à vista) diz outro,
+a faixa "há uma versão nova" aparece nas duas cascas. Não grava o commit dentro do build de
+propósito: exigiria o build arg chegar certo no Railway e falharia em silêncio se não chegasse.
+**Nunca recarrega sozinho** — quem está no meio de uma SC perderia o que digitou; "Depois" esconde a
+faixa daquela versão e o deploy seguinte a reacende. Sem commit no ambiente, ou com a rede falhando,
+nada avisa: nulo nunca vira aviso. A sondagem não passa pelo cliente da API, para não renovar nem
+derrubar a sessão por causa de um 401 em segundo plano.
 
 **A identidade visual é a do Grupo Trino, e mora nos tokens.** Decisão da empresa (2026-09): a
 cor de ação (`marca`) é o **vermelho da seta do logo** (`#9d202c`, o bordô dos botões do site;

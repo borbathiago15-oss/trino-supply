@@ -4,6 +4,7 @@ import { BotaoDeTema } from '@/componentes/BotaoDeTema';
 import { AvisosProvider } from '@/sessao/AvisosProvider';
 import { useSessao, useUsuario } from '@/sessao/SessaoProvider';
 import { abasDoApp } from './abas';
+import { AvisoDeNovaVersao } from '@/versao/AvisoDeNovaVersao';
 
 /**
  * O app de bolso: três telas — aprovar, a visão da diretoria e o dashboard —, com as abas
@@ -41,6 +42,8 @@ export function CascaDoApp() {
         </header>
 
         <main className="mx-auto w-full max-w-5xl flex-1 px-3 pb-24 pt-3 sm:px-4">
+          {/* o app que o Android guardou na memória volta horas depois: é aqui que ele fica sabendo do deploy */}
+          <AvisoDeNovaVersao />
           {abas.length === 0
             ? (
               <div className="rounded-xl border border-borda bg-superficie p-5 text-[14px]" data-testid="app-sem-abas">

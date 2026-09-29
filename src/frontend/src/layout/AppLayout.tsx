@@ -7,6 +7,7 @@ import { AvisosProvider } from '@/sessao/AvisosProvider';
 import { BotaoDeTema } from '@/componentes/BotaoDeTema';
 import { CaixaDeAvisos } from './CaixaDeAvisos';
 import { BarraDeAjuda } from './BarraDeAjuda';
+import { AvisoDeNovaVersao } from '@/versao/AvisoDeNovaVersao';
 import { useSessao, useUsuario } from '@/sessao/SessaoProvider';
 import { ROTULO_PAPEL } from '@/dominio/papeis';
 import { tituloDaRota } from './titulos';
@@ -74,6 +75,8 @@ export function AppLayout() {
             recarregando. A `key` é a rota porque limite de erro do React não se recupera
             sozinho — sem ela, o erro de uma tela continuaria na tela seguinte.
           */}
+          {/* a página que ficou aberta durante um deploy fica sabendo, e decide quando recarregar */}
+          <AvisoDeNovaVersao />
           <LimiteErro key={pathname}>
             <Outlet />
           </LimiteErro>

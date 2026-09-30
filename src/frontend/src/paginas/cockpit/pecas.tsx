@@ -117,15 +117,18 @@ export function CelulaDaFaixa({
 }
 
 /**
- * Um dos dois extremos da vazão do dia: o número grande com o rótulo curto ao lado.
- * Vertical como os cartões faria a faixa ocupar altura que a esteira precisa.
+ * Um par de faixa: o número grande com o rótulo curto ao lado. Empilhar como os cartões
+ * faria a faixa ocupar a altura que a esteira e o radar precisam.
+ *
+ * `tom` existe para o número cuja cor é decidida **pelo servidor** — a faixa da meta de teto,
+ * que é "menor é melhor": a parede não tem como saber sozinha para que lado o número é bom.
  */
-export function ParDaVazao({ rotulo, valor, testid }: {
-  rotulo: string; valor: number; testid: string;
+export function ParDaFaixa({ rotulo, valor, testid, tom = '' }: {
+  rotulo: React.ReactNode; valor: string; testid: string; tom?: string;
 }) {
   return (
     <div className="flex items-baseline gap-2" data-testid={testid}>
-      <NumeroVivo valor={String(valor)} className="font-mono text-2xl font-bold" />
+      <NumeroVivo valor={valor} className={`font-mono text-2xl font-bold ${tom}`} />
       <span className="text-[12px] text-slate-400">{rotulo}</span>
     </div>
   );

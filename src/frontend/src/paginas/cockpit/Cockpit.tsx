@@ -5,13 +5,13 @@ import { moeda } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
 import {
   CLASSE_DA_DESCARGA, CLASSE_DO_ALERTA, CLASSE_DO_GARGALO, cicloDeUnidades, compacto,
-  CLASSE_DA_VAZAO, FRASE_DA_VAZAO, fraseDaRotaDeCompra, horaDoRelogio, horasNaParede,
-  ordenarRadar, progressoDaMeta,
-  proximaUnidade, ROTACAO_MS, saldoComSinal, sentidoDaVazao, temAlmoxarifado,
+  CLASSE_DA_VAZAO, FRASE_DA_VAZAO, fraseDaEmergencia, fraseDaRotaDeCompra, horaDoRelogio,
+  horasNaParede, ordenarRadar, progressoDaMeta,
+  proximaUnidade, ROTACAO_MS, saldoComSinal, sentidoDaVazao, temAlmoxarifado, tomDoTeto,
   ROTULO_DA_DESCARGA, ROTULO_DO_ALERTA, slaAtingido,
 } from './cockpit';
 import {
-  BarraDeMeta, CartaoVital, CelulaDaFaixa, ListaRolante, NumeroVivo, ParDaVazao, PulsoAoVivo,
+  BarraDeMeta, CartaoVital, CelulaDaFaixa, ListaRolante, NumeroVivo, ParDaFaixa, PulsoAoVivo,
 } from './pecas';
 
 /** O relógio do cabeçalho, de segundo em segundo. */
@@ -74,7 +74,8 @@ export function Cockpit() {
   }
 
   const {
-    kpis, vazao, almoxarifado, pipeline, excecoesCriticas, burndownCompradores, agendaDocaHoje,
+    kpis, vazao, compra, almoxarifado, pipeline, excecoesCriticas, burndownCompradores,
+    agendaDocaHoje,
   } = dados;
   const radar = ordenarRadar(excecoesCriticas);
   const slaOk = slaAtingido(kpis.slaSemanalPct, kpis.metaSlaPct);
@@ -153,9 +154,9 @@ export function Cockpit() {
       <div className="mt-3 flex items-center gap-6 rounded-xl border border-white/10 bg-fundo-card/90 px-5 py-2.5"
         data-testid="vazao-do-dia">
         <span className="text-[12px] uppercase tracking-wider text-slate-400">Vazão do dia</span>
-        <ParDaVazao rotulo="entraram" valor={vazao.entraramHoje} testid="vazao-entraram" />
+        <ParDaFaixa rotulo="entraram" valor={String(vazao.entraramHoje)} testid="vazao-entraram" />
         <span aria-hidden className="text-slate-700">──▶</span>
-        <ParDaVazao rotulo="concluídos" valor={vazao.concluidosHoje} testid="vazao-concluidos" />
+        <ParDaFaixa rotulo="concluídos" valor={String(vazao.concluidosHoje)} testid="vazao-concluidos" />
         <div className="flex items-baseline gap-2" data-testid="vazao-saldo">
           <NumeroVivo valor={saldoComSinal(vazao.saldo)}
             className={`font-mono text-2xl font-bold ${CLASSE_DA_VAZAO[sentidoDaVazao(vazao.saldo)]}`} />
@@ -170,6 +171,39 @@ export function Cockpit() {
           <NumeroVivo className="font-mono text-2xl font-bold"
             valor={vazao.taxaConclusaoPct === null
               ? '—' : `${vazao.taxaConclusaoPct.toLocaleString('pt-BR')}%`} />
+        </div>
+      </div>
+
+      {/* NÍVEL 2.55 — a compra do mês.
+          O dia acabou de ser dito pela faixa acima; esta diz o mês, que é o horizonte em que
+          a compra é cobrada. Nenhum número nasce aqui: o valor é o `poTotalValue` do painel,
+          o emergencial é o CP-02 do Compliance e o teto é a meta do catálogo. A cor do valor
+          vem do servidor porque essa meta é teto, não alvo — "menor é melhor" é decisão da
+          régua da empresa, não da parede. */}
+      <div className="mt-3 flex items-center gap-6 rounded-xl border border-white/10 bg-fundo-card/90 px-5 py-2.5"
+        data-testid="compra-do-mes">
+        <span className="text-[12px] uppercase tracking-wider text-slate-400">A compra do mês</span>
+        <ParDaFaixa testid="compra-valor" rotulo="valor comprado"
+          valor={`R$ ${compacto(compra.valorComprado)}`} tom={tomDoTeto(compra.faixaDoTeto)} />
+        {/* zero é notícia boa e merece ser dita: espaço vazio só diz que ninguém olhou */}
+        <span className="text-[13px] text-slate-300" data-testid="compra-emergenciais">
+          {fraseDaEmergencia(compra.emergenciais, compra.pedidos)}
+        </span>
+        <div className="ml-auto flex w-64 items-baseline gap-2" data-testid="compra-teto">
+          <span className="text-[12px] uppercase tracking-wider text-slate-400">Teto</span>
+          {compra.pctDoTeto === null ? (
+            // sem meta cadastrada não há comparação — teto inventado parece conferido e não é
+            <span className="text-[13px] text-slate-500">sem teto definido</span>
+          ) : (
+            <>
+              <NumeroVivo valor={`${compra.pctDoTeto.toLocaleString('pt-BR')}%`}
+                className={`font-mono text-2xl font-bold ${tomDoTeto(compra.faixaDoTeto)}`} />
+              <span className="flex-1">
+                <BarraDeMeta progresso={progressoDaMeta(compra.valorComprado, compra.tetoAteHoje ?? 0)}
+                  atingiu={compra.faixaDoTeto === 'ok'} />
+              </span>
+            </>
+          )}
         </div>
       </div>
 

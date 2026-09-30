@@ -303,6 +303,29 @@ export interface VazaoDoDia {
 
 export type Gargalo = 'NORMAL' | 'ATENCAO' | 'CRITICO';
 
+/**
+ * O bloco do almoxarifado — a solicitação de material, o outro cano da casa.
+ *
+ * A unidade é a **solicitação**: o almoxarife separa a lista toda e fecha o atendimento num
+ * ato. `filaItens` é o que se tira da prateleira, e vai no pé. As duas filas ficam separadas
+ * porque a vez é de gente diferente — `aguardandoAprovacao` espera o Nível 1 do centro, e
+ * `filaSolicitacoes` espera o estoque. `atendidoPeloEstoquePct` é nulo quando nada foi
+ * atendido no mês (0% diria que o estoque estava vazio) e `horasMediaAtendimento` quando
+ * nenhum atendimento tem as duas marcas de tempo.
+ */
+export interface AlmoxarifadoDoCockpit {
+  filaSolicitacoes: number;
+  filaItens: number;
+  horasDoMaisAntigo: number;
+  gargalo: Gargalo;
+  maisAntigaNumero: string | null;
+  aguardandoAprovacao: number;
+  atendidasHoje: number;
+  atendidoPeloEstoquePct: number | null;
+  viraramCompraNoMes: number;
+  horasMediaAtendimento: number | null;
+}
+
 export interface NoDaEsteira {
   etapa: string;
   rotulo: string;
@@ -350,6 +373,7 @@ export interface CockpitDados {
   unidades: string[];
   kpis: CockpitKpis;
   vazao: VazaoDoDia;
+  almoxarifado: AlmoxarifadoDoCockpit;
   pipeline: NoDaEsteira[];
   excecoesCriticas: ExcecaoDoCockpit[];
   burndownCompradores: BurndownDoComprador[];

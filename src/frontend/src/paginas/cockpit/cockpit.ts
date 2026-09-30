@@ -1,4 +1,6 @@
-import type { ExcecaoDoCockpit, Gargalo, StatusDaDescarga, TipoDeAlerta } from '@/api/torre';
+import type {
+  AlmoxarifadoDoCockpit, ExcecaoDoCockpit, Gargalo, StatusDaDescarga, TipoDeAlerta,
+} from '@/api/torre';
 
 /**
  * A lógica do cockpit, fora do componente: cor, ordem e texto são o que decide se a
@@ -140,3 +142,44 @@ export const CLASSE_DA_VAZAO: Record<SentidoDaVazao, string> = {
 
 /** O saldo com sinal: "+3" conta uma história que "3" não conta. */
 export const saldoComSinal = (saldo: number) => (saldo > 0 ? `+${saldo}` : String(saldo));
+
+/**
+ * Tempo dito para quem lê de cinco metros. Até dois dias fica em horas; passando disso vira
+ * dias, porque "76h" obriga a dividir de cabeça e "3d 4h" não.
+ *
+ * <p>
+ * Nulo é **traço**, nunca zero: "ninguém mediu" e "levou zero hora" são notícias diferentes,
+ * e só uma delas é elogio. É a mesma regra do OTIF sem entrega medida.
+ * </p>
+ */
+export function horasNaParede(horas: number | null): string {
+  if (horas === null) return '—';
+  if (horas < 48) return `${horas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}h`;
+  const dias = Math.floor(horas / 24);
+  const resto = Math.round(horas % 24);
+  return resto === 0 ? `${dias}d` : `${dias}d ${resto}h`;
+}
+
+/**
+ * Se o bloco do almoxarifado entra na parede.
+ *
+ * <p>
+ * A altura da TV é disputada, e cinco zeros tirariam espaço da esteira e do radar só para
+ * dizer que o módulo de material não é usado. Basta uma fila, uma espera de aprovação ou um
+ * atendimento no mês para o bloco existir — dentro de um mês de uso ele nunca pisca, e a
+ * operação que não pede material ao almoxarifado nunca o vê.
+ * </p>
+ */
+/**
+ * O que o estoque não deu conta, no mês. O plural é da frase e não do número: "1 viraram
+ * compra" numa parede lida de cinco metros parece defeito da tela, e quem lê passa a
+ * desconfiar do número ao lado.
+ */
+export const fraseDaRotaDeCompra = (quantas: number) =>
+  quantas === 0 ? 'nenhuma virou compra no mês'
+    : quantas === 1 ? '1 virou compra no mês'
+      : `${quantas} viraram compra no mês`;
+
+export const temAlmoxarifado = (a: AlmoxarifadoDoCockpit) =>
+  a.filaSolicitacoes > 0 || a.aguardandoAprovacao > 0 || a.atendidasHoje > 0
+  || a.atendidoPeloEstoquePct !== null || a.viraramCompraNoMes > 0;

@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import type { ExcecaoDoCockpit } from '@/api/torre';
+import type { AlmoxarifadoDoCockpit, ExcecaoDoCockpit } from '@/api/torre';
 import {
-  cicloDeUnidades, CLASSE_DA_VAZAO, compacto, horaDoRelogio, ordenarRadar, precisaRolar,
-  progressoDaMeta, proximaUnidade, saldoComSinal, sentidoDaVazao, slaAtingido,
+  cicloDeUnidades, CLASSE_DA_VAZAO, compacto, fraseDaRotaDeCompra, horaDoRelogio, horasNaParede,
+  ordenarRadar, precisaRolar, progressoDaMeta, proximaUnidade, saldoComSinal, sentidoDaVazao,
+  slaAtingido, temAlmoxarifado,
 } from './cockpit';
+
+const almoxarifado = (p: Partial<AlmoxarifadoDoCockpit> = {}): AlmoxarifadoDoCockpit => ({
+  filaSolicitacoes: 0, filaItens: 0, horasDoMaisAntigo: 0, gargalo: 'NORMAL',
+  maisAntigaNumero: null, aguardandoAprovacao: 0, atendidasHoje: 0,
+  atendidoPeloEstoquePct: null, viraramCompraNoMes: 0, horasMediaAtendimento: null, ...p,
+});
 
 const alerta = (p: Partial<ExcecaoDoCockpit>): ExcecaoDoCockpit => ({
   id: 'x', tipoAlerta: 'OC_PENDENTE', codigoReferencia: 'PO-1', descricaoItem: 'Item',
@@ -109,5 +116,41 @@ describe('o veredito da vazão do dia', () => {
     expect(saldoComSinal(3)).toBe('+3');
     expect(saldoComSinal(-5)).toBe('-5');
     expect(saldoComSinal(0)).toBe('0');
+  });
+});
+
+describe('o bloco do almoxarifado', () => {
+  it('o tempo vira dias depois de dois dias, para não se dividir de cabeça', () => {
+    expect(horasNaParede(9.4)).toBe('9,4h');
+    expect(horasNaParede(47)).toBe('47h');
+    expect(horasNaParede(52)).toBe('2d 4h');
+    expect(horasNaParede(72)).toBe('3d');
+  });
+
+  it('tempo não medido é traço, e não zero hora', () => {
+    // "ninguém mediu" e "levou zero hora" são notícias diferentes, e só uma é elogio
+    expect(horasNaParede(null)).toBe('—');
+    expect(horasNaParede(0)).toBe('0h');
+  });
+
+  it('o plural é da frase, não do número', () => {
+    // "1 viraram compra" numa parede lida de longe parece defeito da tela
+    expect(fraseDaRotaDeCompra(0)).toBe('nenhuma virou compra no mês');
+    expect(fraseDaRotaDeCompra(1)).toBe('1 virou compra no mês');
+    expect(fraseDaRotaDeCompra(4)).toBe('4 viraram compra no mês');
+  });
+
+  it('bloco sem nada a dizer não entra na parede', () => {
+    // cinco zeros tirariam altura da esteira só para anunciar que o módulo não é usado
+    expect(temAlmoxarifado(almoxarifado())).toBe(false);
+  });
+
+  it('basta uma das cinco perguntas ter resposta para o bloco existir', () => {
+    expect(temAlmoxarifado(almoxarifado({ filaSolicitacoes: 1 }))).toBe(true);
+    expect(temAlmoxarifado(almoxarifado({ aguardandoAprovacao: 1 }))).toBe(true);
+    expect(temAlmoxarifado(almoxarifado({ atendidasHoje: 1 }))).toBe(true);
+    expect(temAlmoxarifado(almoxarifado({ viraramCompraNoMes: 1 }))).toBe(true);
+    // o estoque que não tinha nada mediu 0%, e medir é ter o que dizer
+    expect(temAlmoxarifado(almoxarifado({ atendidoPeloEstoquePct: 0 }))).toBe(true);
   });
 });

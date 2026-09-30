@@ -5,12 +5,13 @@ import { moeda } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
 import {
   CLASSE_DA_DESCARGA, CLASSE_DO_ALERTA, CLASSE_DO_GARGALO, cicloDeUnidades, compacto,
-  CLASSE_DA_VAZAO, FRASE_DA_VAZAO, horaDoRelogio, ordenarRadar, progressoDaMeta,
-  proximaUnidade, ROTACAO_MS, saldoComSinal, sentidoDaVazao,
+  CLASSE_DA_VAZAO, FRASE_DA_VAZAO, fraseDaRotaDeCompra, horaDoRelogio, horasNaParede,
+  ordenarRadar, progressoDaMeta,
+  proximaUnidade, ROTACAO_MS, saldoComSinal, sentidoDaVazao, temAlmoxarifado,
   ROTULO_DA_DESCARGA, ROTULO_DO_ALERTA, slaAtingido,
 } from './cockpit';
 import {
-  BarraDeMeta, CartaoVital, ListaRolante, NumeroVivo, ParDaVazao, PulsoAoVivo,
+  BarraDeMeta, CartaoVital, CelulaDaFaixa, ListaRolante, NumeroVivo, ParDaVazao, PulsoAoVivo,
 } from './pecas';
 
 /** O relógio do cabeçalho, de segundo em segundo. */
@@ -72,7 +73,9 @@ export function Cockpit() {
     );
   }
 
-  const { kpis, vazao, pipeline, excecoesCriticas, burndownCompradores, agendaDocaHoje } = dados;
+  const {
+    kpis, vazao, almoxarifado, pipeline, excecoesCriticas, burndownCompradores, agendaDocaHoje,
+  } = dados;
   const radar = ordenarRadar(excecoesCriticas);
   const slaOk = slaAtingido(kpis.slaSemanalPct, kpis.metaSlaPct);
 
@@ -169,6 +172,45 @@ export function Cockpit() {
               ? '—' : `${vazao.taxaConclusaoPct.toLocaleString('pt-BR')}%`} />
         </div>
       </div>
+
+      {/* NÍVEL 2.6 — o almoxarifado.
+          A solicitação de material é o outro cano da casa, e a parede fica na sala onde o
+          atendimento acontece. Duas filas separadas de propósito: a do centro de custo espera
+          o Nível 1, a do almoxarifado espera o estoque — somá-las cobraria do almoxarife
+          trabalho que não é dele. E o bloco só existe quando há o que dizer: cinco zeros
+          tirariam altura da esteira para anunciar que o módulo não é usado. */}
+      {temAlmoxarifado(almoxarifado) && (
+        <div className="mt-3 grid grid-cols-5 gap-3" data-testid="almoxarifado">
+          <CelulaDaFaixa testid="almox-fila" icone="📦" titulo="Fila do almoxarifado"
+            valor={String(almoxarifado.filaSolicitacoes)}
+            borda={CLASSE_DO_GARGALO[almoxarifado.gargalo]}
+            rodape={almoxarifado.filaSolicitacoes === 0 ? 'nada a separar' : (
+              <>
+                {almoxarifado.filaItens} itens · mais antiga {horasNaParede(almoxarifado.horasDoMaisAntigo)}
+                {almoxarifado.maisAntigaNumero && ` · ${almoxarifado.maisAntigaNumero}`}
+              </>
+            )} />
+
+          <CelulaDaFaixa testid="almox-aprovacao" icone="✋" titulo="Aguardando o centro"
+            valor={String(almoxarifado.aguardandoAprovacao)}
+            rodape="Nível 1, antes do estoque" />
+
+          <CelulaDaFaixa testid="almox-atendidas" icone="✅" titulo="Atendidas hoje"
+            valor={String(almoxarifado.atendidasHoje)}
+            rodape="entregues pelo almoxarifado" />
+
+          {/* nulo é traço: 0% diria que o estoque estava vazio, e "nada foi atendido" é
+              notícia diferente de "nada havia" */}
+          <CelulaDaFaixa testid="almox-estoque" icone="🏷️" titulo="Atendido pelo estoque"
+            valor={almoxarifado.atendidoPeloEstoquePct === null
+              ? '—' : `${almoxarifado.atendidoPeloEstoquePct.toLocaleString('pt-BR')}%`}
+            rodape={fraseDaRotaDeCompra(almoxarifado.viraramCompraNoMes)} />
+
+          <CelulaDaFaixa testid="almox-tempo" icone="⏱️" titulo="Tempo de atendimento"
+            valor={horasNaParede(almoxarifado.horasMediaAtendimento)}
+            rodape="média do mês, da liberação à entrega" />
+        </div>
+      )}
 
       {/* NÍVEL 3 — a esteira */}
       <div className="mt-4 flex items-stretch gap-2" data-testid="esteira">

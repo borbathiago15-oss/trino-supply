@@ -90,6 +90,33 @@ export function BarraDeMeta({ progresso, atingiu }: { progresso: number | null; 
 }
 
 /**
+ * Uma célula de faixa: título curto, número grande e o pé que dá o contexto. É a peça do bloco
+ * do almoxarifado, onde cinco perguntas dividem uma faixa horizontal — o cartão do nível 2
+ * ocuparia, cinco vezes, a altura que a esteira e o radar precisam.
+ *
+ * `borda` recebe a classe do gargalo, a mesma da esteira: uma parede com dois critérios de
+ * "está travado" obrigaria quem passa a lembrar qual vale para qual bloco.
+ */
+export function CelulaDaFaixa({
+  icone, titulo, valor, rodape, borda = 'border-white/10', testid,
+}: {
+  icone: string; titulo: string; valor: string;
+  rodape?: React.ReactNode; borda?: string; testid: string;
+}) {
+  return (
+    <div className={`rounded-xl border bg-fundo-card/90 px-4 py-2.5 ${borda}`} data-testid={testid}>
+      <div className="flex items-center gap-1.5 text-[12px] uppercase tracking-wider text-slate-400">
+        <span aria-hidden>{icone}</span>{titulo}
+      </div>
+      <div className="flex items-baseline gap-2">
+        <NumeroVivo valor={valor} className="font-mono text-3xl font-bold text-white" />
+        {rodape && <span className="min-w-0 truncate text-[12px] text-slate-400">{rodape}</span>}
+      </div>
+    </div>
+  );
+}
+
+/**
  * Um dos dois extremos da vazão do dia: o número grande com o rótulo curto ao lado.
  * Vertical como os cartões faria a faixa ocupar altura que a esteira precisa.
  */

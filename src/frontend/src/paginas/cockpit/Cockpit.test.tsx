@@ -20,6 +20,11 @@ const dados = (p: Partial<CockpitDados> = {}): CockpitDados => ({
     otifGeralPct: 88, otifMedidos: 9,
   },
   vazao: { entraramHoje: 18, concluidosHoje: 15, saldo: 3, taxaConclusaoPct: 83.3 },
+  almoxarifado: {
+    filaSolicitacoes: 6, filaItens: 21, horasDoMaisAntigo: 52, gargalo: 'ATENCAO',
+    maisAntigaNumero: 'MR-2026-000012', aguardandoAprovacao: 3, atendidasHoje: 4,
+    atendidoPeloEstoquePct: 78.5, viraramCompraNoMes: 2, horasMediaAtendimento: 9.4,
+  },
   pipeline: [
     { etapa: 'SOLICITACAO', rotulo: 'Solicitação', quantidade: 5, horasNaFila: 12, gargalo: 'NORMAL' },
     { etapa: 'COTACAO', rotulo: 'Cotação', quantidade: 7, horasNaFila: 80, gargalo: 'CRITICO' },
@@ -159,5 +164,67 @@ describe('<Cockpit />', () => {
 
     expect(screen.getByTestId('vazao-taxa')).toHaveTextContent('—');
     expect(screen.getByTestId('vazao-saldo')).toHaveTextContent('backlog estável');
+  });
+
+  it('o bloco do almoxarifado separa a fila do estoque da fila do centro de custo', async () => {
+    // somar as duas cobraria do almoxarife trabalho que ainda está com o Nível 1
+    render(<Cockpit />);
+    await screen.findByTestId('almoxarifado');
+
+    expect(screen.getByTestId('almox-fila')).toHaveTextContent('6');
+    expect(screen.getByTestId('almox-fila')).toHaveTextContent('21 itens');
+    expect(screen.getByTestId('almox-aprovacao')).toHaveTextContent('3');
+    expect(screen.getByTestId('almox-atendidas')).toHaveTextContent('4');
+    expect(screen.getByTestId('almox-estoque')).toHaveTextContent('78,5%');
+    expect(screen.getByTestId('almox-estoque')).toHaveTextContent('2 viraram compra no mês');
+  });
+
+  it('uma solicitação sozinha não vira "1 viraram"', async () => {
+    vi.mocked(obterCockpit).mockResolvedValue(dados({
+      almoxarifado: { ...dados().almoxarifado, viraramCompraNoMes: 1 },
+    }));
+    render(<Cockpit />);
+    await screen.findByTestId('almox-estoque');
+
+    expect(screen.getByTestId('almox-estoque')).toHaveTextContent('1 virou compra no mês');
+  });
+
+  it('a fila do almoxarifado acende pela mesma régua de gargalo da esteira', async () => {
+    render(<Cockpit />);
+    await screen.findByTestId('almox-fila');
+
+    // 52h com a solicitação mais antiga: atenção, e o número dela fica na tela
+    expect(screen.getByTestId('almox-fila').className).toContain('amber');
+    expect(screen.getByTestId('almox-fila')).toHaveTextContent('mais antiga 2d 4h');
+    expect(screen.getByTestId('almox-fila')).toHaveTextContent('MR-2026-000012');
+  });
+
+  it('atendimento sem medição mostra traço, não zero hora', async () => {
+    vi.mocked(obterCockpit).mockResolvedValue(dados({
+      almoxarifado: {
+        ...dados().almoxarifado, atendidasHoje: 0,
+        atendidoPeloEstoquePct: null, horasMediaAtendimento: null, viraramCompraNoMes: 0,
+      },
+    }));
+    render(<Cockpit />);
+    await screen.findByTestId('almox-tempo');
+
+    expect(screen.getByTestId('almox-tempo')).toHaveTextContent('—');
+    expect(screen.getByTestId('almox-estoque')).toHaveTextContent('—');
+    expect(screen.getByTestId('almox-estoque')).toHaveTextContent('nenhuma virou compra no mês');
+  });
+
+  it('operação que não pede material ao almoxarifado não perde altura com o bloco', async () => {
+    vi.mocked(obterCockpit).mockResolvedValue(dados({
+      almoxarifado: {
+        filaSolicitacoes: 0, filaItens: 0, horasDoMaisAntigo: 0, gargalo: 'NORMAL',
+        maisAntigaNumero: null, aguardandoAprovacao: 0, atendidasHoje: 0,
+        atendidoPeloEstoquePct: null, viraramCompraNoMes: 0, horasMediaAtendimento: null,
+      },
+    }));
+    render(<Cockpit />);
+    await screen.findByTestId('esteira');
+
+    expect(screen.queryByTestId('almoxarifado')).not.toBeInTheDocument();
   });
 });

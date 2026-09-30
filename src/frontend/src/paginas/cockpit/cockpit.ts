@@ -106,3 +106,37 @@ export function compacto(valor: number): string {
   if (abs >= 1_000) return `${(valor / 1_000).toFixed(1).replace('.', ',')} mil`;
   return String(Math.round(valor));
 }
+
+/**
+ * O veredito da vazão do dia. O saldo sozinho é um número com sinal; o que o gestor lê de
+ * longe é a frase — e ela precisa dizer **para que lado** o dia andou.
+ *
+ * <p>
+ * Zero é "estável", e não "bom": entrar e sair na mesma medida mantém o backlog onde está,
+ * que pode ser alto. Quem diz se o nível é confortável é o card de backlog, não este.
+ * </p>
+ */
+export type SentidoDaVazao = 'CRESCENDO' | 'REDUZINDO' | 'ESTAVEL';
+
+export const sentidoDaVazao = (saldo: number): SentidoDaVazao =>
+  saldo > 0 ? 'CRESCENDO' : saldo < 0 ? 'REDUZINDO' : 'ESTAVEL';
+
+export const FRASE_DA_VAZAO: Record<SentidoDaVazao, string> = {
+  CRESCENDO: 'backlog aumentando',
+  REDUZINDO: 'backlog reduzindo',
+  ESTAVEL: 'backlog estável',
+};
+
+/**
+ * A cor do saldo. Vermelho quando o backlog cresce, verde quando encolhe — e **cinza no
+ * empate**, porque pintar o estável de verde faria a parede comemorar um dia em que o time
+ * apenas não perdeu terreno.
+ */
+export const CLASSE_DA_VAZAO: Record<SentidoDaVazao, string> = {
+  CRESCENDO: 'text-rose-400',
+  REDUZINDO: 'text-emerald-400',
+  ESTAVEL: 'text-slate-300',
+};
+
+/** O saldo com sinal: "+3" conta uma história que "3" não conta. */
+export const saldoComSinal = (saldo: number) => (saldo > 0 ? `+${saldo}` : String(saldo));

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { ExcecaoDoCockpit } from '@/api/torre';
 import {
-  cicloDeUnidades, compacto, horaDoRelogio, ordenarRadar, precisaRolar, progressoDaMeta,
-  proximaUnidade, slaAtingido,
+  cicloDeUnidades, CLASSE_DA_VAZAO, compacto, horaDoRelogio, ordenarRadar, precisaRolar,
+  progressoDaMeta, proximaUnidade, saldoComSinal, sentidoDaVazao, slaAtingido,
 } from './cockpit';
 
 const alerta = (p: Partial<ExcecaoDoCockpit>): ExcecaoDoCockpit => ({
@@ -90,5 +90,24 @@ describe('rotação de unidades', () => {
 
   it('unidade que saiu do cadastro volta para a geral, em vez de travar a volta', () => {
     expect(proximaUnidade(cicloDeUnidades(['PB']), 'SUMIU')).toBeNull();
+  });
+});
+
+describe('o veredito da vazão do dia', () => {
+  it('o sentido vem do sinal, e o empate é estável — não é boa notícia', () => {
+    // pintar o empate de verde faria a parede comemorar um dia em que o time apenas
+    // não perdeu terreno
+    expect(sentidoDaVazao(3)).toBe('CRESCENDO');
+    expect(sentidoDaVazao(-5)).toBe('REDUZINDO');
+    expect(sentidoDaVazao(0)).toBe('ESTAVEL');
+    expect(CLASSE_DA_VAZAO.ESTAVEL).not.toContain('emerald');
+    expect(CLASSE_DA_VAZAO.CRESCENDO).toContain('rose');
+    expect(CLASSE_DA_VAZAO.REDUZINDO).toContain('emerald');
+  });
+
+  it('o saldo leva o sinal, porque "+3" conta o que "3" não conta', () => {
+    expect(saldoComSinal(3)).toBe('+3');
+    expect(saldoComSinal(-5)).toBe('-5');
+    expect(saldoComSinal(0)).toBe('0');
   });
 });

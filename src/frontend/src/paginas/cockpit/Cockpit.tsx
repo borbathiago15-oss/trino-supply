@@ -5,10 +5,13 @@ import { moeda } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
 import {
   CLASSE_DA_DESCARGA, CLASSE_DO_ALERTA, CLASSE_DO_GARGALO, cicloDeUnidades, compacto,
-  horaDoRelogio, ordenarRadar, progressoDaMeta, proximaUnidade, ROTACAO_MS,
+  CLASSE_DA_VAZAO, FRASE_DA_VAZAO, horaDoRelogio, ordenarRadar, progressoDaMeta,
+  proximaUnidade, ROTACAO_MS, saldoComSinal, sentidoDaVazao,
   ROTULO_DA_DESCARGA, ROTULO_DO_ALERTA, slaAtingido,
 } from './cockpit';
-import { BarraDeMeta, CartaoVital, ListaRolante, NumeroVivo, PulsoAoVivo } from './pecas';
+import {
+  BarraDeMeta, CartaoVital, ListaRolante, NumeroVivo, ParDaVazao, PulsoAoVivo,
+} from './pecas';
 
 /** O relógio do cabeçalho, de segundo em segundo. */
 function useRelogio() {
@@ -69,7 +72,7 @@ export function Cockpit() {
     );
   }
 
-  const { kpis, pipeline, excecoesCriticas, burndownCompradores, agendaDocaHoje } = dados;
+  const { kpis, vazao, pipeline, excecoesCriticas, burndownCompradores, agendaDocaHoje } = dados;
   const radar = ordenarRadar(excecoesCriticas);
   const slaOk = slaAtingido(kpis.slaSemanalPct, kpis.metaSlaPct);
 
@@ -137,6 +140,34 @@ export function Cockpit() {
           rodape={kpis.otifMedidos > 0 ? `${kpis.otifMedidos} entrega(s) medida(s)` : 'nenhuma entrega medida'}>
           <NumeroVivo valor={kpis.otifGeralPct === null ? '—' : `${kpis.otifGeralPct.toLocaleString('pt-BR')}%`} />
         </CartaoVital>
+      </div>
+
+      {/* NÍVEL 2.5 — a vazão do dia.
+          O backlog do cartão diz quanto há parado; ele não diz se o time está ganhando ou
+          perdendo terreno. Entrou × concluiu responde isso nos dois extremos do mesmo cano,
+          e o saldo com sinal é o que se lê de longe. Fica colado nos cartões, acima da
+          esteira, porque é leitura do DIA — a esteira é do agora. */}
+      <div className="mt-3 flex items-center gap-6 rounded-xl border border-white/10 bg-fundo-card/90 px-5 py-2.5"
+        data-testid="vazao-do-dia">
+        <span className="text-[12px] uppercase tracking-wider text-slate-400">Vazão do dia</span>
+        <ParDaVazao rotulo="entraram" valor={vazao.entraramHoje} testid="vazao-entraram" />
+        <span aria-hidden className="text-slate-700">──▶</span>
+        <ParDaVazao rotulo="concluídos" valor={vazao.concluidosHoje} testid="vazao-concluidos" />
+        <div className="flex items-baseline gap-2" data-testid="vazao-saldo">
+          <NumeroVivo valor={saldoComSinal(vazao.saldo)}
+            className={`font-mono text-2xl font-bold ${CLASSE_DA_VAZAO[sentidoDaVazao(vazao.saldo)]}`} />
+          <span className={`text-[12px] ${CLASSE_DA_VAZAO[sentidoDaVazao(vazao.saldo)]}`}>
+            {FRASE_DA_VAZAO[sentidoDaVazao(vazao.saldo)]}
+          </span>
+        </div>
+        <div className="ml-auto flex items-baseline gap-2" data-testid="vazao-taxa">
+          <span className="text-[12px] uppercase tracking-wider text-slate-400">Taxa de conclusão</span>
+          {/* nula é traço, não 0%: "nada entrou" e "não demos conta de nada" são
+              notícias diferentes, e só uma delas cobra alguém */}
+          <NumeroVivo className="font-mono text-2xl font-bold"
+            valor={vazao.taxaConclusaoPct === null
+              ? '—' : `${vazao.taxaConclusaoPct.toLocaleString('pt-BR')}%`} />
+        </div>
       </div>
 
       {/* NÍVEL 3 — a esteira */}

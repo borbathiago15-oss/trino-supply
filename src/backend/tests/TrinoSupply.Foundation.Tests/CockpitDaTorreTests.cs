@@ -226,4 +226,80 @@ public class CockpitDaTorreTests
 
         Assert.Equal(torre.Kpis.Atrasados, cockpit.Kpis.ItensAtrasados);
     }
+
+    // ---- a vazão do dia --------------------------------------------------------
+    //
+    // O backlog diz quanto há parado; ele não diz se o time está ganhando ou perdendo
+    // terreno. Entrou × concluiu responde isso nos dois extremos do mesmo cano.
+
+    [Fact]
+    public async Task A_vazao_conta_por_item_e_o_saldo_diz_para_que_lado_o_dia_andou()
+    {
+        // a mesma unidade do resto da Torre: uma SC de três itens é três demandas
+        var w = Build();
+        await ScAsync(w, null, "Martelete", "Pé de cabra", "Luva");
+
+        var c = await w.Torre.CockpitAsync();
+
+        Assert.Equal(3, c.Vazao.EntraramHoje);
+        Assert.Equal(0, c.Vazao.ConcluidosHoje);
+        Assert.Equal(3, c.Vazao.Saldo);              // positivo: backlog crescendo
+        Assert.Equal(0m, c.Vazao.TaxaConclusaoPct);
+    }
+
+    [Fact]
+    public async Task O_que_foi_entregue_hoje_conta_na_capacidade_mesmo_estando_encerrado()
+    {
+        // é o caso que zeraria o lado da capacidade se a conta ficasse dentro do "aberto":
+        // o item concluído HOJE é, por definição, encerrado
+        var w = Build();
+        var sc = await ScAsync(w, null, "Martelete", "Pé de cabra");
+        w.Db.PurchaseOrders.Add(new PurchaseOrder
+        {
+            Number = "PO-1", SupplierId = Guid.NewGuid(), SupplierName = "Alfa",
+            SourcePrId = sc.Id, TotalValue = 1000, CreatedAt = Agora.AddHours(-4),
+            UpdatedAt = Agora, DeliveryCompletedAt = Agora.AddHours(-1),
+            Status = PurchaseOrderStatus.Received,
+        });
+        await w.Db.SaveChangesAsync();
+
+        var c = await w.Torre.CockpitAsync();
+
+        Assert.Equal(2, c.Vazao.EntraramHoje);
+        Assert.Equal(2, c.Vazao.ConcluidosHoje);
+        Assert.Equal(0, c.Vazao.Saldo);              // empate: backlog estável
+        Assert.Equal(100m, c.Vazao.TaxaConclusaoPct);
+    }
+
+    [Fact]
+    public async Task Entrega_de_ontem_nao_conta_como_capacidade_de_hoje()
+    {
+        var w = Build();
+        var sc = await ScAsync(w, null, "Martelete");
+        w.Db.PurchaseOrders.Add(new PurchaseOrder
+        {
+            Number = "PO-1", SupplierId = Guid.NewGuid(), SupplierName = "Alfa",
+            SourcePrId = sc.Id, TotalValue = 1000, CreatedAt = Agora.AddDays(-3),
+            UpdatedAt = Agora, DeliveryCompletedAt = Agora.AddDays(-1),
+            Status = PurchaseOrderStatus.Received,
+        });
+        await w.Db.SaveChangesAsync();
+
+        var c = await w.Torre.CockpitAsync();
+
+        Assert.Equal(0, c.Vazao.ConcluidosHoje);
+    }
+
+    [Fact]
+    public async Task Dia_sem_entrada_tem_taxa_nula_e_nao_zero()
+    {
+        // dividir por zero não dá 0%: dá pergunta sem sentido. "Nada entrou" e "não demos
+        // conta de nada" são notícias diferentes, e só uma delas cobra alguém
+        var c = await Build().Torre.CockpitAsync();
+
+        Assert.Equal(0, c.Vazao.EntraramHoje);
+        Assert.Null(c.Vazao.TaxaConclusaoPct);
+        Assert.Equal(0, c.Vazao.Saldo);
+    }
+
 }

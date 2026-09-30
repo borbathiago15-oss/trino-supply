@@ -46,6 +46,24 @@ public record DescargaDoDia(
     public const string Descarregando = "DESCARREGANDO";
 }
 
+/// <summary>
+/// A vazão do dia: quanto trabalho entrou e quanto saiu, nos dois extremos do mesmo cano.
+///
+/// <para>
+/// É a pergunta que o backlog sozinho não responde — "8 itens parados" não diz se o time
+/// está ganhando ou perdendo terreno. <c>Saldo</c> positivo é backlog crescendo; negativo,
+/// encolhendo. O sinal é a informação: o número absoluto não diz para que lado se anda.
+/// </para>
+///
+/// <para>
+/// A unidade é o <b>item</b>, como em toda a Torre: uma SC de cinco itens é cinco demandas,
+/// e contá-la como uma esconderia quatro quintos do que entrou. <c>TaxaConclusaoPct</c> é nula
+/// quando nada entrou — dividir por zero não dá 0%, dá pergunta sem sentido, e a parede não
+/// deve fingir que a resposta é "não demos conta de nada".
+/// </para>
+/// </summary>
+public record VazaoDoDia(int EntraramHoje, int ConcluidosHoje, int Saldo, decimal? TaxaConclusaoPct);
+
 public record CockpitResponse(
     DateTimeOffset SincronizadoEm,
     /// <summary>A unidade deste recorte; nulo é a visão geral (todas).</summary>
@@ -53,6 +71,7 @@ public record CockpitResponse(
     /// <summary>As unidades que existem, para a TV girar entre elas sozinha.</summary>
     IReadOnlyList<string> Unidades,
     CockpitKpis Kpis,
+    VazaoDoDia Vazao,
     IReadOnlyList<NoDaEsteira> Pipeline,
     IReadOnlyList<ExcecaoDoCockpit> ExcecoesCriticas,
     IReadOnlyList<BurndownDoComprador> BurndownCompradores,

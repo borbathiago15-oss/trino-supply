@@ -66,6 +66,9 @@ test.describe('Cockpit (Modo TV)', () => {
     await abrirAutenticado(page, '/cockpit');
     await expect(page.getByTestId('pulso-ao-vivo')).toBeVisible();   // nível 1
     await expect(page.getByTestId('esteira')).toBeVisible();          // nível 3
+    // as faixas do meio: o dia e o mês, que ficam entre os cartões e a esteira
+    await expect(page.getByTestId('vazao-do-dia')).toBeVisible();
+    await expect(page.getByTestId('compra-do-mes')).toBeVisible();
     // nível 2: os cinco cartões de comando
     await expect(page.getByText('Risco operacional')).toBeVisible();
     await expect(page.getByText('Backlog de suprimentos')).toBeVisible();

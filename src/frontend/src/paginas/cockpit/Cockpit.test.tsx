@@ -20,6 +20,10 @@ const dados = (p: Partial<CockpitDados> = {}): CockpitDados => ({
     otifGeralPct: 88, otifMedidos: 9,
   },
   vazao: { entraramHoje: 18, concluidosHoje: 15, saldo: 3, taxaConclusaoPct: 83.3 },
+  compra: {
+    valorComprado: 412500, pedidos: 18, emergenciais: 3,
+    tetoAteHoje: 500000, pctDoTeto: 82.5, faixaDoTeto: 'ok',
+  },
   almoxarifado: {
     filaSolicitacoes: 6, filaItens: 21, horasDoMaisAntigo: 52, gargalo: 'ATENCAO',
     maisAntigaNumero: 'MR-2026-000012', aguardandoAprovacao: 3, atendidasHoje: 4,
@@ -164,6 +168,41 @@ describe('<Cockpit />', () => {
 
     expect(screen.getByTestId('vazao-taxa')).toHaveTextContent('—');
     expect(screen.getByTestId('vazao-saldo')).toHaveTextContent('backlog estável');
+  });
+
+  it('a compra do mês mostra o valor, o que foi emergencial e quanto do teto já se usou', async () => {
+    render(<Cockpit />);
+    await screen.findByTestId('compra-do-mes');
+
+    expect(screen.getByTestId('compra-valor')).toHaveTextContent('R$ 412,5 mil');
+    expect(screen.getByTestId('compra-emergenciais')).toHaveTextContent('3 emergenciais de 18 pedidos');
+    expect(screen.getByTestId('compra-teto')).toHaveTextContent('82,5%');
+  });
+
+  it('a cor do valor comprado vem da faixa do servidor, porque a meta é teto e não alvo', async () => {
+    // 82,5% de um alvo seria "quase lá"; de um teto é "dentro". Quem sabe a diferença é a
+    // régua do catálogo, no servidor — a parede só pinta o que ela disse
+    vi.mocked(obterCockpit).mockResolvedValue(dados({
+      compra: { ...dados().compra, pctDoTeto: 134, faixaDoTeto: 'fora' },
+    }));
+    render(<Cockpit />);
+    await screen.findByTestId('compra-valor');
+
+    expect(screen.getByTestId('compra-valor').querySelector('[data-testid="numero-vivo"]')?.className)
+      .toContain('rose');
+  });
+
+  it('sem teto cadastrado não há comparação nem cor', async () => {
+    vi.mocked(obterCockpit).mockResolvedValue(dados({
+      compra: { ...dados().compra, tetoAteHoje: null, pctDoTeto: null, faixaDoTeto: null },
+    }));
+    render(<Cockpit />);
+    await screen.findByTestId('compra-teto');
+
+    expect(screen.getByTestId('compra-teto')).toHaveTextContent('sem teto definido');
+    const numero = screen.getByTestId('compra-valor').querySelector('[data-testid="numero-vivo"]');
+    expect(numero?.className).not.toContain('rose');
+    expect(numero?.className).not.toContain('emerald');
   });
 
   it('o bloco do almoxarifado separa a fila do estoque da fila do centro de custo', async () => {

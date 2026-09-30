@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TrinoSupply.Foundation.Api.Analytics;
 using TrinoSupply.Foundation.Api.Catalog;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Infrastructure;
@@ -31,6 +32,10 @@ public class CockpitDaTorreTests
     private static readonly Actor Ana = new(Guid.NewGuid(), "Ana Solicitante", Roles.Requester);
     private static readonly Actor Bruno = new(Guid.NewGuid(), "Bruno Aprovador", Roles.Approver);
     private static readonly Actor Carla = new(Guid.NewGuid(), "Carla Compradora", Roles.PurchasingOfficer);
+
+    /// <summary>Lê um campo do objeto anônimo que o painel devolve, como em `AnalyticsServiceTests`.</summary>
+    private static object Prop(object obj, string name) =>
+        obj.GetType().GetProperty(name)!.GetValue(obj)!;
 
     private sealed record World(AppDbContext Db, TorreDeControleService Torre, RequisitionService Prs,
         MaterialRequisitionService Mrs, CatalogService Catalog);
@@ -304,6 +309,125 @@ public class CockpitDaTorreTests
         Assert.Equal(0, c.Vazao.EntraramHoje);
         Assert.Null(c.Vazao.TaxaConclusaoPct);
         Assert.Equal(0, c.Vazao.Saldo);
+    }
+
+    // ---- a compra do mês -------------------------------------------------------
+    //
+    // Nenhuma régua nasce aqui: o valor é o `poTotalValue` do painel, o emergencial é o CP-02
+    // do Compliance e o teto é a meta do catálogo. O que estes testes protegem é justamente
+    // isso — que a parede continue dizendo o mesmo número que a tela de mesa.
+
+    /// <summary>Pedido criado no instante <paramref name="quando"/>, a partir da SC informada.</summary>
+    private static async Task<PurchaseOrder> PedidoAsync(
+        World w, PurchaseRequisition sc, decimal valor, DateTimeOffset quando,
+        PurchaseOrderStatus status = PurchaseOrderStatus.Issued)
+    {
+        var pedido = new PurchaseOrder
+        {
+            Number = $"PO-{Guid.NewGuid():N}"[..10], SupplierId = Guid.NewGuid(), SupplierName = "Alfa",
+            SourcePrId = sc.Id, TotalValue = valor, Status = status,
+            CreatedAt = quando, UpdatedAt = quando,
+        };
+        w.Db.PurchaseOrders.Add(pedido);
+        await w.Db.SaveChangesAsync();
+        return pedido;
+    }
+
+    private static async Task ComPrioridadeAsync(World w, PurchaseRequisition sc, string prioridade)
+    {
+        var tracked = await w.Db.Requisitions.SingleAsync(r => r.Id == sc.Id);
+        tracked.Priority = prioridade;
+        await w.Db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task O_valor_comprado_da_parede_e_o_mesmo_do_painel()
+    {
+        // duas telas com o mesmo rótulo e números diferentes perdem a autoridade juntas — é a
+        // mesma razão do teste que compara a parede com a Torre
+        var w = Build();
+        var sc = await ScAsync(w, null, "Martelete");
+        await PedidoAsync(w, sc, 1_800m, Agora.AddDays(-2));
+        await PedidoAsync(w, sc, 700m, Agora.AddHours(-3));
+        await PedidoAsync(w, sc, 9_999m, Agora.AddDays(-1), PurchaseOrderStatus.Cancelled);
+
+        var parede = (await w.Torre.CockpitAsync()).Compra;
+        var painel = await new AnalyticsService(w.Db, new FixedTimeProvider(Agora)).SupplyAsync(
+            new DateOnly(Agora.Year, Agora.Month, 1), DateOnly.FromDateTime(Agora.UtcDateTime),
+            null, null, null, null, null, null, null, null);
+
+        Assert.Equal(2_500m, parede.ValorComprado);   // o cancelado não é compra
+        Assert.Equal((decimal)Prop(Prop(painel, "kpis"), "poTotalValue"), parede.ValorComprado);
+        Assert.Equal(2, parede.Pedidos);
+    }
+
+    [Fact]
+    public async Task O_pedido_do_mes_passado_nao_entra_na_compra_deste()
+    {
+        var w = Build();
+        var sc = await ScAsync(w, null, "Martelete");
+        await PedidoAsync(w, sc, 5_000m, Agora.AddDays(-40));
+
+        var compra = (await w.Torre.CockpitAsync()).Compra;
+
+        Assert.Equal(0m, compra.ValorComprado);
+        Assert.Equal(0, compra.Pedidos);
+    }
+
+    [Fact]
+    public async Task Emergencial_e_o_CP_02_do_compliance_contado_em_pedidos()
+    {
+        // escrever outro critério aqui daria duas definições do mesmo fato
+        var w = Build();
+        var urgente = await ScAsync(w, null, "Martelete");
+        await ComPrioridadeAsync(w, urgente, "URGENT");
+        var normal = await ScAsync(w, null, "Luva");
+        await PedidoAsync(w, urgente, 1_000m, Agora.AddHours(-5));
+        await PedidoAsync(w, normal, 2_000m, Agora.AddHours(-4));
+
+        var compra = (await w.Torre.CockpitAsync()).Compra;
+
+        Assert.Equal(2, compra.Pedidos);
+        Assert.Equal(1, compra.Emergenciais);
+    }
+
+    [Fact]
+    public async Task Sem_meta_cadastrada_o_teto_nao_existe_em_vez_de_valer_zero()
+    {
+        // teto inventado parece conferido e não é — é a mesma regra do card sem meta no painel
+        var w = Build();
+        var sc = await ScAsync(w, null, "Martelete");
+        await PedidoAsync(w, sc, 1_000m, Agora.AddHours(-2));
+
+        var compra = (await w.Torre.CockpitAsync()).Compra;
+
+        Assert.Null(compra.TetoAteHoje);
+        Assert.Null(compra.PctDoTeto);
+        Assert.Null(compra.FaixaDoTeto);
+    }
+
+    [Fact]
+    public async Task O_teto_e_o_do_periodo_decorrido_e_a_faixa_sai_da_regua_do_catalogo()
+    {
+        // a meta que acumula se reparte pelos dias: cobrar no dia 10 o teto do mês inteiro
+        // diria que toda primeira semana está folgada. E "valor comprado" é teto, não alvo —
+        // quem sabe o sentido é o catálogo, não a parede
+        var w = Build();
+        w.Db.IndicatorGoals.Add(new IndicatorGoal
+        {
+            Indicator = "poTotalValue", MonthlyValue = 30_000m,
+            UpdatedAt = Agora, UpdatedByLabel = "Admin",
+        });
+        await w.Db.SaveChangesAsync();
+        var sc = await ScAsync(w, null, "Martelete");
+        await PedidoAsync(w, sc, 20_000m, Agora.AddHours(-2));
+
+        var compra = (await w.Torre.CockpitAsync()).Compra;
+
+        // 1 a 10 de setembro são 10 dias: 10/30,4375 do mês, e o teto acompanha
+        var meses = MetasDosIndicadores.MesesDoPeriodo(new DateOnly(2026, 9, 1), Hoje);
+        Assert.Equal(decimal.Round(30_000m * meses, 2), compra.TetoAteHoje);
+        Assert.Equal("fora", compra.FaixaDoTeto);    // muito acima do teto do período
     }
 
     // ---- o bloco do almoxarifado -----------------------------------------------

@@ -573,6 +573,23 @@ o que não houve; e a **taxa de conclusão é nula quando nada entrou** — divi
 `CockpitAsync`, e o lado da capacidade fica **fora** do `if (!encerrado)`: o item concluído hoje
 é, por definição, encerrado, e contá-lo só enquanto aberto zeraria justamente o que se quer medir.
 
+**A compra do mês na parede não é conta nova: é o número do painel, dito de longe.** A faixa
+(`CompraDoMesAsync`, `compra-do-mes`) **não cria régua nenhuma** — o valor é o `poTotalValue`, com
+a âncora que `DefinicoesDosIndicadores` já declara (pedidos pela data da aprovação, sem os
+cancelados); o emergencial é a penalidade **CP-02** do Compliance (SC de origem com prioridade
+`URGENT`), contada em pedidos; e o teto é a meta `poTotalValue` do catálogo, comparada por
+`MetasDosIndicadores.Comparar`. As SCs de origem do pedido saem de `Quotation.SourcePrIds`, a
+mesma propriedade que o Compliance usa, e é por elas que o pedido responde pela unidade da vez.
+Há teste que compara o número da parede com o do painel no mesmo mês — duas telas com o mesmo
+rótulo e números diferentes perdem a autoridade juntas, como já valia entre a parede e a Torre.
+Duas coisas que a parede **não** decide: a **cor vem do servidor**, porque essa meta é *teto* e
+não alvo (`MaiorEMelhor: false`) e 82% quer dizer o oposto do que quer dizer no saving; e o teto
+é o do **período decorrido**, pela régua do catálogo que reparte a meta que acumula pelos dias —
+cobrar no dia 3 o teto do mês inteiro diria que toda primeira semana está folgada. Sem meta
+cadastrada, os três campos do teto são nulos juntos e o número fica sem cor: teto inventado
+parece conferido e não é. **Zero emergencial é dito**, e não deixado em branco — espaço vazio
+numa parede só significa que ninguém olhou.
+
 **O almoxarifado é o outro cano da casa, e a parede fica na sala dele.** O bloco
 (`AlmoxarifadoAsync`, faixa `almoxarifado` no cockpit) sai do que a solicitação de material já
 grava: as duas filas, o que saiu hoje, quanto o estoque deu conta e quanto tempo levou. A unidade

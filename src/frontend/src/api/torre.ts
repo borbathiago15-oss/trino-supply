@@ -301,6 +301,28 @@ export interface VazaoDoDia {
   taxaConclusaoPct: number | null;
 }
 
+/** A faixa da meta, como `MetasDosIndicadores.Comparar` a devolve ao painel e à diretoria. */
+export type FaixaDaMeta = 'ok' | 'atencao' | 'fora';
+
+/**
+ * A compra do mês — o valor comprometido e quanto dele foi apagar incêndio.
+ *
+ * Nada aqui é conta própria da parede: `valorComprado` é o `poTotalValue` do painel (pedidos
+ * pela data da aprovação, sem cancelados), `emergenciais` é a penalidade CP-02 do Compliance
+ * contada em pedidos, e o teto é a meta `poTotalValue` do catálogo. Como essa meta é
+ * "menor é melhor", a **faixa vem do servidor**: a tela não decide para que lado o número é bom.
+ * Os três campos do teto são nulos juntos quando ninguém cadastrou a meta.
+ */
+export interface CompraDoMes {
+  valorComprado: number;
+  pedidos: number;
+  emergenciais: number;
+  /** O teto do período decorrido — a meta mensal repartida pelos dias, como no painel. */
+  tetoAteHoje: number | null;
+  pctDoTeto: number | null;
+  faixaDoTeto: FaixaDaMeta | null;
+}
+
 export type Gargalo = 'NORMAL' | 'ATENCAO' | 'CRITICO';
 
 /**
@@ -373,6 +395,7 @@ export interface CockpitDados {
   unidades: string[];
   kpis: CockpitKpis;
   vazao: VazaoDoDia;
+  compra: CompraDoMes;
   almoxarifado: AlmoxarifadoDoCockpit;
   pipeline: NoDaEsteira[];
   excecoesCriticas: ExcecaoDoCockpit[];

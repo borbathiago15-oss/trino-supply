@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { AlmoxarifadoDoCockpit, ExcecaoDoCockpit } from '@/api/torre';
 import {
-  cicloDeUnidades, CLASSE_DA_VAZAO, compacto, fraseDaRotaDeCompra, horaDoRelogio, horasNaParede,
-  ordenarRadar, precisaRolar, progressoDaMeta, proximaUnidade, saldoComSinal, sentidoDaVazao,
-  slaAtingido, temAlmoxarifado,
+  cicloDeUnidades, CLASSE_DA_VAZAO, compacto, fraseDaEmergencia, fraseDaRotaDeCompra,
+  horaDoRelogio, horasNaParede, ordenarRadar, precisaRolar, progressoDaMeta, proximaUnidade,
+  saldoComSinal, sentidoDaVazao, slaAtingido, temAlmoxarifado, tomDoTeto,
 } from './cockpit';
 
 const almoxarifado = (p: Partial<AlmoxarifadoDoCockpit> = {}): AlmoxarifadoDoCockpit => ({
@@ -116,6 +116,26 @@ describe('o veredito da vazão do dia', () => {
     expect(saldoComSinal(3)).toBe('+3');
     expect(saldoComSinal(-5)).toBe('-5');
     expect(saldoComSinal(0)).toBe('0');
+  });
+});
+
+describe('a compra do mês', () => {
+  it('a cor sai da faixa do servidor, e sem meta não há cor nenhuma', () => {
+    // a meta de valor comprado é teto ("menor é melhor"): 130% é ruim, o oposto do saving.
+    // Quem sabe o sentido é a régua do catálogo, no servidor
+    expect(tomDoTeto('ok')).toContain('emerald');
+    expect(tomDoTeto('atencao')).toContain('amber');
+    expect(tomDoTeto('fora')).toContain('rose');
+    // pintar de vermelho um valor sem teto seria cobrar de uma meta que ninguém definiu
+    expect(tomDoTeto(null)).toBe('');
+  });
+
+  it('zero emergencial é dito, e não deixado em branco', () => {
+    // espaço vazio numa parede só significa que ninguém olhou
+    expect(fraseDaEmergencia(0, 18)).toBe('nenhuma emergencial em 18 pedidos');
+    expect(fraseDaEmergencia(3, 18)).toBe('3 emergenciais de 18 pedidos');
+    expect(fraseDaEmergencia(1, 1)).toBe('1 emergencial de 1 pedido');
+    expect(fraseDaEmergencia(0, 0)).toBe('nenhum pedido no mês');
   });
 });
 

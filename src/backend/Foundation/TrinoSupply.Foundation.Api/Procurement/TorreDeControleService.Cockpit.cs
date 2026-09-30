@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TrinoSupply.Foundation.Api.Analytics;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Materials;
 
@@ -187,6 +188,7 @@ public partial class TorreDeControleService
                 OtifMedidos: otif.Medidos),
             new VazaoDoDia(entraramHoje, concluidosHoje, entraramHoje - concluidosHoje,
                 Pct(concluidosHoje, entraramHoje)),
+            await CompraDoMesAsync(unidade, agora, ct),
             await AlmoxarifadoAsync(unidade, hoje, agora, ct),
             esteira,
             // gravidade primeiro, espera depois: o urgente que acabou de entrar sobe ao topo
@@ -197,6 +199,80 @@ public partial class TorreDeControleService
                 .Select(b => new BurndownDoComprador(b.Key, b.Value.Atendidos, b.Value.Total, b.Value.Criticas))],
             await AgendaDaDocaAsync(hoje, ct));
     }
+
+    /// <summary>
+    /// A compra do mês. Nenhuma régua nasce aqui: o valor é o <c>poTotalValue</c> do painel,
+    /// o emergencial é o <b>CP-02</b> do Compliance e o teto é a meta do catálogo, comparada
+    /// pela mesma função que o painel e a diretoria perguntam. O que este método faz é juntá-las
+    /// no recorte da parede — o mês corrente e a unidade da vez.
+    ///
+    /// <para>
+    /// As SCs de origem do pedido vêm de <see cref="Quotation.SourcePrIds"/>, a mesma propriedade
+    /// que o Compliance usa para achar as SCs de um processo, mais a SC do pedido lançado direto.
+    /// É por elas que o pedido responde pela unidade — a regra já registrada de que "o pedido
+    /// responde por todas as SCs de onde veio" — e é nelas que a prioridade <c>URGENT</c> mora.
+    /// </para>
+    /// </summary>
+    private async Task<CompraDoMes> CompraDoMesAsync(
+        string? unidade, DateTimeOffset agora, CancellationToken ct)
+    {
+        var primeiroDoMes = new DateOnly(agora.Year, agora.Month, 1);
+        var inicioDoMes = new DateTimeOffset(primeiroDoMes.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero);
+
+        // o pedido nasce na aprovação do Nível 2, então `CreatedAt` é a data da aprovação —
+        // é essa a âncora que a definição do indicador declara. Cancelado não é compra.
+        var pedidos = await db.PurchaseOrders
+            .Where(o => o.CreatedAt >= inicioDoMes && o.Status != PurchaseOrderStatus.Cancelled)
+            .ToListAsync(ct);
+
+        var cotacaoIds = pedidos.Where(o => o.QuotationId != null)
+            .Select(o => o.QuotationId!.Value).Distinct().ToArray();
+        // `SourcePrIds` exige os itens carregados: é deles que saem as SCs agrupadas
+        var scsDaCotacao = (await db.Quotations.Include(q => q.Items)
+                .Where(q => cotacaoIds.Contains(q.Id)).ToListAsync(ct))
+            .ToDictionary(q => q.Id, q => q.SourcePrIds);
+
+        List<Guid> ScsDoPedido(PurchaseOrder o)
+        {
+            var ids = new List<Guid>();
+            if (o.SourcePrId is { } direta) ids.Add(direta);
+            if (o.QuotationId is { } qid && scsDaCotacao.TryGetValue(qid, out var doProcesso)) ids.AddRange(doProcesso);
+            return [.. ids.Distinct()];
+        }
+
+        var scIds = pedidos.SelectMany(ScsDoPedido).Distinct().ToArray();
+        var scs = (await db.Requisitions.Where(r => scIds.Contains(r.Id))
+                .Select(r => new { r.Id, r.Company, r.Priority }).ToListAsync(ct))
+            .ToDictionary(x => x.Id);
+
+        if (unidade is not null)
+            pedidos = [.. pedidos.Where(o => ScsDoPedido(o)
+                .Any(id => scs.TryGetValue(id, out var sc) && sc.Company == unidade))];
+
+        var valor = pedidos.Sum(o => o.TotalValue);
+        // "URGENT" é exatamente o que o CP-02 do Compliance lê para dizer "compra emergencial";
+        // escrever outro critério aqui daria duas definições do mesmo fato
+        var emergenciais = pedidos.Count(o => ScsDoPedido(o)
+            .Any(id => scs.TryGetValue(id, out var sc) && sc.Priority == "URGENT"));
+
+        // o teto é o do período decorrido, pela régua do catálogo: a meta que acumula se
+        // reparte pelos dias, e cobrar o mês inteiro no dia 3 diria que toda semana está folgada
+        var indicador = MetasDosIndicadores.Do(TetoDeCompra);
+        var metaMensal = await db.IndicatorGoals.Where(g => g.Indicator == TetoDeCompra)
+            .Select(g => (decimal?)g.MonthlyValue).FirstOrDefaultAsync(ct);
+        var teto = indicador is null || metaMensal is null ? null
+            : MetasDosIndicadores.Comparar(indicador, metaMensal.Value, valor,
+                MetasDosIndicadores.MesesDoPeriodo(primeiroDoMes, DateOnly.FromDateTime(agora.UtcDateTime)));
+
+        return new CompraDoMes(
+            decimal.Round(valor, 2), pedidos.Count, emergenciais,
+            teto is null ? null : decimal.Round(teto.MetaDoPeriodo, 2),
+            teto is null ? null : decimal.Round((decimal)teto.Atingimento, 1),
+            teto?.Faixa);
+    }
+
+    /// <summary>O indicador do catálogo que dá o teto da compra — o mesmo que o painel compara.</summary>
+    private const string TetoDeCompra = "poTotalValue";
 
     /// <summary>
     /// O bloco do almoxarifado. As duas filas do material, o que saiu hoje, quanto o estoque

@@ -95,6 +95,30 @@ public record AlmoxarifadoDoCockpit(
     int AguardandoAprovacao, int AtendidasHoje,
     decimal? AtendidoPeloEstoquePct, int ViraramCompraNoMes, decimal? HorasMediaAtendimento);
 
+/// <summary>
+/// A compra do mês: quanto a empresa comprometeu e quanto disso foi apagar incêndio.
+///
+/// <para>
+/// Nada aqui é regra nova. <c>ValorComprado</c> é o <c>poTotalValue</c> do painel, com a mesma
+/// âncora já registrada em <see cref="Analytics.AnalyticsService.DefinicoesDosIndicadores"/> —
+/// pedidos pela data da aprovação, que é quando o pedido nasce, sem os cancelados.
+/// <c>Emergenciais</c> é a penalidade <b>CP-02</b> do Compliance, contada em pedidos: SC de
+/// origem com prioridade <c>URGENT</c>. E o teto é a meta <c>poTotalValue</c> do catálogo,
+/// comparada por <see cref="Analytics.MetasDosIndicadores.Comparar"/> — que é "menor é melhor",
+/// e por isso a faixa vem do servidor em vez de a parede decidir para que lado o número é bom.
+/// </para>
+///
+/// <para>
+/// O teto é o do <b>período decorrido</b>, não o do mês cheio: a meta que acumula se reparte
+/// pelos dias (é a régua do catálogo), e cobrar no dia 3 o teto do mês inteiro diria que toda
+/// primeira semana está folgada. <c>TetoAteHoje</c>, <c>PctDoTeto</c> e <c>FaixaDoTeto</c> são
+/// nulos juntos quando ninguém cadastrou a meta — teto inventado parece conferido e não é.
+/// </para>
+/// </summary>
+public record CompraDoMes(
+    decimal ValorComprado, int Pedidos, int Emergenciais,
+    decimal? TetoAteHoje, decimal? PctDoTeto, string? FaixaDoTeto);
+
 public record CockpitResponse(
     DateTimeOffset SincronizadoEm,
     /// <summary>A unidade deste recorte; nulo é a visão geral (todas).</summary>
@@ -103,6 +127,7 @@ public record CockpitResponse(
     IReadOnlyList<string> Unidades,
     CockpitKpis Kpis,
     VazaoDoDia Vazao,
+    CompraDoMes Compra,
     AlmoxarifadoDoCockpit Almoxarifado,
     IReadOnlyList<NoDaEsteira> Pipeline,
     IReadOnlyList<ExcecaoDoCockpit> ExcecoesCriticas,

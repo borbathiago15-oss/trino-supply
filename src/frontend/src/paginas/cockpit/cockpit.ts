@@ -1,5 +1,5 @@
 import type {
-  AlmoxarifadoDoCockpit, ExcecaoDoCockpit, Gargalo, StatusDaDescarga, TipoDeAlerta,
+  AlmoxarifadoDoCockpit, ExcecaoDoCockpit, FaixaDaMeta, Gargalo, StatusDaDescarga, TipoDeAlerta,
 } from '@/api/torre';
 
 /**
@@ -170,6 +170,36 @@ export function horasNaParede(horas: number | null): string {
  * operação que não pede material ao almoxarifado nunca o vê.
  * </p>
  */
+/**
+ * A cor do valor comprado contra o teto. A faixa vem do servidor porque a meta de
+ * `poTotalValue` é **"menor é melhor"** — teto, não alvo —, e a parede não tem como saber
+ * sozinha para que lado o número é bom: verde dentro do teto, âmbar na tolerância que a
+ * régua do catálogo já define, vermelho acima dela.
+ *
+ * <p>
+ * Sem meta cadastrada não há cor, e não há "fora": o número fica branco como qualquer outro.
+ * Pintar de vermelho um valor sem teto seria cobrar de uma meta que ninguém definiu.
+ * </p>
+ */
+export const CLASSE_DO_TETO: Record<FaixaDaMeta, string> = {
+  ok: 'text-emerald-400',
+  atencao: 'text-amber-400',
+  fora: 'text-rose-400',
+};
+
+export const tomDoTeto = (faixa: FaixaDaMeta | null) => (faixa === null ? '' : CLASSE_DO_TETO[faixa]);
+
+/**
+ * A frase da compra emergencial. Zero é notícia boa e merece ser dita — "nenhuma emergencial"
+ * numa parede vale mais que um espaço vazio, que só significa que ninguém olhou.
+ */
+export function fraseDaEmergencia(emergenciais: number, pedidos: number): string {
+  if (pedidos === 0) return 'nenhum pedido no mês';
+  const total = `${pedidos} pedido${pedidos > 1 ? 's' : ''}`;
+  if (emergenciais === 0) return `nenhuma emergencial em ${total}`;
+  return `${emergenciais} emergencia${emergenciais > 1 ? 'is' : 'l'} de ${total}`;
+}
+
 /**
  * O que o estoque não deu conta, no mês. O plural é da frase e não do número: "1 viraram
  * compra" numa parede lida de cinco metros parece defeito da tela, e quem lê passa a

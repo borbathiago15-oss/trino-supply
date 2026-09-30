@@ -21,8 +21,19 @@ let eu: Usuario = {
   id: 'u1', email: 'carla@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['COMPRAS'],
 };
 
+/**
+ * `HOJE` é data fixa porque os testes de `diasNaFila` e `faixaDeAging` recebem o instante
+ * de comparação por parâmetro — ali o relógio é do teste.
+ *
+ * Já a **tela** usa o relógio de verdade, e por isso `diasAtras` conta a partir de agora.
+ * Contar a partir de `HOJE` nos dois casos criava uma bomba-relógio: a demanda nascia
+ * "de ontem" em setembro de 2026 e ia envelhecendo com o calendário até mudar de faixa
+ * sozinha — o teste passava por meses e quebrava num dia em que ninguém tocou no código.
+ */
 const HOJE = new Date('2026-09-10T12:00:00Z').getTime();
 const diasAtras = (n: number) => new Date(HOJE - n * 86_400_000).toISOString();
+/** Dias atrás contados do relógio real — para o que a tela vai comparar com `Date.now()`. */
+const diasAtrasDeAgora = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
 
 const item = (p: Partial<ItemDemanda>): ItemDemanda => ({
   id: 'i1', sequence: 1, code: 'EPI-001', description: 'Luva nitrílica', size: 'M',
@@ -33,7 +44,7 @@ const item = (p: Partial<ItemDemanda>): ItemDemanda => ({
 
 const demanda = (p: Partial<Demanda>): Demanda => ({
   kind: 'MR', id: 'mr1', number: 'SM-2026-000001', costCenter: 'BAH-001', requesterLabel: 'Ana',
-  summary: '10× Luva', estimatedValue: 250, openedAt: diasAtras(1), status: 'SUBMITTED',
+  summary: '10× Luva', estimatedValue: 250, openedAt: diasAtrasDeAgora(1), status: 'SUBMITTED',
   processStatusLabel: 'Pendente', processStatusTone: '', processStatusHint: 'Aguardando o comprador.',
   splitProcesses: false, priority: 'NORMAL', neededBy: null, justification: 'Reposição de EPI',
   urgencyReason: null, urgencyImpact: null, priorityChangedByLabel: null, priorityChangeReason: null,

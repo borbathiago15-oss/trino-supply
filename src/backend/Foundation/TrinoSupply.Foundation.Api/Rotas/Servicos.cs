@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using TrinoSupply.Foundation.Api.Analytics;
 using TrinoSupply.Foundation.Api.Auth;
 using TrinoSupply.Foundation.Api.Catalog;
 using TrinoSupply.Foundation.Api.Domain;
@@ -46,6 +47,7 @@ public static class Servicos
         servicos.AddScoped<AvisoDoUsuarioService>();
         servicos.AddScoped<EscalonamentoDoPrazoService>();
         servicos.AddScoped<TorreDeControleService>();
+        servicos.AddScoped<CockpitService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Comunicados.AnnouncementService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Analytics.AnalyticsService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Analytics.RelatorioExecutivoService>();

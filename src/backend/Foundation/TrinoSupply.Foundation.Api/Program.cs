@@ -203,6 +203,7 @@ app.MapComunicados();
 
 // ---- Torre de Controle: uma linha por item de compra -------------------------
 app.MapTorre();
+app.MapCockpit();
 
 // ---- MMS-004/005 — Estoque e MMS-003 — Solicitação de Material --------------
 app.MapEstoque();

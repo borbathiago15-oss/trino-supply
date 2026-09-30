@@ -59,6 +59,9 @@ export const MENU: GrupoMenu[] = [
       { id: 'insights', rotulo: 'Insights & Executivo', rota: '/insights', modulo: 'INSIGHTS', mostrar: podeVerCompliance },
       { id: 'compliance', rotulo: 'Compliance', rota: '/compliance', modulo: 'COMPLIANCE', mostrar: podeVerCompliance },
       { id: 'reports', rotulo: 'Relatórios', rota: '/relatorios', mostrar: podeVerRelatorios },
+      // a TV da sala: mesma regra de quem vê a Torre, porque são os mesmos números
+      { id: 'cockpit', rotulo: 'Cockpit (TV)', rota: '/cockpit',
+        mostrar: (u) => podeComprar(u) || podeVerCompliance(u) || u.role === 'Auditor' },
     ]},
     { id: 'pr-approvals', rotulo: 'Central de Aprovação', rota: '/aprovacoes', modulo: 'APROVACAO', mostrar: podeDecidirSc },
   ]},

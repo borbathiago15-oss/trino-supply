@@ -29,6 +29,7 @@ import { FilaDeAtendimento } from '@/paginas/estoque/FilaDeAtendimento';
 import { PainelDeAtendimentos } from '@/paginas/estoque/PainelDeAtendimentos';
 import { GestaoDeSolicitacoes } from '@/paginas/triagem/GestaoDeSolicitacoes';
 import { TorreDeControle } from '@/paginas/torre/TorreDeControle';
+import { CockpitTv } from '@/paginas/cockpit/CockpitTv';
 import { DashboardSuprimentos } from '@/paginas/painel/DashboardSuprimentos';
 import { Insights } from '@/paginas/insights/Insights';
 import { Relatorios } from '@/paginas/relatorios/Relatorios';
@@ -65,6 +66,9 @@ export function Rotas() {
       <Route element={<Protegida />}>
         {/* fora do AppLayout: com a senha provisória o menu não deve nem aparecer */}
         <Route path="/trocar-senha" element={<TrocarSenha />} />
+        {/* fora do AppLayout de propósito: numa TV de parede não há menu para clicar,
+            e a barra lateral comeria a largura que os números precisam */}
+        <Route path="/cockpit" element={<CockpitTv />} />
         <Route element={<AppLayout />}>
           <Route index element={<Navigate to="/painel" replace />} />
           <Route path="/pedidos" element={<PedidosLista />} />

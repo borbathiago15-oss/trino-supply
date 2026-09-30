@@ -42,7 +42,7 @@ describe('menu', () => {
     const dashboard = topo.find((i) => ehSubgrupo(i) && i.rotulo === 'Dashboard');
     expect(dashboard).toBeDefined();
     expect((dashboard as SubgrupoMenu).filhos.map((f) => f.id))
-      .toEqual(['supply-dash', 'insights', 'compliance', 'reports']);
+      .toEqual(['supply-dash', 'insights', 'compliance', 'reports', 'cockpit']);
     // a Central de Aprovação continua fora: ela é passo do ciclo, não leitura
     expect(topo.some((i) => !ehSubgrupo(i) && i.id === 'pr-approvals')).toBe(true);
   });

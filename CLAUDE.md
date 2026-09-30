@@ -291,6 +291,32 @@ Tem tela própria, no grupo Material, e lista só `MR`. O endpoint `/api/v1/tria
 servindo os dois tipos porque a Torre usa as mesmas chamadas de atribuição — o recorte é
 de quem lê.
 
+**O cockpit é a Torre vista de longe, e não uma segunda contabilidade.** A TV da sala
+(`/cockpit`, fora do `AppLayout` — numa parede não há menu para clicar) **não recalcula
+etapa, atraso nem prazo estourado**: chama `TorreDeControleService.ConsultarAsync` com página
+1, porque os KPIs são do recorte inteiro e não da página. Fosse uma segunda conta, a parede e
+a tela do comprador discordariam no primeiro caso de canto, e um número que contradiz a tela
+não é informação — é ruído que destrói a confiança nos dois. O que o cockpit **acrescenta** é
+o dinheiro (comprado, economia, custo evitado) e a **vazão do dia**: entraram × concluídos,
+medidos nos dois extremos do mesmo cano (itens de SC criados hoje × itens entregues hoje) e
+sempre por **item**, que é a unidade da Torre. A economia é do **processo** (`Quotation.SavingValue`,
+datada por `SelectedAt`), nunca da adjudicação, e fica **separada** do custo evitado: são
+metodologias diferentes e somá-las daria um número que não existe. Quatro regras de tela de
+parede: **nulo não vira zero** (sem entrega concluída, o OTIF é travessão — 0% diria "erramos
+todas"); **o lado bom da variação é do indicador, não do sinal** (`tomDaVariacao`), senão a TV
+comemora o próprio backlog; **alerta zerado não vira linha**, porque alarme que grita sempre
+para de ser lido; e **a hora é do servidor, no topo** — uma TV congelada com números
+plausíveis é pior que uma apagada, porque ninguém desconfia. Falha de rede **não esvazia a
+parede**: mostra o último número bom e avisa que está velho.
+
+**KPI sem dado não entra.** O documento do cockpit pede 50 indicadores; 12 não têm origem no
+sistema e ficaram de fora em vez de virar número bonito e falso: separação, tempo de separação,
+pendentes de envio, envios, entregas em rota e a divisão transporte/retirada/liberação **não
+existem no modelo** (a solicitação de material vai de criada a atendida, sem etapas no meio);
+estoque crítico e ruptura precisam de estoque mínimo, que não é cadastrado, **e** de um saldo
+confiável, que não existe — três pontos somam entrada no recebimento e a única saída é uma
+rota que nenhuma tela chama, então **o saldo do estoque só cresce**.
+
 ## Verificação antes de entregar
 
 ```bash

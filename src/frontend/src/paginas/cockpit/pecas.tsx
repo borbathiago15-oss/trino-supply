@@ -88,3 +88,18 @@ export function BarraDeMeta({ progresso, atingiu }: { progresso: number | null; 
     </div>
   );
 }
+
+/**
+ * Um dos dois extremos da vazão do dia: o número grande com o rótulo curto ao lado.
+ * Vertical como os cartões faria a faixa ocupar altura que a esteira precisa.
+ */
+export function ParDaVazao({ rotulo, valor, testid }: {
+  rotulo: string; valor: number; testid: string;
+}) {
+  return (
+    <div className="flex items-baseline gap-2" data-testid={testid}>
+      <NumeroVivo valor={String(valor)} className="font-mono text-2xl font-bold" />
+      <span className="text-[12px] text-slate-400">{rotulo}</span>
+    </div>
+  );
+}

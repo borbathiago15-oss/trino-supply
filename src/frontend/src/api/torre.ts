@@ -289,6 +289,18 @@ export interface CockpitKpis {
   otifMedidos: number;
 }
 
+/**
+ * A vazão do dia — quanto entrou e quanto saiu, nos dois extremos do mesmo cano.
+ * `saldo` positivo é backlog crescendo; negativo, encolhendo. `taxaConclusaoPct` é nula
+ * quando nada entrou: dividir por zero não dá 0%, dá pergunta sem sentido.
+ */
+export interface VazaoDoDia {
+  entraramHoje: number;
+  concluidosHoje: number;
+  saldo: number;
+  taxaConclusaoPct: number | null;
+}
+
 export type Gargalo = 'NORMAL' | 'ATENCAO' | 'CRITICO';
 
 export interface NoDaEsteira {
@@ -337,6 +349,7 @@ export interface CockpitDados {
   /** Todas as unidades que existem — a TV gira entre elas. */
   unidades: string[];
   kpis: CockpitKpis;
+  vazao: VazaoDoDia;
   pipeline: NoDaEsteira[];
   excecoesCriticas: ExcecaoDoCockpit[];
   burndownCompradores: BurndownDoComprador[];

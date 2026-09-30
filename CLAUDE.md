@@ -562,6 +562,16 @@ aviso discreto, em vez de apagar o painel por causa de um timeout. A rotação d
 com uma unidade só não gira, que mostraria o mesmo número duas vezes. `MetaSavingMensal` é
 constante com dono declarado, como `PrazoDaEtapaService.Padrao`: é ponto de partida até alguém
 configurar a da empresa.
+**A vazão do dia é a pergunta que o backlog não responde.** "8 itens parados" não diz se o time
+está ganhando ou perdendo terreno; entrou × concluiu diz, nos dois extremos do mesmo cano — a SC
+criada hoje de um lado, a entrega concluída hoje do outro, ambas datas que o sistema grava. A
+unidade é o **item**, como no resto da Torre. Três coisas mantêm a faixa honesta: o **saldo leva
+o sinal** (`+3` conta o que `3` não conta) e é ele que carrega a cor; **empate é cinza, não
+verde**, porque pintar de verde um dia em que o time apenas não perdeu terreno seria comemorar
+o que não houve; e a **taxa de conclusão é nula quando nada entrou** — dividir por zero não dá
+0%, e "nada entrou" não é "não demos conta de nada". A conta entra na **mesma passada** de
+`CockpitAsync`, e o lado da capacidade fica **fora** do `if (!encerrado)`: o item concluído hoje
+é, por definição, encerrado, e contá-lo só enquanto aberto zeraria justamente o que se quer medir.
 
 **Aviso e contagem são coisas diferentes, e as duas ficam.** A Central de Avisos é
 **derivada**: conta o que está aberto e o número muda sozinho quando o trabalho anda — serve

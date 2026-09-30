@@ -19,6 +19,7 @@ const dados = (p: Partial<CockpitDados> = {}): CockpitDados => ({
     slaSemanalPct: 92, metaSlaPct: 90, savingMesTotal: 30000, metaSavingMes: 50000,
     otifGeralPct: 88, otifMedidos: 9,
   },
+  vazao: { entraramHoje: 18, concluidosHoje: 15, saldo: 3, taxaConclusaoPct: 83.3 },
   pipeline: [
     { etapa: 'SOLICITACAO', rotulo: 'Solicitação', quantidade: 5, horasNaFila: 12, gargalo: 'NORMAL' },
     { etapa: 'COTACAO', rotulo: 'Cotação', quantidade: 7, horasNaFila: 80, gargalo: 'CRITICO' },
@@ -122,5 +123,41 @@ describe('<Cockpit />', () => {
     vi.mocked(obterCockpit).mockReturnValue(new Promise(() => {}));
     render(<Cockpit />);
     expect(screen.getByText('Conectando ao cockpit…')).toBeInTheDocument();
+  });
+
+  it('a vazão do dia mostra os dois extremos do cano e o lado para onde o dia andou', async () => {
+    // o backlog do cartão diz quanto há parado; ele não diz se o time ganhou ou perdeu terreno
+    render(<Cockpit />);
+    await screen.findByTestId('vazao-do-dia');
+
+    expect(screen.getByTestId('vazao-entraram')).toHaveTextContent('18');
+    expect(screen.getByTestId('vazao-concluidos')).toHaveTextContent('15');
+    expect(screen.getByTestId('vazao-saldo')).toHaveTextContent('+3');
+    expect(screen.getByTestId('vazao-saldo')).toHaveTextContent('backlog aumentando');
+    expect(screen.getByTestId('vazao-taxa')).toHaveTextContent('83,3%');
+  });
+
+  it('backlog encolhendo é verde, e o saldo negativo já carrega o sinal', async () => {
+    vi.mocked(obterCockpit).mockResolvedValue(dados({
+      vazao: { entraramHoje: 12, concluidosHoje: 17, saldo: -5, taxaConclusaoPct: 141.7 },
+    }));
+    render(<Cockpit />);
+    await screen.findByTestId('vazao-do-dia');
+
+    const saldo = screen.getByTestId('vazao-saldo');
+    expect(saldo).toHaveTextContent('-5');
+    expect(saldo).toHaveTextContent('backlog reduzindo');
+  });
+
+  it('dia sem entrada mostra traço na taxa, não 0%', async () => {
+    // "nada entrou" e "não demos conta de nada" são notícias diferentes, e só uma cobra alguém
+    vi.mocked(obterCockpit).mockResolvedValue(dados({
+      vazao: { entraramHoje: 0, concluidosHoje: 0, saldo: 0, taxaConclusaoPct: null },
+    }));
+    render(<Cockpit />);
+    await screen.findByTestId('vazao-do-dia');
+
+    expect(screen.getByTestId('vazao-taxa')).toHaveTextContent('—');
+    expect(screen.getByTestId('vazao-saldo')).toHaveTextContent('backlog estável');
   });
 });

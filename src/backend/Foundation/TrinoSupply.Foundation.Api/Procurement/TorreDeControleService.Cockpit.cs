@@ -84,6 +84,7 @@ public partial class TorreDeControleService
         var radar = new List<ExcecaoDoCockpit>();
         var burndown = new Dictionary<string, (int Atendidos, int Total, int Criticas)>();
         int atrasados = 0, emRisco = 0, backlogItens = 0, dentroDoPrazo = 0, medidosNoPrazo = 0;
+        int entraramHoje = 0, concluidosHoje = 0;
         decimal backlogValor = 0;
         var semanaAtras = agora.AddDays(-7);
 
@@ -107,6 +108,14 @@ public partial class TorreDeControleService
             var horasNaFila = desde is { } d ? (int)Math.Max(0, (agora - d).TotalHours) : 0;
             // a mesma régua da coluna da Torre: quem conduziu a cotação, e não o aprovador
             var comprador = CompradorDe(sc, cotacao).Label is { Length: > 0 } nome ? nome : "Sem responsável";
+
+            // a vazão do dia, nos dois extremos do cano. Entra pela criação da SC e sai pela
+            // entrega concluída: as duas são datas que o sistema grava, e nenhuma é estimada.
+            // Fica fora do `if (!encerrado)` de propósito — o que concluiu hoje É encerrado,
+            // e contá-lo só enquanto está aberto zeraria justamente o lado da capacidade
+            if (DateOnly.FromDateTime(sc.CreatedAt.UtcDateTime) == hoje) entraramHoje += itensDoGrupo;
+            if (pedido?.DeliveryCompletedAt is { } entregueEm
+                && DateOnly.FromDateTime(entregueEm.UtcDateTime) == hoje) concluidosHoje += itensDoGrupo;
 
             if (!encerrado)
             {
@@ -175,6 +184,8 @@ public partial class TorreDeControleService
                     .Select(g => (decimal?)g.MonthlyValue).FirstOrDefaultAsync(ct) ?? MetaSavingMensal,
                 OtifGeralPct: otif.Pct,
                 OtifMedidos: otif.Medidos),
+            new VazaoDoDia(entraramHoje, concluidosHoje, entraramHoje - concluidosHoje,
+                Pct(concluidosHoje, entraramHoje)),
             esteira,
             // gravidade primeiro, espera depois: o urgente que acabou de entrar sobe ao topo
             // sem ninguém reordenar nada — é o critério de aceite 3

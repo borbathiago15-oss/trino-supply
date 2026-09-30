@@ -1,5 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { abrirAutenticado } from './sessao';
+import { abrirAutenticado, tokenDaSessao } from './sessao';
+
+/** Se a página rola em algum eixo — o critério de aceite 1 da parede. */
+const rolagem = (page: import('@playwright/test').Page) => page.evaluate(() => ({
+  rolaX: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  rolaY: document.documentElement.scrollHeight > document.documentElement.clientHeight,
+}));
 
 /**
  * War Room Cockpit — a TV da sala de suprimentos.
@@ -15,10 +21,35 @@ test.describe('Cockpit (Modo TV)', () => {
     await abrirAutenticado(page, '/cockpit');
     await expect(page.getByTestId('cockpit')).toBeVisible();
 
-    const { rolaX, rolaY } = await page.evaluate(() => ({
-      rolaX: document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      rolaY: document.documentElement.scrollHeight > document.documentElement.clientHeight,
-    }));
+    const { rolaX, rolaY } = await rolagem(page);
+    expect(rolaX).toBe(false);
+    expect(rolaY).toBe(false);
+  });
+
+  /**
+   * O bloco do almoxarifado só entra na parede quando há o que dizer, então o teste semeia
+   * a solicitação de material que ele conta: depender de `material.spec.ts` ter rodado antes
+   * faria o resultado mudar com a ordem da suíte. E a faixa nova disputa altura com a esteira
+   * e o radar, então aqui se confere de novo que nada passou a rolar.
+   */
+  test('o bloco do almoxarifado aparece e a tela continua sem rolagem', async ({ page, request }) => {
+    const headers = { Authorization: `Bearer ${tokenDaSessao()}`, 'Content-Type': 'application/json' };
+    const produtos = await request.get(
+      '/api/v1/items/?family=' + encodeURIComponent('EPI CENARIO E2E'), { headers });
+    const [produto] = (await produtos.json()).data.items as { id: string }[];
+    const criada = await request.post('/api/v1/material-requisitions/', {
+      headers,
+      data: { costCenter: 'E2E-001', items: [{ catalogItemId: produto.id, quantity: 3 }] },
+    });
+    expect(criada.ok()).toBe(true);
+
+    await abrirAutenticado(page, '/cockpit');
+    await expect(page.getByTestId('almoxarifado')).toBeVisible();
+    // a fila do estoque e a do centro de custo são números diferentes, e os dois aparecem
+    await expect(page.getByTestId('almox-fila')).toBeVisible();
+    await expect(page.getByTestId('almox-aprovacao')).toBeVisible();
+
+    const { rolaX, rolaY } = await rolagem(page);
     expect(rolaX).toBe(false);
     expect(rolaY).toBe(false);
   });

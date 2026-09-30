@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using TrinoSupply.Foundation.Api.Domain;
+using TrinoSupply.Foundation.Api.Materials;
 
 namespace TrinoSupply.Foundation.Api.Procurement;
 
@@ -186,6 +187,7 @@ public partial class TorreDeControleService
                 OtifMedidos: otif.Medidos),
             new VazaoDoDia(entraramHoje, concluidosHoje, entraramHoje - concluidosHoje,
                 Pct(concluidosHoje, entraramHoje)),
+            await AlmoxarifadoAsync(unidade, hoje, agora, ct),
             esteira,
             // gravidade primeiro, espera depois: o urgente que acabou de entrar sobe ao topo
             // sem ninguém reordenar nada — é o critério de aceite 3
@@ -194,6 +196,89 @@ public partial class TorreDeControleService
                 .OrderByDescending(b => b.Value.Criticas).ThenByDescending(b => b.Value.Total)
                 .Select(b => new BurndownDoComprador(b.Key, b.Value.Atendidos, b.Value.Total, b.Value.Criticas))],
             await AgendaDaDocaAsync(hoje, ct));
+    }
+
+    /// <summary>
+    /// O bloco do almoxarifado. As duas filas do material, o que saiu hoje, quanto o estoque
+    /// deu conta e quanto tempo levou — do que a própria solicitação de material grava.
+    ///
+    /// <para>
+    /// O recorte por unidade <b>não sai da solicitação de material</b>: ela não tem empresa. Sai
+    /// do centro de custo — <c>CostCenter.CompanyId</c> aponta o CNPJ, e o nome oficial dele é o
+    /// mesmo texto que a SC grava em <c>Company</c>, que é o que a TV gira. Centro sem empresa
+    /// cadastrada conta na visão geral e fica fora dos recortes: pôr a solicitação numa unidade
+    /// escolhida ao acaso seria inventar o dado que falta.
+    /// </para>
+    /// </summary>
+    private async Task<AlmoxarifadoDoCockpit> AlmoxarifadoAsync(
+        string? unidade, DateOnly hoje, DateTimeOffset agora, CancellationToken ct)
+    {
+        var inicioDoMes = new DateTimeOffset(new DateTime(agora.Year, agora.Month, 1), TimeSpan.Zero);
+
+        // filtro na entidade e projeção por último, como manda a régua do Npgsql: as duas filas
+        // abertas e o que foi atendido no mês, num recorte só
+        var solicitacoes = await db.MaterialRequisitions.Include(r => r.Items)
+            .Where(r => r.Status == MaterialRequisitionStatus.Submitted
+                        || r.Status == MaterialRequisitionStatus.Approved
+                        || (r.FulfilledAt != null && r.FulfilledAt >= inicioDoMes))
+            .ToListAsync(ct);
+
+        if (unidade is not null)
+        {
+            var empresaPorCentro = await EmpresaPorCentroAsync(ct);
+            solicitacoes = [.. solicitacoes.Where(r =>
+                empresaPorCentro.GetValueOrDefault(r.CostCenter.Trim().ToUpperInvariant()) == unidade)];
+        }
+
+        var fila = solicitacoes.Where(r => r.Status == MaterialRequisitionStatus.Approved).ToList();
+        // a espera conta da liberação do Nível 1, que é quando a solicitação entrou nesta fila.
+        // Sem essa marca ela fica sem data, em vez de contar como espera do almoxarifado o tempo
+        // em que a solicitação ainda estava com o gestor do centro
+        var liberadas = fila.Where(r => r.ApprovedAt is not null).OrderBy(r => r.ApprovedAt).ToList();
+        var horasDoMaisAntigo = liberadas.Count == 0 ? 0
+            : (int)Math.Max(0, (agora - liberadas[0].ApprovedAt!.Value).TotalHours);
+
+        var atendidas = solicitacoes.Where(r => r.FulfilledAt is { } f && f >= inicioDoMes).ToList();
+        var aprovado = atendidas.Sum(r => r.Items.Sum(i => i.EffectiveQuantity));
+        var entregue = atendidas.Sum(r => r.Items.Sum(i => i.FulfilledQuantity));
+        var ciclos = atendidas.Where(r => r.ApprovedAt is not null)
+            .Select(r => (decimal)(r.FulfilledAt!.Value - r.ApprovedAt!.Value).TotalHours).ToList();
+
+        return new AlmoxarifadoDoCockpit(
+            FilaSolicitacoes: fila.Count,
+            FilaItens: fila.Sum(r => r.Items.Count),
+            HorasDoMaisAntigo: horasDoMaisAntigo,
+            // a mesma régua de cor da esteira: uma parede com dois critérios de "está travado"
+            // obrigaria quem passa a lembrar qual vale para qual bloco
+            Gargalo: fila.Count == 0 ? NoDaEsteira.Normal
+                : horasDoMaisAntigo > GargaloCriticoHoras ? NoDaEsteira.Critico
+                : horasDoMaisAntigo > GargaloAtencaoHoras ? NoDaEsteira.Atencao
+                : NoDaEsteira.Normal,
+            MaisAntigaNumero: liberadas.FirstOrDefault()?.Number,
+            AguardandoAprovacao: solicitacoes.Count(r => r.Status == MaterialRequisitionStatus.Submitted),
+            AtendidasHoje: atendidas.Count(r => DateOnly.FromDateTime(r.FulfilledAt!.Value.UtcDateTime) == hoje),
+            AtendidoPeloEstoquePct: aprovado <= 0 ? null : decimal.Round(entregue * 100m / aprovado, 1),
+            ViraramCompraNoMes: atendidas.Count(r => r.PurchaseRequisitionId is not null),
+            HorasMediaAtendimento: ciclos.Count == 0 ? null : decimal.Round(ciclos.Average(), 1));
+    }
+
+    /// <summary>
+    /// Centro de custo (em caixa alta) → nome oficial da empresa. É o único caminho da
+    /// solicitação de material até a unidade da parede, e as duas tabelas são de cadastro:
+    /// juntar em memória custa menos que um <c>Join</c> sobre chave anulável.
+    /// </summary>
+    private async Task<Dictionary<string, string>> EmpresaPorCentroAsync(CancellationToken ct)
+    {
+        var empresas = await db.Companies.Select(e => new { e.Id, e.LegalName }).ToListAsync(ct);
+        var centros = await db.CostCenters.Where(c => c.CompanyId != null)
+            .Select(c => new { c.Code, c.CompanyId }).ToListAsync(ct);
+        var nomePorId = empresas.ToDictionary(e => e.Id, e => e.LegalName);
+
+        var mapa = new Dictionary<string, string>();
+        foreach (var centro in centros)
+            if (nomePorId.TryGetValue(centro.CompanyId!.Value, out var legal))
+                mapa[centro.Code.Trim().ToUpperInvariant()] = legal;
+        return mapa;
     }
 
     private static decimal ValorDoItem(PurchaseRequisition sc, PurchaseOrder? pedido)

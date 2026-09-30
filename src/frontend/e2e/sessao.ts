@@ -16,6 +16,9 @@ let tokens: { accessToken: string; refreshToken: string } | null = null;
 
 const lerTokens = () => (tokens ??= JSON.parse(readFileSync(ARQUIVO_SESSAO, 'utf8')));
 
+/** O token do login único da execução, para a spec que precisa semear pela API. */
+export const tokenDaSessao = () => lerTokens().accessToken;
+
 /** Abre a página já autenticada, na mesma sessão que o legado usa. */
 export async function abrirAutenticado(page: Page, destino: string) {
   const { accessToken, refreshToken } = lerTokens();

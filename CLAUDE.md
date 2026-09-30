@@ -573,6 +573,26 @@ o que não houve; e a **taxa de conclusão é nula quando nada entrou** — divi
 `CockpitAsync`, e o lado da capacidade fica **fora** do `if (!encerrado)`: o item concluído hoje
 é, por definição, encerrado, e contá-lo só enquanto aberto zeraria justamente o que se quer medir.
 
+**O almoxarifado é o outro cano da casa, e a parede fica na sala dele.** O bloco
+(`AlmoxarifadoAsync`, faixa `almoxarifado` no cockpit) sai do que a solicitação de material já
+grava: as duas filas, o que saiu hoje, quanto o estoque deu conta e quanto tempo levou. A unidade
+aqui é a **solicitação**, e não o item como no resto da Torre — `FulfillAsync` fecha a lista
+inteira num ato, e contar em item diria quanto se tira da prateleira (que é o número do pé), não
+o tamanho da fila de trabalho. **Duas filas, e o que as separa é de quem é a vez**: `Submitted`
+espera o Nível 1 do centro e o estoque não pode fazer nada com ela, `Approved` espera o
+almoxarifado — somá-las cobraria do almoxarife trabalho alheio, o mesmo erro que separou "em
+faturamento" de "aguardando recebimento". A espera da fila conta da **liberação do Nível 1**, que é
+quando a solicitação entrou nela, e acende pela **mesma régua de gargalo da esteira** (48h/72h):
+dois critérios de "está travado" na mesma parede obrigariam quem passa a lembrar qual vale para
+qual bloco. O **atendido pelo estoque é da quantidade**, não da solicitação — entregar 8 de 10 é
+80%, e contar a solicitação inteira como não atendida esconderia as oito que saíram —, e é **nulo**
+quando nada foi atendido no mês, porque 0% diria que o estoque estava vazio. O **recorte por
+unidade não sai da solicitação**: ela não tem empresa. Sai do centro de custo
+(`CostCenter.CompanyId` → `LegalName`, o mesmo texto que a SC grava em `Company`), e centro sem
+empresa cadastrada conta só na visão geral — pôr a solicitação numa unidade escolhida ao acaso
+seria inventar o dado que falta. O bloco **só entra quando há o que dizer** (`temAlmoxarifado`):
+cinco zeros tirariam altura da esteira e do radar para anunciar que o módulo não é usado.
+
 **Aviso e contagem são coisas diferentes, e as duas ficam.** A Central de Avisos é
 **derivada**: conta o que está aberto e o número muda sozinho quando o trabalho anda — serve
 para "o que há para eu fazer agora". `UserNotice` é o outro lado: **fato datado, com dono e

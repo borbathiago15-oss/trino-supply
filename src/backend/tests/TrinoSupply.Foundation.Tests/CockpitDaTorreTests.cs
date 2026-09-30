@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TrinoSupply.Foundation.Api.Catalog;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Infrastructure;
+using TrinoSupply.Foundation.Api.Materials;
 using TrinoSupply.Foundation.Api.Procurement;
 
 namespace TrinoSupply.Foundation.Tests;
@@ -31,15 +32,18 @@ public class CockpitDaTorreTests
     private static readonly Actor Bruno = new(Guid.NewGuid(), "Bruno Aprovador", Roles.Approver);
     private static readonly Actor Carla = new(Guid.NewGuid(), "Carla Compradora", Roles.PurchasingOfficer);
 
-    private sealed record World(AppDbContext Db, TorreDeControleService Torre, RequisitionService Prs);
+    private sealed record World(AppDbContext Db, TorreDeControleService Torre, RequisitionService Prs,
+        MaterialRequisitionService Mrs, CatalogService Catalog);
 
     private static World Build()
     {
         var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
         var clock = new FixedTimeProvider(Agora);
+        var catalogo = new CatalogService(db, clock);
         return new World(db, new TorreDeControleService(db, clock),
-            new RequisitionService(db, new FakeNumbers(), new CatalogService(db, clock), clock));
+            new RequisitionService(db, new FakeNumbers(), catalogo, clock),
+            new MaterialRequisitionService(db, catalogo, clock), catalogo);
     }
 
     /// <summary>
@@ -302,4 +306,141 @@ public class CockpitDaTorreTests
         Assert.Equal(0, c.Vazao.Saldo);
     }
 
+    // ---- o bloco do almoxarifado -----------------------------------------------
+    //
+    // A solicitação de material é o outro cano da casa, e a parede fica na sala onde o
+    // atendimento acontece. O que estes testes protegem: as duas filas não se somam (a vez é
+    // de gente diferente), o atendimento parcial conta pela quantidade, e mês sem atendimento
+    // não vira "0% atendido pelo estoque".
+
+    /// <summary>
+    /// Solicitação de material com um produto de catálogo por quantidade informada. Passa pelo
+    /// serviço de verdade de propósito: o cockpit deriva do que o atendimento grava, e um
+    /// registro montado à mão poderia não ter as marcas que a conta lê.
+    /// </summary>
+    private static async Task<MaterialRequisition> MrAsync(
+        World w, string centro, bool aprovar, params decimal[] quantidades)
+    {
+        var itens = new List<MaterialItemInput>();
+        foreach (var q in quantidades)
+        {
+            var (produto, erroProduto) = await w.Catalog.CreateAsync(Carla.Id,
+                $"MAT-{Guid.NewGuid():N}"[..12], "Detergente neutro", "MATERIAL DE LIMPEZA", "UN", 5m);
+            Assert.Null(erroProduto);
+            itens.Add(new MaterialItemInput(produto!.Id, q));
+        }
+        var (mr, erro) = await w.Mrs.CreateAsync(Ana, centro, null, itens);
+        Assert.Null(erro);
+        if (!aprovar) return mr!;
+        var (aprovada, erroAprovacao) = await w.Mrs.ApproveAsync(Bruno, mr!.Id, null, null);
+        Assert.Null(erroAprovacao);
+        return aprovada!;
+    }
+
+    /// <summary>Recua a liberação do Nível 1, que é o relógio da fila do almoxarifado.</summary>
+    private static async Task LiberadaHaAsync(World w, Guid id, int horas)
+    {
+        var mr = await w.Db.MaterialRequisitions.SingleAsync(r => r.Id == id);
+        mr.ApprovedAt = Agora.AddHours(-horas);
+        await w.Db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task A_fila_do_almoxarifado_nao_soma_o_que_ainda_espera_o_centro_de_custo()
+    {
+        // somar as duas cobraria do almoxarife trabalho que o Nível 1 ainda não liberou — é o
+        // mesmo erro que separou "em faturamento" de "aguardando recebimento" na Torre
+        var w = Build();
+        await MrAsync(w, "CC-01", true, 10, 4);      // liberada: fila do estoque
+        await MrAsync(w, "CC-01", false, 3);         // ainda com o Nível 1
+
+        var a = (await w.Torre.CockpitAsync()).Almoxarifado;
+
+        Assert.Equal(1, a.FilaSolicitacoes);
+        Assert.Equal(2, a.FilaItens);                // o que se separa da prateleira
+        Assert.Equal(1, a.AguardandoAprovacao);
+    }
+
+    [Fact]
+    public async Task A_fila_conta_da_liberacao_do_nivel_1_e_acende_como_a_esteira()
+    {
+        // usar a criação contaria como espera do almoxarifado o tempo em que a solicitação
+        // ainda estava na mão do gestor do centro
+        var w = Build();
+        var antiga = await MrAsync(w, "CC-01", true, 10);
+        await LiberadaHaAsync(w, antiga.Id, 80);
+        await MrAsync(w, "CC-01", true, 5);          // liberada agora
+
+        var a = (await w.Torre.CockpitAsync()).Almoxarifado;
+
+        Assert.Equal(80, a.HorasDoMaisAntigo);       // o mais antigo, não a média
+        Assert.Equal(NoDaEsteira.Critico, a.Gargalo);
+        Assert.Equal(antiga.Number, a.MaisAntigaNumero);
+    }
+
+    [Fact]
+    public async Task O_atendimento_parcial_conta_pela_quantidade_e_o_que_faltou_vira_compra()
+    {
+        // entregar 8 de 10 é 80% atendido: contar a solicitação inteira como não atendida
+        // esconderia as oito unidades que saíram do estoque
+        var w = Build();
+        var mr = await MrAsync(w, "CC-01", true, 10);
+        await LiberadaHaAsync(w, mr.Id, 6);
+        var item = (await w.Db.MaterialRequisitions.Include(r => r.Items)
+            .SingleAsync(r => r.Id == mr.Id)).Items.Single();
+        var (_, erro) = await w.Mrs.FulfillAsync(Carla, mr.Id, [new(item.Id, 8)], w.Prs);
+        Assert.Null(erro);
+
+        var a = (await w.Torre.CockpitAsync()).Almoxarifado;
+
+        Assert.Equal(1, a.AtendidasHoje);
+        Assert.Equal(80m, a.AtendidoPeloEstoquePct);
+        Assert.Equal(1, a.ViraramCompraNoMes);
+        Assert.Equal(6m, a.HorasMediaAtendimento);
+        Assert.Equal(0, a.FilaSolicitacoes);         // saiu da fila do estoque
+    }
+
+    [Fact]
+    public async Task Mes_sem_atendimento_deixa_o_percentual_e_o_tempo_nulos()
+    {
+        // 0% diria que o estoque estava vazio; nulo diz que ninguém atendeu nada ainda
+        var w = Build();
+        await MrAsync(w, "CC-01", true, 10);
+
+        var a = (await w.Torre.CockpitAsync()).Almoxarifado;
+
+        Assert.Null(a.AtendidoPeloEstoquePct);
+        Assert.Null(a.HorasMediaAtendimento);
+        Assert.Equal(0, a.AtendidasHoje);
+    }
+
+    [Fact]
+    public async Task A_unidade_da_parede_sai_do_centro_de_custo_porque_a_solicitacao_nao_tem_empresa()
+    {
+        // a MR não grava empresa: o caminho até a unidade é CostCenter.CompanyId → LegalName,
+        // que é o mesmo texto que a SC grava. Centro sem empresa conta só na visão geral —
+        // pôr a solicitação numa unidade escolhida ao acaso seria inventar o dado que falta
+        var w = Build();
+        var empresa = new Company
+        {
+            LegalName = "TRINO ALIMENTOS LTDA", TaxId = "11222333000144",
+            Address = "Rua 1", City = "Recife", State = "PE", Zip = "50000000",
+            CreatedAt = Agora, UpdatedAt = Agora,
+        };
+        w.Db.Companies.Add(empresa);
+        w.Db.CostCenters.Add(new CostCenter
+        {
+            Code = "CC-ALI", Name = "Alimentos", CompanyId = empresa.Id,
+            CreatedAt = Agora, UpdatedAt = Agora,
+        });
+        await w.Db.SaveChangesAsync();
+        await MrAsync(w, "CC-ALI", true, 10);
+        await MrAsync(w, "CC-SEM", true, 4);         // centro sem empresa cadastrada
+
+        var geral = (await w.Torre.CockpitAsync()).Almoxarifado;
+        var recorte = (await w.Torre.CockpitAsync("TRINO ALIMENTOS LTDA")).Almoxarifado;
+
+        Assert.Equal(2, geral.FilaSolicitacoes);
+        Assert.Equal(1, recorte.FilaSolicitacoes);
+    }
 }

@@ -64,6 +64,37 @@ public record DescargaDoDia(
 /// </summary>
 public record VazaoDoDia(int EntraramHoje, int ConcluidosHoje, int Saldo, decimal? TaxaConclusaoPct);
 
+/// <summary>
+/// O bloco do almoxarifado: a solicitação de material, que é o outro cano da casa. A parede
+/// fica na sala de suprimentos, e o atendimento de material acontece ali do lado.
+///
+/// <para>
+/// A unidade aqui é a <b>solicitação</b>, e não o item como no resto da Torre — de propósito.
+/// <c>FulfillAsync</c> atende a solicitação inteira num ato: o almoxarife separa a lista toda
+/// e fecha o atendimento de uma vez. Contar em item diria quanto se tira da prateleira, que é
+/// informação de apoio (<c>FilaItens</c>), não o tamanho da fila de trabalho.
+/// </para>
+///
+/// <para>
+/// <b>Duas filas, e o que as separa é de quem é a vez.</b> <c>Submitted</c> espera o Nível 1 do
+/// centro de custo e o estoque não pode fazer nada com ela; <c>Approved</c> espera o almoxarifado.
+/// Somá-las cobraria do almoxarife trabalho que não é dele — é o mesmo erro que separou
+/// "em faturamento" de "aguardando recebimento" na Torre.
+/// </para>
+///
+/// <para>
+/// <c>AtendidoPeloEstoquePct</c> é da <b>quantidade</b>, não da solicitação: entregar 8 de 10
+/// unidades é 80% atendido, e contar a solicitação inteira como "não atendida" esconderia as
+/// oito que saíram. Nulo quando nada foi atendido no mês — 0% diria que o estoque estava vazio.
+/// <c>HorasMediaAtendimento</c> é nulo pelo mesmo motivo, e deixa de fora o atendimento sem as
+/// duas marcas: a mesma regra da Torre, de nunca usar uma data que não seja a da própria etapa.
+/// </para>
+/// </summary>
+public record AlmoxarifadoDoCockpit(
+    int FilaSolicitacoes, int FilaItens, int HorasDoMaisAntigo, string Gargalo, string? MaisAntigaNumero,
+    int AguardandoAprovacao, int AtendidasHoje,
+    decimal? AtendidoPeloEstoquePct, int ViraramCompraNoMes, decimal? HorasMediaAtendimento);
+
 public record CockpitResponse(
     DateTimeOffset SincronizadoEm,
     /// <summary>A unidade deste recorte; nulo é a visão geral (todas).</summary>
@@ -72,6 +103,7 @@ public record CockpitResponse(
     IReadOnlyList<string> Unidades,
     CockpitKpis Kpis,
     VazaoDoDia Vazao,
+    AlmoxarifadoDoCockpit Almoxarifado,
     IReadOnlyList<NoDaEsteira> Pipeline,
     IReadOnlyList<ExcecaoDoCockpit> ExcecoesCriticas,
     IReadOnlyList<BurndownDoComprador> BurndownCompradores,

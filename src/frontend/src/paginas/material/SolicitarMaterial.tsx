@@ -7,7 +7,9 @@ import { criarSolicitacaoMaterial } from '@/api/material';
 import { Aviso, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
+import { podeBuscar } from '@/dominio/buscaDeProduto';
 import { useCarregar } from '@/util/useCarregar';
+import { useDebounce } from '@/util/useDebounce';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
@@ -45,6 +47,7 @@ export function SolicitarMaterial() {
   const [centroCusto, setCentroCusto] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [familia, setFamilia] = useState('');
+  const [busca, setBusca] = useState('');
   const [escolhas, setEscolhas] = useState<Record<string, Escolha>>({});
   const [enviando, setEnviando] = useState(false);
 
@@ -55,9 +58,15 @@ export function SolicitarMaterial() {
     familias: (await listarFamilias(false, signal, true)).map((f) => f.name),
   }), []);
 
+  // a mesma régua da SC: família **ou** duas letras. Rolar atrás da bota numa lista de
+  // oitocentos itens era o que a tela pedia antes de ter busca
+  const termo = useDebounce(busca);
+  const buscando = podeBuscar(familia, termo);
   const produtos = useCarregar(
-    async (signal) => (familia ? buscarProdutos({ familia, material: true }, signal) : []),
-    [familia],
+    async (signal) => (buscando
+      ? buscarProdutos({ familia: familia || undefined, q: termo || undefined, material: true }, signal)
+      : []),
+    [familia, termo, buscando],
   );
 
   const lista = produtos.dados ?? [];
@@ -108,25 +117,37 @@ export function SolicitarMaterial() {
             </Campo>
           </Grade2>
 
-          <Campo id="mr-family" rotulo="Família de produtos" className="mt-3">
-            <select id="mr-family" value={familia} onChange={(e) => setFamilia(e.target.value)}>
-              <option value="">Selecione a família…</option>
-              {base.dados.familias.map((f) => <option key={f} value={f}>{f}</option>)}
-            </select>
-          </Campo>
+          <Grade2 className="mt-3">
+            <Campo id="mr-family" rotulo="Família de produtos">
+              <select id="mr-family" value={familia} onChange={(e) => setFamilia(e.target.value)}>
+                <option value="">Todas as famílias</option>
+                {base.dados.familias.map((f) => <option key={f} value={f}>{f}</option>)}
+              </select>
+            </Campo>
+            {/* a busca é a outra porta, e a única que alcança o produto marcado "sempre entra"
+                numa família que não é de almoxarifado — essa família não entra no seletor */}
+            <Campo id="mr-busca" rotulo="Buscar produto" dica="(nome ou código)">
+              <input id="mr-busca" placeholder="ex.: bota, 24001" value={busca}
+                onChange={(e) => setBusca(e.target.value)} />
+            </Campo>
+          </Grade2>
 
           <div className="mt-3">
             {produtos.erro && <Erro>{produtos.erro}</Erro>}
-            {!familia && <Vazio>Escolha uma família para ver os produtos.</Vazio>}
-            {familia && produtos.carregando && <Carregando texto="Carregando os produtos…" />}
-            {familia && !produtos.carregando && !lista.length && (
-              <Vazio>Nenhum produto cadastrado nesta família.</Vazio>
+            {!buscando && <Vazio>Escolha uma família ou busque o produto pelo nome ou código.</Vazio>}
+            {buscando && produtos.carregando && <Carregando texto="Carregando os produtos…" />}
+            {buscando && !produtos.carregando && !lista.length && (
+              <Vazio>
+                {familia && !termo
+                  ? 'Nenhum produto de almoxarifado nesta família.'
+                  : 'Nenhum produto de almoxarifado encontrado para esta busca.'}
+              </Vazio>
             )}
             {bloqueados.length > 0 && (
               <Aviso testid="epi-sem-ca">
                 {bloqueados.length === 1
                   ? <>O item <strong>{bloqueados[0].description}</strong> é {bloqueados[0].productTypeLabel ?? 'EPI/EPC'} e </>
-                  : <><strong>{bloqueados.length} itens</strong> desta família são EPI/EPC e </>}
+                  : <><strong>{bloqueados.length} itens</strong> da lista são EPI/EPC e </>}
                 está sem C.A. em nenhum fornecedor, então não pode ser solicitado (IC-ERR-023).
                 Peça ao cadastro para informar o C.A. no par produto-fornecedor.
               </Aviso>

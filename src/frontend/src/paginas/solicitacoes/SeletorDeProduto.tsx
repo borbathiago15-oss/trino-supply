@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { produtosParaEscolha, type ProdutoParaEscolha } from '@/api/catalogo';
 import { Carregando, Erro } from '@/componentes/basicos';
+import { podeBuscar } from '@/dominio/buscaDeProduto';
 import { Dialogo } from '@/componentes/Dialogo';
 import { Campo } from '@/componentes/formulario';
 import { moeda } from '@/util/formato';
@@ -10,12 +11,6 @@ import { FichaDoProduto } from './FichaDoProduto';
 
 /** Quantos produtos a lista mostra antes de pedir um recorte melhor. */
 export const TETO_DA_LISTA = 40;
-
-/**
- * Com o que a busca é feita. Sem família e sem termo não se busca nada: o catálogo tem
- * milhares de itens, e listar todos é o que fazia o solicitante rolar a tela atrás da bota.
- */
-export const podeBuscar = (familia: string, termo: string) => !!familia || termo.trim().length >= 2;
 
 /**
  * Escolha do produto na SC: primeiro a família, depois a busca — e o resultado vem por

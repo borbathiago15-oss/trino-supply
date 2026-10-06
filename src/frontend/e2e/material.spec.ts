@@ -36,6 +36,21 @@ test.describe('Material, Contratos, Scorecard e Compliance (React)', () => {
     await expect(linha).toContainText(/Aguardando/);
   });
 
+  test('solicitar material: a busca acha o produto sem passar pela família', async ({ page }) => {
+    // a outra porta da tela, e a única que alcança o produto de uma família que não é de
+    // almoxarifado: rolar oitocentos itens atrás da bota era o caminho de antes
+    await abrirAutenticado(page, '/material/nova');
+    await expect(page.getByTestId('grade-produtos')).toHaveCount(0);
+
+    await page.fill('#mr-busca', 'E2E-EPI');
+
+    const grade = page.getByTestId('grade-produtos');
+    await expect(grade).toBeVisible();
+    await expect(grade.locator('tr[data-produto="E2E-EPI-001"]')).toBeVisible();
+    // a família continua vazia: a busca não depende dela
+    await expect(page.locator('#mr-family')).toHaveValue('');
+  });
+
   test('cancelar a solicitação de material exige o motivo', async ({ page }) => {
     await abrirAutenticado(page, '/material');
     const linha = page.locator('tr', { hasText: `E2E material ${marca}` }).first();

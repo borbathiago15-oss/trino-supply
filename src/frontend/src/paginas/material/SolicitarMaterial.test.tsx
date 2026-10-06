@@ -151,4 +151,33 @@ describe('tela Solicitar Material', () => {
 
     expect(listarFamilias).toHaveBeenCalledWith(false, expect.anything(), true);
   });
+
+  it('sem família e sem termo, a tela não lista nada — e diz as duas portas', async () => {
+    // listar o acervo inteiro é o que fazia o solicitante rolar a tela atrás da bota
+    abrir();
+    await screen.findByLabelText('Família de produtos');
+
+    expect(screen.getByText(/Escolha uma família ou busque o produto/)).toBeInTheDocument();
+    expect(buscarProdutos).not.toHaveBeenCalled();
+  });
+
+  it('a busca acha o produto sem passar pela família, dentro do recorte do almoxarifado', async () => {
+    // é a única porta que alcança o produto marcado "sempre entra" numa família que não é
+    // de almoxarifado: essa família não entra no seletor
+    const usuario = userEvent.setup();
+    abrir();
+    await usuario.type(await screen.findByLabelText(/Buscar produto/), 'bota');
+
+    await waitFor(() => expect(buscarProdutos).toHaveBeenCalledWith(
+      { familia: undefined, q: 'bota', material: true }, expect.anything()));
+  });
+
+  it('uma letra só não busca: acharia quase tudo e devolveria a mesma rolagem', async () => {
+    const usuario = userEvent.setup();
+    abrir();
+    await usuario.type(await screen.findByLabelText(/Buscar produto/), 'b');
+
+    await waitFor(() => expect(screen.getByText(/Escolha uma família ou busque/)).toBeInTheDocument());
+    expect(buscarProdutos).not.toHaveBeenCalled();
+  });
 });

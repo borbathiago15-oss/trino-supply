@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
   atualizarProduto, buscarProdutos, excluirProduto, criarGradeDeTamanhos, criarProduto, enviarFoto, GRADES_DE_TAMANHO,
-  resumoCatalogo, tiposDeProduto, type Produto, type ResumoCatalogo, type TipoDeProduto,
+  resumoCatalogo, ROTULO_DO_AJUSTE, tiposDeProduto,
+  type AjusteDeMaterial, type Produto, type ResumoCatalogo, type TipoDeProduto,
 } from '@/api/catalogo';
 import { listarFamilias, type Familia } from '@/api/familias';
 import { listarFornecedores, type Fornecedor } from '@/api/fornecedores';
@@ -24,7 +25,9 @@ import { PainelImportacao } from './PainelImportacao';
 /** A tela mostra um bloco por vez: o acervo tem milhares de itens. */
 export const POR_PAGINA = 50;
 
-const VAZIO = { codigo: '', familia: '', descricao: '', unidade: '', preco: '', tipo: '', tamanhos: '' };
+const VAZIO = { codigo: '', familia: '', descricao: '', unidade: '', preco: '', tipo: '', tamanhos: '',
+  // o produto novo segue a família: o ajuste existe para a exceção, não para o caso comum
+  material: 'FAMILIA' as AjusteDeMaterial };
 type Formulario = typeof VAZIO;
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
@@ -109,6 +112,7 @@ export function Produtos() {
       preco: p.referencePrice != null ? String(p.referencePrice) : '', tipo: p.productType ?? '',
       // editar é de um produto só: a grade cadastra vários e não se aplica aqui
       tamanhos: '',
+      material: p.materialRequestable,
     });
     setFornecedoresDoItem(p.suppliers.map(daFornecedorDoProduto));
     setFoto(null); setImportando(false); setFormAberto(true);
@@ -136,6 +140,7 @@ export function Produtos() {
       suppliers: fornecedoresDoFormulario(fornecedoresDoItem),
       stockControlled: true as const,
       purchasable: true as const,
+      materialRequestable: form.material,
     };
     setSalvando(true);
     try {
@@ -378,6 +383,17 @@ export function Produtos() {
               <select id="prod-tipo" {...campo('tipo')}>
                 <option value="">Selecione o tipo…</option>
                 {tipos.map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+              </select>
+            </Campo>
+            {/* quem decide se o produto aparece em Solicitar Material é a família; isto é a
+                exceção — o papel A4 que não sai do estoque dentro de uma família que sai */}
+            <Campo id="prod-material" rotulo="Em Solicitar Material" className="mt-3"
+              dica="(a família decide; use o ajuste só para a exceção)">
+              <select id="prod-material" value={form.material}
+                onChange={(e) => setForm((f) => ({ ...f, material: e.target.value as AjusteDeMaterial }))}>
+                {(Object.keys(ROTULO_DO_AJUSTE) as AjusteDeMaterial[]).map((a) => (
+                  <option key={a} value={a}>{ROTULO_DO_AJUSTE[a]}</option>
+                ))}
               </select>
             </Campo>
             {exigeCa && (

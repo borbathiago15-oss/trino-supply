@@ -269,24 +269,29 @@ public interface IFamilyLeadTimes
 }
 public record ProductFamilyRequest(string? Name, string? Notes, string? Category = null,
     int? LeadRequestToQuote = null, int? LeadQuoteToApproval = null,
-    int? LeadApprovalToPo = null, int? LeadPoToDelivery = null, bool? ApplyLeadTimes = null) : IFamilyLeadTimes;
+    int? LeadApprovalToPo = null, int? LeadPoToDelivery = null, bool? ApplyLeadTimes = null,
+    /// <summary>A família é de almoxarifado (Solicitar Material). Ausente nasce marcada.</summary>
+    bool? MaterialRequestable = null) : IFamilyLeadTimes;
 public record UpdateProductFamilyRequest(string? Name, string? Notes, bool? Active, string? Category = null,
     bool? ClearCategory = null,
     int? LeadRequestToQuote = null, int? LeadQuoteToApproval = null,
-    int? LeadApprovalToPo = null, int? LeadPoToDelivery = null, bool? ApplyLeadTimes = null) : IFamilyLeadTimes;
+    int? LeadApprovalToPo = null, int? LeadPoToDelivery = null, bool? ApplyLeadTimes = null,
+    bool? MaterialRequestable = null) : IFamilyLeadTimes;
 public record ItemSupplierRequest(string? SupplierName, string? TaxId, string? Contact,
     string? SupplierItemCode, decimal? LastPrice, string? Notes, Guid? SupplierId = null,
     string? CaNumber = null);
 public record CreateCatalogItemRequest(string? Code, string Description, string Family, string? UnitOfMeasure,
     decimal? ReferencePrice, bool? StockControlled, decimal? MinimumQty, List<ItemSupplierRequest>? Suppliers,
-    bool? Purchasable, string? ProductType);
+    bool? Purchasable, string? ProductType, string? MaterialRequestable = null);
 /// <summary>Cadastro da grade de tamanhos: um produto por tamanho, todos com o mesmo código-base.</summary>
 public record CreateSizeGradeRequest(string? BaseCode, string Description, string Family, string? UnitOfMeasure,
     decimal? ReferencePrice, List<string>? Sizes, bool? StockControlled, decimal? MinimumQty,
     List<ItemSupplierRequest>? Suppliers, bool? Purchasable, string? ProductType);
 public record UpdateCatalogItemRequest(string? Description, string? Family, string? UnitOfMeasure,
     decimal? ReferencePrice, bool? Active, bool? StockControlled, decimal? MinimumQty, bool? ClearMinimum,
-    List<ItemSupplierRequest>? Suppliers, bool? Purchasable, string? ProductType);
+    List<ItemSupplierRequest>? Suppliers, bool? Purchasable, string? ProductType,
+    /// <summary>FAMILIA | SEMPRE | NUNCA. Ausente não mexe no ajuste gravado.</summary>
+    string? MaterialRequestable = null);
 public record CreateLocationRequest(string Code, string Name);
 public record MaterialLineRequest(Guid ItemId, decimal Quantity);
 public record ApproveMaterialRequest(List<MaterialLineRequest>? Items, string? Notes);

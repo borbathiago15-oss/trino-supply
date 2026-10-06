@@ -701,6 +701,27 @@ produto, e apagá-la com produto dentro os deixaria numa família que o cadastro
 próxima edição deles seria recusada. A foto do produto é do catálogo, e **todo papel interno** a
 baixa: quem pede precisa ver o que está pedindo.
 
+**Quem aparece em Solicitar Material: a família manda, o produto ajusta.** Decisão da empresa
+(2026-10), em `Catalog/MaterialDoAlmoxarifado.cs`. `ProductFamily.MaterialRequestable` diz se o
+grupo é de almoxarifado e `CatalogItem.MaterialRequestable` é **nulo** no caso comum — "segue a
+família" —, `true` para o item que entra numa família que não é de estoque e `false` para o que
+fica de fora de uma que é. Dar a decisão à família é o que permite marcar quatro grupos em vez de
+oitocentos produtos; o campo do produto existe para a exceção, que é o papel A4 dentro de MATERIAL
+DE ESCRITÓRIO. **Sem nada dito, entra** — é o que todo produto anterior à regra significa.
+**Não é o `StockControlled`**, que já existia com quase esse nome: ele está `true` em toda linha
+do banco (a importação o força e a caixa saiu da tela em 2026-08-26), então reaproveitá-lo faria
+todo produto sobrepor a família dizendo "entra", o contrário do que a regra diz; ele segue
+guardando só "tem saldo controlado". A regra é **uma frase em dois formatos no mesmo arquivo** —
+`Entra` para a memória e `Filtro` para o SQL, com a lista curta das famílias que *não* entram indo
+num array (`Contains`, filtro na entidade) — e **há teste que as compara item a item**: separadas,
+a tela mostraria um conjunto e a conta diria outro. O ajuste do produto viaja na API como **texto**
+(`FAMILIA`/`SEMPRE`/`NUNCA`) e não como booleano anulável, porque na edição "não mandei o campo" e
+"volte a seguir a família" seriam o mesmo `null`. A migration nasce com a família **marcada**: o
+campo chegou a uma tela em uso, e começar desmarcado a esvaziaria para todo mundo no deploy — quem
+tira um grupo de circulação é o cadastro, não um deploy. A lista de famílias da tela continua sendo
+a do **cadastro** (`?material=true`), nunca derivada dos produtos; por isso o produto marcado
+"sempre entra" numa família não marcada se acha pela busca, e não pelo seletor de família.
+
 **O Dashboard de Suprimentos evolui o `/painel` e a `/diretoria` — não nasce ao lado.** Duas telas
 para o mesmo número desmentiriam a regra de que o indicador tem o mesmo valor em todo lugar. Três
 decisões seguram a Onda 1:

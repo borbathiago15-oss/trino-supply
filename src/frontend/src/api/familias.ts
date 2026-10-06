@@ -12,6 +12,8 @@ export interface Familia {
   leadApprovalToPo: number | null;
   leadPoToDelivery: number | null;
   leadTotal: number | null;
+  /** A família é de almoxarifado: os produtos dela aparecem em Solicitar Material. */
+  materialRequestable: boolean;
 }
 
 export interface DadosFamilia {
@@ -25,12 +27,19 @@ export interface DadosFamilia {
   leadPoToDelivery: number | null;
   /** O formulário sempre manda as quatro etapas: vazio limpa a meta. */
   applyLeadTimes: true;
+  materialRequestable: boolean;
 }
 
 const base = '/api/v1/product-families';
 
-export const listarFamilias = async (incluirInativas = false, signal?: AbortSignal) =>
-  (await api<{ items: Familia[] }>(`${base}/${incluirInativas ? '?all=true' : ''}`, { signal })).items;
+/** `material` traz só as famílias de almoxarifado — a lista da tela Solicitar Material. */
+export const listarFamilias = async (incluirInativas = false, signal?: AbortSignal, material = false) => {
+  const params = new URLSearchParams();
+  if (incluirInativas) params.set('all', 'true');
+  if (material) params.set('material', 'true');
+  const query = params.toString();
+  return (await api<{ items: Familia[] }>(`${base}/${query ? `?${query}` : ''}`, { signal })).items;
+};
 
 export const criarFamilia = (dados: DadosFamilia) => api<Familia>(`${base}/`, { method: 'POST', body: dados });
 

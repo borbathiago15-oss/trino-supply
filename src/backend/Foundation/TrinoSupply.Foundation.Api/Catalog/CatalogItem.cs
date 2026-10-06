@@ -17,6 +17,21 @@ public class CatalogItem
     public bool StockControlled { get; set; }
     /// <summary>Disponível para solicitação de compra/cotação. Um item pode ser as duas coisas.</summary>
     public bool Purchasable { get; set; } = true;
+    /// <summary>
+    /// O ajuste deste produto diante da família na tela Solicitar Material: <b>nulo segue a
+    /// família</b> (o caso comum, e o que todo produto já cadastrado significa), <c>true</c>
+    /// entra mesmo numa família que não é de almoxarifado, <c>false</c> fica de fora de uma
+    /// que é. Quem decide por padrão é <see cref="ProductFamily.MaterialRequestable"/>; isto
+    /// existe para a exceção, que é o papel A4 dentro de MATERIAL DE ESCRITÓRIO.
+    ///
+    /// <para>
+    /// Não é o <see cref="StockControlled"/>: aquele diz que o item tem saldo controlado, está
+    /// <c>true</c> em toda linha do banco (a importação o força, e a caixa saiu da tela em
+    /// 2026-08-26) e reaproveitá-lo faria <b>todo</b> produto sobrepor a família dizendo
+    /// "entra" — exatamente o contrário de "a família manda".
+    /// </para>
+    /// </summary>
+    public bool? MaterialRequestable { get; set; }
     /// <summary>Estoque mínimo do almoxarifado — abaixo dele o item entra na lista de reposição.</summary>
     public decimal? MinimumQty { get; set; }
     /// <summary>Tipo do produto (ProductTypes) — define as exigências de conformidade.</summary>
@@ -80,6 +95,18 @@ public class ProductFamily
     public int? LeadApprovalToPo { get; set; }      // aprovação → O.C.
     public int? LeadPoToDelivery { get; set; }      // O.C. → entrega
     public int? LeadTotal => LeadRequestToQuote + LeadQuoteToApproval + LeadApprovalToPo + LeadPoToDelivery;
+    /// <summary>
+    /// A família é de almoxarifado: os produtos dela aparecem em Solicitar Material, salvo o
+    /// que for ajustado no próprio produto (<see cref="CatalogItem.MaterialRequestable"/>).
+    ///
+    /// <para>
+    /// Nasce <c>true</c> de propósito. O padrão de um cadastro novo é "não", mas aqui o campo
+    /// chega a uma tela <b>em uso</b>: começar em <c>false</c> esvaziaria a Solicitar Material
+    /// de todo mundo no deploy, e quem tira produto de circulação é o cadastro, não uma
+    /// migration. Marcada a primeira família, o filtro passa a valer sem ninguém perder nada.
+    /// </para>
+    /// </summary>
+    public bool MaterialRequestable { get; set; } = true;
     public bool Active { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }

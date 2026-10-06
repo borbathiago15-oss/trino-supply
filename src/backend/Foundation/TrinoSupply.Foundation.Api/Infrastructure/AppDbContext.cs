@@ -408,6 +408,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.UnitOfMeasure).HasColumnName("unit_of_measure").HasMaxLength(10);
             e.Property(i => i.ReferencePrice).HasColumnName("reference_price").HasPrecision(18, 4);
             e.Property(i => i.StockControlled).HasColumnName("stock_controlled");
+            e.Property(i => i.MaterialRequestable).HasColumnName("material_requestable");
             e.Property(i => i.Purchasable).HasColumnName("purchasable");
             e.Property(i => i.MinimumQty).HasColumnName("minimum_qty").HasPrecision(18, 4);
             e.Property(i => i.ProductType).HasColumnName("product_type").HasMaxLength(30);
@@ -439,6 +440,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(f => f.LeadApprovalToPo).HasColumnName("lead_approval_to_po");
             e.Property(f => f.LeadPoToDelivery).HasColumnName("lead_po_to_delivery");
             e.Ignore(f => f.LeadTotal);
+            e.Property(f => f.MaterialRequestable).HasColumnName("material_requestable");
             e.Property(f => f.Active).HasColumnName("active");
             e.Property(f => f.CreatedAt).HasColumnName("created_at");
             e.Property(f => f.UpdatedAt).HasColumnName("updated_at");

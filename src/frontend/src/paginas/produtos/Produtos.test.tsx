@@ -36,7 +36,8 @@ const produto = (p: Partial<Produto>): Produto => ({
   id: 'p-' + (p.code ?? '1'), code: '12003', description: 'Luva nitrílica', family: 'EPI',
   unitOfMeasure: 'PAR', referencePrice: 12.5, active: true, stockControlled: true, purchasable: true,
   minimumQty: null, productType: 'EPI', productTypeLabel: 'EPI', baseCode: null, size: null,
-  imageDocumentId: null, imageFileName: null, compliancePending: false, suppliers: [], ...p,
+  imageDocumentId: null, imageFileName: null, compliancePending: false,
+  materialRequestable: 'FAMILIA', suppliers: [], ...p,
 });
 
 const resumo: ResumoCatalogo = {
@@ -138,6 +139,24 @@ describe('<Produtos />', () => {
     await userEvent.type(screen.getByLabelText('Nome do fornecedor fora do cadastro'), 'Alfa EPIs');
     await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
     expect(await screen.findByTestId('toast')).toHaveTextContent('EPI e EPC exigem o C.A.');
+  });
+
+  it('o produto nasce seguindo a família, e o ajuste só existe para a exceção', async () => {
+    // quem decide se o produto aparece em Solicitar Material é a família; o campo do produto
+    // é o papel A4 que não sai do estoque dentro de uma família que sai
+    vi.mocked(criarProduto).mockResolvedValue(produto({ id: 'novo' }));
+    montar();
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ Novo produto' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: '+ Novo produto' }));
+
+    expect(screen.getByLabelText(/Em Solicitar Material/)).toHaveValue('FAMILIA');
+    await userEvent.type(screen.getByLabelText('Descrição'), 'Papel A4');
+    await userEvent.selectOptions(screen.getByLabelText('Família'), 'EPI');
+    await userEvent.selectOptions(screen.getByLabelText(/Em Solicitar Material/), 'NUNCA');
+    await userEvent.click(screen.getByRole('button', { name: 'Adicionar produto' }));
+
+    await waitFor(() => expect(criarProduto).toHaveBeenCalledWith(
+      expect.objectContaining({ materialRequestable: 'NUNCA' })));
   });
 
   it('a grade de tamanhos cadastra um produto por tamanho, de uma vez', async () => {

@@ -27,6 +27,8 @@ public static class CatalogoRotas
             id = i.Id, code = i.Code, description = i.Description, family = i.Family,
             unitOfMeasure = i.UnitOfMeasure, referencePrice = i.ReferencePrice, active = i.Active,
             stockControlled = i.StockControlled, purchasable = i.Purchasable, minimumQty = i.MinimumQty,
+            // o ajuste do produto diante da família em Solicitar Material (FAMILIA | SEMPRE | NUNCA)
+            materialRequestable = MaterialDoAlmoxarifado.Texto(i.MaterialRequestable),
             productType = i.ProductType, productTypeLabel = i.ProductType is null ? null : ProductTypes.LabelOf(i.ProductType),
             baseCode = i.BaseCode, size = i.Size,
             imageDocumentId = i.ImageDocumentId, imageFileName = i.ImageFileName,
@@ -87,11 +89,13 @@ public static class CatalogoRotas
             }, ctx);
         });
 
-        catalogGroup.MapGet("/", async (CatalogService svc, ClaimsPrincipal p, HttpContext ctx, string? family, string? q, bool? all, bool? stock) =>
+        // `material=true` é o recorte da tela Solicitar Material: a família manda, o produto ajusta
+        catalogGroup.MapGet("/", async (CatalogService svc, ClaimsPrincipal p, HttpContext ctx,
+            string? family, string? q, bool? all, bool? stock, bool? material) =>
         {
             var role = p.FindFirstValue(ClaimTypes.Role) ?? "";
             var includeInactive = all == true && CatalogService.CanRegisterProduct(role);
-            var items = await svc.ListAsync(family, q, includeInactive, stock == true);
+            var items = await svc.ListAsync(family, q, includeInactive, stock == true, material == true);
             return Ok(new { items = items.Select(CatalogView) }, ctx);
         });
 
@@ -191,6 +195,8 @@ public static class CatalogoRotas
         static object FamilyView(ProductFamily f) => new
         {
             id = f.Id, name = f.Name, notes = f.Notes, active = f.Active, category = f.Category,
+            // a família é de almoxarifado: manda em Solicitar Material, e o produto só ajusta
+            materialRequestable = f.MaterialRequestable,
             // prazos-meta do processo, em dias: o dashboard compara com o realizado
             leadRequestToQuote = f.LeadRequestToQuote, leadQuoteToApproval = f.LeadQuoteToApproval,
             leadApprovalToPo = f.LeadApprovalToPo, leadPoToDelivery = f.LeadPoToDelivery,
@@ -208,17 +214,19 @@ public static class CatalogoRotas
         var families = app.MapGroup("/api/v1/product-families").RequireAuthorization();
         families.AddEndpointFilter(RejectSupplierRole());
 
-        families.MapGet("/", async (CatalogService svc, ClaimsPrincipal p, HttpContext ctx, bool? all) =>
+        // `material=true` é a lista de "Família de produtos" da tela Solicitar Material
+        families.MapGet("/", async (CatalogService svc, ClaimsPrincipal p, HttpContext ctx, bool? all, bool? material) =>
         {
             var includeInactive = all == true && CatalogService.CanMaintain(RoleOf(p));
-            return Ok(new { items = (await svc.ListFamiliesAsync(includeInactive)).Select(FamilyView) }, ctx);
+            return Ok(new { items = (await svc.ListFamiliesAsync(includeInactive, material == true)).Select(FamilyView) }, ctx);
         });
 
         families.MapPost("/", async (ProductFamilyRequest body, CatalogService svc, ClaimsPrincipal p, HttpContext ctx) =>
         {
             if (!CatalogService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.Produtos))
                 return Error(ctx, 403, "IC-ERR-900", "Seu usuário não mantém o catálogo.");
-            var (family, error) = await svc.CreateFamilyAsync(ActorId(p), body.Name ?? "", body.Notes, LeadOf(body), body.Category);
+            var (family, error) = await svc.CreateFamilyAsync(ActorId(p), body.Name ?? "", body.Notes, LeadOf(body),
+                body.Category, body.MaterialRequestable);
             return error is not null ? Error(ctx, error.Code == "IC-ERR-021" ? 409 : 400, error.Code, error.Message)
                 : Results.Json(new { data = FamilyView(family!), correlationId = CorrelationId(ctx) }, statusCode: 201);
         });
@@ -228,7 +236,7 @@ public static class CatalogoRotas
             if (!CatalogService.CanMaintain(RoleOf(p)) || !ModulesOf(p).Contains(AppModules.Produtos))
                 return Error(ctx, 403, "IC-ERR-900", "Seu usuário não mantém o catálogo.");
             var (family, error) = await svc.UpdateFamilyAsync(id, body.Name, body.Notes, body.Active, LeadOf(body),
-                body.Category, body.ClearCategory == true);
+                body.Category, body.ClearCategory == true, body.MaterialRequestable);
             return error is not null ? Error(ctx, error.Code == "IC-ERR-404" ? 404 : 400, error.Code, error.Message)
                 : Ok(FamilyView(family!), ctx);
         });
@@ -267,7 +275,7 @@ public static class CatalogoRotas
                 x.CaNumber)).ToList();
             var (item, error) = await svc.CreateAsync(ActorId(p), body.Code, body.Description, body.Family,
                 body.UnitOfMeasure, body.ReferencePrice, body.StockControlled ?? true, body.MinimumQty, suppliers,
-                body.Purchasable ?? true, body.ProductType);
+                body.Purchasable ?? true, body.ProductType, body.MaterialRequestable);
             return error is not null
                 ? Error(ctx, error.Code == "IC-ERR-010" ? 409 : 400, error.Code, error.Message)
                 : Results.Json(new { data = CatalogView(item!), correlationId = CorrelationId(ctx) }, statusCode: 201);
@@ -342,7 +350,7 @@ public static class CatalogoRotas
                 x.CaNumber)).ToList();
             var (item, error) = await svc.UpdateAsync(id, body.Description, body.Family, body.UnitOfMeasure,
                 body.ReferencePrice, body.Active, body.StockControlled, body.MinimumQty, body.ClearMinimum == true, suppliers,
-                body.Purchasable, body.ProductType);
+                body.Purchasable, body.ProductType, body.MaterialRequestable);
             return error is not null
                 ? Error(ctx, error.Code == "IC-ERR-404" ? 404 : 400, error.Code, error.Message)
                 : Ok(CatalogView(item!), ctx);

@@ -23,7 +23,7 @@ const produto = (p: Partial<Produto>): Produto => ({
   id: 'p1', code: 'EPI-001', description: 'Luva nitrílica', family: 'EPI', unitOfMeasure: 'PAR',
   referencePrice: null, active: true, stockControlled: true, purchasable: true, minimumQty: null,
   productType: null, productTypeLabel: null, baseCode: null, size: null, imageDocumentId: null,
-  imageFileName: null, compliancePending: false, suppliers: [],
+  imageFileName: null, compliancePending: false, materialRequestable: 'FAMILIA', suppliers: [],
   ...p,
 });
 
@@ -103,7 +103,9 @@ describe('tela Solicitar Material', () => {
 
     await usuario.selectOptions(screen.getByLabelText('Família de produtos'), 'EPI');
     await screen.findByTestId('grade-produtos');
-    expect(buscarProdutos).toHaveBeenCalledWith({ familia: 'EPI' }, expect.anything());
+    // a tela pede o recorte do almoxarifado, não o catálogo inteiro: era por mostrar tudo
+    // que ela trazia oitocentos produtos de toda família
+    expect(buscarProdutos).toHaveBeenCalledWith({ familia: 'EPI', material: true }, expect.anything());
   });
 
   it('envia o centro de custo, as observações e só os itens marcados com quantidade', async () => {
@@ -140,5 +142,13 @@ describe('tela Solicitar Material', () => {
 
     expect(await screen.findByText('Informe a quantidade dos itens marcados.')).toBeInTheDocument();
     expect(criarSolicitacaoMaterial).not.toHaveBeenCalled();
+  });
+
+  it('a lista de famílias é a do almoxarifado, não o cadastro inteiro', async () => {
+    // a família manda nesta tela: pedir todas traria grupo que não se retira do estoque
+    abrir();
+    await screen.findByLabelText('Família de produtos');
+
+    expect(listarFamilias).toHaveBeenCalledWith(false, expect.anything(), true);
   });
 });

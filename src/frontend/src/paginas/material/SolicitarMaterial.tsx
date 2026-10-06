@@ -50,12 +50,13 @@ export function SolicitarMaterial() {
 
   const base = useCarregar(async (signal) => ({
     centros: await listarCentrosCusto(false, signal),
-    // as famílias ativas do cadastro, e não os nomes que aparecem nos produtos
-    familias: (await listarFamilias(false, signal)).map((f) => f.name),
+    // as famílias **de almoxarifado** do cadastro, e não os nomes que aparecem nos produtos:
+    // é a família que decide quem entra nesta tela, e o produto só ajusta quando é exceção
+    familias: (await listarFamilias(false, signal, true)).map((f) => f.name),
   }), []);
 
   const produtos = useCarregar(
-    async (signal) => (familia ? buscarProdutos({ familia }, signal) : []),
+    async (signal) => (familia ? buscarProdutos({ familia, material: true }, signal) : []),
     [familia],
   );
 

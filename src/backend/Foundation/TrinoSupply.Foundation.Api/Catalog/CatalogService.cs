@@ -30,10 +30,18 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         CanMaintain(role) || role == Roles.PurchasingOfficer;
 
     // ---- famílias (cadastro próprio) ----------------------------------------
-    public Task<List<ProductFamily>> ListFamiliesAsync(bool includeInactive, CancellationToken ct = default)
+    /// <param name="materialOnly">
+    /// Só as famílias de almoxarifado — a lista de "Família de produtos" em Solicitar Material.
+    /// O produto marcado "sempre entra" numa família não marcada continua fora <b>desta lista</b>
+    /// e se acha pela busca: a lista de famílias é a do cadastro, nunca derivada dos produtos
+    /// (derivá-la mostrava família inativa e escondia a ativa ainda sem produto).
+    /// </param>
+    public Task<List<ProductFamily>> ListFamiliesAsync(
+        bool includeInactive, bool materialOnly = false, CancellationToken ct = default)
     {
         var q = db.ProductFamilies.AsQueryable();
         if (!includeInactive) q = q.Where(f => f.Active);
+        if (materialOnly) q = q.Where(f => f.MaterialRequestable);
         return q.OrderBy(f => f.Name).Take(300).ToListAsync(ct);
     }
 
@@ -67,7 +75,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
 
     public async Task<(ProductFamily? family, UserError? error)> CreateFamilyAsync(
         Guid actorId, string name, string? notes, FamilyLeadTimes? lead = null,
-        string? category = null, CancellationToken ct = default)
+        string? category = null, bool? materialRequestable = null, CancellationToken ct = default)
     {
         var clean = (name ?? "").Trim().ToUpperInvariant();
         if (clean.Length < 3) return (null, new("IC-ERR-020", "Informe o nome da família (mín. 3 caracteres)."));
@@ -76,6 +84,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
 
         var now = clock.GetUtcNow();
         var family = new ProductFamily { Name = clean, Notes = Clean(notes), Category = CleanCategory(category),
+            MaterialRequestable = materialRequestable ?? true,
             CreatedAt = now, UpdatedAt = now, CreatedBy = actorId };
         if (ApplyLeadTimes(family, lead) is { } leadError) return (null, leadError);
         db.ProductFamilies.Add(family);
@@ -86,7 +95,8 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
     /// <summary>Renomear a família também renomeia os produtos que a usam (a identidade é o nome).</summary>
     public async Task<(ProductFamily? family, UserError? error)> UpdateFamilyAsync(
         Guid id, string? name, string? notes, bool? active, FamilyLeadTimes? lead = null,
-        string? category = null, bool clearCategory = false, CancellationToken ct = default)
+        string? category = null, bool clearCategory = false, bool? materialRequestable = null,
+        CancellationToken ct = default)
     {
         var family = await db.ProductFamilies.SingleOrDefaultAsync(f => f.Id == id, ct);
         if (family is null) return (null, new("IC-ERR-404", "Família não encontrada."));
@@ -112,6 +122,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
                     if (active is not null) existing.Active = active.Value;
                     if (clearCategory) existing.Category = null;
                     else if (category is not null) existing.Category = CleanCategory(category);
+                    if (materialRequestable is not null) existing.MaterialRequestable = materialRequestable.Value;
                     if (ApplyLeadTimes(existing, lead) is { } mergeError) return (null, mergeError);
                     existing.UpdatedAt = clock.GetUtcNow();
                     await db.SaveChangesAsync(ct);
@@ -124,6 +135,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         if (active is not null) family.Active = active.Value;
         if (clearCategory) family.Category = null;
         else if (category is not null) family.Category = CleanCategory(category);
+        if (materialRequestable is not null) family.MaterialRequestable = materialRequestable.Value;
         if (ApplyLeadTimes(family, lead) is { } leadError) return (null, leadError);
         family.UpdatedAt = clock.GetUtcNow();
         await db.SaveChangesAsync(ct);
@@ -137,12 +149,20 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         return await query.Select(i => i.Family).Distinct().OrderBy(f => f).ToListAsync(ct);
     }
 
+    /// <param name="materialOnly">
+    /// Só o que a tela Solicitar Material mostra, pela régua de <see cref="MaterialDoAlmoxarifado"/>:
+    /// a família manda e o produto ajusta.
+    /// </param>
     public async Task<List<CatalogItem>> ListAsync(string? family, string? q, bool includeInactive,
-        bool stockOnly = false, CancellationToken ct = default)
+        bool stockOnly = false, bool materialOnly = false, CancellationToken ct = default)
     {
         var query = db.CatalogItems.AsQueryable();
         if (!includeInactive) query = query.Where(i => i.Active);
         if (stockOnly) query = query.Where(i => i.StockControlled);   // almoxarifado
+        if (materialOnly)
+            query = query.Where(MaterialDoAlmoxarifado.Filtro(
+                await db.ProductFamilies.Where(f => !f.MaterialRequestable)
+                    .Select(f => f.Name).ToArrayAsync(ct)));
         if (!string.IsNullOrWhiteSpace(family)) query = query.Where(i => i.Family == family.Trim().ToUpperInvariant());
         if (!string.IsNullOrWhiteSpace(q))
         {
@@ -176,7 +196,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         Guid actorId, string? code, string description, string family, string? unit, decimal? referencePrice,
         bool stockControlled = true, decimal? minimumQty = null,
         IReadOnlyList<ItemSupplierInput>? suppliers = null, bool purchasable = true,
-        string? productType = null, CancellationToken ct = default)
+        string? productType = null, string? materialAdjust = null, CancellationToken ct = default)
     {
         code = (code ?? "").Trim().ToUpperInvariant();
         family = family.Trim().ToUpperInvariant();
@@ -204,6 +224,8 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
             StockControlled = stockControlled,
             Purchasable = purchasable,
             MinimumQty = minimumQty,
+            // nulo é "segue a família", que é o que o produto novo significa até alguém dizer outra coisa
+            MaterialRequestable = MaterialDoAlmoxarifado.Ajuste(materialAdjust),
             ProductType = typeKey,
             CreatedAt = now,
             UpdatedAt = now,
@@ -485,7 +507,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         Guid id, string? description, string? family, string? unit, decimal? referencePrice, bool? active,
         bool? stockControlled = null, decimal? minimumQty = null, bool clearMinimum = false,
         IReadOnlyList<ItemSupplierInput>? suppliers = null, bool? purchasable = null,
-        string? productType = null, CancellationToken ct = default)
+        string? productType = null, string? materialAdjust = null, CancellationToken ct = default)
     {
         var item = await db.CatalogItems.Include(i => i.Suppliers).SingleOrDefaultAsync(i => i.Id == id, ct);
         if (item is null) return (null, new("IC-ERR-404", "Item não encontrado."));
@@ -509,6 +531,9 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
         }
         if (stockControlled is not null) item.StockControlled = stockControlled.Value;
         if (purchasable is not null) item.Purchasable = purchasable.Value;
+        // campo ausente não mexe; "FAMILIA" volta a seguir a família. É por isso que ele viaja
+        // como texto: os dois seriam o mesmo `null` num booleano anulável
+        if (materialAdjust is not null) item.MaterialRequestable = MaterialDoAlmoxarifado.Ajuste(materialAdjust);
         if (productType is not null)
         {
             var (typeKey, typeError) = NormalizeType(productType);

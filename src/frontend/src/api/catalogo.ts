@@ -13,6 +13,15 @@ export interface FornecedorDoProduto {
   notes: string | null;
 }
 
+/** Os três estados do ajuste do produto diante da família (a família manda, o produto ajusta). */
+export type AjusteDeMaterial = 'FAMILIA' | 'SEMPRE' | 'NUNCA';
+
+export const ROTULO_DO_AJUSTE: Record<AjusteDeMaterial, string> = {
+  FAMILIA: 'Segue a família',
+  SEMPRE: 'Sempre entra',
+  NUNCA: 'Nunca entra',
+};
+
 export interface Produto {
   id: string;
   code: string;
@@ -32,6 +41,12 @@ export interface Produto {
   imageFileName: string | null;
   /** EPI/EPC sem C.A. em nenhum fornecedor: pendência de conformidade. */
   compliancePending: boolean;
+  /**
+   * O ajuste deste produto diante da família em Solicitar Material. `FAMILIA` é o comum:
+   * quem decide é a família. `SEMPRE` entra mesmo numa família que não é de almoxarifado e
+   * `NUNCA` fica de fora de uma que é.
+   */
+  materialRequestable: AjusteDeMaterial;
   suppliers: FornecedorDoProduto[];
 }
 
@@ -114,11 +129,14 @@ export const tiposDeProduto = async (signal?: AbortSignal) =>
  * trecho da descrição ou família. `incluirInativos` só vale para quem mantém.
  */
 export async function buscarProdutos(
-  { q, familia, incluirInativos }: { q?: string; familia?: string; incluirInativos?: boolean },
+  { q, familia, incluirInativos, material }:
+  { q?: string; familia?: string; incluirInativos?: boolean; material?: boolean },
   signal?: AbortSignal,
 ) {
   const params = new URLSearchParams();
   if (incluirInativos) params.set('all', 'true');
+  // o recorte da tela Solicitar Material: a família manda, o produto ajusta
+  if (material) params.set('material', 'true');
   if (q) params.set('q', q);
   if (familia) params.set('family', familia);
   const { items } = await api<{ items: Produto[] }>(`${base}/?${params}`, { signal });

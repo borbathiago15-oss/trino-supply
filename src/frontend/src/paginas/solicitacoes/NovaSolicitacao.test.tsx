@@ -412,6 +412,7 @@ function ficha(id: string): Produto {
     unitOfMeasure: 'SC', referencePrice: 32, active: true, stockControlled: true, purchasable: true, minimumQty: 10,
     productType: null, productTypeLabel: null, baseCode: null, size: null,
     imageDocumentId: 'doc-foto', imageFileName: 'cimento.jpg', compliancePending: false,
+    materialRequestable: 'FAMILIA',
     suppliers: [{ supplierId: null, supplierName: 'Votorantim', taxId: null, contact: null,
       supplierItemCode: 'CP2-50', lastPrice: 31.5, caNumber: null, notes: null }],
   };

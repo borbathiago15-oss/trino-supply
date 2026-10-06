@@ -13,7 +13,13 @@ import { useCarregar } from '@/util/useCarregar';
 const VAZIO = { nome: '', observacao: '', categoria: '', l1: '', l2: '', l3: '', l4: '' };
 type Formulario = typeof VAZIO;
 
-const doFormulario = (f: Formulario): DadosFamilia => {
+/**
+ * A família nasce de almoxarifado, como a coluna do banco: o cadastro novo acompanha o acervo,
+ * e quem tira um grupo de Solicitar Material é quem o desmarca aqui.
+ */
+export const MATERIAL_PADRAO = true;
+
+const doFormulario = (f: Formulario, material: boolean): DadosFamilia => {
   const dias = (v: string) => (v === '' ? null : parseInt(v, 10));
   return {
     name: f.nome,
@@ -25,6 +31,7 @@ const doFormulario = (f: Formulario): DadosFamilia => {
     leadApprovalToPo: dias(f.l3),
     leadPoToDelivery: dias(f.l4),
     applyLeadTimes: true,
+    materialRequestable: material,
   };
 };
 
@@ -41,6 +48,7 @@ export function Familias() {
   const { avisar } = useToast();
   const [editando, setEditando] = useState<Familia | null>(null);
   const [form, setForm] = useState<Formulario>(VAZIO);
+  const [material, setMaterial] = useState(MATERIAL_PADRAO);
   const [salvando, setSalvando] = useState(false);
 
   const { dados, erro, carregando, recarregar } = useCarregar(
@@ -64,19 +72,20 @@ export function Familias() {
       l1: f.leadRequestToQuote?.toString() ?? '', l2: f.leadQuoteToApproval?.toString() ?? '',
       l3: f.leadApprovalToPo?.toString() ?? '', l4: f.leadPoToDelivery?.toString() ?? '',
     });
+    setMaterial(f.materialRequestable);
     rolarPara('form-familia');
   }
-  const cancelar = () => { setEditando(null); setForm(VAZIO); };
+  const cancelar = () => { setEditando(null); setForm(VAZIO); setMaterial(MATERIAL_PADRAO); };
 
   async function enviar(ev: FormEvent) {
     ev.preventDefault();
     setSalvando(true);
     try {
       if (editando) {
-        await atualizarFamilia(editando.id, doFormulario(form));
+        await atualizarFamilia(editando.id, doFormulario(form, material));
         avisar('Família atualizada — os produtos dela acompanham o novo nome.');
       } else {
-        await criarFamilia(doFormulario(form));
+        await criarFamilia(doFormulario(form, material));
         avisar('Família cadastrada.');
       }
       cancelar();
@@ -176,6 +185,18 @@ export function Familias() {
               <input id="fam-categoria" list="fam-categorias" placeholder="opcional — escolha ou digite uma nova" {...campo('categoria')} />
               <datalist id="fam-categorias">{categorias.map((c) => <option key={c} value={c} />)}</datalist>
             </Campo>
+
+            {/* a decisão que governa a tela Solicitar Material: marcar quatro grupos em vez de
+                oitocentos produtos. O produto só ajusta quando é exceção */}
+            <label className="mt-3 flex items-start gap-2 text-[13px]">
+              <input type="checkbox" className="mt-0.5 w-auto" checked={material}
+                data-testid="fam-material" onChange={(e) => setMaterial(e.target.checked)} />
+              <span>
+                <strong>Família de almoxarifado</strong> — os produtos dela aparecem em
+                {' '}<strong>Solicitar Material</strong>. Desmarcada, o grupo some dessa tela;
+                o produto que for exceção se ajusta no próprio cadastro dele.
+              </span>
+            </label>
 
             <p className="mt-4 mb-1 text-[12.5px] font-semibold text-texto-suave">
               Prazos-meta do processo <span className="font-normal">(dias corridos; o dashboard compara com o realizado)</span>

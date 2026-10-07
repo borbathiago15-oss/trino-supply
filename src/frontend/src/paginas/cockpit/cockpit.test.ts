@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { AlmoxarifadoDoCockpit, ExcecaoDoCockpit } from '@/api/torre';
 import {
-  cicloDeUnidades, CLASSE_DA_VAZAO, compacto, fraseDaEmergencia, fraseDaRotaDeCompra,
-  horaDoRelogio, horasNaParede, ordenarRadar, precisaRolar, progressoDaMeta, proximaUnidade,
+  cicloDeParadas, cicloDeUnidades, CLASSE_DA_VAZAO, compacto, fraseDaEmergencia, fraseDaRotaDeCompra,
+  fraseDasMedidas, horaDoRelogio, horasNaParede, ordenarRadar, ordenarRadarDoAlmoxarifado, paradaInicial,
+  precisaRolar, progressoDaMeta, proximaParada, proximaUnidade, ROTACAO_MS,
   saldoComSinal, sentidoDaVazao, slaAtingido, temAlmoxarifado, tomDoTeto,
 } from './cockpit';
 
@@ -97,6 +98,72 @@ describe('rotação de unidades', () => {
 
   it('unidade que saiu do cadastro volta para a geral, em vez de travar a volta', () => {
     expect(proximaUnidade(cicloDeUnidades(['PB']), 'SUMIU')).toBeNull();
+  });
+});
+
+describe('o rodízio das duas telas', () => {
+  it('a tela do material entra como mais um passo do mesmo ciclo, depois da compra de cada recorte', () => {
+    expect(cicloDeParadas(['PB', 'BA'], true)).toEqual([
+      { tela: 'compras', unidade: null }, { tela: 'material', unidade: null },
+      { tela: 'compras', unidade: 'PB' }, { tela: 'material', unidade: 'PB' },
+      { tela: 'compras', unidade: 'BA' }, { tela: 'material', unidade: 'BA' },
+    ]);
+  });
+
+  it('sem material para contar, o ciclo é o de sempre', () => {
+    expect(cicloDeParadas(['PB', 'BA'], false)).toEqual([
+      { tela: 'compras', unidade: null }, { tela: 'compras', unidade: 'PB' }, { tela: 'compras', unidade: 'BA' },
+    ]);
+  });
+
+  it('com uma unidade só e material, a parede ainda alterna as duas telas da geral', () => {
+    expect(cicloDeParadas(['Única'], true)).toEqual([
+      { tela: 'compras', unidade: null }, { tela: 'material', unidade: null },
+    ]);
+    expect(cicloDeParadas(['Única'], false)).toEqual([{ tela: 'compras', unidade: null }]);
+  });
+
+  it('a volta passa pela compra e pelo material de cada recorte e recomeça na compra geral', () => {
+    const ciclo = cicloDeParadas(['PB', 'BA'], true);
+    expect(proximaParada(ciclo, { tela: 'compras', unidade: null })).toEqual({ tela: 'material', unidade: null });
+    expect(proximaParada(ciclo, { tela: 'material', unidade: null })).toEqual({ tela: 'compras', unidade: 'PB' });
+    expect(proximaParada(ciclo, { tela: 'compras', unidade: 'PB' })).toEqual({ tela: 'material', unidade: 'PB' });
+    expect(proximaParada(ciclo, { tela: 'material', unidade: 'BA' })).toEqual({ tela: 'compras', unidade: null });
+  });
+
+  it('parada que saiu do ciclo volta ao início, em vez de travar a volta', () => {
+    expect(proximaParada(cicloDeParadas(['PB', 'BA'], true), { tela: 'material', unidade: 'SUMIU' }))
+      .toEqual({ tela: 'compras', unidade: null });
+    expect(proximaParada([], { tela: 'material', unidade: null })).toEqual({ tela: 'compras', unidade: null });
+  });
+
+  it('cada parada fica um minuto: a volta com o material não pode dobrar de tamanho', () => {
+    expect(ROTACAO_MS).toBe(60_000);
+  });
+
+  it('a parede começa pela compra geral, e ?tela=material abre direto na segunda tela', () => {
+    expect(paradaInicial('')).toEqual({ tela: 'compras', unidade: null });
+    expect(paradaInicial('?tela=material')).toEqual({ tela: 'material', unidade: null });
+    expect(paradaInicial('?tela=outra')).toEqual({ tela: 'compras', unidade: null });
+  });
+});
+
+describe('a tela do material', () => {
+  it('o radar do almoxarifado põe o prazo estourado no topo, estável no desempate', () => {
+    const linha = (numero: string, tipo: 'PRAZO_ESTOURADO' | 'ROTA_DE_COMPRA' | 'AGUARDANDO_CENTRO', ordem: number) => ({
+      id: numero, tipo, numero, descricao: '', centroCusto: '', solicitante: '', tempo: '', ordem,
+    });
+    const ordenado = ordenarRadarDoAlmoxarifado([
+      linha('MR-9', 'ROTA_DE_COMPRA', 3), linha('MR-2', 'PRAZO_ESTOURADO', 0),
+      linha('MR-5', 'AGUARDANDO_CENTRO', 2), linha('MR-1', 'PRAZO_ESTOURADO', 0),
+    ]);
+    expect(ordenado.map((l) => l.numero)).toEqual(['MR-1', 'MR-2', 'MR-5', 'MR-9']);
+  });
+
+  it('a frase das medidas não deixa o traço sem explicação', () => {
+    expect(fraseDasMedidas(0)).toBe('nenhum atendimento medido no mês');
+    expect(fraseDasMedidas(1)).toBe('1 atendimento medido no mês');
+    expect(fraseDasMedidas(7)).toBe('7 atendimentos medidos no mês');
   });
 });
 

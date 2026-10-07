@@ -37,8 +37,24 @@ public partial class TorreDeControleService
     /// </summary>
     public const decimal MetaSavingMensal = 50_000m;
 
-    private const int GargaloAtencaoHoras = 48;
-    private const int GargaloCriticoHoras = 72;
+    internal const int GargaloAtencaoHoras = 48;
+    internal const int GargaloCriticoHoras = 72;
+
+    /// <summary>A régua de cor da esteira, dita uma vez: a parede do material usa a mesma.</summary>
+    internal static string GargaloDe(int quantidade, int horasDoMaisAntigo) =>
+        quantidade == 0 ? NoDaEsteira.Normal
+        : horasDoMaisAntigo > GargaloCriticoHoras ? NoDaEsteira.Critico
+        : horasDoMaisAntigo > GargaloAtencaoHoras ? NoDaEsteira.Atencao
+        : NoDaEsteira.Normal;
+
+    /// <summary>
+    /// As unidades que a TV percorre. Saem do recorte inteiro, e não do filtrado: a lista que a
+    /// parede usa para girar não pode encolher a cada volta até sobrar só a unidade da tela.
+    /// </summary>
+    internal Task<List<string>> UnidadesAsync(CancellationToken ct) =>
+        db.Requisitions
+            .Where(r => r.DeletedAt == null && r.Status != RequisitionStatus.Draft && r.Company != null)
+            .Select(r => r.Company!).Distinct().OrderBy(c => c).ToListAsync(ct);
 
     /// <summary>Quantas linhas o radar entrega. A TV mostra as mais graves; o resto é a Torre.</summary>
     public const int TetoDoRadar = 40;
@@ -53,11 +69,7 @@ public partial class TorreDeControleService
         var hoje = DateOnly.FromDateTime(agora.UtcDateTime);
         unidade = string.IsNullOrWhiteSpace(unidade) ? null : unidade.Trim();
 
-        // as unidades saem do recorte inteiro, e não do filtrado: a lista que a TV usa para
-        // girar não pode encolher a cada volta até sobrar só a unidade que está na tela
-        var unidades = await db.Requisitions
-            .Where(r => r.DeletedAt == null && r.Status != RequisitionStatus.Draft && r.Company != null)
-            .Select(r => r.Company!).Distinct().OrderBy(c => c).ToListAsync(ct);
+        var unidades = await UnidadesAsync(ct);
 
         // mesmo recorte de KpisAsync: o que está aberto, do mais novo para o mais velho
         var consulta = db.Requisitions.Include(r => r.Items)
@@ -286,7 +298,7 @@ public partial class TorreDeControleService
     /// escolhida ao acaso seria inventar o dado que falta.
     /// </para>
     /// </summary>
-    private async Task<AlmoxarifadoDoCockpit> AlmoxarifadoAsync(
+    internal async Task<AlmoxarifadoDoCockpit> AlmoxarifadoAsync(
         string? unidade, DateOnly hoje, DateTimeOffset agora, CancellationToken ct)
     {
         var inicioDoMes = new DateTimeOffset(new DateTime(agora.Year, agora.Month, 1), TimeSpan.Zero);
@@ -326,10 +338,7 @@ public partial class TorreDeControleService
             HorasDoMaisAntigo: horasDoMaisAntigo,
             // a mesma régua de cor da esteira: uma parede com dois critérios de "está travado"
             // obrigaria quem passa a lembrar qual vale para qual bloco
-            Gargalo: fila.Count == 0 ? NoDaEsteira.Normal
-                : horasDoMaisAntigo > GargaloCriticoHoras ? NoDaEsteira.Critico
-                : horasDoMaisAntigo > GargaloAtencaoHoras ? NoDaEsteira.Atencao
-                : NoDaEsteira.Normal,
+            Gargalo: GargaloDe(fila.Count, horasDoMaisAntigo),
             MaisAntigaNumero: liberadas.FirstOrDefault()?.Number,
             AguardandoAprovacao: solicitacoes.Count(r => r.Status == MaterialRequisitionStatus.Submitted),
             AtendidasHoje: atendidas.Count(r => DateOnly.FromDateTime(r.FulfilledAt!.Value.UtcDateTime) == hoje),
@@ -343,7 +352,7 @@ public partial class TorreDeControleService
     /// solicitação de material até a unidade da parede, e as duas tabelas são de cadastro:
     /// juntar em memória custa menos que um <c>Join</c> sobre chave anulável.
     /// </summary>
-    private async Task<Dictionary<string, string>> EmpresaPorCentroAsync(CancellationToken ct)
+    internal async Task<Dictionary<string, string>> EmpresaPorCentroAsync(CancellationToken ct)
     {
         var empresas = await db.Companies.Select(e => new { e.Id, e.LegalName }).ToListAsync(ct);
         var centros = await db.CostCenters.Where(c => c.CompanyId != null)

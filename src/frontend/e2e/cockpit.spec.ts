@@ -54,6 +54,28 @@ test.describe('Cockpit (Modo TV)', () => {
     expect(rolaY).toBe(false);
   });
 
+  /**
+   * A segunda tela do rodízio. `?tela=material` abre direto nela — esperar o minuto da rotação
+   * faria o teste durar mais que a suíte inteira —, e o que só o E2E prova é o mesmo de sempre:
+   * cabe inteira em Full HD, sem rolagem, com a faixa da compra no topo.
+   */
+  test('a tela do material do rodízio cabe inteira e leva a compra no topo', async ({ page }) => {
+    await abrirAutenticado(page, '/cockpit?tela=material');
+    await expect(page.getByTestId('cockpit')).toHaveAttribute('data-tela', 'material');
+    await expect(page.getByTestId('tela-na-parede')).toContainText('Material do almoxarifado');
+    await expect(page.getByTestId('tela-na-parede')).toContainText('rodízio de');
+    await expect(page.getByTestId('compras-na-tela-do-material')).toBeVisible();
+    await expect(page.getByTestId('esteira-do-material')).toBeVisible();
+    await expect(page.getByText('Fila do almoxarifado')).toBeVisible();
+    await expect(page.getByText('Fora do prazo')).toBeVisible();
+    await expect(page.getByText('Radar do almoxarifado — ação imediata')).toBeVisible();
+    await expect(page.getByTestId('ranking-centros')).toBeVisible();
+
+    const { rolaX, rolaY } = await rolagem(page);
+    expect(rolaX).toBe(false);
+    expect(rolaY).toBe(false);
+  });
+
   test('é tela de parede: sem menu e sem cabeçalho do app', async ({ page }) => {
     await abrirAutenticado(page, '/cockpit');
     await expect(page.getByTestId('cockpit')).toBeVisible();

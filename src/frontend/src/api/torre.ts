@@ -406,6 +406,53 @@ export interface CockpitDados {
 /** De quanto em quanto tempo a parede se atualiza. */
 export const INTERVALO_DO_COCKPIT = 30_000;
 
+// ---- a segunda tela da parede: a solicitação de material -------------------
+
+export type TipoDeAlertaDoAlmoxarifado = 'PRAZO_ESTOURADO' | 'PRAZO_ATENCAO' | 'AGUARDANDO_CENTRO' | 'ROTA_DE_COMPRA';
+
+export interface AlertaDoAlmoxarifado {
+  id: string;
+  tipo: TipoDeAlertaDoAlmoxarifado;
+  numero: string;
+  descricao: string;
+  centroCusto: string;
+  solicitante: string;
+  tempo: string;
+  ordem: number;
+}
+
+export interface RankingDoMaterial { rotulo: string; solicitacoes: number; quantidade: number }
+
+/**
+ * A tela do material no rodízio da parede. Nenhum número nasce nela: o bloco do almoxarifado é
+ * o da tela da compra, o mês é o do Dashboard e o prazo de cada linha é o da fila do almoxarife.
+ */
+export interface CockpitDoMaterial {
+  sincronizadoEm: string;
+  unidade: string | null;
+  unidades: string[];
+  almoxarifado: AlmoxarifadoDoCockpit;
+  horasDoMaisAntigoAguardando: number;
+  gargaloAguardando: Gargalo;
+  maisAntigaAguardandoNumero: string | null;
+  foraDoPrazo: number;
+  emAtencao: number;
+  atendidasNoPrazoPct: number | null;
+  atendidasMedidas: number;
+  solicitadasNoMes: number;
+  atendidasNoMes: number;
+  horasMediaAprovacao: number | null;
+  radar: AlertaDoAlmoxarifado[];
+  porCentro: RankingDoMaterial[];
+  porFamilia: RankingDoMaterial[];
+  porProduto: RankingDoMaterial[];
+}
+
+export const obterCockpitDoMaterial = (unidade?: string | null, signal?: AbortSignal) =>
+  api<CockpitDoMaterial>(
+    `/api/v1/control-tower/cockpit/material${unidade ? `?unidade=${encodeURIComponent(unidade)}` : ''}`,
+    { signal });
+
 export const obterCockpit = (unidade?: string | null, signal?: AbortSignal) =>
   api<CockpitDados>(
     `/api/v1/control-tower/cockpit${unidade ? `?unidade=${encodeURIComponent(unidade)}` : ''}`,

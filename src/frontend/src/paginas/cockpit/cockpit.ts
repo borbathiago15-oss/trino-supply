@@ -1,5 +1,6 @@
 import type {
-  AlmoxarifadoDoCockpit, ExcecaoDoCockpit, FaixaDaMeta, Gargalo, StatusDaDescarga, TipoDeAlerta,
+  AlertaDoAlmoxarifado, AlmoxarifadoDoCockpit, ExcecaoDoCockpit, FaixaDaMeta, Gargalo, StatusDaDescarga,
+  TipoDeAlerta, TipoDeAlertaDoAlmoxarifado,
 } from '@/api/torre';
 
 /**
@@ -7,8 +8,51 @@ import type {
  * parede diz a verdade, e é o que precisa de teste. O JSX fica só com o desenho.
  */
 
-/** Quanto tempo cada unidade fica na tela antes de a rotação trocar. */
-export const ROTACAO_MS = 120_000;
+/**
+ * Quanto tempo cada parada do rodízio fica na tela. Era 2 minutos por unidade; com a tela do
+ * material no ciclo (decisão da empresa, 2026-10) passou a 1 minuto por parada, para a volta
+ * inteira não dobrar de tamanho.
+ */
+export const ROTACAO_MS = 60_000;
+
+/** Uma parada do rodízio: qual tela, de qual unidade (nulo é a visão geral). */
+export interface Parada { tela: 'compras' | 'material'; unidade: string | null }
+
+/**
+ * O rodízio inteiro, num relógio só. A tela do material entra como mais um passo do mesmo
+ * ciclo — Compras geral → Material geral → Compras PB → Material PB… — em vez de um segundo
+ * cronômetro, que cortaria a unidade pela metade. Ela só entra quando há material para contar:
+ * a operação que não pede ao almoxarifado não ganha uma tela em branco a cada minuto.
+ *
+ * <p>
+ * A geral abre o ciclo pelo mesmo motivo de sempre: quem passa e olha três segundos precisa ver
+ * a empresa inteira. Com uma unidade só, a compra não gira — mas com material a parede ainda
+ * alterna as duas telas da geral, porque são leituras diferentes.
+ * </p>
+ */
+export function cicloDeParadas(unidades: string[], temMaterial: boolean): Parada[] {
+  const recortes = cicloDeUnidades(unidades);
+  return recortes.flatMap((unidade): Parada[] => temMaterial
+    ? [{ tela: 'compras', unidade }, { tela: 'material', unidade }]
+    : [{ tela: 'compras', unidade }]);
+}
+
+/**
+ * Por onde a parede começa. `?tela=material` abre direto na tela do material — é como o E2E a
+ * confere sem esperar o minuto da rotação, e como quem liga a TV pode conferir a segunda tela.
+ * Sem o parâmetro, pela compra geral, como sempre.
+ */
+export function paradaInicial(busca: string): Parada {
+  const tela = new URLSearchParams(busca).get('tela');
+  return { tela: tela === 'material' ? 'material' : 'compras', unidade: null };
+}
+
+/** A próxima parada. Parada que não existe mais (unidade que saiu do cadastro) volta ao início. */
+export function proximaParada(ciclo: Parada[], atual: Parada): Parada {
+  if (ciclo.length === 0) return { tela: 'compras', unidade: null };
+  const i = ciclo.findIndex((p) => p.tela === atual.tela && p.unidade === atual.unidade);
+  return ciclo[(i + 1) % ciclo.length] ?? ciclo[0];
+}
 
 /**
  * O ciclo que a TV percorre: a visão geral primeiro, depois cada unidade. `null` é a geral.
@@ -213,3 +257,40 @@ export const fraseDaRotaDeCompra = (quantas: number) =>
 export const temAlmoxarifado = (a: AlmoxarifadoDoCockpit) =>
   a.filaSolicitacoes > 0 || a.aguardandoAprovacao > 0 || a.atendidasHoje > 0
   || a.atendidoPeloEstoquePct !== null || a.viraramCompraNoMes > 0;
+
+// ---- a tela do material ---------------------------------------------------------
+
+export const ROTULO_DO_ALERTA_DO_ALMOXARIFADO: Record<TipoDeAlertaDoAlmoxarifado, string> = {
+  PRAZO_ESTOURADO: 'Prazo estourado',
+  PRAZO_ATENCAO: 'Prazo a vencer',
+  AGUARDANDO_CENTRO: 'Com o centro',
+  ROTA_DE_COMPRA: 'Virou compra',
+};
+
+/**
+ * A faixa de cor do radar do almoxarifado, pela mesma gramática do radar da compra: vermelho é
+ * prazo estourado, âmbar é a vencer ou parada no centro, azul é o que virou compra — que não é
+ * falha do estoque, é o caminho normal do que não havia.
+ */
+export const CLASSE_DO_ALERTA_DO_ALMOXARIFADO: Record<TipoDeAlertaDoAlmoxarifado, string> = {
+  PRAZO_ESTOURADO: 'border-l-rose-500 bg-rose-950/40 text-rose-200',
+  PRAZO_ATENCAO: 'border-l-amber-400 bg-amber-950/30 text-amber-200',
+  AGUARDANDO_CENTRO: 'border-l-amber-400 bg-amber-950/30 text-amber-200',
+  ROTA_DE_COMPRA: 'border-l-sky-400 bg-sky-950/30 text-sky-200',
+};
+
+/** A ordem do radar do almoxarifado: gravidade primeiro, estável no desempate. */
+export const ordenarRadarDoAlmoxarifado = (linhas: AlertaDoAlmoxarifado[]): AlertaDoAlmoxarifado[] =>
+  [...linhas].sort((a, b) => a.ordem - b.ordem || a.numero.localeCompare(b.numero));
+
+/**
+ * A frase das atendidas no prazo. Nula é traço com a explicação: "0%" diria que todas
+ * atrasaram, e "nenhuma medida" é notícia diferente.
+ */
+export const fraseDasMedidas = (medidas: number) =>
+  medidas === 0 ? 'nenhum atendimento medido no mês'
+    : medidas === 1 ? '1 atendimento medido no mês'
+      : `${medidas} atendimentos medidos no mês`;
+
+/** O ranking sem linhas é dito, não deixado em branco: espaço vazio numa parede é ninguém olhou. */
+export const SEM_RANKING = 'nada pedido no mês';

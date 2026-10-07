@@ -112,11 +112,12 @@ export const MANUAIS: Record<string, Manual> = {
     paraQueServe: 'A Torre de Controle vista da parede: a tela da TV da sala de suprimentos, sem menu, que se atualiza sozinha.',
     passos: [
       'Abra pelo menu ou pelo "Modo TV" da Torre — a tela abre numa aba nova, já logada.',
-      'Na TV, deixe a aba em tela cheia (F11). A tela gira entre a visão geral e cada unidade.',
-      'Para ligar uma TV que não tem o sistema aberto, acesse o endereço /cockpit e faça o login uma vez.',
+      'Na TV, deixe a aba em tela cheia (F11). A parede gira sozinha, um minuto por parada: a compra e o material do almoxarifado da visão geral, depois os dois de cada unidade.',
+      'Para ligar uma TV que não tem o sistema aberto, acesse o endereço /cockpit e faça o login uma vez. Para conferir a tela do material sem esperar a vez dela, abra /cockpit?tela=material.',
     ],
     regras: [
       { texto: 'Os números são os mesmos da Torre: etapa, atraso, exceção e prazo saem das mesmas funções.' },
+      { texto: 'A tela do material só entra no rodízio quando há solicitação de material para contar, e os números dela são os do Painel de Atendimentos e do bloco de material do Dashboard — fila, espera do centro, fora do prazo, atendidas no prazo e os rankings do mês. A faixa da compra fica no topo dela, e a faixa do almoxarifado fica na tela da compra: nenhuma tela esconde o alarme da outra.' },
       { texto: 'Se uma atualização falhar, os números ficam na tela com um aviso discreto, em vez de apagar o painel.' },
     ],
   },

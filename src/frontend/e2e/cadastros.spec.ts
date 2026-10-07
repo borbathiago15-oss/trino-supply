@@ -164,11 +164,20 @@ test.describe('Cadastros (React)', () => {
     const painel = page.locator('#contrato');
     await expect(painel).toContainText(razao);
 
-    const produtos = painel.getByRole('combobox', { name: 'Produto do contrato' }).first();
-    const opcoes = await produtos.locator('option').count();
-    test.skip(opcoes < 2, 'ambiente sem produtos no catálogo para contratar');
+    // o produto se escolhe **buscando**: o select com o catálogo inteiro dentro não deixava
+    // digitar para filtrar, e achar o item era rolar milhares de linhas
+    await expect(painel.getByRole('combobox', { name: 'Produto do contrato' })).toHaveCount(0);
+    await painel.getByRole('button', { name: 'Buscar produto do contrato' }).first().click();
+    const busca = page.getByRole('dialog');
+    // nada é consultado antes de família ou duas letras — a mesma régua da SC
+    await expect(busca).toContainText('digite ao menos duas letras');
 
-    await produtos.selectOption({ index: 1 });
+    await busca.getByRole('combobox', { name: 'Família' }).selectOption('EPI CENARIO E2E');
+    const achados = busca.getByTestId('produtos-do-contrato');
+    await expect(achados).toBeVisible();
+    await achados.getByRole('button').first().click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
     await painel.getByRole('spinbutton', { name: 'Preço fixo' }).first().fill('19.90');
     await painel.getByRole('spinbutton', { name: 'Prazo de entrega em dias' }).first().fill('7');
     await painel.locator('#ct-numero').fill(`CT-E2E-${marca}`);

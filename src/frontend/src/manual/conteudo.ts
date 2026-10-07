@@ -273,6 +273,7 @@ export const MANUAIS: Record<string, Manual> = {
     paraQueServe: 'Os contratos de parceria: cadastrar, editar, acompanhar teto, consumo e saldo, e registrar reajustes.',
     passos: [
       '"Novo contrato de parceria": escolha o fornecedor (ativos e sem contrato) e preencha número, vigência, teto e os produtos.',
+      'Em "Buscar produto no catálogo…", escolha a família ou digite ao menos duas letras do código ou da descrição.',
       'Em cada produto, o preço fixo, o prazo de entrega e a condição de pagamento que valem enquanto o contrato durar.',
       'Para mudar um contrato, use "Editar contrato" na linha dele.',
       'Veja o teto contratado, o consumido na vigência e o saldo de cada contrato.',
@@ -285,6 +286,8 @@ export const MANUAIS: Record<string, Manual> = {
       { codigo: 'SUP-ERR-020', texto: 'A vigência não pode terminar antes de começar.' },
       { texto: 'Salvar sem nenhum produto encerra o contrato: o fornecedor volta a ser cotado normalmente.' },
       { texto: 'Quem já tem contrato não aparece em "Novo contrato": edite pela linha dele.' },
+      { texto: 'O produto se escolhe buscando, não rolando: o catálogo tem milhares de itens.' },
+      { texto: 'Produto com tamanho entra uma linha por tamanho — a bota 38 e a 39 têm preço próprio.' },
     ],
   },
   'contract-detail': {

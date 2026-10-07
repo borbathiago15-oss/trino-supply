@@ -269,6 +269,18 @@ o usuário descobrir no erro do servidor:
   caminhos para a mesma coisa, e o de lá nasceria vazio), e `listarContratos` devolve as duas listas
   numa **consulta só** — duas chamadas ao mesmo endpoint dariam dois retratos do cadastro, com o
   fornecedor podendo aparecer nas duas listas ou em nenhuma.
+- **O produto do contrato se escolhe buscando, não rolando.** O campo era um `select` com o
+  catálogo inteiro dentro (`listarProdutos`): num acervo de milhares de itens, achar a bota era
+  rolar a lista até ela, e o `select` nativo não deixa digitar para filtrar. É o mesmo problema
+  que a SC já tinha resolvido, então a régua é a **mesma** — `dominio/buscaDeProduto`, família ou
+  duas letras antes de consultar —, e não uma terceira cópia do piso. O resultado é o **produto
+  individual**, e não a grade junta como na SC: no contrato a bota 38 e a 39 têm preço próprio, são
+  linhas diferentes, porque é o preço de cada uma que fica fixo; agrupar a grade aqui obrigaria a
+  desfazê-la na linha seguinte. A linha passou a **carregar o produto escolhido** (código,
+  descrição e unidade) em vez de guardar só o id e procurá-lo numa cópia do catálogo — era essa
+  cópia que obrigava a tela a baixar tudo. O produto **fora do catálogo** vindo de contrato antigo
+  continua só de leitura: ele não tem id, e oferecer "trocar" apagaria uma linha que o fornecedor
+  já entrega.
 - **O contrato de parceria tem ficha, e a ficha tem memória.** `/contratos/:id` junta o que o
   comprador pergunta antes de renovar ou reajustar: os documentos, os produtos, **todas** as compras
   com o fornecedor (a de antes do contrato mostra quanto se pagava sem ele; cada linha diz se abate

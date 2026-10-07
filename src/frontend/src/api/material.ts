@@ -103,8 +103,16 @@ export const filaDoAlmoxarifado = async (somenteMinhas: boolean, signal?: AbortS
  * Atendimento: quantidade entregue por item. O que faltar vira solicitação de
  * compra no nome de quem pediu — por isso a resposta traz o número da SC.
  */
-export const atenderMaterial = (id: string, items: { itemId: string; quantity: number }[]) =>
-  api<SolicitacaoMaterial>(`${base}/${id}/fulfill`, { method: 'POST', body: { items } });
+export interface DecisaoDoAtendimento {
+  /** Encerra o atendimento mesmo parcial; `false` deixa a solicitação na fila do estoque. */
+  concluir: boolean;
+  /** Abre a SC do que faltou, no nome de quem pediu. */
+  gerarCompra: boolean;
+}
+
+export const atenderMaterial = (
+  id: string, items: { itemId: string; quantity: number }[], decisao: DecisaoDoAtendimento,
+) => api<SolicitacaoMaterial>(`${base}/${id}/fulfill`, { method: 'POST', body: { items, ...decisao } });
 
 export interface LinhaPainel {
   id: string;

@@ -344,8 +344,16 @@ export const MANUAIS: Record<string, Manual> = {
     paraQueServe: 'A fila do almoxarifado: as solicitações de material aprovadas, prontas para atender.',
     passos: [
       'Clique em "Atender" na solicitação.',
-      'Informe o que está sendo entregue de cada item, ou use "Atender tudo".',
-      'Clique em "Confirmar atendimento". O que faltar fica como parcial, aguardando compra.',
+      'Informe o que está sendo entregue de cada item, ou use "Atender tudo" — o campo já vem com o que ainda falta.',
+      'Decida as duas coisas: concluir o atendimento ou deixar a solicitação na fila, e comprar ou não o que faltou.',
+      'Clique no botão (ele diz o que vai fazer: "Confirmar atendimento" ou "Registrar entrega parcial").',
+    ],
+    regras: [
+      { texto: 'Desmarcando "Concluir o atendimento", a solicitação continua na fila com o que já '
+          + 'saiu registrado — é o caso do resto da carga que chega depois. A próxima entrega soma à primeira.' },
+      { texto: 'Desmarcando "Comprar o que faltou", nenhuma solicitação de compra é aberta: use quando '
+          + 'o material já está a caminho. A SC do faltante sai uma vez só por solicitação.' },
+      { texto: 'Concluir sem entregar nada é decisão válida — quer dizer que não havia nada em estoque.' },
     ],
   },
   'wh-panel': {

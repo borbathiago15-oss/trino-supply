@@ -270,7 +270,8 @@ public static class EstoqueRotas
                 return Error(ctx, 403, "MR-ERR-001", "Seu usuário não atende solicitações de material.");
             var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
             var lines = (body.Items ?? []).Select(i => new MaterialRequisitionService.FulfillLine(i.ItemId, i.Quantity)).ToList();
-            var (mr, error) = await svc.FulfillAsync(actor, id, lines, purchases);
+            var decisao = new DecisaoDoAtendimento(body.Concluir ?? true, body.GerarCompra ?? true);
+            var (mr, error) = await svc.FulfillAsync(actor, id, lines, purchases, decisao);
             return error is not null
                 ? Error(ctx, error.Code switch { "MR-ERR-404" => 404, "MR-ERR-040" => 409, _ => 422 }, error.Code, error.Message)
                 : Ok(MrView(mr!), ctx);

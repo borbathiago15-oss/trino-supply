@@ -708,6 +708,23 @@ corre** (`DiasQueOPrazoCobra`): a vez é de quem pediu. O status novo é `9` no 
 que compara status por ordem (`CaminhoDoProcesso`, "cotação feita") responde certo para ele, e
 comparação nova por ordem precisa lembrar que 9 não é "depois da O.C.".
 
+**No atendimento parcial, quem atende decide duas coisas — e elas são independentes.** Decisão da
+empresa (2026-10), em `Materials/AtendimentoParcial.cs`: **concluir** (encerra o atendimento mesmo
+parcial, ou deixa a solicitação na fila do estoque) e **gerar a compra** do que faltou. Antes não
+havia escolha: todo atendimento encerrava a solicitação *e* comprava o faltante, então o
+almoxarifado perdia o caso mais comum — entregou 3 das 10 porque o resto chega na quinta — e
+tinha de escolher entre não registrar o que já saiu ou comprar o que já estava a caminho. As
+quatro combinações querem dizer coisas diferentes, e amarrar uma à outra tiraria a decisão de
+quem tem o material na mão. Três coisas seguram a regra. **A entrega soma, não substitui**
+(`FulfilledQuantity += entregue`): a solicitação que voltou pendente já tem parte do saldo
+baixada. **O teto de cada entrega é o que ainda falta**, não o aprovado — cobrar contra o aprovado
+deixaria entregar duas vezes a mesma quantidade —, e a tela pré-preenche com ele. **Pendente não é
+rota de compra**: o item que espera o estoque chegar fica `PartiallyFulfilled` ou `Pending`, e
+`FulfilledAt` **continua nulo**, que é por onde o painel e o cockpit sabem que o atendimento não
+acabou. A SC do faltante sai **uma vez só por solicitação** (a segunda compraria de novo o que a
+primeira já pediu), e o **padrão da porta interna continua sendo o de antes** — encerra e compra —
+para nenhuma chamada anterior à regra mudar de sentido em silêncio.
+
 **Excluir de verdade é só para o que nunca circulou.** Produto que entrou numa SC, cotação,
 pedido, contrato, solicitação de material ou no estoque é histórico, e apagá-lo deixaria esses
 registros apontando para nada (`IC-ERR-030`, que diz **onde** ele circulou); o caminho é

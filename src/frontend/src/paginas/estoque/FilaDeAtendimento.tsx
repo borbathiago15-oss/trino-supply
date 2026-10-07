@@ -18,24 +18,42 @@ const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message
 export const aprovado = (i: ItemMaterial) => i.effectiveQuantity ?? i.approvedQuantity ?? i.quantity;
 
 /**
- * Nada entregue é atendimento nenhum — e o backend recusa. A tela diz isso antes
- * de gastar a chamada; para não atender, o caminho é fechar o painel.
+ * Quanto ainda falta entregar deste item. É o teto de cada entrega — e não o aprovado:
+ * a solicitação que ficou pendente já tem entrega registrada, e cobrar contra o aprovado
+ * deixaria entregar duas vezes a mesma quantidade.
  */
-export function validarAtendimento(entregas: Record<string, string>, itens: ItemMaterial[]) {
+export const falta = (i: ItemMaterial) => i.pendingQuantity ?? (aprovado(i) - (i.fulfilledQuantity ?? 0));
+
+/**
+ * O que a tela cobra antes de gastar a chamada.
+ *
+ * <p>
+ * Nada entregue só faz sentido quando se <b>conclui</b> o atendimento — aí quer dizer "não tinha
+ * nada, segue para compra". Deixando pendente, nada entregue não registra coisa alguma, e o
+ * caminho para não atender agora é fechar o painel.
+ * </p>
+ */
+export function validarAtendimento(
+  entregas: Record<string, string>, itens: ItemMaterial[], concluir = true,
+) {
   const linhas = itens.map((i) => ({
     itemId: i.itemId,
     quantity: Number((entregas[i.itemId] ?? '').replace(',', '.')) || 0,
-    limite: aprovado(i),
+    limite: falta(i),
   }));
   const acima = linhas.find((l) => l.quantity > l.limite);
-  if (acima) return { items: [], erro: 'Não dá para entregar mais do que foi aprovado.' };
-  if (!linhas.some((l) => l.quantity > 0))
+  if (acima) return { items: [], erro: 'Não dá para entregar mais do que ainda falta.' };
+  if (!concluir && !linhas.some((l) => l.quantity > 0))
     return { items: [], erro: 'Informe ao menos uma quantidade entregue — para não atender agora, feche o painel.' };
   return { items: linhas.map(({ itemId, quantity }) => ({ itemId, quantity })), erro: null };
 }
 
 export function FilaDeAtendimento() {
   const nomesDosCentros = useNomesDosCentros();
+  // as duas decisões de quem atende, independentes de propósito: encerrar ou deixar na fila,
+  // e comprar ou não o que faltou
+  const [concluir, setConcluir] = useState(true);
+  const [gerarCompra, setGerarCompra] = useState(true);
   const usuario = useUsuario();
   const { avisar } = useToast();
   const [somenteMinhas, setSomenteMinhas] = useState(false);
@@ -55,23 +73,27 @@ export function FilaDeAtendimento() {
   function abrir(r: SolicitacaoMaterial) {
     setAtendendo(r);
     // começa com tudo o que foi aprovado: o almoxarife zera o que não tinha
-    setEntregas(Object.fromEntries(r.items.map((i) => [i.itemId, String(aprovado(i))])));
+    setEntregas(Object.fromEntries(r.items.map((i) => [i.itemId, String(falta(i))])));
+    // cada solicitação começa no padrão: a decisão da anterior não se arrasta para esta
+    setConcluir(true); setGerarCompra(true);
     rolarPara('painel-atendimento');
   }
 
   const atenderTudo = () => atendendo &&
-    setEntregas(Object.fromEntries(atendendo.items.map((i) => [i.itemId, String(aprovado(i))])));
+    setEntregas(Object.fromEntries(atendendo.items.map((i) => [i.itemId, String(falta(i))])));
 
   async function confirmar() {
     if (!atendendo) return;
-    const { items, erro: problema } = validarAtendimento(entregas, atendendo.items);
+    const { items, erro: problema } = validarAtendimento(entregas, atendendo.items, concluir);
     if (problema) { avisar(problema, 'erro'); return; }
     setSalvando(true);
     try {
-      const mr = await atenderMaterial(atendendo.id, items);
-      avisar(mr.purchaseRequisitionNumber
-        ? `Atendimento registrado. O faltante virou a solicitação ${mr.purchaseRequisitionNumber}.`
-        : 'Atendimento registrado.');
+      const mr = await atenderMaterial(atendendo.id, items, { concluir, gerarCompra });
+      const compra = mr.purchaseRequisitionNumber
+        ? ` O faltante virou a solicitação ${mr.purchaseRequisitionNumber}.` : '';
+      avisar(concluir
+        ? `Atendimento concluído.${compra}`
+        : `Entrega registrada. A solicitação continua na fila do estoque.${compra}`);
       setAtendendo(null);
       recarregar();
     } catch (e) { avisar(mensagem(e, 'Falha ao registrar o atendimento.'), 'erro'); }
@@ -157,9 +179,15 @@ export function FilaDeAtendimento() {
                   <tr key={i.itemId} data-item={i.itemId}>
                     <td>{i.catalogCode ? `[${i.catalogCode}] ` : ''}{i.description}</td>
                     <td className="sub whitespace-nowrap">{quantidade(i.quantity)} {i.unitOfMeasure}</td>
-                    <td className="whitespace-nowrap">{quantidade(aprovado(i))} {i.unitOfMeasure}</td>
+                    <td className="whitespace-nowrap">
+                      {quantidade(falta(i))} {i.unitOfMeasure}
+                      {/* já entregue: a solicitação que ficou pendente volta com parte do saldo */}
+                      {(i.fulfilledQuantity ?? 0) > 0 && (
+                        <div className="sub">já entregue {quantidade(i.fulfilledQuantity ?? 0)}</div>
+                      )}
+                    </td>
                     <td>
-                      <input type="number" min="0" step="0.01" max={aprovado(i)}
+                      <input type="number" min="0" step="0.01" max={falta(i)}
                         aria-label={`Entregue de ${i.description}`}
                         value={entregas[i.itemId] ?? ''}
                         onChange={(e) => setEntregas((q) => ({ ...q, [i.itemId]: e.target.value }))} />
@@ -169,16 +197,37 @@ export function FilaDeAtendimento() {
               </tbody>
             </table>
           </div>
-          <div className="mt-4 flex flex-wrap gap-2">
+          {/* as duas decisões de quem atende. Antes nem existiam: todo atendimento encerrava a
+              solicitação e comprava o faltante, então ou se esperava a carga sem registrar o que
+              já saiu, ou se comprava o que já estava a caminho */}
+          <div className="mt-4 rounded-lg border border-borda bg-superficie-suave p-3">
+            <label className="flex items-start gap-2 text-[13px]">
+              <input type="checkbox" className="mt-0.5 w-auto" checked={concluir}
+                data-testid="atend-concluir" onChange={(e) => setConcluir(e.target.checked)} />
+              <span>
+                <strong>Concluir o atendimento</strong> — encerra a solicitação mesmo entregando em
+                parte. Desmarque quando o resto chega depois: a solicitação fica na fila do estoque
+                com o que já saiu registrado.
+              </span>
+            </label>
+            <label className="mt-2 flex items-start gap-2 text-[13px]">
+              <input type="checkbox" className="mt-0.5 w-auto" checked={gerarCompra}
+                data-testid="atend-compra" onChange={(e) => setGerarCompra(e.target.checked)} />
+              <span>
+                <strong>Comprar o que faltou</strong> — abre a solicitação de compra no nome de
+                {' '}{atendendo.requesterLabel}, no centro
+                {' '}{rotuloDoCentro(nomesDosCentros, atendendo.costCenter)}. Desmarque quando o
+                material já está a caminho.
+              </span>
+            </label>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" className="botao" disabled={salvando} onClick={confirmar}>
-              {salvando ? 'Registrando…' : 'Confirmar atendimento'}
+              {salvando ? 'Registrando…' : concluir ? 'Confirmar atendimento' : 'Registrar entrega parcial'}
             </button>
             <button type="button" className="botao-secundario" onClick={atenderTudo}>Atender tudo</button>
           </div>
-          <Nota>
-            Deixe zero no que não tinha em estoque: o faltante vira uma solicitação de compra no nome
-            de {atendendo.requesterLabel}, no centro {rotuloDoCentro(nomesDosCentros, atendendo.costCenter)}.
-          </Nota>
         </Painel>
       )}
     </>

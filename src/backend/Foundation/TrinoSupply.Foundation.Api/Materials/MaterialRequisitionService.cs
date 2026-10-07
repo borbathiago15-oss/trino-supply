@@ -173,10 +173,15 @@ public class MaterialRequisitionService(AppDbContext db, CatalogService catalog,
     /// (revisão do módulo de estoque, 2026-08-26). A posição de estoque fica no sistema de
     /// almoxarifado da operação — aqui guardamos o atendimento.
     /// </summary>
+    /// <param name="decisao">
+    /// As duas escolhas de quem atende (<see cref="DecisaoDoAtendimento"/>): encerrar ou deixar
+    /// na fila, e comprar ou não o que faltou. Nulo é o padrão de antes — encerra e compra.
+    /// </param>
     public async Task<(MaterialRequisition? mr, UserError? error)> FulfillAsync(
         Actor actor, Guid id, IReadOnlyList<FulfillLine> lines, RequisitionService purchases,
-        CancellationToken ct = default)
+        DecisaoDoAtendimento? decisao = null, CancellationToken ct = default)
     {
+        decisao ??= DecisaoDoAtendimento.Padrao;
         var mr = await db.MaterialRequisitions.Include(r => r.Items).SingleOrDefaultAsync(r => r.Id == id, ct);
         if (mr is null) return (null, new("MR-ERR-404", "Solicitação não encontrada."));
         if (mr.Status != MaterialRequisitionStatus.Approved)
@@ -186,22 +191,34 @@ public class MaterialRequisitionService(AppDbContext db, CatalogService catalog,
         {
             var entregue = lines.FirstOrDefault(l => l.ItemId == item.Id)?.Quantity ?? 0;
             if (entregue < 0) return (null, new("MR-ERR-032", "Quantidade entregue não pode ser negativa."));
-            if (entregue > item.EffectiveQuantity)
+            // o teto é o que **ainda falta**, não o aprovado: a solicitação que ficou pendente já
+            // tem entrega registrada, e cobrar contra o aprovado deixaria entregar duas vezes
+            var falta = item.EffectiveQuantity - item.FulfilledQuantity;
+            if (entregue > falta)
                 return (null, new("MR-ERR-032",
-                    $"{item.Description}: entregue {entregue:0.##}, mas o aprovado é {item.EffectiveQuantity:0.##}."));
-            item.FulfilledQuantity = entregue;
-            item.Status = entregue >= item.EffectiveQuantity && entregue > 0 ? MaterialItemStatus.Fulfilled
-                : entregue > 0 ? MaterialItemStatus.PartiallyFulfilled
-                : MaterialItemStatus.PurchaseRoute;
+                    $"{item.Description}: entregue {entregue:0.##}, mas ainda falta {falta:0.##} do aprovado "
+                    + $"({item.EffectiveQuantity:0.##})."));
+            // soma, não substitui: a entrega de hoje se junta à de quando a carga chegou pela metade
+            item.FulfilledQuantity += entregue;
         }
 
-        // o que faltou vira uma SC no nome de quem pediu, para seguir a alçada do centro
+        var entregueAgora = lines.Sum(l => l.Quantity);
+        if (!decisao.Concluir && entregueAgora <= 0)
+            return (null, new("MR-ERR-033",
+                "Informe ao menos uma quantidade entregue para registrar o atendimento parcial, "
+                + "ou marque que o atendimento está concluído."));
+
+        // o que ainda falta, depois desta entrega
         var faltantes = mr.Items
             .Where(i => i.EffectiveQuantity - i.FulfilledQuantity > 0)
             .Select(i => new ItemInput("", i.EffectiveQuantity - i.FulfilledQuantity, i.UnitOfMeasure,
                 null, $"Faltante do atendimento {mr.Number}", i.CatalogItemId))
             .ToList();
-        if (faltantes.Count > 0)
+
+        // a SC do faltante sai no nome de quem pediu, para seguir a alçada do centro — e só
+        // quando quem atende pede. Uma por solicitação: a segunda compraria de novo o mesmo
+        // faltante que a primeira já pediu
+        if (decisao.GerarCompra && faltantes.Count > 0 && mr.PurchaseRequisitionId is null)
         {
             var requester = new Actor(mr.RequesterId, mr.RequesterLabel, Roles.Requester);
             var (pr, prError) = await purchases.CreateAsync(requester,
@@ -212,6 +229,26 @@ public class MaterialRequisitionService(AppDbContext db, CatalogService catalog,
             if (submitError is not null) return (null, submitError);
             mr.PurchaseRequisitionId = submitted!.Id;
             mr.PurchaseRequisitionNumber = submitted.Number;
+        }
+
+        foreach (var item in mr.Items)
+        {
+            var falta = item.EffectiveQuantity - item.FulfilledQuantity;
+            item.Status = falta <= 0 && item.FulfilledQuantity > 0 ? MaterialItemStatus.Fulfilled
+                // pendente não é rota de compra: o item continua esperando o estoque chegar
+                : !decisao.Concluir ? (item.FulfilledQuantity > 0
+                    ? MaterialItemStatus.PartiallyFulfilled : MaterialItemStatus.Pending)
+                : item.FulfilledQuantity > 0 ? MaterialItemStatus.PartiallyFulfilled
+                : MaterialItemStatus.PurchaseRoute;
+        }
+
+        if (!decisao.Concluir)
+        {
+            // fica na fila do estoque, com o que já saiu registrado: `FulfilledAt` continua nulo
+            // porque o atendimento não acabou, e é por esse nulo que o painel e o cockpit o leem
+            Touch(mr);
+            await db.SaveChangesAsync(ct);
+            return (mr, null);
         }
 
         var atendidos = mr.Items.Count(i => i.FulfilledQuantity > 0);

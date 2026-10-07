@@ -323,4 +323,110 @@ public class MaterialRequisitionServiceTests
 
         Assert.Single(daAna);
     }
+
+    // ---- atendimento parcial: as duas decisões de quem atende -----------------
+    //
+    // Antes, todo atendimento encerrava a solicitação e comprava o faltante. O almoxarifado
+    // perdia o caso mais comum: entregou 3 das 10 porque o resto chega na quinta — ou se
+    // esperava a carga sem registrar o que já saiu, ou se comprava o que já estava a caminho.
+
+    [Fact]
+    public async Task Entrega_parcial_pendente_mantem_a_solicitacao_na_fila_do_estoque()
+    {
+        var w = await BuildAsync();
+        var mr = await AprovadaAsync(w, new MaterialItemInput(w.Detergente.Id, 10));
+        var item = mr.Items.Single();
+
+        var (depois, erro) = await w.Mrs.FulfillAsync(Otavio, mr.Id, [new(item.Id, 3)], w.Prs,
+            new DecisaoDoAtendimento(Concluir: false, GerarCompra: false));
+
+        Assert.Null(erro);
+        Assert.Equal(MaterialRequisitionStatus.Approved, depois!.Status);   // continua na fila
+        Assert.Null(depois.FulfilledAt);                                     // não acabou
+        Assert.Equal(3, depois.Items.Single().FulfilledQuantity);
+        Assert.Null(depois.PurchaseRequisitionNumber);                       // não comprou
+        Assert.Equal(MaterialItemStatus.PartiallyFulfilled, depois.Items.Single().Status);
+    }
+
+    [Fact]
+    public async Task A_segunda_entrega_soma_a_primeira_e_o_teto_e_o_que_ainda_falta()
+    {
+        // substituir em vez de somar perderia as três primeiras botas no segundo atendimento
+        var w = await BuildAsync();
+        var mr = await AprovadaAsync(w, new MaterialItemInput(w.Detergente.Id, 10));
+        var item = mr.Items.Single();
+        await w.Mrs.FulfillAsync(Otavio, mr.Id, [new(item.Id, 3)], w.Prs, new(false, false));
+
+        // entregar 8 agora passaria do aprovado: faltam 7
+        var (_, excesso) = await w.Mrs.FulfillAsync(Otavio, mr.Id, [new(item.Id, 8)], w.Prs, new(false, false));
+        Assert.Equal("MR-ERR-032", excesso!.Code);
+        Assert.Contains("ainda falta 7", excesso.Message);
+
+        var (fim, erro) = await w.Mrs.FulfillAsync(Otavio, mr.Id, [new(item.Id, 7)], w.Prs, new(true, false));
+        Assert.Null(erro);
+        Assert.Equal(10, fim!.Items.Single().FulfilledQuantity);
+        Assert.Equal(MaterialRequisitionStatus.Fulfilled, fim.Status);
+    }
+
+    [Fact]
+    public async Task Concluir_sem_comprar_encerra_a_solicitacao_curta()
+    {
+        // "o que faltou não vai ser comprado" é decisão legítima, e antes não existia
+        var w = await BuildAsync();
+        var mr = await AprovadaAsync(w, new MaterialItemInput(w.Detergente.Id, 10));
+
+        var (depois, erro) = await w.Mrs.FulfillAsync(Otavio, mr.Id, [new(mr.Items.Single().Id, 4)], w.Prs,
+            new(Concluir: true, GerarCompra: false));
+
+        Assert.Null(erro);
+        Assert.Equal(MaterialRequisitionStatus.PartiallyFulfilled, depois!.Status);
+        Assert.NotNull(depois.FulfilledAt);
+        Assert.Null(depois.PurchaseRequisitionNumber);
+    }
+
+    [Fact]
+    public async Task Pendente_sem_entregar_nada_nao_registra_atendimento_nenhum()
+    {
+        var w = await BuildAsync();
+        var mr = await AprovadaAsync(w, new MaterialItemInput(w.Detergente.Id, 10));
+
+        var (_, erro) = await w.Mrs.FulfillAsync(Otavio, mr.Id, [new(mr.Items.Single().Id, 0)], w.Prs,
+            new(Concluir: false, GerarCompra: false));
+
+        Assert.Equal("MR-ERR-033", erro!.Code);
+    }
+
+    [Fact]
+    public async Task A_compra_do_faltante_sai_uma_vez_so_por_solicitacao()
+    {
+        // a segunda compraria de novo o mesmo faltante que a primeira já pediu
+        var w = await BuildAsync();
+        var mr = await AprovadaAsync(w, new MaterialItemInput(w.Detergente.Id, 10));
+        var item = mr.Items.Single();
+
+        var (primeira, _) = await w.Mrs.FulfillAsync(Otavio, mr.Id, [new(item.Id, 2)], w.Prs, new(false, true));
+        var numero = primeira!.PurchaseRequisitionNumber;
+        Assert.NotNull(numero);
+
+        var (segunda, _) = await w.Mrs.FulfillAsync(Otavio, mr.Id, [new(item.Id, 2)], w.Prs, new(true, true));
+
+        Assert.Equal(numero, segunda!.PurchaseRequisitionNumber);
+        Assert.Equal(1, await w.Db.Requisitions.CountAsync());
+    }
+
+    [Fact]
+    public async Task O_padrao_continua_sendo_o_de_antes_encerra_e_compra()
+    {
+        // toda chamada anterior à regra significa isso; mudar o sentido delas em silêncio
+        // seria pior que pedir a decisão
+        var w = await BuildAsync();
+        var mr = await AprovadaAsync(w, new MaterialItemInput(w.Detergente.Id, 10));
+
+        var (depois, erro) = await w.Mrs.FulfillAsync(Otavio, mr.Id, [new(mr.Items.Single().Id, 4)], w.Prs);
+
+        Assert.Null(erro);
+        Assert.Equal(MaterialRequisitionStatus.PartiallyFulfilled, depois!.Status);
+        Assert.NotNull(depois.FulfilledAt);
+        Assert.NotNull(depois.PurchaseRequisitionNumber);
+    }
 }

@@ -36,13 +36,24 @@ describe('regras do atendimento', () => {
     expect(aprovado(item({ quantity: 10, effectiveQuantity: undefined, approvedQuantity: 6 }))).toBe(6);
     expect(aprovado(item({ quantity: 10, effectiveQuantity: undefined, approvedQuantity: null }))).toBe(10);
   });
-  it('entregar mais do que foi aprovado não passa', () => {
+  it('entregar mais do que ainda falta não passa', () => {
     expect(validarAtendimento({ i1: '11' }, [item({ effectiveQuantity: 10 })]).erro)
-      .toBe('Não dá para entregar mais do que foi aprovado.');
+      .toBe('Não dá para entregar mais do que ainda falta.');
   });
-  it('atendimento vazio não vira chamada — o caminho é fechar o painel', () => {
-    expect(validarAtendimento({ i1: '0' }, [item({})]).erro).toMatch(/feche o painel/);
-    expect(validarAtendimento({}, [item({})]).erro).toMatch(/feche o painel/);
+  it('o teto é o que falta, não o aprovado: a parcial já entregue não se entrega de novo', () => {
+    // a solicitação que ficou pendente volta com parte do saldo baixada
+    const parcial = item({ effectiveQuantity: 10, fulfilledQuantity: 6, pendingQuantity: 4 });
+    expect(validarAtendimento({ i1: '4' }, [parcial]).erro).toBeNull();
+    expect(validarAtendimento({ i1: '5' }, [parcial]).erro)
+      .toBe('Não dá para entregar mais do que ainda falta.');
+  });
+  it('deixar pendente sem entregar nada não registra nada — o caminho é fechar o painel', () => {
+    expect(validarAtendimento({ i1: '0' }, [item({})], false).erro).toMatch(/feche o painel/);
+    expect(validarAtendimento({}, [item({})], false).erro).toMatch(/feche o painel/);
+  });
+  it('concluir sem entregar nada é decisão válida: não tinha nada, tudo segue para compra', () => {
+    // antes a tela mandava fechar o painel, e a solicitação ficava na fila para sempre
+    expect(validarAtendimento({ i1: '0' }, [item({})], true).erro).toBeNull();
   });
   it('zero num item e quantidade em outro é atendimento parcial válido', () => {
     const { items, erro } = validarAtendimento(
@@ -95,7 +106,7 @@ describe('tela Fila de Atendimento', () => {
 
     await waitFor(() => expect(atenderMaterial).toHaveBeenCalledWith('mr1', [
       { itemId: 'i1', quantity: 4 }, { itemId: 'i2', quantity: 2 },
-    ]));
+    ], { concluir: true, gerarCompra: true }));
     // o faltante vira SC, e a tela diz qual
     expect(await screen.findByText(/SC-2026-000030/)).toBeInTheDocument();
   });
@@ -112,5 +123,56 @@ describe('tela Fila de Atendimento', () => {
 
     await usuario.click(screen.getByRole('button', { name: 'Atender tudo' }));
     expect(campo).toHaveValue(7);
+  });
+
+  it('desmarcar "concluir" registra a entrega e mantém a solicitação na fila', async () => {
+    // o caso que a tela perdia: entregou 3 das 10 porque o resto chega na quinta
+    const usuario = userEvent.setup();
+    vi.mocked(filaDoAlmoxarifado).mockResolvedValue([mr({ items: [item({ effectiveQuantity: 10 })] })]);
+    vi.mocked(atenderMaterial).mockResolvedValue(mr({}));
+    abrir();
+
+    await usuario.click(await screen.findByRole('button', { name: 'Atender' }));
+    const luva = within(screen.getByTestId('itens-atendimento')).getByLabelText('Entregue de Luva nitrílica');
+    await usuario.clear(luva);
+    await usuario.type(luva, '3');
+    await usuario.click(screen.getByTestId('atend-concluir'));
+
+    // o botão diz o que o clique faz, e não "confirmar atendimento"
+    await usuario.click(screen.getByRole('button', { name: 'Registrar entrega parcial' }));
+
+    await waitFor(() => expect(atenderMaterial).toHaveBeenCalledWith(
+      'mr1', [{ itemId: 'i1', quantity: 3 }], { concluir: false, gerarCompra: true }));
+    expect(await screen.findByText(/continua na fila do estoque/)).toBeInTheDocument();
+  });
+
+  it('desmarcar "comprar o que faltou" não abre a SC do faltante', async () => {
+    // o material já está a caminho: comprar de novo duplicaria a carga
+    const usuario = userEvent.setup();
+    vi.mocked(filaDoAlmoxarifado).mockResolvedValue([mr({ items: [item({ effectiveQuantity: 10 })] })]);
+    vi.mocked(atenderMaterial).mockResolvedValue(mr({}));
+    abrir();
+
+    await usuario.click(await screen.findByRole('button', { name: 'Atender' }));
+    await usuario.click(screen.getByTestId('atend-compra'));
+    await usuario.click(screen.getByRole('button', { name: 'Confirmar atendimento' }));
+
+    await waitFor(() => expect(atenderMaterial).toHaveBeenCalledWith(
+      'mr1', expect.anything(), { concluir: true, gerarCompra: false }));
+  });
+
+  it('a solicitação que voltou parcial mostra o que falta, e o que já saiu', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(filaDoAlmoxarifado).mockResolvedValue([mr({
+      items: [item({ effectiveQuantity: 10, fulfilledQuantity: 6, pendingQuantity: 4 })],
+    })]);
+    abrir();
+
+    await usuario.click(await screen.findByRole('button', { name: 'Atender' }));
+    const grade = screen.getByTestId('itens-atendimento');
+
+    expect(within(grade).getByText('já entregue 6')).toBeInTheDocument();
+    // "Atender tudo" preenche o que falta, não o aprovado
+    expect(within(grade).getByLabelText('Entregue de Luva nitrílica')).toHaveValue(4);
   });
 });

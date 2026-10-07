@@ -307,7 +307,12 @@ public record EntryRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity
 public record IssueRequest(Guid CatalogItemId, Guid LocationId, decimal Quantity, string OriginReference);
 public record MaterialItemRequest(Guid CatalogItemId, decimal Quantity);
 public record CreateMaterialRequisitionRequest(string CostCenter, string? Notes, List<MaterialItemRequest>? Items);
-public record FulfillRequest(List<MaterialLineRequest>? Items);
+/// <summary>
+/// O atendimento do almoxarifado. `Concluir` e `GerarCompra` são as duas decisões de quem atende;
+/// ausentes valem o padrão de antes (encerra e compra o faltante), para a porta antiga não mudar
+/// de sentido em silêncio.
+/// </summary>
+public record FulfillRequest(List<MaterialLineRequest>? Items, bool? Concluir = null, bool? GerarCompra = null);
 public record HomologationRequest(string? Status);
 public record SupplierContractItemRequest(Guid? CatalogItemId, string? Description, string? CatalogCode,
     string? UnitOfMeasure, decimal UnitPrice, string? PaymentTerms, int? PaymentDays, int? DeliveryDays, string? Notes);

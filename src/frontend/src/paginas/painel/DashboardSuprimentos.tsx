@@ -15,6 +15,7 @@ import { LinhaDaMeta } from '@/componentes/LinhaDaMeta';
 import { TabelaResponsiva } from '@/componentes/TabelaResponsiva';
 import { Link } from 'react-router-dom';
 import { pontosDeAtencao } from './pontosDeAtencao';
+import { MaterialNoPainel } from './MaterialNoPainel';
 import { CentralDeAvisos } from './CentralDeAvisos';
 import { TrilhaDoProcesso } from './TrilhaDoProcesso';
 
@@ -423,6 +424,8 @@ export function DashboardSuprimentos() {
           {erro && <Painel><Erro>{erro}</Erro></Painel>}
           {carregando && !dados && <Painel><Carregando texto="Apurando o período…" /></Painel>}
           {dados && <Analises dados={dados} filtros={aplicados} aoFiltrar={filtrar} aoFiltrarMes={filtrarMes} />}
+          {/* o outro cano da casa: o material que sai do almoxarifado, com filtros próprios */}
+          <MaterialNoPainel />
         </>
       )}
     </>

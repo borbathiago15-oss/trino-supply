@@ -218,3 +218,44 @@ export const painelDeAtendimentos = (filtro: FiltroDoPainel = {}, signal?: Abort
   const query = params.toString();
   return api<PainelAtendimentos>(`${base}/panel${query ? `?${query}` : ''}`, { signal });
 };
+
+// ---- A solicitação de material no Dashboard e na Visão da diretoria ----------------------
+
+export interface LinhaDeMaterial { label: string; key: string; count: number; qty: number; delivered: number }
+export interface MesDeMaterial { month: string; requested: number; fulfilled: number; rejected: number }
+export interface PrazoDaFamilia { family: string; maxDays: number | null; measured: number; met: number; avgDays: number | null }
+export interface KpisDeMaterial {
+  requested: number; requestedPrev: number; requestedQty: number; deliveredQty: number;
+  awaitingApproval: number; inWarehouseQueue: number; fulfilled: number; partial: number; rejected: number; cancelled: number;
+  purchaseRouteItems: number; avgApprovalHours: number | null; avgFulfillDays: number | null; avgTotalDays: number | null;
+  slaMetPercent: number | null; slaMeasured: number; slaBreachedOpen: number;
+}
+export interface RelatorioDeMaterial {
+  from: string; to: string; kpis: KpisDeMaterial; months: MesDeMaterial[];
+  byCostCenter: LinhaDeMaterial[]; byFamily: LinhaDeMaterial[]; byProduct: LinhaDeMaterial[]; byRequester: LinhaDeMaterial[];
+  slaByFamily: PrazoDaFamilia[];
+  filterOptions: { costCenters: { code: string; name: string }[]; families: string[] };
+  indicators?: Record<string, string>;
+}
+
+/**
+ * Os filtros são próprios: período, centro, família e produto. Os do painel de compras falam
+ * de fornecedor, comprador e prioridade, que a solicitação de material não tem.
+ */
+export interface FiltrosMaterial { de: string; ate: string; centroCusto: string; familia: string; produto: string }
+export const FILTROS_MATERIAL_VAZIOS: FiltrosMaterial = { de: '', ate: '', centroCusto: '', familia: '', produto: '' };
+
+export function consultaDeMaterial(f: FiltrosMaterial) {
+  const params = new URLSearchParams();
+  if (f.de) params.set('from', f.de);
+  if (f.ate) params.set('to', f.ate);
+  if (f.centroCusto) params.set('costCenter', f.centroCusto);
+  if (f.familia) params.set('family', f.familia);
+  if (f.produto.trim()) params.set('product', f.produto.trim());
+  return params.toString();
+}
+
+export const analyticsDeMaterial = (f: FiltrosMaterial, signal?: AbortSignal) => {
+  const query = consultaDeMaterial(f);
+  return api<RelatorioDeMaterial>(`/api/v1/analytics/material${query ? `?${query}` : ''}`, { signal });
+};

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { listarProdutos, type Produto } from '@/api/catalogo';
+import type { Produto } from '@/api/catalogo';
+import { listarFamilias } from '@/api/familias';
 import { salvarContrato, type Fornecedor, type ItemContrato } from '@/api/fornecedores';
 import { Painel } from '@/componentes/basicos';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
@@ -7,12 +8,20 @@ import { useToast } from '@/componentes/Toast';
 import { moeda } from '@/util/formato';
 import { rolarPara } from '@/util/rolar';
 import { useCarregar } from '@/util/useCarregar';
+import { BuscaDeProdutoDoContrato } from './BuscaDeProdutoDoContrato';
 
-interface LinhaForm {
+/**
+ * Uma linha do contrato já carrega o produto escolhido — código, descrição e unidade — em vez
+ * de guardar só o id e procurá-lo numa cópia do catálogo inteiro. Era essa cópia que obrigava
+ * a tela a baixar milhares de itens só para desenhar um seletor.
+ */
+export interface LinhaForm {
   chave: string;
   catalogItemId: string;
-  /** Produto fora do catálogo, vindo de um contrato salvo antes. */
-  descricaoLivre: string | null;
+  catalogCode: string | null;
+  /** A descrição do produto escolhido, ou a do item fora do catálogo vindo de um contrato antigo. */
+  descricao: string | null;
+  unidade: string | null;
   preco: string;
   condicao: string;
   diasPagamento: string;
@@ -21,15 +30,17 @@ interface LinhaForm {
 }
 
 let sequencia = 0;
-const novaLinha = (): LinhaForm => ({
-  chave: 'l' + ++sequencia, catalogItemId: '', descricaoLivre: null,
+export const novaLinha = (): LinhaForm => ({
+  chave: 'l' + ++sequencia, catalogItemId: '', catalogCode: null, descricao: null, unidade: null,
   preco: '', condicao: '', diasPagamento: '', diasEntrega: '', observacao: '',
 });
 
-const daLinha = (i: ItemContrato): LinhaForm => ({
+export const daLinha = (i: ItemContrato): LinhaForm => ({
   chave: 'l' + ++sequencia,
   catalogItemId: i.catalogItemId ?? '',
-  descricaoLivre: i.catalogItemId ? null : i.description,
+  catalogCode: i.catalogCode ?? null,
+  descricao: i.description,
+  unidade: i.unitOfMeasure ?? null,
   preco: i.unitPrice != null ? String(i.unitPrice) : '',
   condicao: i.paymentTerms ?? '',
   diasPagamento: i.paymentDays?.toString() ?? '',
@@ -38,23 +49,20 @@ const daLinha = (i: ItemContrato): LinhaForm => ({
 });
 
 /** Linhas do formulário viram itens da API; linha sem produto e sem descrição é descartada. */
-export function itensDoFormulario(linhas: LinhaForm[], catalogo: Produto[]): ItemContrato[] {
+export function itensDoFormulario(linhas: LinhaForm[]): ItemContrato[] {
   const inteiro = (v: string) => (v === '' ? null : parseInt(v, 10));
   return linhas
-    .map((l) => {
-      const produto = catalogo.find((c) => c.id === l.catalogItemId);
-      return {
-        catalogItemId: produto?.id ?? null,
-        description: produto?.description ?? l.descricaoLivre,
-        catalogCode: produto?.code ?? null,
-        unitOfMeasure: produto?.unitOfMeasure ?? null,
-        unitPrice: l.preco ? parseFloat(l.preco) : 0,
-        paymentTerms: l.condicao || null,
-        paymentDays: inteiro(l.diasPagamento),
-        deliveryDays: inteiro(l.diasEntrega),
-        notes: l.observacao || null,
-      };
-    })
+    .map((l) => ({
+      catalogItemId: l.catalogItemId || null,
+      description: l.descricao,
+      catalogCode: l.catalogCode,
+      unitOfMeasure: l.unidade,
+      unitPrice: l.preco ? parseFloat(l.preco) : 0,
+      paymentTerms: l.condicao || null,
+      paymentDays: inteiro(l.diasPagamento),
+      deliveryDays: inteiro(l.diasEntrega),
+      notes: l.observacao || null,
+    }))
     .filter((i) => i.catalogItemId || i.description);
 }
 
@@ -62,7 +70,15 @@ export function PainelContrato({ fornecedor, aoSalvar, aoFechar }:
   { fornecedor: Fornecedor; aoSalvar: () => void; aoFechar: () => void }) {
   const { avisar } = useToast();
   const contrato = fornecedor.contract;
-  const { dados: catalogo } = useCarregar((signal) => listarProdutos(signal).catch(() => [] as Produto[]), []);
+  // só as famílias (algumas dezenas), para o recorte da busca. O catálogo inteiro não é mais
+  // baixado: o produto se acha buscando, e a busca é do servidor
+  const { dados: familias } = useCarregar(
+    async (signal): Promise<string[]> => {
+      try { return (await listarFamilias(false, signal)).map((f) => f.name); }
+      // falhar aqui não derruba o contrato: sem famílias, a busca segue pelo termo
+      catch { return []; }
+    }, []);
+  const [buscando, setBuscando] = useState<string | null>(null);
   const [numero, setNumero] = useState(contrato.number ?? '');
   const [teto, setTeto] = useState(contrato.valueLimit != null ? String(contrato.valueLimit) : '');
   const [inicio, setInicio] = useState(contrato.validFrom ?? '');
@@ -80,8 +96,15 @@ export function PainelContrato({ fornecedor, aoSalvar, aoFechar }:
   const editar = (chave: string, campo: keyof LinhaForm, valor: string) =>
     setLinhas((ls) => ls.map((l) => (l.chave === chave ? { ...l, [campo]: valor } : l)));
 
+  function escolher(chave: string, p: Produto) {
+    setLinhas((ls) => ls.map((l) => (l.chave === chave
+      ? { ...l, catalogItemId: p.id, catalogCode: p.code, descricao: p.description, unidade: p.unitOfMeasure }
+      : l)));
+    setBuscando(null);
+  }
+
   async function salvar() {
-    const items = itensDoFormulario(linhas, catalogo ?? []);
+    const items = itensDoFormulario(linhas);
     setSalvando(true);
     try {
       await salvarContrato(fornecedor.id, {
@@ -141,17 +164,26 @@ export function PainelContrato({ fornecedor, aoSalvar, aoFechar }:
         {linhas.map((l) => (
           <div key={l.chave} className="rounded-lg border border-borda p-3" data-linha-contrato>
             <Grade2>
+              {/* buscando, não rolando: o select com o catálogo inteiro dentro não deixava
+                  digitar para filtrar, e achar a bota era rolar milhares de itens */}
               <Campo rotulo="Produto">
-                {l.descricaoLivre && !l.catalogItemId ? (
-                  <input value={l.descricaoLivre} readOnly title="Produto fora do catálogo, mantido do contrato anterior" />
+                {l.descricao && !l.catalogItemId ? (
+                  <input value={l.descricao} readOnly title="Produto fora do catálogo, mantido do contrato anterior" />
+                ) : l.catalogItemId ? (
+                  <div className="flex items-center gap-2">
+                    <span className="flex-1 truncate" title={`[${l.catalogCode}] ${l.descricao}`}>
+                      <strong>{l.descricao}</strong>
+                      <span className="sub"> [{l.catalogCode}]{l.unidade ? ` · ${l.unidade}` : ''}</span>
+                    </span>
+                    <button type="button" className="botao-secundario" onClick={() => setBuscando(l.chave)}>
+                      Trocar
+                    </button>
+                  </div>
                 ) : (
-                  <select aria-label="Produto do contrato" value={l.catalogItemId}
-                    onChange={(e) => editar(l.chave, 'catalogItemId', e.target.value)}>
-                    <option value="">Selecione o produto…</option>
-                    {(catalogo ?? []).map((c) => (
-                      <option key={c.id} value={c.id}>[{c.code}] {c.description}</option>
-                    ))}
-                  </select>
+                  <button type="button" className="botao-secundario w-full"
+                    aria-label="Buscar produto do contrato" onClick={() => setBuscando(l.chave)}>
+                    Buscar produto no catálogo…
+                  </button>
                 )}
               </Campo>
               <Grade2>
@@ -196,6 +228,11 @@ export function PainelContrato({ fornecedor, aoSalvar, aoFechar }:
         <button type="button" className="botao" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando…' : 'Salvar contrato'}</button>
       </div>
       <Nota>Salvar sem nenhum produto encerra o contrato: o fornecedor volta a ser cotado normalmente.</Nota>
+
+      {buscando && (
+        <BuscaDeProdutoDoContrato familias={familias ?? []}
+          aoEscolher={(p) => escolher(buscando, p)} aoFechar={() => setBuscando(null)} />
+      )}
     </Painel>
   );
 }

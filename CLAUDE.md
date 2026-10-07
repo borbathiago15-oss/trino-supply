@@ -721,6 +721,10 @@ campo chegou a uma tela em uso, e começar desmarcado a esvaziaria para todo mun
 tira um grupo de circulação é o cadastro, não um deploy. A lista de famílias da tela continua sendo
 a do **cadastro** (`?material=true`), nunca derivada dos produtos; por isso o produto marcado
 "sempre entra" numa família não marcada se acha pela busca, e não pelo seletor de família.
+**A tela tem duas portas, e a busca é a que alcança esse caso**: família **ou** termo, pela mesma
+régua da SC — `dominio/buscaDeProduto.ts`, que existe fora das duas telas justamente para elas não
+divergirem no piso de duas letras. Sem família e sem termo a tela não lista nada: era listar o
+acervo inteiro que fazia o solicitante rolar a página atrás da bota.
 
 **O Dashboard de Suprimentos evolui o `/painel` e a `/diretoria` — não nasce ao lado.** Duas telas
 para o mesmo número desmentiriam a regra de que o indicador tem o mesmo valor em todo lugar. Três

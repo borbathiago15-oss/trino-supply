@@ -310,12 +310,17 @@ export const MANUAIS: Record<string, Manual> = {
   'mr-new': {
     paraQueServe: 'Pedir material ao almoxarifado, para um centro de custo.',
     passos: [
-      'Escolha o centro de custo e a família, e busque os produtos.',
-      'Informe as quantidades e, se precisar, uma observação.',
+      'Escolha o centro de custo.',
+      'Escolha a família ou busque o produto pelo nome ou pelo código — as duas portas levam à mesma lista.',
+      'Marque os produtos, informe as quantidades e, se precisar, uma observação.',
       'Clique em "Enviar ao almoxarifado".',
     ],
     regras: [
       { texto: 'Com centros vinculados ao seu cadastro, você só pede material para eles.' },
+      { texto: 'A lista traz só o que é de almoxarifado: quem decide é a família, no cadastro de '
+          + 'Famílias de Produtos, e o produto ajusta quando é exceção. Produto de uma família que '
+          + 'não é de almoxarifado não aparece no seletor de família — se ele for exceção, ache-o pela busca.' },
+      { texto: 'EPI e EPC sem C.A. em nenhum fornecedor não podem ser solicitados (IC-ERR-023).' },
     ],
   },
   'mr-mine': {

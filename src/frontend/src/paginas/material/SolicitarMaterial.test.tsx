@@ -5,14 +5,16 @@ import { MemoryRouter } from 'react-router-dom';
 import type { Produto } from '@/api/catalogo';
 import type { CentroCusto } from '@/api/centrosCusto';
 import { ToastProvider } from '@/componentes/Toast';
-import { casDoProduto, itensEscolhidos, semCaObrigatorio, SolicitarMaterial } from './SolicitarMaterial';
+import { casDoProduto, itensEscolhidos, paraEscolha, semCaObrigatorio, SolicitarMaterial } from './SolicitarMaterial';
 
-vi.mock('@/api/catalogo', () => ({ buscarProdutos: vi.fn() }));
+vi.mock('@/api/catalogo', () => ({ buscarProdutos: vi.fn(), fichaDoProduto: vi.fn() }));
+vi.mock('@/api/documentos', () => ({ urlDocumento: vi.fn() }));
 vi.mock('@/api/familias', () => ({ listarFamilias: vi.fn() }));
 vi.mock('@/api/centrosCusto', () => ({ listarCentrosCusto: vi.fn() }));
 vi.mock('@/api/material', () => ({ criarSolicitacaoMaterial: vi.fn() }));
 
-import { buscarProdutos } from '@/api/catalogo';
+import { buscarProdutos, fichaDoProduto } from '@/api/catalogo';
+import { urlDocumento } from '@/api/documentos';
 import { listarFamilias } from '@/api/familias';
 import { listarCentrosCusto } from '@/api/centrosCusto';
 import { criarSolicitacaoMaterial } from '@/api/material';
@@ -179,5 +181,79 @@ describe('tela Solicitar Material', () => {
 
     await waitFor(() => expect(screen.getByText(/Escolha uma família ou busque/)).toBeInTheDocument());
     expect(buscarProdutos).not.toHaveBeenCalled();
+  });
+});
+
+describe('a ficha do produto na tela de material', () => {
+  const bota38 = produto({ id: 'b38', code: '24001-38', description: 'Bota biqueira de aço — Tam. 38', baseCode: '24001', size: '38', productType: 'EPI', productTypeLabel: 'EPI' });
+  const bota40 = produto({ id: 'b40', code: '24001-40', description: 'Bota biqueira de aço — Tam. 40', baseCode: '24001', size: '40', productType: 'EPI', productTypeLabel: 'EPI', imageDocumentId: 'doc-bota' });
+  const luva = produto({});
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(listarCentrosCusto).mockResolvedValue([cc]);
+    vi.mocked(listarFamilias).mockResolvedValue([{ name: 'EPI' }] as never);
+    vi.mocked(buscarProdutos).mockResolvedValue([bota38, bota40, luva]);
+    vi.mocked(fichaDoProduto).mockImplementation(async (id: string) => produto({
+      ...(id === 'b40' ? bota40 : id === 'b38' ? bota38 : luva),
+      suppliers: [{ id: 'f1', supplierId: 's1', supplierName: 'Alfa EPIs', taxId: null, contact: null,
+        supplierItemCode: 'ALF-24001', lastPrice: 89.9, caNumber: '31469', notes: null }],
+    }));
+    vi.mocked(urlDocumento).mockResolvedValue('blob:foto');
+  });
+
+  it('a linha da grade vira o produto com os tamanhos irmãos; o produto sem grade fica só', () => {
+    const lista = [bota38, bota40, luva];
+    const bota = paraEscolha(bota40, lista);
+    expect(bota.hasGrade).toBe(true);
+    expect(bota.sizes.map((v) => v.size)).toEqual(['38', '40']);
+    expect(bota.key).toBe('24001');
+    const solta = paraEscolha(luva, lista);
+    expect(solta.hasGrade).toBe(false);
+    expect(solta.sizes).toHaveLength(1);
+    expect(solta.key).toBe('p1');
+  });
+
+  it('clicar no nome abre a ficha com a foto, os tamanhos e o C.A. do fornecedor', async () => {
+    const usuario = userEvent.setup();
+    abrir();
+    await usuario.selectOptions(await screen.findByLabelText('Família de produtos'), 'EPI');
+    const grade = await screen.findByTestId('grade-produtos');
+    await usuario.click(within(grade).getByRole('button', { name: 'Bota biqueira de aço — Tam. 40' }));
+
+    const ficha = await screen.findByTestId('ficha-do-produto');
+    // a ficha é a do tamanho clicado, não a do primeiro da grade
+    await waitFor(() => expect(fichaDoProduto).toHaveBeenCalledWith('b40', expect.anything()));
+    expect(await within(ficha).findByTestId('foto-do-produto')).toHaveAttribute('src', 'blob:foto');
+    expect(within(ficha).getByTestId('tamanhos-da-ficha')).toHaveTextContent('38');
+    expect(within(ficha).getByTestId('fornecedores-da-ficha')).toHaveTextContent('Alfa EPIs');
+    expect(within(ficha).getByTestId('fornecedores-da-ficha')).toHaveTextContent('31469');
+  });
+
+  it('"Usar este produto" marca a linha da grade e leva o cursor à quantidade', async () => {
+    const usuario = userEvent.setup();
+    abrir();
+    await usuario.selectOptions(await screen.findByLabelText('Família de produtos'), 'EPI');
+    const grade = await screen.findByTestId('grade-produtos');
+    await usuario.click(within(grade).getByRole('button', { name: 'Bota biqueira de aço — Tam. 38' }));
+    await screen.findByTestId('ficha-do-produto');
+    await usuario.click(await screen.findByRole('button', { name: 'Usar este produto' }));
+
+    expect(screen.queryByTestId('ficha-do-produto')).not.toBeInTheDocument();
+    expect(within(grade).getByLabelText('Selecionar Bota biqueira de aço — Tam. 38')).toBeChecked();
+    expect(within(grade).getByLabelText('Selecionar Bota biqueira de aço — Tam. 40')).not.toBeChecked();
+    await waitFor(() => expect(within(grade).getByLabelText('Quantidade de Bota biqueira de aço — Tam. 38')).toHaveFocus());
+  });
+
+  it('"Voltar à lista" fecha a ficha sem marcar nada', async () => {
+    const usuario = userEvent.setup();
+    abrir();
+    await usuario.selectOptions(await screen.findByLabelText('Família de produtos'), 'EPI');
+    const grade = await screen.findByTestId('grade-produtos');
+    await usuario.click(within(grade).getByRole('button', { name: 'Luva nitrílica' }));
+    await screen.findByTestId('ficha-do-produto');
+    await usuario.click(await screen.findByRole('button', { name: '← Voltar à lista' }));
+    expect(screen.queryByTestId('ficha-do-produto')).not.toBeInTheDocument();
+    expect(within(grade).getByLabelText('Selecionar Luva nitrílica')).not.toBeChecked();
   });
 });

@@ -326,6 +326,7 @@ export const MANUAIS: Record<string, Manual> = {
     passos: [
       'Escolha o centro de custo.',
       'Escolha a família ou busque o produto pelo nome ou pelo código — as duas portas levam à mesma lista.',
+      'Clique no nome do produto para ver a ficha: foto, cadastro, tamanhos e fornecedores com o C.A. "Usar este produto" marca a linha.',
       'Marque os produtos, informe as quantidades e, se precisar, uma observação.',
       'Clique em "Enviar ao almoxarifado".',
     ],

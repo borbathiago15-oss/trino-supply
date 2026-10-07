@@ -694,7 +694,11 @@ seletor que pede família ou duas letras antes de consultar (`SeletorDeProduto`)
 única porta do produto cadastrado na SC**: o campo de texto solto na linha parecia uma segunda busca
 e deixava o produto cadastrado entrar como texto. Clicar num resultado abre a **ficha**
 (`FichaDoProduto` — foto, código, família, unidade, fornecedores com C.A.), e é dela que se usa o
-produto. O item **fora do catálogo** tem duas portas (decisão da empresa, 2026-09): "não achou?" na
+produto. **A mesma ficha abre na Solicitação de Material**: ali a lista continua sendo a grade (uma
+linha por tamanho, marcar e informar a quantidade), e o nome do produto abre a ficha do tamanho
+clicado (`paraEscolha` junta as linhas irmãs pelo código-base, sem segunda consulta); "Usar este
+produto" marca a linha e leva o cursor à quantidade. Sem a ficha, o pedido de EPI era feito sem ver
+a foto nem o C.A., que é justamente o que a SC já mostrava. O item **fora do catálogo** tem duas portas (decisão da empresa, 2026-09): "não achou?" na
 própria busca, com o termo buscado como descrição, e **"Escrever item fora do catálogo"** na linha,
 para quem já sabe que o item não existe e não quer passar pela busca para dizer isso. As duas abrem
 o **mesmo modo**, explícito — rótulo "Item fora do catálogo", descrição, unidade, quantidade e a

@@ -270,15 +270,21 @@ export const MANUAIS: Record<string, Manual> = {
     ],
   },
   contracts: {
-    paraQueServe: 'Os contratos de parceria vigentes: teto, quanto já se consumiu em O.C.s e o saldo, além dos pleitos de reajuste.',
+    paraQueServe: 'Os contratos de parceria: cadastrar, editar, acompanhar teto, consumo e saldo, e registrar reajustes.',
     passos: [
+      '"Novo contrato de parceria": escolha o fornecedor (ativos e sem contrato) e preencha número, vigência, teto e os produtos.',
+      'Em cada produto, o preço fixo, o prazo de entrega e a condição de pagamento que valem enquanto o contrato durar.',
+      'Para mudar um contrato, use "Editar contrato" na linha dele.',
       'Veja o teto contratado, o consumido na vigência e o saldo de cada contrato.',
       'Para um reajuste, registre o percentual pleiteado e o fechado com "Registrar reajuste".',
-      'O contrato em si se cadastra no fornecedor (Cadastros → Fornecedores).',
       'Clique no nome do fornecedor para abrir a ficha do contrato: documentos, compras e histórico.',
     ],
     regras: [
+      { texto: 'O contrato de parceria é mantido aqui. O cadastro do fornecedor continua em Cadastros → Fornecedores.' },
       { texto: 'Preço de contrato só preenche a proposta dentro da vigência — preço vencido não entra calado.' },
+      { codigo: 'SUP-ERR-020', texto: 'A vigência não pode terminar antes de começar.' },
+      { texto: 'Salvar sem nenhum produto encerra o contrato: o fornecedor volta a ser cotado normalmente.' },
+      { texto: 'Quem já tem contrato não aparece em "Novo contrato": edite pela linha dele.' },
     ],
   },
   'contract-detail': {
@@ -514,14 +520,15 @@ export const MANUAIS: Record<string, Manual> = {
     ],
   },
   suppliers: {
-    paraQueServe: 'O cadastro de fornecedores: dados, homologação, documentos, contrato de parceria e a chave do Portal do Fornecedor.',
+    paraQueServe: 'O cadastro de fornecedores: dados, homologação, documentos e a chave do Portal do Fornecedor.',
     passos: [
       '"Novo fornecedor": razão social e telefone bastam para o pré-cadastro.',
       'Para homologar, informe o CNPJ e anexe os documentos.',
-      'No contrato, registre vigência, teto, condição de pagamento e os preços fixos por produto.',
       '"Chave do Portal do Fornecedor" gera o acesso para o fornecedor responder cotações.',
+      'A coluna Contrato diz se o fornecedor tem um e leva à ficha dele.',
     ],
     regras: [
+      { texto: 'O contrato de parceria é mantido em Compras → Contratos, não aqui.' },
       { codigo: 'SUP-ERR-013', texto: 'Homologar exige CPF/CNPJ.' },
       { codigo: 'SUP-ERR-015', texto: 'Não se cadastra dois fornecedores com a mesma razão social (sem acento, caixa ou pontuação).' },
       { texto: 'O CNPJ, uma vez gravado, não se troca. Fundir dois cadastros não existe: inative o repetido.' },

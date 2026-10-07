@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import {
   atualizarFornecedor, buscarFornecedores, criarFornecedor, gerarChavePortal, ROTULO_HOMOLOGACAO,
   situacaoEfetiva, type Fornecedor,
@@ -14,7 +15,6 @@ import { data, moeda } from '@/util/formato';
 import { rolarPara } from '@/util/rolar';
 import { useCarregar } from '@/util/useCarregar';
 import { useDebounce } from '@/util/useDebounce';
-import { PainelContrato } from './PainelContrato';
 import { PainelHomologacao } from './PainelHomologacao';
 
 const VAZIO = { razao: '', fantasia: '', cnpj: '', email: '', telefone: '' };
@@ -33,7 +33,6 @@ export function Fornecedores() {
   const [form, setForm] = useState<Formulario>(VAZIO);
   const [salvando, setSalvando] = useState(false);
   const [homologando, setHomologando] = useState<string | null>(null);
-  const [contratando, setContratando] = useState<string | null>(null);
   const [chaveDe, setChaveDe] = useState<Fornecedor | null>(null);
   const [chave, setChave] = useState<string | null>(null);
 
@@ -53,7 +52,6 @@ export function Fornecedores() {
   const duplicados = dados?.totalDuplicados ?? 0;
   const aberto = (id: string | null) => (id ? lista.find((f) => f.id === id) ?? null : null);
   const emHomologacao = aberto(homologando);
-  const emContrato = aberto(contratando);
 
   function editar(f: Fornecedor) {
     setEditando(f);
@@ -182,11 +180,17 @@ export function Fornecedores() {
                         {restritoPorCertidao && <div className="sub">certidão vencida</div>}
                       </td>
                       <td>
+                        {/* leitura, não manutenção: o contrato de parceria é mantido no menu
+                            Contratos (decisão da empresa, 2026-10). Esconder o fato aqui seria
+                            pior — é informação do fornecedor —, mas quem age vai para lá */}
                         {temContrato ? (
                           <>
-                            <Badge classe={f.contract.current ? 'bg-ok-fundo text-ok' : 'bg-superficie-forte text-texto-suave'}>
-                              {f.contract.current ? 'VIGENTE' : 'FORA DA VIGÊNCIA'}
-                            </Badge>
+                            <Link to={`/contratos/${f.id}`} className="hover:underline"
+                              title="Abrir a ficha do contrato">
+                              <Badge classe={f.contract.current ? 'bg-ok-fundo text-ok' : 'bg-superficie-forte text-texto-suave'}>
+                                {f.contract.current ? 'VIGENTE' : 'FORA DA VIGÊNCIA'}
+                              </Badge>
+                            </Link>
                             <div className="sub">
                               {f.contract.items.length} produto(s)
                               {f.contract.validUntil && ` · até ${data(f.contract.validUntil)}`}
@@ -201,9 +205,8 @@ export function Fornecedores() {
                           <CelulaAcoes>
                             <button type="button" className="botao-secundario" onClick={() => editar(f)}>Editar</button>
                             <button type="button" className="botao-secundario"
-                              onClick={() => { setHomologando(f.id); setContratando(null); }}>Homologação</button>
+                              onClick={() => setHomologando(f.id)}>Homologação</button>
                             <MenuAcoes rotulo={`Mais ações de ${f.legalName}`} acoes={[
-                              { rotulo: 'Contrato de parceria', aoEscolher: () => { setContratando(f.id); setHomologando(null); } },
                               { rotulo: 'Chave do portal', aoEscolher: () => setChaveDe(f) },
                               { rotulo: f.active ? 'Inativar' : 'Reativar', perigo: f.active, aoEscolher: () => alternarSituacao(f) },
                             ]} />
@@ -277,18 +280,12 @@ export function Fornecedores() {
       )}
 
       {/*
-        A `key` é o fornecedor, e não é detalhe: os dois painéis nascem com o estado lido
-        da prop uma única vez (`useState(fornecedor.…)`). Como a lista continua na tela
-        acima deles, abrir a homologação de outro fornecedor trocava a prop **sem
-        desmontar** o painel — e o select seguia mostrando a situação do anterior. Um
-        homologado aparecia como Prospect, e "Salvar situação" gravava isso nele. No
-        contrato era pior: dava para copiar número, teto, vigência e itens de um
-        fornecedor para outro sem perceber.
+        A `key` é o fornecedor, e não é detalhe: o painel nasce com o estado lido da prop uma
+        única vez (`useState(fornecedor.…)`). Como a lista continua na tela acima dele, abrir
+        a homologação de outro fornecedor trocava a prop **sem desmontar** o painel — e o
+        select seguia mostrando a situação do anterior. Um homologado aparecia como Prospect,
+        e "Salvar situação" gravava isso nele.
       */}
-      {emContrato && (
-        <PainelContrato key={emContrato.id} fornecedor={emContrato}
-          aoSalvar={recarregar} aoFechar={() => setContratando(null)} />
-      )}
       {emHomologacao && (
         <PainelHomologacao key={emHomologacao.id} fornecedor={emHomologacao}
           aoSalvar={recarregar} aoFechar={() => setHomologando(null)} />

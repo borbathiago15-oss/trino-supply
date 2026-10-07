@@ -45,6 +45,7 @@ public static class Servicos
         servicos.AddScoped<ScoreWeightsService>();
         servicos.AddScoped<Analytics.MetasDosIndicadoresService>();
         servicos.AddScoped<PrazoDaEtapaService>();
+        servicos.AddScoped<Materials.PrazoDeAtendimentoService>();
         servicos.AddScoped<TipoDeSolicitacaoService>();
         servicos.AddScoped<AvisoDoUsuarioService>();
         servicos.AddScoped<EscalonamentoDoPrazoService>();

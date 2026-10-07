@@ -109,5 +109,47 @@ public static class PrazoDaEtapaRotas
                 ? Error(ctx, error.Code == "SLA-ERR-900" ? 403 : 400, error.Code, error.Message)
                 : Ok(new { items = salvos!.Select(s => new { stage = s.Stage, maxDays = s.MaxDays }) }, ctx);
         });
+
+        // ---- prazo de atendimento do almoxarifado, por família -------------------
+        // Mora junto dos prazos das etapas porque é a mesma régua (padrão + herança + zero
+        // desliga) e o administrador mantém os dois no mesmo lugar. O que ele mede é outro
+        // cano: o material que sai do estoque, sem compra nenhuma.
+        var atendimento = app.MapGroup("/api/v1/material-sla").RequireAuthorization();
+        atendimento.AddEndpointFilter(RejectSupplierRole());
+
+        atendimento.MapGet("/", async (Materials.PrazoDeAtendimentoService svc,
+            ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            var atuais = await svc.AtuaisAsync();
+            var proprias = (await svc.PropriasAsync()).ToHashSet();
+            return Ok(new
+            {
+                // a régua vai junto: a tela pinta de amarelo antes do estouro e precisa dizer
+                // a partir de quando, em vez de guardar o número para si
+                warnAtPercent = Math.Round(Materials.PrazoDeAtendimentoService.FracaoDeAtencao * 100, 0),
+                defaultDays = Materials.PrazoDeAtendimentoService.PadraoDeDias,
+                canEdit = Materials.PrazoDeAtendimentoService.CanEdit(RoleOf(p)),
+                items = atuais.Select(s => new
+                {
+                    family = s.Family,
+                    maxDays = s.MaxDays,
+                    // herdada = a família não definiu o seu prazo e segue o padrão
+                    inherited = s.Family is not null && !proprias.Contains(s.Family),
+                    updatedAt = s.UpdatedAt, updatedByLabel = s.UpdatedByLabel,
+                }),
+            }, ctx);
+        });
+
+        atendimento.MapPut("/", async (PrazoDeAtendimentoRequest body,
+            Materials.PrazoDeAtendimentoService svc, ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            var actor = BuildActor(p);
+            if (actor is null) return Error(ctx, 403, "MSLA-ERR-900", "Seu papel não define o prazo de atendimento.");
+            var (salvos, error) = await svc.SalvarAsync(
+                actor, body.Days ?? new Dictionary<string, int>(), body.Inherit);
+            return error is not null
+                ? Error(ctx, error.Code == "MSLA-ERR-900" ? 403 : 400, error.Code, error.Message)
+                : Ok(new { items = salvos!.Select(s => new { family = s.Family, maxDays = s.MaxDays }) }, ctx);
+        });
     }
 }

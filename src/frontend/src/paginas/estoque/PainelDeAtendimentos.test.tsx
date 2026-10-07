@@ -19,6 +19,7 @@ const linha = (p: Partial<LinhaPainel>): LinhaPainel => ({
   id: 'mr1', number: 'MR-2026-000001', costCenter: 'BAH-001', requesterLabel: 'Ana',
   createdAt: '2026-09-01T12:00:00Z', approvedAt: null, fulfilledAt: null, fulfilledByLabel: null,
   purchaseRequisitionNumber: null, items: 2, pending: 0, summary: '10× Luva · 2× Bota',
+  sla: null,
   ...p,
 });
 
@@ -106,6 +107,30 @@ describe('tela Painel de Atendimentos', () => {
     const porCentro = await screen.findByTestId('painel-por-centro');
     expect(within(porCentro).getByText('BAH-001')).toBeInTheDocument();
     expect(within(screen.getByTestId('painel-por-solicitante')).getByText('Ana')).toBeInTheDocument();
+  });
+
+  it('a linha mostra o prazo de atendimento com o número e a família que o impôs', async () => {
+    // a cor sozinha não diz contra que prazo a linha ficou vermelha
+    vi.mocked(painelDeAtendimentos).mockResolvedValue(painel({
+      emAndamento: [linha({
+        id: 'mr9', number: 'MR-ATRASADA',
+        sla: { maxDays: 2, days: 5, status: 'ESTOURADO', family: 'EPI' },
+      })],
+    }));
+    abrir();
+    const tabela = await screen.findByTestId('painel-andamento');
+    expect(within(tabela).getByText('prazo estourado')).toBeInTheDocument();
+    expect(within(tabela).getByText('5 de 2 dia(s) (EPI)')).toBeInTheDocument();
+  });
+
+  it('sem prazo nenhum a coluna é traço, e não "no prazo"', async () => {
+    // zero em todas as famílias quer dizer que esta fila não cobra tempo — dizer "no prazo"
+    // afirmaria um veredito que ninguém deu
+    vi.mocked(painelDeAtendimentos).mockResolvedValue(painel({}));
+    abrir();
+    const tabela = await screen.findByTestId('painel-andamento');
+    expect(within(tabela).queryByText('no prazo')).not.toBeInTheDocument();
+    expect(within(tabela).getAllByText('—').length).toBeGreaterThan(0);
   });
 
   it('a linha mostra o nome do centro, e o código fica na dica', async () => {

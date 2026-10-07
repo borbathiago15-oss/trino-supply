@@ -29,6 +29,14 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
     public static bool CanRegisterProduct(string role) =>
         CanMaintain(role) || role == Roles.PurchasingOfficer;
 
+    /// <summary>
+    /// O nome da família como o cadastro o guarda: sem espaço nas pontas e em caixa alta
+    /// (<c>MATERIAL DE LIMPEZA</c>). O nome é a chave — o produto o carrega como texto —, então
+    /// quem recebe família de fora passa por aqui antes de comparar, senão "EPI" e " epi "
+    /// seriam duas famílias que nunca somam.
+    /// </summary>
+    public static string NormalizarFamilia(string? nome) => (nome ?? string.Empty).Trim().ToUpperInvariant();
+
     // ---- famílias (cadastro próprio) ----------------------------------------
     /// <param name="materialOnly">
     /// Só as famílias de almoxarifado — a lista de "Família de produtos" em Solicitar Material.

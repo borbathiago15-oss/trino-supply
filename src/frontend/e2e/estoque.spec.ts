@@ -124,6 +124,67 @@ test.describe('Estoque e Triagem de Material (React)', () => {
     await expect.poll(() => centro.locator('option').allInnerTexts()).toEqual(opcoesAntes);
   });
 
+  test('prazos do almoxarifado: o padrão vale para quem não definir, e a exceção para de herdar', async ({ page }) => {
+    await abrirAutenticado(page, '/prazos-almoxarifado');
+    await expect(page.locator('#titulo-pagina')).toHaveText('Prazos do Almoxarifado');
+    await expect(page.getByTestId('form-prazos-atendimento')).toBeVisible();
+
+    // o padrão é a primeira linha, e é ele que vale para quem não definir o seu
+    const padrao = page.locator('#matsla-PADRAO');
+    await padrao.fill('6');
+    await expect(page.getByTestId('leitura-PADRAO')).toContainText('estouro depois de 6');
+
+    // zero é dito como desligado, não como "0 dias"
+    await padrao.fill('0');
+    await expect(page.getByTestId('leitura-PADRAO')).toContainText('sem cobrança de tempo');
+    await padrao.fill('6');
+
+    // a família do cenário E2E existe e é de almoxarifado. O teste não assume o estado
+    // inicial dela — o banco é o mesmo entre execuções —, e sim o **ciclo**: vira exceção,
+    // depois volta a herdar. É o ciclo que é a regra.
+    const familia = page.locator('#matsla-EPI\\ CENARIO\\ E2E');
+    await expect(familia).toBeVisible();
+
+    await familia.fill('1');
+    await page.getByRole('button', { name: 'Salvar prazos' }).click();
+    await expect(page.getByTestId('toast').last()).toContainText('Prazos de atendimento atualizados');
+
+    // gravada, a família deixa de herdar e o padrão não a move mais
+    await expect(page.getByTestId('origem-EPI CENARIO E2E')).toContainText('prazo próprio desta família');
+    await expect(familia).toHaveValue('1');
+    await expect(padrao).toHaveValue('6');
+
+    // voltar ao padrão apaga a exceção, em vez de copiar o número
+    await page.getByRole('button', { name: 'voltar ao padrão' }).click();
+    await expect(page.getByTestId('origem-EPI CENARIO E2E')).toContainText('voltará a seguir o padrão');
+    await page.getByRole('button', { name: 'Salvar prazos' }).click();
+    await expect(page.getByTestId('toast').last()).toContainText('Prazos de atendimento atualizados');
+    await expect(page.getByTestId('origem-EPI CENARIO E2E')).toContainText('segue o padrão');
+    await expect(familia).toHaveValue('6');
+  });
+
+  test('fila do almoxarifado: a coluna Prazo diz o número e a família que o impôs', async ({ page }) => {
+    const observacao = `E2E prazo ${marca}`;
+    await pedirEAprovar(page, observacao);
+
+    // qual é o prazo vigente da família do cenário, lido do próprio cadastro: cravar um
+    // número aqui faria o teste depender do que outra execução deixou no banco
+    await abrirAutenticado(page, '/prazos-almoxarifado');
+    const campo = page.locator('#matsla-EPI\\ CENARIO\\ E2E');
+    await expect(campo).toBeVisible();
+    const dias = await campo.inputValue();
+
+    await abrirAutenticado(page, '/estoque/fila');
+    const linha = page.locator('tr', { hasText: observacao }).first();
+    await expect(linha).toBeVisible();
+    // recém-liberada pelo Nível 1: o relógio está em zero, dentro do prazo da família
+    const prazo = linha.getByTestId(/^sla-/);
+    await expect(prazo).toContainText('no prazo');
+    // o número vem junto da cor, e a família que impôs o prazo também — é o que permite
+    // ao almoxarife conferir de onde saiu o prazo da solicitação
+    await expect(prazo).toContainText(`0 de ${dias} dia(s) (EPI CENARIO E2E)`);
+  });
+
   test('triagem de material: filtra e designa', async ({ page }) => {
     await abrirAutenticado(page, '/gestao-solicitacoes');
     // a tela passou a triar só material: a demanda de COMPRA é triada na Torre,

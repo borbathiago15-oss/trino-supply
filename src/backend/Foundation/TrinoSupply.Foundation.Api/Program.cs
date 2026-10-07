@@ -446,6 +446,12 @@ public record DispensaDoConviteRequest(string? Reason);
 /// <summary>Os prazos por etapa, em dias: <c>{"COTACAO": 7, "APROVACAO": 3}</c>.</summary>
 public record PrazosDasEtapasRequest(
     Dictionary<string, int>? Days, string? RequestType = null, List<string>? Inherit = null);
+/// <summary>
+/// O prazo de atendimento do almoxarifado, em dias, por família:
+/// <c>{"days": {"": 2, "EPI": 1}}</c> — a chave vazia é o padrão.
+/// </summary>
+public record PrazoDeAtendimentoRequest(
+    Dictionary<string, int>? Days, List<string>? Inherit = null);
 public record TipoDeSolicitacaoRequest(string? Code, string? Name, string? Description);
 public record AtualizaTipoDeSolicitacaoRequest(string? Name, string? Description, bool? Active);
 public record ProposalItemRequest(Guid QuotationItemId, decimal UnitPrice, decimal? Quantity);

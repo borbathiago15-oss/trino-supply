@@ -1,4 +1,5 @@
 import { api } from './cliente';
+import type { SlaDoAtendimento } from './prazoDeAtendimento';
 
 /**
  * Situação da solicitação de material — os mesmos rótulos do `MrView` do
@@ -58,6 +59,8 @@ export interface SolicitacaoMaterial {
   cancelReason?: string | null;
   decisionReason?: string | null;
   items: ItemMaterial[];
+  /** O prazo de atendimento da família mais curta entre os itens — derivado no servidor. */
+  sla?: SlaDoAtendimento | null;
 }
 
 const base = '/api/v1/material-requisitions';
@@ -127,6 +130,7 @@ export interface LinhaPainel {
   items: number;
   pending: number;
   summary: string | null;
+  sla?: SlaDoAtendimento | null;
 }
 
 export interface GrupoPainel {

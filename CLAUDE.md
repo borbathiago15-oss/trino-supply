@@ -725,6 +725,39 @@ acabou. A SC do faltante sai **uma vez só por solicitação** (a segunda compra
 primeira já pediu), e o **padrão da porta interna continua sendo o de antes** — encerra e compra —
 para nenhuma chamada anterior à regra mudar de sentido em silêncio.
 
+**O prazo de atendimento do almoxarifado é por família, e tem cadastro próprio.** Decisão da
+empresa (2026-10), em `Materials/PrazoDeAtendimento.cs`, com tela em `/prazos-almoxarifado`
+(Cadastros → Atendimento, ao lado de Prazos por Etapa). A fila já dizia há quantos dias cada
+solicitação espera; faltava alguém dizer que aquilo é tempo demais — e o tempo demais **depende
+do que se pediu**: luva da prateleira não tem o prazo de uma peça que o almoxarife busca em outro
+galpão. **Não é o lead time da família** (`ProductFamily.LeadRequestToQuote` e os outros três,
+que o Dashboard compara com o realizado): aqueles são as metas do processo de **compra**, e este é
+o material que já está em estoque e sai sem compra nenhuma — juntar os dois num campo faria o
+painel de compras cobrar o almoxarife. A forma é a **mesma do `StageSla`**, de propósito: família
+nula é o **padrão**, quem não define **herda**, voltar a herdar **apaga a exceção** (copiar o
+número a congelaria), e **zero desliga**. Duas réguas parecidas com comportamentos diferentes
+seria pior que não ter a segunda. O padrão de fábrica é **2 dias**, que é o mesmo das 48h que o
+cockpit já trata como atenção nesta fila — começar com outro faria a parede e o cadastro cobrarem
+coisas diferentes. O cadastro lista só as famílias que **entram em Solicitar Material**: prazo de
+família que nunca chega ao almoxarifado é linha que o administrador lê para descobrir que não
+serve. Três decisões seguram a conta. A solicitação tem itens de várias famílias e responde pelo
+prazo **mais curto** (`TetoDaSolicitacao`) — valer o mais longo deixaria o item de dois dias
+parado dez dentro de uma solicitação "no prazo". Família em **zero sai da conta** em vez de ser a
+mais curta: zero quer dizer "não cobramos tempo", e tratá-lo como prazo de zero dia faria toda
+solicitação que a tocasse nascer estourada; se todas estão em zero, não há prazo e a tela mostra
+**traço**, não "no prazo". E o relógio começa na **liberação do Nível 1** (`ApprovedAt`), a mesma
+régua da espera da fila — contar da criação cobraria do almoxarife o tempo que a solicitação
+passou esperando o centro; já atendida, mede-se **até o atendimento**, porque ali a pergunta
+passou a ser "foi atendida no prazo?". Ele **mede e expõe, nunca bloqueia**, como o prazo da
+etapa. A família do item **não está no item** (que guarda código e descrição), então vem do
+catálogo pelo `CatalogItemId`, numa consulta para a lista inteira — `SituacoesAsync` existe para
+a fila não fazer uma consulta por linha. A fila e o Painel mostram a **mesma marca**
+(`componentes/MarcaDoSla`), com o número e a família junto: a cor sozinha não diz contra que
+prazo a linha ficou vermelha, e duas telas pintando o mesmo prazo de cores diferentes perderiam
+a autoridade juntas. **Salvar a tela não cria exceção que ninguém pediu**: a família herdada e
+intocada não vai ao servidor, senão abrir o cadastro e salvar congelaria todas as heranças no
+valor do padrão de uma vez — o oposto do que a herança faz.
+
 **O recorte do Painel de Atendimentos é do servidor, e entra antes do teto.** O painel abria
 sempre as últimas 500 solicitações e não tinha filtro nenhum: num almoxarifado com movimento, "Em
 andamento: 37" era um número que ninguém conseguia recortar para cobrar de alguém. A régua vive em

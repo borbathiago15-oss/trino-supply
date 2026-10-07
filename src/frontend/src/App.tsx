@@ -13,6 +13,7 @@ import { CondicoesDePagamento } from '@/paginas/pagamentos/CondicoesDePagamento'
 import { PesosDoScore } from '@/paginas/score/PesosDoScore';
 import { MetasDosIndicadores } from '@/paginas/metas/MetasDosIndicadores';
 import { PrazosDasEtapas } from '@/paginas/torre/PrazosDasEtapas';
+import { PrazosDeAtendimento } from '@/paginas/estoque/PrazosDeAtendimento';
 import { TiposDeSolicitacao } from '@/paginas/torre/TiposDeSolicitacao';
 import { Fornecedores } from '@/paginas/fornecedores/Fornecedores';
 import { Produtos } from '@/paginas/produtos/Produtos';
@@ -119,6 +120,7 @@ export function Rotas() {
           <Route path="/pesos-score" element={<PesosDoScore />} />
           <Route path="/metas" element={<MetasDosIndicadores />} />
           <Route path="/prazos-etapas" element={<PrazosDasEtapas />} />
+          <Route path="/prazos-almoxarifado" element={<PrazosDeAtendimento />} />
           <Route path="/tipos-solicitacao" element={<TiposDeSolicitacao />} />
           <Route path="/centros-custo" element={<CentrosCusto />} />
           <Route path="/produtos" element={<Produtos />} />

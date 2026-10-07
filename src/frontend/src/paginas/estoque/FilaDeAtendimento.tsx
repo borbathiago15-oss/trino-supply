@@ -3,6 +3,7 @@ import {
   atenderMaterial, filaDoAlmoxarifado, type ItemMaterial, type SolicitacaoMaterial,
 } from '@/api/material';
 import { Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
+import { MarcaDoSla } from '@/componentes/MarcaDoSla';
 import { Nota } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
 import { useUsuario } from '@/sessao/SessaoProvider';
@@ -128,7 +129,7 @@ export function FilaDeAtendimento() {
           <div className="mt-3 overflow-x-auto">
             <table data-testid="fila-almoxarifado" className="min-w-[900px]">
               <thead>
-                <tr><th>Solicitação</th><th>Solicitante</th><th>Itens aprovados</th><th>Responsável</th><th></th></tr>
+                <tr><th>Solicitação</th><th>Solicitante</th><th>Itens aprovados</th><th>Prazo</th><th>Responsável</th><th></th></tr>
               </thead>
               <tbody>
                 {fila.map((r) => (
@@ -146,6 +147,11 @@ export function FilaDeAtendimento() {
                         <div key={i.itemId}>{quantidade(aprovado(i))}× {i.description}</div>
                       ))}
                       {r.approvedByLabel && <div className="sub">aprovado por {r.approvedByLabel}</div>}
+                    </td>
+                    {/* o prazo da família mais curta: a cor sem o número não diz contra o
+                        que a linha ficou vermelha, e o almoxarife não tem como conferir */}
+                    <td className="whitespace-nowrap" data-testid={`sla-${r.number}`}>
+                      <MarcaDoSla sla={r.sla} />
                     </td>
                     <td className="min-w-[160px]">
                       {r.assignedToLabel

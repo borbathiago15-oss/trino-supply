@@ -38,6 +38,16 @@ test.describe('Dashboard de Suprimentos e Insights (React)', () => {
     await expect(page.locator('body')).toContainText('Painel do comprador');
   });
 
+  test('painel: o bloco de material carrega e filtra por conta própria', async ({ page }) => {
+    await abrirAutenticado(page, '/painel');
+    const bloco = page.getByTestId('material-no-painel');
+    await expect(bloco.getByTestId('kpis-material')).toBeVisible();
+    await bloco.locator('#mat-produto').fill('luva');
+    await bloco.getByRole('button', { name: 'Aplicar ao material' }).click();
+    await expect(bloco.getByTestId('kpis-material')).toBeVisible();
+    await expect(bloco.getByText('Top solicitações por centro de custo')).toBeVisible();
+  });
+
   test('painel: o filtro só consulta ao aplicar, e limpar devolve o período inteiro', async ({ page }) => {
     await abrirAutenticado(page, '/painel');
     await expect(page.locator('#sd-cc')).toBeVisible();

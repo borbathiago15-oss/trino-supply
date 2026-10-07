@@ -54,6 +54,23 @@ public static class AnalyticsRotas
                 company, category, priority), ctx);
         });
 
+        // a solicitação de material no Dashboard e na Visão da diretoria, com filtros próprios
+        // (período, centro, família, produto): o outro cano da casa, ao lado da compra
+        analytics.MapGet("/material", async (AnalyticsDeMaterialService svc, ClaimsPrincipal p, HttpContext ctx,
+            TimeProvider clock, DateOnly? from, DateOnly? to, string? costCenter, string? family, string? product) =>
+        {
+            if (!AnalyticsDeMaterialService.CanView(RoleOf(p)))
+                return Error(ctx, 403, "AN-ERR-901", "Seu papel não acessa a análise de solicitações de material.");
+            var mods = ModulesOf(p);
+            if (!mods.Contains(AppModules.Material) && !mods.Contains(AppModules.Estoque)
+                && !mods.Contains(AppModules.Aprovacao) && !mods.Contains(AppModules.Compras))
+                return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para este módulo.");
+            var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+            var f = from ?? new DateOnly(today.Year, today.Month, 1);
+            var t = to ?? today;
+            return Ok(await svc.MaterialAsync(f, t, costCenter, family, product), ctx);
+        });
+
         // Procurement Insights (V2-P3): achados determinísticos + visão executiva + backlog
         analytics.MapGet("/insights", async (TrinoSupply.Foundation.Api.Insights.InsightsService svc,
             TrinoSupply.Foundation.Api.Melhoria.GatilhoDePlanoService gatilho,

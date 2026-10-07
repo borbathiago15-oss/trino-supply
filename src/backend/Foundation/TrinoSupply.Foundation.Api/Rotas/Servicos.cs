@@ -57,6 +57,7 @@ public static class Servicos
         servicos.AddScoped<Melhoria.GatilhoDePlanoService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Comunicados.AnnouncementService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Analytics.AnalyticsService>();
+        servicos.AddScoped<TrinoSupply.Foundation.Api.Analytics.AnalyticsDeMaterialService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Analytics.RelatorioExecutivoService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Compliance.ComplianceService>();
         servicos.AddScoped<TrinoSupply.Foundation.Api.Insights.InsightsService>();

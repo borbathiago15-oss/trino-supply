@@ -18,8 +18,18 @@ test.describe('Material, Contratos, Scorecard e Compliance (React)', () => {
     const grade = page.getByTestId('grade-produtos');
     await expect(grade).toBeVisible();
 
-    // marcado sem quantidade: a tela recusa e continua na mesma página
+    // o nome do produto abre a ficha, como na SC — foto, cadastro e fornecedores com C.A. —
+    // e "Usar este produto" marca a linha
     const primeira = grade.locator('tr[data-produto]').first();
+    await primeira.getByRole('button', { name: /Luva nitrílica/ }).click();
+    const ficha = page.getByTestId('ficha-do-produto');
+    await expect(ficha).toBeVisible();
+    await expect(ficha.getByTestId('fornecedores-da-ficha').or(ficha.getByText('Nenhum fornecedor no cadastro deste produto.'))).toBeVisible();
+    await page.getByRole('button', { name: 'Usar este produto' }).click();
+    await expect(ficha).toHaveCount(0);
+    await expect(primeira.locator('input[type=checkbox]')).toBeChecked();
+
+    // marcado sem quantidade: a tela recusa e continua na mesma página
     await primeira.locator('input[type=checkbox]').check();
     await page.getByRole('button', { name: 'Enviar ao almoxarifado' }).click();
     await expect(page.getByTestId('toast')).toContainText('Informe a quantidade');

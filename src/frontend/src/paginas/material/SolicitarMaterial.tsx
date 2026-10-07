@@ -1,11 +1,13 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { buscarProdutos, type Produto } from '@/api/catalogo';
+import { buscarProdutos, type Produto, type ProdutoParaEscolha } from '@/api/catalogo';
 import { listarFamilias } from '@/api/familias';
 import { listarCentrosCusto } from '@/api/centrosCusto';
 import { criarSolicitacaoMaterial } from '@/api/material';
 import { Aviso, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
+import { Dialogo } from '@/componentes/Dialogo';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
+import { FichaDoProduto } from '@/paginas/solicitacoes/FichaDoProduto';
 import { useToast } from '@/componentes/Toast';
 import { podeBuscar } from '@/dominio/buscaDeProduto';
 import { useCarregar } from '@/util/useCarregar';
@@ -23,6 +25,27 @@ export const casDoProduto = (p: Produto) =>
  * pendência aparecer antes de o solicitante preencher o resto.
  */
 export const semCaObrigatorio = (p: Produto) => p.compliancePending;
+
+/**
+ * A linha da grade como a ficha a entende: o produto com a grade de tamanhos junta. A lista
+ * desta tela é uma linha por tamanho (a bota 38 e a 39 são produtos); a ficha é uma só para
+ * as duas, e os tamanhos vêm das linhas irmãs que a mesma busca trouxe — o mesmo desenho do
+ * seletor da SC, sem uma segunda consulta ao servidor.
+ */
+export function paraEscolha(p: Produto, lista: Produto[]): ProdutoParaEscolha {
+  const irmaos = p.baseCode ? lista.filter((x) => x.baseCode === p.baseCode) : [p];
+  const tamanhos = irmaos.length ? irmaos : [p];
+  return {
+    key: p.baseCode ?? p.id, baseCode: p.baseCode, description: p.description, family: p.family,
+    unitOfMeasure: p.unitOfMeasure, productType: p.productType, productTypeLabel: p.productTypeLabel,
+    hasGrade: !!p.baseCode && tamanhos.length > 1,
+    compliancePending: tamanhos.every((x) => x.compliancePending),
+    sizes: tamanhos.map((x) => ({
+      id: x.id, code: x.code, size: x.size, referencePrice: x.referencePrice,
+      compliancePending: x.compliancePending, imageDocumentId: x.imageDocumentId,
+    })),
+  };
+}
 
 export interface Escolha { marcado: boolean; quantidade: string }
 const VAZIA: Escolha = { marcado: false, quantidade: '' };
@@ -50,6 +73,9 @@ export function SolicitarMaterial() {
   const [busca, setBusca] = useState('');
   const [escolhas, setEscolhas] = useState<Record<string, Escolha>>({});
   const [enviando, setEnviando] = useState(false);
+  // a ficha aberta (foto, cadastro, tamanhos e fornecedores com C.A.) e a linha a focar ao usá-la
+  const [ficha, setFicha] = useState<Produto | null>(null);
+  const [focar, setFocar] = useState<string | null>(null);
 
   const base = useCarregar(async (signal) => ({
     centros: await listarCentrosCusto(false, signal),
@@ -75,6 +101,18 @@ export function SolicitarMaterial() {
 
   const mexer = (id: string, mudanca: Partial<Escolha>) =>
     setEscolhas((e) => ({ ...e, [id]: { ...VAZIA, ...e[id], ...mudanca } }));
+
+  /** "Usar este produto" na ficha: marca a linha e põe o cursor na quantidade — é o que faltava digitar. */
+  function usarDaFicha(p: Produto) {
+    mexer(p.id, { marcado: true });
+    setFicha(null);
+    setFocar(p.id);
+  }
+  useEffect(() => {
+    if (!focar) return;
+    document.querySelector<HTMLInputElement>(`input[data-qtd="${focar}"]`)?.focus();
+    setFocar(null);
+  }, [focar]);
 
   async function enviar(ev: FormEvent) {
     ev.preventDefault();
@@ -174,7 +212,15 @@ export function SolicitarMaterial() {
                               title={semCa ? `${p.productTypeLabel ?? 'EPI/EPC'} sem C.A. cadastrado (IC-ERR-023)` : undefined}
                               onChange={(e) => mexer(p.id, { marcado: e.target.checked })} />
                           </td>
-                          <td>{p.description}<div className="sub">{p.code}</div></td>
+                          <td>
+                            {/* o nome abre a ficha, como na SC: a dúvida entre duas botas se resolve olhando a foto e o C.A. */}
+                            <button type="button" title="Ver a ficha do produto: foto, cadastro e C.A."
+                              className="text-left font-semibold text-texto hover:text-marca hover:underline"
+                              onClick={() => setFicha(p)}>
+                              {p.description}
+                            </button>
+                            <div className="sub">{p.code}</div>
+                          </td>
                           <td>{p.size || '—'}</td>
                           <td className={semCa ? 'text-[12.5px] font-semibold text-aviso' : 'sub'}>
                             {semCa ? 'sem C.A. (IC-ERR-023)' : cas || '—'}
@@ -182,7 +228,7 @@ export function SolicitarMaterial() {
                           <td>{p.unitOfMeasure}</td>
                           <td>
                             <input type="number" min="0.01" step="0.01" placeholder="0" value={escolha.quantidade}
-                              disabled={semCa} aria-label={`Quantidade de ${p.description}`}
+                              disabled={semCa} aria-label={`Quantidade de ${p.description}`} data-qtd={p.id}
                               onChange={(e) => mexer(p.id, { quantidade: e.target.value })} />
                           </td>
                         </tr>
@@ -201,6 +247,15 @@ export function SolicitarMaterial() {
             <span className="sub">{marcados} produto(s) marcado(s).</span>
           </div>
         </form>
+      )}
+
+      {ficha && (
+        <Dialogo titulo="Ficha do produto" aoFechar={() => setFicha(null)} largura="max-w-[760px]" acoes={<></>}>
+          <div className="max-h-[70vh] overflow-y-auto">
+            <FichaDoProduto produto={paraEscolha(ficha, lista)} tamanhoAberto={ficha.id} rotuloVoltar="← Voltar à lista"
+              aoUsar={() => usarDaFicha(ficha)} aoVoltar={() => setFicha(null)} />
+          </div>
+        </Dialogo>
       )}
     </Painel>
   );

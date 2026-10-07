@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Usuario } from '@/api/auth';
 import type { Fornecedor } from '@/api/fornecedores';
@@ -56,7 +57,9 @@ describe('<Fornecedores />', () => {
     vi.mocked(buscarFornecedores).mockResolvedValue(pagina(lista));
   });
 
-  const montar = () => render(<ToastProvider><Fornecedores /></ToastProvider>);
+  // a coluna do contrato leva à ficha, então a tela tem Link e precisa de rota
+  const montar = () => render(
+    <MemoryRouter><ToastProvider><Fornecedores /></ToastProvider></MemoryRouter>);
 
   it('mostra a homologação efetiva e explica a restrição por certidão', async () => {
     montar();
@@ -188,38 +191,32 @@ describe('<Fornecedores />', () => {
     expect(screen.getByLabelText(/Situação da homologação/)).toHaveValue('HOMOLOGADO');
   });
 
-  it('trocar de fornecedor não carrega o contrato do anterior', async () => {
-    // aqui a consequência era pior que um rótulo errado: salvar copiava número, teto,
-    // vigência e itens de um fornecedor para outro
-    const comContrato = fornecedor({ taxId: '11111111000111', legalName: 'Alfa Equipamentos LTDA' });
-    comContrato.contract = { ...comContrato.contract, number: 'CT-2026-001', valueLimit: 50000 };
-    vi.mocked(buscarFornecedores).mockResolvedValue(pagina([
-      comContrato,
-      fornecedor({ taxId: '98765432000155', legalName: 'Beta Química S.A.', tradeName: 'Beta' }),
-    ]));
+  it('o contrato de parceria não se mantém mais aqui: a ação foi para o menu Contratos', async () => {
+    // decisão da empresa (2026-10): o cadastro do fornecedor fica, o contrato dele vive no
+    // menu Contratos. Duas portas para a mesma coisa é o que se desfez — nenhuma regra mudou
     montar();
     await waitFor(() => expect(screen.getByTestId('tabela-fornecedores')).toBeInTheDocument());
-
     await userEvent.click(screen.getAllByRole('button', { name: /Mais ações de/ })[0]);
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Contrato de parceria' }));
-    expect(screen.getByLabelText(/Número do contrato/)).toHaveValue('CT-2026-001');
-
-    await userEvent.click(screen.getAllByRole('button', { name: /Mais ações de/ })[1]);
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Contrato de parceria' }));
-    expect(screen.getByLabelText(/Número do contrato/)).toHaveValue('');
+    expect(screen.queryByRole('menuitem', { name: 'Contrato de parceria' })).not.toBeInTheDocument();
   });
 
-  it('a vigência do contrato não aceita fim antes do início (SUP-ERR-020)', async () => {
-    // o servidor recusa; o campo já não deixa escolher, em vez de avisar no salvar
-    usuarioAtual = comprador;
+  it('a coluna do contrato continua informando, e leva à ficha', async () => {
+    // esconder o fato seria pior: é informação do fornecedor. Quem **age** vai para Contratos
+    const comContrato = fornecedor({ taxId: '11111111000111', legalName: 'Alfa Equipamentos LTDA' });
+    comContrato.contract = {
+      ...comContrato.contract, number: 'CT-2026-001', valueLimit: 50000,
+      items: [{
+        catalogItemId: null, catalogCode: 'EPI-001', description: 'Luva', unitOfMeasure: 'PAR',
+        unitPrice: 12, paymentTerms: null, paymentDays: null, deliveryDays: null, notes: null,
+      }],
+      current: true,
+    };
+    vi.mocked(buscarFornecedores).mockResolvedValue(pagina([comContrato]));
     montar();
-    await waitFor(() => expect(screen.getByTestId('tabela-fornecedores')).toBeInTheDocument());
-    await userEvent.click(screen.getAllByRole('button', { name: /Mais ações de/ })[0]);
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Contrato de parceria' }));
+    const tabela = await screen.findByTestId('tabela-fornecedores');
 
-    const fim = screen.getByLabelText(/Fim da vigência/);
-    expect(fim).not.toHaveAttribute('min');          // sem início, nada a limitar
-    await userEvent.type(screen.getByLabelText('Início da vigência'), '2026-03-01');
-    expect(fim).toHaveAttribute('min', '2026-03-01');
+    expect(within(tabela).getByText('VIGENTE')).toBeInTheDocument();
+    expect(within(tabela).getByRole('link', { name: /VIGENTE/ }))
+      .toHaveAttribute('href', `/contratos/${comContrato.id}`);
   });
 });

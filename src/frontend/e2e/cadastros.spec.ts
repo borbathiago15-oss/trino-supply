@@ -136,20 +136,33 @@ test.describe('Cadastros (React)', () => {
     await expect(page.locator('#forn-cnpj')).toBeDisabled();
   });
 
-  test('contrato de parceria: fixa preço de um produto e depois encerra', async ({ page }) => {
+  test('contrato de parceria: cadastra, fixa preço e encerra — tudo no menu Contratos', async ({ page }) => {
+    // decisão da empresa (2026-10): o fornecedor se cadastra aqui, o contrato dele vive em
+    // Compras → Contratos. Nenhuma regra mudou — é a mesma gravação, a mesma vigência e o
+    // mesmo encerramento por lista vazia —, só deixou de ter duas portas
     await abrirAutenticado(page, '/fornecedores');
     const cnpj = `${marca}00000280`;
-    await page.fill('#forn-razao', `E2E Contrato ${marca} LTDA`);
+    const razao = `E2E Contrato ${marca} LTDA`;
+    await page.fill('#forn-razao', razao);
     await page.fill('#forn-cnpj', cnpj);
     await page.fill('#forn-telefone', '(81) 3333-2000');
     await page.getByRole('button', { name: 'Cadastrar fornecedor' }).click();
     await expect(page.getByTestId('toast')).toContainText('Fornecedor cadastrado.');
 
+    // aqui não se mantém mais contrato: a ação saiu do menu da linha
     const linha = page.locator(`tr[data-fornecedor="${cnpj}"]`);
     await linha.getByRole('button', { name: /Mais ações de/ }).click();
-    await page.getByRole('menuitem', { name: 'Contrato de parceria' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Contrato de parceria' })).toHaveCount(0);
+    await page.keyboard.press('Escape');
+
+    // o contrato nasce no menu Contratos
+    await abrirAutenticado(page, '/contratos');
+    await page.getByRole('button', { name: 'Novo contrato de parceria' }).click();
+    await page.getByLabel(/Fornecedor/).selectOption({ label: razao });
+    await page.getByRole('button', { name: 'Abrir contrato' }).click();
+
     const painel = page.locator('#contrato');
-    await expect(painel).toBeVisible();
+    await expect(painel).toContainText(razao);
 
     const produtos = painel.getByRole('combobox', { name: 'Produto do contrato' }).first();
     const opcoes = await produtos.locator('option').count();
@@ -160,15 +173,19 @@ test.describe('Cadastros (React)', () => {
     await painel.getByRole('spinbutton', { name: 'Prazo de entrega em dias' }).first().fill('7');
     await painel.locator('#ct-numero').fill(`CT-E2E-${marca}`);
     await painel.locator('#ct-inicio').fill('2026-01-01');
+    // a vigência não aceita fim antes do início (SUP-ERR-020): o campo já limita
+    await expect(painel.locator('#ct-fim')).toHaveAttribute('min', '2026-01-01');
     await painel.locator('#ct-fim').fill('2030-12-31');
     await painel.getByRole('button', { name: 'Salvar contrato' }).click();
     await expect(page.getByTestId('toast').last()).toContainText('Contrato salvo.');
-    await expect(linha).toContainText('VIGENTE');
-    await expect(linha).toContainText('1 produto(s)');
 
-    // a ficha do contrato: abre pelo nome do fornecedor na tela de Contratos
-    await page.goto('/contratos');
-    await page.getByRole('link', { name: `E2E Contrato ${marca} LTDA` }).click();
+    // salvo, ele aparece na tabela de contratos
+    const noContrato = page.locator(`tr[data-contrato="${razao}"]`);
+    await expect(noContrato).toContainText('VIGENTE');
+    await expect(noContrato).toContainText(`CT-E2E-${marca}`);
+
+    // a ficha do contrato: abre pelo nome do fornecedor
+    await noContrato.getByRole('link', { name: razao }).click();
     const ficha = page.getByTestId('ficha-contrato');
     await expect(ficha).toContainText(`CT-E2E-${marca}`);
     await expect(ficha).toContainText('VIGENTE');
@@ -186,16 +203,19 @@ test.describe('Cadastros (React)', () => {
       .toContainText(`contrato-${marca}.pdf`);
     await expect(historia.locator('[data-tipo="DOCUMENTO_ANEXADO"]')).toContainText(`contrato-${marca}.pdf`);
 
-    // de volta ao cadastro, pela busca: a lista é paginada e o fornecedor pode não estar na primeira página
-    await page.goto('/fornecedores');
-    await page.getByLabel('Buscar', { exact: true }).fill(cnpj);
-
-    // remover o produto e salvar encerra o contrato
-    await linha.getByRole('button', { name: /Mais ações de/ }).click();
-    await page.getByRole('menuitem', { name: 'Contrato de parceria' }).click();
+    // editar pela linha, remover o produto e salvar encerra o contrato
+    await abrirAutenticado(page, '/contratos');
+    await page.getByRole('button', { name: `Mais ações do contrato de ${razao}` }).click();
+    await page.getByRole('menuitem', { name: 'Editar contrato' }).click();
     await page.locator('#contrato').getByRole('button', { name: 'Remover' }).first().click();
     await page.locator('#contrato').getByRole('button', { name: 'Salvar contrato' }).click();
     await expect(page.getByTestId('toast').last()).toContainText('Contrato encerrado');
+    // encerrado, ele sai da tabela de contratos
+    await expect(page.locator(`tr[data-contrato="${razao}"]`)).toHaveCount(0);
+
+    // e o cadastro do fornecedor volta a dizer "sem contrato"
+    await abrirAutenticado(page, '/fornecedores');
+    await page.getByLabel('Buscar', { exact: true }).fill(cnpj);
     await expect(linha).toContainText('sem contrato');
   });
 

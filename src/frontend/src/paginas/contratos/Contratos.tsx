@@ -4,6 +4,7 @@ import {
   historicoDeReajustes, listarContratos, registrarReajuste, resumoDeContratos,
   type LinhaContrato, type Reajuste,
 } from '@/api/contratos';
+import type { Fornecedor } from '@/api/fornecedores';
 import { Badge, Carregando, Erro, FaixaKpis, Kpi, Painel, Vazio } from '@/componentes/basicos';
 import { Dialogo } from '@/componentes/Dialogo';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
@@ -11,6 +12,7 @@ import { CelulaAcoes, MenuAcoes } from '@/componentes/MenuAcoes';
 import { useToast } from '@/componentes/Toast';
 import { data, dataHora, moeda } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
+import { PainelContrato } from './PainelContrato';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
@@ -38,10 +40,24 @@ export function Contratos() {
   const [salvando, setSalvando] = useState(false);
   const [historico, setHistorico] = useState<
     { linha: LinhaContrato; itens: Reajuste[]; total: number } | null>(null);
+  // de quem é o contrato aberto no formulário. Guardo o **id**, e não o fornecedor: depois de
+  // salvar a lista recarrega, e um objeto preso no estado mostraria o contrato de antes
+  const [editando, setEditando] = useState<string | null>(null);
+  const [escolhendo, setEscolhendo] = useState(false);
+  const [novo, setNovo] = useState('');
 
   const { dados, erro, carregando, recarregar } = useCarregar(listarContratos, []);
-  const linhas = dados ?? [];
+  const linhas = dados?.linhas ?? [];
   const resumo = resumoDeContratos(linhas);
+  const emContrato: Fornecedor | null =
+    dados?.fornecedores.find((f) => f.id === editando) ?? null;
+
+  function abrirNovo() {
+    if (!novo) return;
+    setEditando(novo);
+    setEscolhendo(false);
+    setNovo('');
+  }
 
   function abrirPleito(l: LinhaContrato) { setForm(FORM_VAZIO); setPleito(l); }
 
@@ -78,11 +94,17 @@ export function Contratos() {
 
   return (
     <>
-      <Painel titulo="Contratos de Parceria">
+      <Painel titulo="Contratos de Parceria" acoes={
+        <button type="button" className="botao" onClick={() => { setNovo(''); setEscolhendo(true); }}>
+          Novo contrato de parceria
+        </button>
+      }>
         <Nota>
-          Os contratos são mantidos em Cadastros → Fornecedores (botão Contrato). Aqui você acompanha
-          vigência, teto, consumo e saldo — cada O.C. registrada do fornecedor abate o saldo. Clique no
-          fornecedor para abrir a ficha: documentos, compras e o histórico do contrato.
+          O contrato de parceria é mantido <strong>aqui</strong> — número, vigência, teto e os produtos
+          contratados (decisão da empresa, 2026-10). O cadastro do fornecedor continua em Cadastros →
+          Fornecedores; o que é do contrato vive neste menu. Cada O.C. registrada do fornecedor na
+          vigência abate o saldo. Clique no fornecedor para abrir a ficha: documentos, compras e o
+          histórico do contrato.
         </Nota>
 
         {erro && <Erro>{erro}</Erro>}
@@ -102,7 +124,7 @@ export function Contratos() {
             </FaixaKpis>
 
             {!linhas.length && (
-              <Vazio>Nenhum contrato de parceria cadastrado. Cadastre em Cadastros → Fornecedores → Contrato.</Vazio>
+              <Vazio>Nenhum contrato de parceria cadastrado. Use &ldquo;Novo contrato de parceria&rdquo;.</Vazio>
             )}
 
             {linhas.length > 0 && (
@@ -154,7 +176,10 @@ export function Contratos() {
                               <button type="button" className="botao-secundario" onClick={() => abrirPleito(l)}>
                                 Registrar reajuste
                               </button>
-                              <MenuAcoes acoes={[{ rotulo: 'Histórico de reajustes', aoEscolher: () => abrirHistorico(l) }]} />
+                              <MenuAcoes rotulo={`Mais ações do contrato de ${l.supplierName}`} acoes={[
+                                { rotulo: 'Editar contrato', aoEscolher: () => setEditando(l.supplierId) },
+                                { rotulo: 'Histórico de reajustes', aoEscolher: () => abrirHistorico(l) },
+                              ]} />
                             </CelulaAcoes>
                           </td>
                         </tr>
@@ -167,6 +192,47 @@ export function Contratos() {
           </>
         )}
       </Painel>
+
+      {/*
+        A `key` é o fornecedor, e não é detalhe: o painel nasce com o estado lido da prop uma
+        única vez (`useState(contrato.…)`). Como a tabela continua na tela acima dele, abrir o
+        contrato de outro fornecedor trocaria a prop **sem desmontar** o painel, e dava para
+        copiar número, teto, vigência e itens de um fornecedor para outro sem perceber.
+      */}
+      {emContrato && (
+        <PainelContrato key={emContrato.id} fornecedor={emContrato}
+          aoSalvar={recarregar} aoFechar={() => setEditando(null)} />
+      )}
+
+      {escolhendo && (
+        <Dialogo titulo="Novo contrato de parceria" aoFechar={() => setEscolhendo(false)} acoes={
+          <>
+            <button type="button" className="botao-secundario" onClick={() => setEscolhendo(false)}>Cancelar</button>
+            <button type="button" className="botao" disabled={!novo} onClick={abrirNovo}>Abrir contrato</button>
+          </>
+        }>
+          {/* só fornecedor ativo e sem contrato: quem já tem um se edita pela linha da tabela,
+              senão haveria dois caminhos para a mesma coisa e o de cá nasceria vazio */}
+          <Campo id="ct-fornecedor" rotulo="Fornecedor" dica="ativos e sem contrato">
+            <select id="ct-fornecedor" value={novo} onChange={(e) => setNovo(e.target.value)}>
+              <option value="">Selecione o fornecedor…</option>
+              {(dados?.semContrato ?? []).map((f) => (
+                <option key={f.id} value={f.id}>{f.legalName}</option>
+              ))}
+            </select>
+          </Campo>
+          {dados && !dados.semContrato.length && (
+            <Nota>
+              Todo fornecedor ativo já tem contrato. Para mudar um deles, use &ldquo;Editar
+              contrato&rdquo; na linha da tabela.
+            </Nota>
+          )}
+          <Nota>
+            O cadastro do fornecedor é em Cadastros → Fornecedores. Aqui se define o contrato
+            dele: número, vigência, teto e os produtos com preço e prazos fixos.
+          </Nota>
+        </Dialogo>
+      )}
 
       {pleito && (
         <Dialogo titulo={`Reajuste pleiteado por ${pleito.supplierName}`} aoFechar={() => setPleito(null)} acoes={

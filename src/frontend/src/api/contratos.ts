@@ -51,17 +51,41 @@ export function resumoDeContratos(linhas: LinhaContrato[]): ResumoContratos {
   };
 }
 
+/** O que a tela de Contratos lê: as linhas e os fornecedores que podem receber um contrato. */
+export interface AcervoDeContratos {
+  linhas: LinhaContrato[];
+  /** Ativos e **sem** contrato — é a lista de "Novo contrato de parceria". */
+  semContrato: { id: string; legalName: string }[];
+  /** Os fornecedores inteiros, para o formulário do contrato não precisar de outra consulta. */
+  fornecedores: Fornecedor[];
+}
+
 /**
- * A tela de contratos lê os fornecedores (é lá que o contrato é mantido) e
- * mostra só quem tem produtos contratados — o mesmo filtro do legado.
+ * A tela de contratos lê os fornecedores — o contrato é um campo do fornecedor no modelo — e
+ * separa quem já tem contrato de quem pode receber um.
+ *
+ * <p>
+ * É **uma consulta só**: a tela precisa das duas listas no mesmo instante (a tabela e o seletor
+ * de "novo contrato"), e duas chamadas ao mesmo endpoint dariam dois retratos do cadastro, com
+ * o fornecedor podendo aparecer nas duas listas ou em nenhuma.
+ * </p>
  */
-export async function listarContratos(signal?: AbortSignal): Promise<LinhaContrato[]> {
+export async function listarContratos(signal?: AbortSignal): Promise<AcervoDeContratos> {
   const fornecedores = await listarFornecedores(true, signal);
-  return fornecedores
-    .filter((f) => f.contract?.items?.length)
-    .map(linhaDeContrato)
-    .sort((a, b) => Number(b.contrato.current) - Number(a.contrato.current)
-      || a.supplierName.localeCompare(b.supplierName, 'pt-BR'));
+  const temContrato = (f: Fornecedor) => !!f.contract?.items?.length;
+  return {
+    linhas: fornecedores
+      .filter(temContrato)
+      .map(linhaDeContrato)
+      .sort((a, b) => Number(b.contrato.current) - Number(a.contrato.current)
+        || a.supplierName.localeCompare(b.supplierName, 'pt-BR')),
+    // inativo fica de fora: reativar é decisão do cadastro de fornecedores, não daqui
+    semContrato: fornecedores
+      .filter((f) => !temContrato(f) && f.active)
+      .map((f) => ({ id: f.id, legalName: f.legalName }))
+      .sort((a, b) => a.legalName.localeCompare(b.legalName, 'pt-BR')),
+    fornecedores,
+  };
 }
 
 export interface Reajuste {

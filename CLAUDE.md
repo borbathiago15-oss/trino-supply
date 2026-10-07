@@ -251,6 +251,24 @@ o usuário descobrir no erro do servidor:
   trabalho feito. O `totalDuplicados` vem do cadastro inteiro, não da página: contá-lo do que
   coube na tela diria "2" onde há sete. **Fundir dois cadastros não existe** — repontar
   cotação, O.C. e contrato é decisão que precisa de dono, não de um botão.
+- **O contrato de parceria é mantido no menu Contratos, numa porta só.** Decisão da empresa
+  (2026-10): o **cadastro do fornecedor** continua em Cadastros → Fornecedores, e tudo o que é do
+  **contrato** — número, vigência, teto e os produtos com preço e prazos fixos — vive em
+  `/contratos`. Antes havia duas portas para a mesma coisa: a tela de Contratos listava e dizia na
+  própria nota "os contratos são mantidos em Cadastros → Fornecedores", e o usuário tinha de
+  atravessar dois menus para fechar um contrato. **Nenhuma regra mudou de conteúdo** — é a mesma
+  `salvarContrato`, a mesma vigência (`SUP-ERR-020`), o mesmo encerramento por lista vazia e o
+  mesmo registro na ficha; o backend não foi tocado. O que mudou foi o lugar: `PainelContrato` saiu
+  de `paginas/fornecedores/` para `paginas/contratos/`, e as duas regras de tela que viviam no teste
+  de Fornecedores (a `key` que impede copiar contrato de um fornecedor para outro, e a vigência que
+  não aceita fim antes do início) **vieram junto** — regra não se perde na mudança de lugar, e há
+  sabotagem provando que as duas continuam cobradas. A tela de Fornecedores **mantém a coluna do
+  contrato**, agora como leitura com link para a ficha: esconder o fato seria pior, porque é
+  informação do fornecedor; o que saiu de lá foi a manutenção. "Novo contrato" oferece só
+  fornecedor **ativo e sem contrato** (quem já tem se edita pela linha, senão haveria outra vez dois
+  caminhos para a mesma coisa, e o de lá nasceria vazio), e `listarContratos` devolve as duas listas
+  numa **consulta só** — duas chamadas ao mesmo endpoint dariam dois retratos do cadastro, com o
+  fornecedor podendo aparecer nas duas listas ou em nenhuma.
 - **O contrato de parceria tem ficha, e a ficha tem memória.** `/contratos/:id` junta o que o
   comprador pergunta antes de renovar ou reajustar: os documentos, os produtos, **todas** as compras
   com o fornecedor (a de antes do contrato mostra quanto se pagava sem ele; cada linha diz se abate

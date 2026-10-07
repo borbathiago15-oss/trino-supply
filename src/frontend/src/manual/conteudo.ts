@@ -573,6 +573,22 @@ export const MANUAIS: Record<string, Manual> = {
       { texto: 'O prazo mede e avisa, nunca bloqueia.' },
     ],
   },
+  'material-sla': {
+    paraQueServe: 'Quanto tempo o almoxarifado tem para atender, no padrão e por família de produto.',
+    passos: [
+      'Ajuste o padrão: ele vale para toda família que não definir o seu.',
+      'Defina só a família que foge do padrão — as outras herdam.',
+      'Use "voltar ao padrão" para desfazer uma exceção.',
+    ],
+    regras: [
+      { texto: 'O relógio começa na liberação do Nível 1, não na criação da solicitação.' },
+      { texto: 'A solicitação responde pelo prazo mais curto entre as famílias dos itens dela.' },
+      { texto: 'Zero desliga a cobrança da família, e a família em zero sai da conta da solicitação.' },
+      { texto: 'Voltar a herdar apaga a exceção, em vez de copiar o número do padrão.' },
+      { texto: 'O prazo mede e avisa, nunca bloqueia o atendimento.' },
+      { texto: 'Não é o prazo-meta da família, que é do processo de compra.' },
+    ],
+  },
   'payment-methods': {
     paraQueServe: 'As formas de pagamento aceitas nas propostas (boleto, PIX, depósito…).',
     passos: ['"Nova forma de pagamento": nome.', 'Ela passa a aparecer na proposta da cotação.'],

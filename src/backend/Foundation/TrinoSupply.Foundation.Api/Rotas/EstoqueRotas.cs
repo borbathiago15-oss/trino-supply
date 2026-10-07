@@ -114,7 +114,7 @@ public static class EstoqueRotas
         });
 
         // ---- MMS-003 — Solicitação de Material (MVP) ---------------------------------
-        static object MrView(MaterialRequisition r) => new
+        static object MrView(MaterialRequisition r, SituacaoDoAtendimento? prazo = null) => new
         {
             id = r.Id, number = r.Number,
             status = r.Status switch
@@ -150,11 +150,17 @@ public static class EstoqueRotas
                 },
             }),
             createdAt = r.CreatedAt,
+            // o prazo de atendimento da família (o mais curto entre os itens): a fila precisa
+            // dizer contra que número a linha ficou vermelha, senão a cor é só cor
+            sla = (prazo ?? SituacaoDoAtendimento.Nenhuma) is { MaxDays: not null } s2
+                ? new { maxDays = s2.MaxDays, days = s2.Days, status = s2.Status, family = s2.Family }
+                : null,
         };
 
         // Painel de atendimentos: substitui o dashboard de estoque (a posição de saldo fica no
         // sistema de almoxarifado da operação — revisão do módulo, 2026-08-26)
-        app.MapGet("/api/v1/material-requisitions/panel", async (AppDbContext db, ClaimsPrincipal p, HttpContext ctx,
+        app.MapGet("/api/v1/material-requisitions/panel", async (AppDbContext db,
+            PrazoDeAtendimentoService prazos, ClaimsPrincipal p, HttpContext ctx,
             string? costCenter, Guid? requesterId, DateOnly? from, DateOnly? to) =>
         {
             if (!CanOperateStock(p) && !MaterialRequisitionService.CanSeeAll(RoleOf(p)))
@@ -170,6 +176,8 @@ public static class EstoqueRotas
             // as escolhas do filtro saem do cadastro inteiro, não do recorte: tirá-las do recorte
             // faria o seletor passar a oferecer só o que já está filtrado
             var opcoes = await RecorteDoPainel.OpcoesAsync(db.MaterialRequisitions);
+            // o prazo de atendimento, para o recorte inteiro de uma vez
+            var sla = await prazos.SituacoesAsync(mrsAll);
 
             object Bloco(IEnumerable<MaterialRequisition> fonte) => fonte.Select(r => new
             {
@@ -180,6 +188,9 @@ public static class EstoqueRotas
                 items = r.Items.Count,
                 pending = r.Items.Sum(i => i.EffectiveQuantity - i.FulfilledQuantity),
                 summary = string.Join(" · ", r.Items.Take(3).Select(i => $"{i.EffectiveQuantity:0.##}× {i.Description}")),
+                sla = sla.GetValueOrDefault(r.Id) is { MaxDays: not null } s2
+                    ? new { maxDays = s2.MaxDays, days = s2.Days, status = s2.Status, family = s2.Family }
+                    : null,
             }).ToList();
 
             var aguardando = mrsAll.Where(r => r.Status == MaterialRequisitionStatus.Submitted).ToList();
@@ -228,7 +239,8 @@ public static class EstoqueRotas
         var mrs = app.MapGroup("/api/v1/material-requisitions").RequireAuthorization();
         mrs.AddEndpointFilter(RequireModules(AppModules.Material, AppModules.Estoque));
 
-        mrs.MapGet("/", async (MaterialRequisitionService svc, ClaimsPrincipal p, HttpContext ctx, bool? queue, bool? mine) =>
+        mrs.MapGet("/", async (MaterialRequisitionService svc, PrazoDeAtendimentoService prazos,
+            ClaimsPrincipal p, HttpContext ctx, bool? queue, bool? mine) =>
         {
             var role = RoleOf(p);
             var actor = new Actor(ActorId(p), p.FindFirstValue("name") ?? "Usuário", role);
@@ -238,7 +250,10 @@ public static class EstoqueRotas
                 return Error(ctx, 403, "MR-ERR-001", "Seu papel não acessa solicitações de material.");
             var list = await svc.ListAsync(actor, queue == true);
             if (mine == true) list = list.Where(r => r.AssignedToId == actor.Id).ToList();
-            return Ok(new { items = list.Select(MrView) }, ctx);
+            // uma consulta para a lista inteira: resolver a família linha a linha seria uma
+            // consulta por linha da tela
+            var sla = await prazos.SituacoesAsync(list);
+            return Ok(new { items = list.Select(r => MrView(r, sla.GetValueOrDefault(r.Id))) }, ctx);
         });
 
         mrs.MapPost("/", async (CreateMaterialRequisitionRequest body, MaterialRequisitionService svc, ClaimsPrincipal p, HttpContext ctx) =>

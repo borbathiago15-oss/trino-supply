@@ -173,6 +173,11 @@ export const MENU: GrupoMenu[] = [
       { id: 'request-types', rotulo: 'Tipos de Solicitação', rota: '/tipos-solicitacao', modulo: 'COMPRAS',
         mostrar: (u) => ehAdmin(u) || u.role === 'SupplyManager' },
       { id: 'stage-sla', rotulo: 'Prazos por Etapa', rota: '/prazos-etapas', modulo: 'COMPRAS', mostrar: ehAdmin },
+      // o prazo do almoxarifado é a mesma régua da linha acima, para o outro cano da casa: o
+      // material que sai do estoque sem compra nenhuma. Fica ao lado porque o administrador
+      // mantém os dois prazos no mesmo lugar, e o módulo é o do material, não o de compras
+      { id: 'material-sla', rotulo: 'Prazos do Almoxarifado', rota: '/prazos-almoxarifado',
+        modulo: 'MATERIAL', mostrar: ehAdmin },
     ]},
     { rotulo: 'Pagamento', filhos: [
       { id: 'payment-methods', rotulo: 'Formas de Pagamento', rota: '/formas-pagamento', modulo: 'COMPRAS', mostrar: podeComprar },

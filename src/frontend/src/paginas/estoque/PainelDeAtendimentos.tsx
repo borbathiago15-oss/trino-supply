@@ -5,6 +5,7 @@ import {
   type FiltroDoPainel, type GrupoPainel, type LinhaPainel,
 } from '@/api/material';
 import { Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
+import { MarcaDoSla } from '@/componentes/MarcaDoSla';
 import { Campo } from '@/componentes/formulario';
 import { useCarregar } from '@/util/useCarregar';
 import { data, quantidade } from '@/util/formato';
@@ -50,7 +51,7 @@ function Lista({ linhas, coluna, marca, nomesDosCentros }: {
     <div className="overflow-x-auto">
       <table data-testid={marca} className="min-w-[760px]">
         <thead>
-          <tr><th>Solicitação</th><th>Solicitante</th><th>Centro</th><th>Itens</th><th>{coluna}</th></tr>
+          <tr><th>Solicitação</th><th>Solicitante</th><th>Centro</th><th>Itens</th><th>Prazo</th><th>{coluna}</th></tr>
         </thead>
         <tbody>
           {linhas.map((r) => (
@@ -62,6 +63,8 @@ function Lista({ linhas, coluna, marca, nomesDosCentros }: {
               <td>{r.requesterLabel}</td>
               <td title={r.costCenter}>{rotuloDoCentro(nomesDosCentros, r.costCenter)}</td>
               <td className="min-w-[240px]">{r.summary || '—'}</td>
+              {/* o mesmo prazo e a mesma marca da fila do almoxarifado (MarcaDoSla) */}
+              <td className="whitespace-nowrap"><MarcaDoSla sla={r.sla} /></td>
               <td>{situacaoDaLinha(r)}</td>
             </tr>
           ))}

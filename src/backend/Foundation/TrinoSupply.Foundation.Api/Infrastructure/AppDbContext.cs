@@ -51,6 +51,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ScoreWeights> ScoreWeights => Set<ScoreWeights>();
     public DbSet<Analytics.IndicatorGoal> IndicatorGoals => Set<Analytics.IndicatorGoal>();
     public DbSet<StageSla> StageSlas => Set<StageSla>();
+    public DbSet<Materials.MaterialFulfillmentSla> MaterialFulfillmentSlas => Set<Materials.MaterialFulfillmentSla>();
     public DbSet<RequestType> RequestTypes => Set<RequestType>();
     public DbSet<UserNotice> UserNotices => Set<UserNotice>();
     public DbSet<PaymentTermOption> PaymentTermOptions => Set<PaymentTermOption>();
@@ -842,6 +843,22 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             // um prazo por (tipo, etapa); nulo no tipo é o conjunto padrão, e por isso os
             // nulos precisam ser comparados entre si — senão haveria vários "padrão"
             e.HasIndex(s => new { s.RequestType, s.Stage }).IsUnique().AreNullsDistinct(false);
+        });
+
+        modelBuilder.Entity<Materials.MaterialFulfillmentSla>(e =>
+        {
+            // o prazo de atendimento do almoxarifado mora no schema do material, não no de
+            // compras: é o outro cano da casa, e o prazo da etapa já é o de lá
+            e.ToTable("material_fulfillment_sla", "materials");
+            e.HasKey(s => s.Id);
+            e.Property(s => s.Id).HasColumnName("id");
+            e.Property(s => s.Family).HasColumnName("family").HasMaxLength(120);
+            e.Property(s => s.MaxDays).HasColumnName("max_days");
+            e.Property(s => s.UpdatedAt).HasColumnName("updated_at");
+            e.Property(s => s.UpdatedByLabel).HasColumnName("updated_by_label").HasMaxLength(200);
+            // uma linha por família; o nulo é o padrão e precisa ser único entre os nulos,
+            // senão haveria vários "padrão" e a leitura escolheria um deles ao acaso
+            e.HasIndex(s => s.Family).IsUnique().AreNullsDistinct(false);
         });
 
         modelBuilder.Entity<Suporte.SupportTicket>(e =>

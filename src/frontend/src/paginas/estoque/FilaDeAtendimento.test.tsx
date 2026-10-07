@@ -87,6 +87,25 @@ describe('tela Fila de Atendimento', () => {
     expect(within(tabela).getByText('designada a você')).toBeInTheDocument();
   });
 
+  it('a fila mostra o prazo de atendimento, com o número e a família que o impôs', async () => {
+    // o prazo é a mesma marca do Painel de Atendimentos (MarcaDoSla): duas telas que
+    // mostrassem o mesmo prazo de jeitos diferentes deixariam o almoxarife sem saber em
+    // qual acreditar
+    vi.mocked(filaDoAlmoxarifado).mockResolvedValue([
+      mr({ sla: { maxDays: 2, days: 3, status: 'ESTOURADO', family: 'EPI' } }),
+    ]);
+    abrir();
+    const celula = await screen.findByTestId('sla-MR-2026-000001');
+    expect(celula).toHaveTextContent('prazo estourado');
+    expect(celula).toHaveTextContent('3 de 2 dia(s) (EPI)');
+  });
+
+  it('solicitação sem prazo mostra traço, e não "no prazo"', async () => {
+    vi.mocked(filaDoAlmoxarifado).mockResolvedValue([mr({ sla: null })]);
+    abrir();
+    expect(await screen.findByTestId('sla-MR-2026-000001')).toHaveTextContent('—');
+  });
+
   it('atender abre com o aprovado preenchido e envia o que ficou na grade', async () => {
     const usuario = userEvent.setup();
     vi.mocked(filaDoAlmoxarifado).mockResolvedValue([

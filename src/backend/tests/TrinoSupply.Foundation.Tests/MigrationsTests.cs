@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Infrastructure;
+using TrinoSupply.Foundation.Api.Materials;
 using TrinoSupply.Foundation.Api.Procurement;
 using TrinoSupply.Foundation.Api.Suporte;
 
@@ -68,6 +69,14 @@ public sealed class MigrationsTests : IAsyncLifetime
 
         // duas consultas juntadas em memória: o Concat delas no LINQ não teria tradução
         Assert.Empty(await LocaisDeEntrega.ListarAsync(db));
+
+        // o recorte do Painel de Atendimentos: `ToUpper()` na coluna e `DateTimeOffset` montado
+        // a partir de um DateOnly — o InMemory executa os dois, o Npgsql é quem precisa traduzir
+        Assert.Empty(await RecorteDoPainel.Filtrar(db.MaterialRequisitions.Include(r => r.Items),
+                "BAH-001", Guid.NewGuid(), new DateOnly(2026, 9, 1), new DateOnly(2026, 9, 30))
+            .OrderByDescending(r => r.CreatedAt).Take(RecorteDoPainel.Teto).ToListAsync());
+        // e as opções do filtro: dois `Distinct()`, um deles sobre uma projeção de duas colunas
+        Assert.Empty((await RecorteDoPainel.OpcoesAsync(db.MaterialRequisitions)).Centros);
 
         // roda na aprovação do Nível 1, que é gravação: `Contains` com array sobre a entidade
         var vazia = new Quotation { Number = "RFQ-0", CostCenter = "CC-01" };

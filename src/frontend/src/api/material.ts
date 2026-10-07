@@ -131,6 +131,8 @@ export interface LinhaPainel {
 
 export interface GrupoPainel {
   costCenter?: string;
+  /** Id do solicitante: é por ele que o filtro recorta — dois "João Silva" são duas pessoas. */
+  requesterId?: string;
   requesterLabel?: string;
   total: number;
   emAndamento: number;
@@ -138,8 +140,20 @@ export interface GrupoPainel {
   parciais: number;
 }
 
+/**
+ * O que o filtro oferece para escolher. Vem do **cadastro inteiro**, e não do recorte: a quebra
+ * por centro conta o recorte (é o que faz o número bater com a lista), mas o seletor responde
+ * outra pergunta — "para onde eu posso ir agora". Tirá-lo do recorte faria do filtro uma porta de
+ * mão única: quem filtrasse o BAH-001 veria o seletor passar a oferecer só o BAH-001.
+ */
+export interface OpcoesDoPainel {
+  centros: string[];
+  solicitantes: { id: string; label: string }[];
+}
+
 export interface PainelAtendimentos {
   totals: { aguardandoAprovacao: number; emAndamento: number; concluidos: number; parciais: number };
+  opcoes: OpcoesDoPainel;
   aguardandoAprovacao: LinhaPainel[];
   emAndamento: LinhaPainel[];
   concluidos: LinhaPainel[];
@@ -148,5 +162,30 @@ export interface PainelAtendimentos {
   porSolicitante: GrupoPainel[];
 }
 
-export const painelDeAtendimentos = (signal?: AbortSignal) =>
-  api<PainelAtendimentos>(`${base}/panel`, { signal });
+/**
+ * O recorte do painel. Vai ao servidor, e não fica no navegador, para o cartão continuar
+ * contando exatamente a lista que ele abre: filtrar só as listas deixaria o número do topo
+ * dizendo uma coisa e a tabela outra.
+ */
+export interface FiltroDoPainel {
+  costCenter?: string;
+  requesterId?: string;
+  from?: string;
+  to?: string;
+}
+
+export const FILTRO_VAZIO: FiltroDoPainel = {};
+
+/** Quantos recortes estão valendo — o número que o botão mostra. */
+export const filtrosAtivos = (f: FiltroDoPainel) =>
+  [f.costCenter, f.requesterId, f.from, f.to].filter((v) => !!v).length;
+
+export const painelDeAtendimentos = (filtro: FiltroDoPainel = {}, signal?: AbortSignal) => {
+  const params = new URLSearchParams();
+  if (filtro.costCenter) params.set('costCenter', filtro.costCenter);
+  if (filtro.requesterId) params.set('requesterId', filtro.requesterId);
+  if (filtro.from) params.set('from', filtro.from);
+  if (filtro.to) params.set('to', filtro.to);
+  const query = params.toString();
+  return api<PainelAtendimentos>(`${base}/panel${query ? `?${query}` : ''}`, { signal });
+};

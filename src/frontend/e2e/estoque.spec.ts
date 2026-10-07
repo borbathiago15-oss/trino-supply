@@ -4,9 +4,11 @@ import { abrirAutenticado } from './sessao';
 const marca = Date.now().toString().slice(-6);
 
 /** Cria uma solicitação de material e a aprova, para ela cair na fila do almoxarifado. */
-async function pedirEAprovar(page: import('@playwright/test').Page, observacao: string) {
+async function pedirEAprovar(
+  page: import('@playwright/test').Page, observacao: string, centro = 'E2E-001',
+) {
   await abrirAutenticado(page, '/material/nova');
-  await page.selectOption('#mr-cc', 'E2E-001');
+  await page.selectOption('#mr-cc', centro);
   await page.fill('#mr-notes', observacao);
   await page.selectOption('#mr-family', 'EPI CENARIO E2E');
   const grade = page.getByTestId('grade-produtos');
@@ -73,6 +75,53 @@ test.describe('Estoque e Triagem de Material (React)', () => {
     await cartao.click();
     await expect(cartao).toHaveAttribute('aria-pressed', 'false');
     await expect(page.locator('body')).toContainText('Clique em um cartão para ver a lista');
+  });
+
+  test('painel: o filtro vai ao servidor, o seletor oferece o cadastro inteiro e limpar desfaz', async ({ page }) => {
+    // dois centros: com um só, "o seletor oferece o cadastro inteiro" e "oferece o recorte"
+    // dariam a mesma lista, e o teste não distinguiria as duas regras
+    await pedirEAprovar(page, `E2E painel A ${marca}`, 'E2E-001');
+    await pedirEAprovar(page, `E2E painel B ${marca}`, 'E2E-002');
+
+    const consultas: string[] = [];
+    page.on('request', (r) => {
+      if (r.url().includes('/material-requisitions/panel')) consultas.push(new URL(r.url()).search);
+    });
+
+    await abrirAutenticado(page, '/estoque/atendimentos');
+    await expect(page.getByTestId('filtro-painel')).toBeVisible();
+    // abre sem recorte: o painel inteiro, como era antes de o filtro existir
+    await expect.poll(() => consultas.at(-1)).toBe('');
+    await expect(page.getByTestId('limpar-filtro')).toHaveCount(0);
+
+    // o seletor é alimentado pelo cadastro inteiro (`opcoes`), não pela quebra do recorte
+    const centro = page.locator('#f-centro');
+    const opcoesAntes = await centro.locator('option').allInnerTexts();
+    expect(opcoesAntes).toContain('Centro de Custo do Cenário E2E');
+    expect(opcoesAntes).toContain('Segundo Centro do Cenário E2E');
+
+    await centro.selectOption('E2E-001');
+    await expect.poll(() => consultas.at(-1)).toContain('costCenter=E2E-001');
+    await expect(page.getByTestId('limpar-filtro')).toBeVisible();
+    // a quebra encolheu para o recorte — e o seletor **não**: o filtro não é porta de mão única
+    await expect(page.getByTestId('painel-por-centro').locator('tbody tr')).toHaveCount(1);
+    await expect.poll(() => centro.locator('option').allInnerTexts()).toEqual(opcoesAntes);
+
+    // a data entra no mesmo recorte e o contador soma os dois
+    await page.fill('#f-de', '2026-01-01');
+    await expect.poll(() => consultas.at(-1)).toMatch(/costCenter=E2E-001.*from=2026-01-01/);
+    await expect(page.locator('body')).toContainText('2 filtro(s) valendo');
+
+    // a linha da quebra aplica o recorte dela, e aplicar de novo o tira
+    const porCentro = page.getByTestId('painel-por-centro');
+    await expect(porCentro).toBeVisible();
+    await porCentro.locator('tbody button[aria-pressed=true]').first().click();
+    await expect.poll(() => consultas.at(-1)).not.toContain('costCenter=E2E-001');
+
+    await page.getByTestId('limpar-filtro').click();
+    await expect.poll(() => consultas.at(-1)).toBe('');
+    await expect(page.getByTestId('limpar-filtro')).toHaveCount(0);
+    await expect.poll(() => centro.locator('option').allInnerTexts()).toEqual(opcoesAntes);
   });
 
   test('triagem de material: filtra e designa', async ({ page }) => {

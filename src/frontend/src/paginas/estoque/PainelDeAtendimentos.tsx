@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { painelDeAtendimentos, type GrupoPainel, type LinhaPainel } from '@/api/material';
+import {
+  FILTRO_VAZIO, filtrosAtivos, painelDeAtendimentos,
+  type FiltroDoPainel, type GrupoPainel, type LinhaPainel,
+} from '@/api/material';
 import { Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
+import { Campo } from '@/componentes/formulario';
 import { useCarregar } from '@/util/useCarregar';
 import { data, quantidade } from '@/util/formato';
 import { rolarPara } from '@/util/rolar';
@@ -67,8 +71,24 @@ function Lista({ linhas, coluna, marca, nomesDosCentros }: {
   );
 }
 
-function Agrupado({ linhas, titulo, campo, marca }:
-  { linhas: GrupoPainel[]; titulo: string; campo: 'costCenter' | 'requesterLabel'; marca: string }) {
+/**
+ * Uma quebra do painel. O rótulo da linha **aplica o filtro daquela linha**: é a mesma regra do
+ * ranking do Dashboard — o número já promete um recorte, e obrigar a repetir o centro no seletor
+ * ao lado seria pedir duas vezes a mesma coisa. Tocar de novo tira.
+ *
+ * <p>
+ * É <b>botão</b>, e não uma `<tr>` com `onClick`, pela mesma razão do `ListaBarras`: o alvo é
+ * largo (a célula inteira), chega pelo teclado e o `aria-pressed` diz se aquele recorte está
+ * valendo — numa linha de tabela com `onClick` nada disso existe.
+ * </p>
+ */
+function Agrupado({ linhas, titulo, campo, marca, rotulo, aoFiltrar, ativo }:
+  {
+    linhas: GrupoPainel[]; titulo: string; campo: 'costCenter' | 'requesterLabel'; marca: string;
+    rotulo?: (g: GrupoPainel) => string;
+    aoFiltrar: (g: GrupoPainel) => void;
+    ativo: (g: GrupoPainel) => boolean;
+  }) {
   if (!linhas.length) return <Vazio>Sem dados ainda.</Vazio>;
   return (
     <div className="overflow-x-auto">
@@ -77,12 +97,24 @@ function Agrupado({ linhas, titulo, campo, marca }:
           <tr><th>{titulo}</th><th>Total</th><th>Em andamento</th><th>Concluídos</th><th>Parciais</th></tr>
         </thead>
         <tbody>
-          {linhas.map((g) => (
-            <tr key={g[campo] ?? '—'}>
-              <td>{g[campo] || '—'}</td>
-              <td>{g.total}</td><td>{g.emAndamento}</td><td>{g.concluidos}</td><td>{g.parciais}</td>
-            </tr>
-          ))}
+          {linhas.map((g) => {
+            const texto = (rotulo ? rotulo(g) : g[campo]) || '—';
+            const marcada = ativo(g);
+            return (
+              <tr key={g[campo] ?? '—'} className={marcada ? 'bg-marca/5 font-semibold' : undefined}>
+                {/* o código fica na dica do centro: é por ele que se confere com o ERP */}
+                <td title={campo === 'costCenter' ? g.costCenter : undefined}>
+                  <button type="button" aria-pressed={marcada} onClick={() => aoFiltrar(g)}
+                    aria-label={marcada ? `Tirar o filtro de ${texto}` : `Filtrar por ${texto}`}
+                    className={'-mx-1 w-full rounded-md px-1 py-0.5 text-left '
+                      + (marcada ? 'text-marca' : 'hover:bg-superficie-suave')}>
+                    {texto}
+                  </button>
+                </td>
+                <td>{g.total}</td><td>{g.emAndamento}</td><td>{g.concluidos}</td><td>{g.parciais}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -92,7 +124,14 @@ function Agrupado({ linhas, titulo, campo, marca }:
 export function PainelDeAtendimentos() {
   const nomesDosCentros = useNomesDosCentros();
   const [aberto, setAberto] = useState<Bloco | null>(null);
-  const { dados, erro, carregando } = useCarregar(painelDeAtendimentos, []);
+  const [filtro, setFiltro] = useState<FiltroDoPainel>(FILTRO_VAZIO);
+  const chave = JSON.stringify(filtro);
+  const { dados, erro, carregando } = useCarregar(
+    (signal) => painelDeAtendimentos(filtro, signal), [chave]);
+
+  // `undefined` é como se tira um recorte: a chave serializada muda em relação à anterior, e é
+  // ela que manda a consulta de novo — o painel inteiro volta sem ninguém precisar limpar tudo
+  const trocar = (mudanca: Partial<FiltroDoPainel>) => setFiltro((f) => ({ ...f, ...mudanca }));
 
   // clicar de novo no mesmo cartão volta a mostrar todos os blocos
   const escolher = (b: Bloco) => {
@@ -102,12 +141,58 @@ export function PainelDeAtendimentos() {
   };
   const visivel = (b: Bloco) => aberto === null || aberto === b;
 
-  if (erro) return <Painel><Erro>{erro}</Erro></Painel>;
-  if (!dados) return <Painel>{carregando && <Carregando />}</Painel>;
+  const ativos = filtrosAtivos(filtro);
+  const barra = (
+    // o recorte vai ao servidor: filtrar só as listas deixaria o cartão contando uma coisa
+    // e a tabela mostrando outra, que é o oposto do que o painel promete
+    <Painel titulo="Filtro" className="mb-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4" data-testid="filtro-painel">
+        {/* as opções vêm de `opcoes`, o cadastro inteiro — não das quebras, que contam o
+            recorte: tiradas do recorte, trocar de centro exigiria limpar o filtro primeiro */}
+        <Campo id="f-centro" rotulo="Centro de custo">
+          <select id="f-centro" value={filtro.costCenter ?? ''}
+            onChange={(e) => trocar({ costCenter: e.target.value || undefined })}>
+            <option value="">Todos</option>
+            {(dados?.opcoes?.centros ?? []).map((codigo) => (
+              <option key={codigo} value={codigo}>{rotuloDoCentro(nomesDosCentros, codigo)}</option>
+            ))}
+          </select>
+        </Campo>
+        <Campo id="f-solicitante" rotulo="Solicitante">
+          <select id="f-solicitante" value={filtro.requesterId ?? ''}
+            onChange={(e) => trocar({ requesterId: e.target.value || undefined })}>
+            <option value="">Todos</option>
+            {(dados?.opcoes?.solicitantes ?? []).map((s) => (
+              <option key={s.id} value={s.id}>{s.label}</option>
+            ))}
+          </select>
+        </Campo>
+        <Campo id="f-de" rotulo="Criadas de">
+          <input id="f-de" type="date" value={filtro.from ?? ''}
+            onChange={(e) => trocar({ from: e.target.value || undefined })} />
+        </Campo>
+        <Campo id="f-ate" rotulo="até">
+          <input id="f-ate" type="date" value={filtro.to ?? ''}
+            onChange={(e) => trocar({ to: e.target.value || undefined })} />
+        </Campo>
+      </div>
+      {ativos > 0 && (
+        <p className="sub mt-2">
+          {ativos} filtro(s) valendo — os cartões e as listas abaixo já contam só o recorte.{' '}
+          <button type="button" className="underline" data-testid="limpar-filtro"
+            onClick={() => setFiltro(FILTRO_VAZIO)}>limpar</button>
+        </p>
+      )}
+    </Painel>
+  );
+
+  if (erro) return <>{barra}<Painel><Erro>{erro}</Erro></Painel></>;
+  if (!dados) return <>{barra}<Painel>{carregando && <Carregando />}</Painel></>;
 
   const t = dados.totals;
   return (
     <>
+      {barra}
       <div className="mb-2 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Cartao rotulo="Aguardando aprovação" valor={t.aguardandoAprovacao} detalhe="do responsável do centro"
           aberto={aberto === 'aguardando'} aoEscolher={() => escolher('aguardando')} />
@@ -149,10 +234,15 @@ export function PainelDeAtendimentos() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <Painel titulo="Por centro de custo">
-          <Agrupado linhas={dados.porCentro} titulo="Centro de custo" campo="costCenter" marca="painel-por-centro" />
+          <Agrupado linhas={dados.porCentro} titulo="Centro de custo" campo="costCenter" marca="painel-por-centro"
+            rotulo={(g) => rotuloDoCentro(nomesDosCentros, g.costCenter)}
+            ativo={(g) => !!g.costCenter && filtro.costCenter === g.costCenter}
+            aoFiltrar={(g) => trocar({ costCenter: filtro.costCenter === g.costCenter ? undefined : g.costCenter })} />
         </Painel>
         <Painel titulo="Por solicitante">
-          <Agrupado linhas={dados.porSolicitante} titulo="Solicitante" campo="requesterLabel" marca="painel-por-solicitante" />
+          <Agrupado linhas={dados.porSolicitante} titulo="Solicitante" campo="requesterLabel" marca="painel-por-solicitante"
+            ativo={(g) => !!g.requesterId && filtro.requesterId === g.requesterId}
+            aoFiltrar={(g) => trocar({ requesterId: filtro.requesterId === g.requesterId ? undefined : g.requesterId })} />
         </Painel>
       </div>
     </>

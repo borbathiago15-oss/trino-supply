@@ -360,7 +360,14 @@ export const MANUAIS: Record<string, Manual> = {
     paraQueServe: 'O painel de atendimentos do almoxarifado: aguardando aprovação, em andamento, concluídos e parciais aguardando compra.',
     passos: [
       'Leia os cartões do topo para ver onde está o volume.',
-      'Veja as quebras por centro de custo e por solicitante.',
+      'Clique num cartão para ver só a lista por trás daquele número.',
+      'Use o filtro do topo para recortar por centro de custo, solicitante ou data de criação.',
+      'Nas quebras por centro de custo e por solicitante, clique na linha para filtrar por ela — e clique de novo para tirar o filtro.',
+    ],
+    regras: [
+      { texto: 'O filtro vale para os cartões e para as listas ao mesmo tempo: o número do topo sempre conta exatamente a lista que ele abre.' },
+      { texto: 'A quebra por solicitante é por pessoa, não por nome: dois homônimos continuam sendo duas linhas.' },
+      { texto: 'A data recorta pela criação da solicitação, e os dois dias informados entram inteiros.' },
     ],
   },
 

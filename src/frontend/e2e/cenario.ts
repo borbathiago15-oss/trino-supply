@@ -100,6 +100,10 @@ export async function prepararCenario() {
   const { items: centros } = await chamar<{ items: { code: string }[] }>('/api/v1/cost-centers/', token);
   if (!centros.some((c) => c.code === 'E2E-001'))
     await chamar('/api/v1/cost-centers/', token, { code: 'E2E-001', name: 'Centro de Custo do Cenário E2E' });
+  // o segundo centro existe para o filtro do Painel de Atendimentos: com um centro só, "o
+  // seletor oferece o cadastro inteiro" e "o seletor oferece o recorte" dariam a mesma lista
+  if (!centros.some((c) => c.code === 'E2E-002'))
+    await chamar('/api/v1/cost-centers/', token, { code: 'E2E-002', name: 'Segundo Centro do Cenário E2E' });
 
   const { items: familias } = await chamar<{ items: { name: string }[] }>('/api/v1/product-families/', token);
   if (!familias.some((f) => f.name === 'EPI CENARIO E2E'))

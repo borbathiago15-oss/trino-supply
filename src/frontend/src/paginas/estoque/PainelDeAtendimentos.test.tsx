@@ -24,12 +24,22 @@ const linha = (p: Partial<LinhaPainel>): LinhaPainel => ({
 
 const painel = (p: Partial<PainelAtendimentos>): PainelAtendimentos => ({
   totals: { aguardandoAprovacao: 1, emAndamento: 2, concluidos: 3, parciais: 1 },
+  opcoes: {
+    centros: ['BAH-001', 'PER-002'],
+    solicitantes: [
+      { id: '11111111-1111-1111-1111-111111111111', label: 'Ana Silva' },
+      { id: '22222222-2222-2222-2222-222222222222', label: 'Bruno Lima' },
+    ],
+  },
   aguardandoAprovacao: [linha({ number: 'MR-AGUARDANDO' })],
   emAndamento: [linha({ id: 'mr2', number: 'MR-ANDAMENTO', approvedAt: '2026-09-02T12:00:00Z' })],
   concluidos: [linha({ id: 'mr3', number: 'MR-CONCLUIDO', fulfilledByLabel: 'Zé' })],
   parciais: [linha({ id: 'mr4', number: 'MR-PARCIAL', pending: 6, purchaseRequisitionNumber: 'SC-2026-000030' })],
   porCentro: [{ costCenter: 'BAH-001', total: 4, emAndamento: 2, concluidos: 1, parciais: 1 }],
-  porSolicitante: [{ requesterLabel: 'Ana', total: 4, emAndamento: 2, concluidos: 1, parciais: 1 }],
+  porSolicitante: [{
+    requesterId: '11111111-1111-1111-1111-111111111111', requesterLabel: 'Ana',
+    total: 4, emAndamento: 2, concluidos: 1, parciais: 1,
+  }],
   ...p,
 });
 
@@ -118,5 +128,152 @@ describe('tela Painel de Atendimentos', () => {
     abrir();
 
     expect((await screen.findAllByTitle('BAH-001'))[0]).toHaveTextContent('BAH-001');
+  });
+});
+
+describe('o filtro do painel', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(listarCentrosCusto).mockResolvedValue([]);
+    vi.mocked(painelDeAtendimentos).mockResolvedValue(painel({}));
+  });
+
+  it('abre sem recorte nenhum: o painel inteiro', async () => {
+    abrir();
+    await screen.findByTestId('painel-aguardando');
+    expect(vi.mocked(painelDeAtendimentos).mock.calls[0][0]).toEqual({});
+    expect(screen.queryByTestId('limpar-filtro')).not.toBeInTheDocument();
+  });
+
+  it('o recorte vai ao servidor, para o cartão continuar contando a lista que ele abre', async () => {
+    const usuario = userEvent.setup();
+    abrir();
+    await screen.findByTestId('painel-aguardando');
+
+    await usuario.selectOptions(screen.getByLabelText('Centro de custo'), 'BAH-001');
+    await vi.waitFor(() => {
+      const ultima = vi.mocked(painelDeAtendimentos).mock.calls.at(-1)?.[0];
+      expect(ultima).toEqual({ costCenter: 'BAH-001' });
+    });
+  });
+
+  it('a data de criação também recorta, e as duas pontas somam no contador', async () => {
+    const usuario = userEvent.setup();
+    abrir();
+    await screen.findByTestId('painel-aguardando');
+
+    await usuario.type(screen.getByLabelText('Criadas de'), '2026-09-01');
+    await usuario.type(screen.getByLabelText('até'), '2026-09-30');
+    await vi.waitFor(() => {
+      expect(vi.mocked(painelDeAtendimentos).mock.calls.at(-1)?.[0])
+        .toEqual({ from: '2026-09-01', to: '2026-09-30' });
+    });
+    expect(screen.getByTestId('limpar-filtro').parentElement).toHaveTextContent('2 filtro(s) valendo');
+  });
+
+  it('clicar na quebra por centro aplica o recorte daquela linha, e clicar de novo o tira', async () => {
+    // o número da linha já promete um recorte: obrigar a repetir o centro no seletor ao lado
+    // seria pedir duas vezes a mesma coisa
+    const usuario = userEvent.setup();
+    abrir();
+    const porCentro = await screen.findByTestId('painel-por-centro');
+
+    // é botão, não linha com onClick: chega pelo teclado e o aria-pressed diz o que está valendo
+    const alvo = within(porCentro).getByRole('button', { name: 'Filtrar por BAH-001' });
+    expect(alvo).toHaveAttribute('aria-pressed', 'false');
+    await usuario.click(alvo);
+    await vi.waitFor(() => {
+      expect(vi.mocked(painelDeAtendimentos).mock.calls.at(-1)?.[0]).toEqual({ costCenter: 'BAH-001' });
+    });
+    expect(within(screen.getByTestId('painel-por-centro'))
+      .getByRole('button', { name: 'Tirar o filtro de BAH-001' })).toHaveAttribute('aria-pressed', 'true');
+
+    const chamadas = vi.mocked(painelDeAtendimentos).mock.calls.length;
+    await usuario.click(within(screen.getByTestId('painel-por-centro'))
+      .getByRole('button', { name: 'Tirar o filtro de BAH-001' }));
+    await vi.waitFor(() => {
+      // tirar o recorte consulta de novo, e não só repinta: os cartões precisam voltar a contar
+      // o painel inteiro, senão o número do topo fica preso no recorte que já saiu
+      expect(vi.mocked(painelDeAtendimentos).mock.calls.length).toBeGreaterThan(chamadas);
+      expect(vi.mocked(painelDeAtendimentos).mock.calls.at(-1)?.[0]).toEqual({});
+    });
+  });
+
+  it('a quebra por solicitante recorta pelo id, não pelo nome', async () => {
+    // dois "João Silva" são duas pessoas, e o painel não pode somá-las numa só
+    const usuario = userEvent.setup();
+    abrir();
+    const porSolicitante = await screen.findByTestId('painel-por-solicitante');
+
+    await usuario.click(within(porSolicitante).getByRole('button', { name: 'Filtrar por Ana' }));
+    await vi.waitFor(() => {
+      expect(vi.mocked(painelDeAtendimentos).mock.calls.at(-1)?.[0])
+        .toEqual({ requesterId: '11111111-1111-1111-1111-111111111111' });
+    });
+  });
+
+  it('limpar devolve o painel inteiro de uma vez', async () => {
+    const usuario = userEvent.setup();
+    abrir();
+    await screen.findByTestId('painel-aguardando');
+
+    await usuario.selectOptions(screen.getByLabelText('Centro de custo'), 'BAH-001');
+    await vi.waitFor(() => {
+      expect(vi.mocked(painelDeAtendimentos).mock.calls.at(-1)?.[0]).toEqual({ costCenter: 'BAH-001' });
+    });
+
+    await usuario.click(screen.getByTestId('limpar-filtro'));
+    await vi.waitFor(() => {
+      expect(vi.mocked(painelDeAtendimentos).mock.calls.at(-1)?.[0]).toEqual({});
+    });
+    expect(screen.queryByTestId('limpar-filtro')).not.toBeInTheDocument();
+  });
+
+  it('o seletor oferece o cadastro inteiro, e não só o que sobrou do recorte', async () => {
+    // a quebra conta o recorte; o seletor responde "para onde eu posso ir agora". Se ele viesse
+    // do recorte, filtrar o BAH-001 esconderia o PER-002 e trocar de centro exigiria limpar tudo
+    const usuario = userEvent.setup();
+    vi.mocked(painelDeAtendimentos).mockResolvedValue(painel({
+      // o recorte já devolveu uma quebra de um centro só — é o que acontece ao filtrar
+      porCentro: [{ costCenter: 'BAH-001', total: 2, emAndamento: 1, concluidos: 1, parciais: 0 }],
+    }));
+    abrir();
+    await screen.findByTestId('painel-aguardando');
+
+    const centro = screen.getByLabelText('Centro de custo');
+    expect([...centro.querySelectorAll('option')].map((o) => o.textContent))
+      .toEqual(['Todos', 'BAH-001', 'PER-002']);
+
+    await usuario.selectOptions(centro, 'PER-002');
+    await vi.waitFor(() => {
+      expect(vi.mocked(painelDeAtendimentos).mock.calls.at(-1)?.[0]).toEqual({ costCenter: 'PER-002' });
+    });
+  });
+
+  it('o seletor de solicitante mostra os homônimos como duas linhas, porque o valor é o id', async () => {
+    vi.mocked(painelDeAtendimentos).mockResolvedValue(painel({
+      opcoes: {
+        centros: ['BAH-001'],
+        solicitantes: [
+          { id: '11111111-1111-1111-1111-111111111111', label: 'Ana Silva' },
+          { id: '22222222-2222-2222-2222-222222222222', label: 'Ana Silva' },
+        ],
+      },
+    }));
+    abrir();
+    await screen.findByTestId('painel-aguardando');
+
+    const opcoes = [...screen.getByLabelText('Solicitante').querySelectorAll('option')];
+    expect(opcoes.map((o) => o.textContent)).toEqual(['Todos', 'Ana Silva', 'Ana Silva']);
+    expect(opcoes.map((o) => o.getAttribute('value'))).toEqual([
+      '', '11111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222',
+    ]);
+  });
+
+  it('o filtro continua na tela quando a consulta falha, para dar como desfazer o recorte', async () => {
+    // painel que troca a barra por uma mensagem de erro prende o usuário no filtro que quebrou
+    vi.mocked(painelDeAtendimentos).mockRejectedValue(new Error('MR-ERR-001'));
+    abrir();
+    expect(await screen.findByTestId('filtro-painel')).toBeInTheDocument();
   });
 });

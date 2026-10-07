@@ -154,13 +154,22 @@ public static class EstoqueRotas
 
         // Painel de atendimentos: substitui o dashboard de estoque (a posição de saldo fica no
         // sistema de almoxarifado da operação — revisão do módulo, 2026-08-26)
-        app.MapGet("/api/v1/material-requisitions/panel", async (AppDbContext db, ClaimsPrincipal p, HttpContext ctx) =>
+        app.MapGet("/api/v1/material-requisitions/panel", async (AppDbContext db, ClaimsPrincipal p, HttpContext ctx,
+            string? costCenter, Guid? requesterId, DateOnly? from, DateOnly? to) =>
         {
             if (!CanOperateStock(p) && !MaterialRequisitionService.CanSeeAll(RoleOf(p)))
                 return Error(ctx, 403, "MR-ERR-001", "Seu usuário não acessa o painel de atendimentos.");
 
-            var mrsAll = await db.MaterialRequisitions.Include(r => r.Items)
-                .OrderByDescending(r => r.CreatedAt).Take(500).ToListAsync();
+            // o recorte entra **antes** do teto: ver RecorteDoPainel, que é quem tem o teste
+            var consulta = RecorteDoPainel.Filtrar(
+                db.MaterialRequisitions.Include(r => r.Items), costCenter, requesterId, from, to);
+
+            var mrsAll = await consulta.OrderByDescending(r => r.CreatedAt)
+                .Take(RecorteDoPainel.Teto).ToListAsync();
+
+            // as escolhas do filtro saem do cadastro inteiro, não do recorte: tirá-las do recorte
+            // faria o seletor passar a oferecer só o que já está filtrado
+            var opcoes = await RecorteDoPainel.OpcoesAsync(db.MaterialRequisitions);
 
             object Bloco(IEnumerable<MaterialRequisition> fonte) => fonte.Select(r => new
             {
@@ -186,6 +195,11 @@ public static class EstoqueRotas
                     aguardandoAprovacao = aguardando.Count, emAndamento = andamento.Count,
                     concluidos = concluidos.Count, parciais = parciais.Count,
                 },
+                opcoes = new
+                {
+                    centros = opcoes.Centros,
+                    solicitantes = opcoes.Solicitantes.Select(s => new { id = s.Id, label = s.Label }),
+                },
                 aguardandoAprovacao = Bloco(aguardando),
                 emAndamento = Bloco(andamento),
                 concluidos = Bloco(concluidos.Take(50)),
@@ -198,9 +212,11 @@ public static class EstoqueRotas
                     parciais = g.Count(r => r.Status is MaterialRequisitionStatus.PartiallyFulfilled
                                             or MaterialRequisitionStatus.PurchaseRoute),
                 }).OrderByDescending(x => x.total).ToList(),
-                porSolicitante = mrsAll.GroupBy(r => r.RequesterLabel).Select(g => new
+                // agrupa por id, e não pelo nome: dois "João Silva" são duas pessoas, e é o id
+                // que o filtro usa — a quebra e o recorte precisam falar da mesma pessoa
+                porSolicitante = mrsAll.GroupBy(r => r.RequesterId).Select(g => new
                 {
-                    requesterLabel = g.Key, total = g.Count(),
+                    requesterId = g.Key, requesterLabel = g.First().RequesterLabel, total = g.Count(),
                     emAndamento = g.Count(r => r.Status == MaterialRequisitionStatus.Approved),
                     concluidos = g.Count(r => r.Status == MaterialRequisitionStatus.Fulfilled),
                     parciais = g.Count(r => r.Status is MaterialRequisitionStatus.PartiallyFulfilled

@@ -725,6 +725,34 @@ acabou. A SC do faltante sai **uma vez só por solicitação** (a segunda compra
 primeira já pediu), e o **padrão da porta interna continua sendo o de antes** — encerra e compra —
 para nenhuma chamada anterior à regra mudar de sentido em silêncio.
 
+**O recorte do Painel de Atendimentos é do servidor, e entra antes do teto.** O painel abria
+sempre as últimas 500 solicitações e não tinha filtro nenhum: num almoxarifado com movimento, "Em
+andamento: 37" era um número que ninguém conseguia recortar para cobrar de alguém. A régua vive em
+`Materials/RecorteDoPainel.cs` — centro de custo, solicitante e a janela de criação — e não dentro
+da rota, porque filtro é onde um `>=` no lugar de um `>` passa despercebido e o painel some com o
+dia que o usuário pediu. Três coisas seguram a conta. O recorte vai ao **servidor** e não fica no
+navegador: **cada cartão do topo promete a lista que abre**, e filtrar só as tabelas deixaria o
+número dizendo uma coisa e a tabela outra — é a mesma regra que já valia na Torre. Ele entra
+**antes do `Take`**: filtrar depois faria o filtro valer só dentro das últimas quinhentas, e a
+solicitação antiga daquele centro sumiria sem ninguém entender por quê. E o solicitante recorta
+**pelo id**, nunca pelo nome — por isso a quebra por solicitante passou a agrupar por
+`RequesterId` —, pelo mesmo motivo que o responsável da ação é chave estrangeira: dois "Ana Silva"
+são duas pessoas, e cobrar de uma a solicitação da outra é o erro que não se desfaz olhando a
+tela. As **quebras são clicáveis** e aplicam o filtro da própria linha, como o ranking do
+Dashboard: o número já promete um recorte, e obrigar a repetir o centro no seletor ao lado seria
+pedir duas vezes a mesma coisa; clicar de novo tira. É **botão**, e não `<tr>` com `onClick`, pela
+mesma razão do `ListaBarras`: chega pelo teclado e o `aria-pressed` diz qual recorte está valendo.
+**A quebra conta o recorte, mas o seletor
+oferece o cadastro inteiro** (`OpcoesAsync`, campo `opcoes` da resposta): são perguntas diferentes
+— "quanto tem em cada centro, aqui dentro" e "para onde eu posso ir agora". Tirar as opções do
+recorte fazia do filtro uma **porta de mão única**: quem filtrava o BAH-001 via o seletor passar a
+oferecer só o BAH-001, e trocar de centro exigia limpar tudo e começar de novo. O seletor de
+solicitante lista os **homônimos separados**, porque o valor dele é o id — juntá-los pelo nome
+tornaria um deles inalcançável. A barra de filtro **fica na tela quando a
+consulta falha**, senão o recorte que quebrou prende o usuário sem como desfazê-lo. O dia final
+conta **inteiro** (`< meia-noite do dia seguinte`): parar na meia-noite dele esconderia tudo o que
+entrou na tarde.
+
 **Excluir de verdade é só para o que nunca circulou.** Produto que entrou numa SC, cotação,
 pedido, contrato, solicitação de material ou no estoque é histórico, e apagá-lo deixaria esses
 registros apontando para nada (`IC-ERR-030`, que diz **onde** ele circulou); o caminho é

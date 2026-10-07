@@ -677,6 +677,21 @@ três jeitos, e a Torre e o cockpit, que agrupam por ela, contavam três. Sem ne
 **ativo** a regra não se aplica — a tela cai no nome do padrão da O.C., e a régua do servidor é
 a mesma que a tela consegue enxergar (a primeira versão contava os inativos e recusava toda SC).
 
+**O centro de custo aparece pelo nome; o código fica na dica.** A solicitação grava o **código**
+(`PER-001`), que é a identidade e não muda — mas quem lê a tela não decora código, e "PER-001" não
+diz se a compra é da obra de Pernambuco ou do administrativo. A régua é a da Torre, agora num lugar
+só (`dominio/centrosDeCusto.ts`): **o nome quando o cadastro conhece o centro, o código quando não**,
+e o código sempre no `title`, porque é por ele que se confere com o ERP. **Centro fora do cadastro
+continua aparecendo pelo código**, nunca como traço: ele some do cadastro e a solicitação dele
+continua existindo, e esconder a que centro ela pertence seria pior que mostrar o código cru. O
+mapa vem do navegador (`useNomesDosCentros`), não de mais um campo em seis rotas: a rota do cadastro
+é **aberta a qualquer papel interno** desde que os formulários de solicitação passaram a usá-la.
+Ele **não guarda cache entre telas** — um mapa vivo pela sessão mostraria o nome antigo depois de
+alguém corrigir o cadastro, e nome errado com cara de oficial é pior que o código. E falhar ali
+**não derruba a tela**: sem o mapa, o rótulo é o código, que é exatamente o que a tela mostrava
+antes. Onde a lista é montada por bloco ou por card, o mapa desce por **prop** — um hook por card
+seria uma consulta por card.
+
 **A SC diz se é orçamento ou compra, e orçamento para antes da aprovação.** `FinalidadeDaSc` é
 obrigatória na rota de criação (`PR-ERR-024`) e **sem valor pré-marcado** na tela — um "compra"
 de fábrica faria todo orçamento esquecido chegar ao Nível 1. O serviço trata vazio como compra

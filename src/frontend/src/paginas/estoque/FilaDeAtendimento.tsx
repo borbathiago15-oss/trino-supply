@@ -9,6 +9,8 @@ import { useUsuario } from '@/sessao/SessaoProvider';
 import { quantidade } from '@/util/formato';
 import { rolarPara } from '@/util/rolar';
 import { useCarregar } from '@/util/useCarregar';
+import { rotuloDoCentro } from '@/dominio/centrosDeCusto';
+import { useNomesDosCentros } from '@/util/useNomesDosCentros';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
@@ -33,6 +35,7 @@ export function validarAtendimento(entregas: Record<string, string>, itens: Item
 }
 
 export function FilaDeAtendimento() {
+  const nomesDosCentros = useNomesDosCentros();
   const usuario = useUsuario();
   const { avisar } = useToast();
   const [somenteMinhas, setSomenteMinhas] = useState(false);
@@ -110,7 +113,7 @@ export function FilaDeAtendimento() {
                   <tr key={r.id} data-material={r.number}>
                     <td className="whitespace-nowrap">
                       <span className="font-semibold">{r.number}</span>
-                      <div className="sub">CC: {r.costCenter}</div>
+                      <div className="sub" title={r.costCenter}>CC: {rotuloDoCentro(nomesDosCentros, r.costCenter)}</div>
                     </td>
                     <td>
                       {r.requesterLabel}
@@ -174,7 +177,7 @@ export function FilaDeAtendimento() {
           </div>
           <Nota>
             Deixe zero no que não tinha em estoque: o faltante vira uma solicitação de compra no nome
-            de {atendendo.requesterLabel}, no centro {atendendo.costCenter}.
+            de {atendendo.requesterLabel}, no centro {rotuloDoCentro(nomesDosCentros, atendendo.costCenter)}.
           </Nota>
         </Painel>
       )}

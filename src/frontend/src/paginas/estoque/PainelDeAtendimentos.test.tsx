@@ -10,8 +10,10 @@ vi.mock('@/api/material', async (importar) => ({
   ...(await importar<typeof import('@/api/material')>()),
   painelDeAtendimentos: vi.fn(),
 }));
+vi.mock('@/api/centrosCusto', () => ({ listarCentrosCusto: vi.fn() }));
 
 import { painelDeAtendimentos } from '@/api/material';
+import { listarCentrosCusto } from '@/api/centrosCusto';
 
 const linha = (p: Partial<LinhaPainel>): LinhaPainel => ({
   id: 'mr1', number: 'MR-2026-000001', costCenter: 'BAH-001', requesterLabel: 'Ana',
@@ -47,7 +49,11 @@ describe('a coluna que muda de bloco para bloco', () => {
 });
 
 describe('tela Painel de Atendimentos', () => {
-  beforeEach(() => vi.resetAllMocks());
+  beforeEach(() => {
+    vi.resetAllMocks();
+    // o cadastro de centros é consultado pelo rótulo da linha; sem resposta a tela cai no código
+    vi.mocked(listarCentrosCusto).mockResolvedValue([]);
+  });
 
   it('abre com os quatro blocos visíveis', async () => {
     vi.mocked(painelDeAtendimentos).mockResolvedValue(painel({}));
@@ -90,5 +96,27 @@ describe('tela Painel de Atendimentos', () => {
     const porCentro = await screen.findByTestId('painel-por-centro');
     expect(within(porCentro).getByText('BAH-001')).toBeInTheDocument();
     expect(within(screen.getByTestId('painel-por-solicitante')).getByText('Ana')).toBeInTheDocument();
+  });
+
+  it('a linha mostra o nome do centro, e o código fica na dica', async () => {
+    // "BAH-001" não diz se a compra é da obra da Bahia ou do administrativo — era isso que
+    // a lista mostrava em toda linha
+    vi.mocked(painelDeAtendimentos).mockResolvedValue(painel({}));
+    vi.mocked(listarCentrosCusto).mockResolvedValue(
+      [{ code: 'BAH-001', name: 'Obra Bahia' }] as never);
+    abrir();
+
+    // a mesma linha aparece em mais de um bloco da tela: basta a primeira
+    const celulas = await screen.findAllByTitle('BAH-001');
+    expect(celulas[0]).toHaveTextContent('Obra Bahia');
+  });
+
+  it('centro fora do cadastro continua aparecendo pelo código, não como traço', async () => {
+    // some do cadastro depois, mas a solicitação dele continua existindo
+    vi.mocked(painelDeAtendimentos).mockResolvedValue(painel({}));
+    vi.mocked(listarCentrosCusto).mockResolvedValue([] as never);
+    abrir();
+
+    expect((await screen.findAllByTitle('BAH-001'))[0]).toHaveTextContent('BAH-001');
   });
 });

@@ -10,6 +10,8 @@ import { useToast } from '@/componentes/Toast';
 import { useUsuario } from '@/sessao/SessaoProvider';
 import { quantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
+import { rotuloDoCentro } from '@/dominio/centrosDeCusto';
+import { useNomesDosCentros } from '@/util/useNomesDosCentros';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
@@ -21,6 +23,7 @@ export const descricaoDoItem = (i: SolicitacaoMaterial['items'][number]) => {
 };
 
 export function MinhasSolicitacoes() {
+  const nomesDosCentros = useNomesDosCentros();
   const usuario = useUsuario();
   const { avisar } = useToast();
   const [aCancelar, setACancelar] = useState<SolicitacaoMaterial | null>(null);
@@ -58,7 +61,7 @@ export function MinhasSolicitacoes() {
                     <tr key={r.id} data-material={r.number}>
                       <td className="whitespace-nowrap">
                         <span className="font-semibold">{r.number}</span>
-                        <div className="sub">CC: {r.costCenter}</div>
+                        <div className="sub" title={r.costCenter}>CC: {rotuloDoCentro(nomesDosCentros, r.costCenter)}</div>
                       </td>
                       <td className="min-w-[360px]">
                         {r.items.map((i) => <div key={i.itemId}>{descricaoDoItem(i)}</div>)}

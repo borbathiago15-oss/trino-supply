@@ -13,6 +13,8 @@ import { classeDoTom } from '@/dominio/tons';
 import { useUsuario } from '@/sessao/SessaoProvider';
 import { data, moeda, quantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
+import { rotuloDoCentro } from '@/dominio/centrosDeCusto';
+import { useNomesDosCentros } from '@/util/useNomesDosCentros';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
@@ -32,6 +34,7 @@ export const contarPorFaixa = (itens: Demanda[], agora = Date.now()) =>
   FAIXAS_AGING.map((_, i) => itens.filter((t) => faixaDeAging(t, agora) === i).length);
 
 export function GestaoDeSolicitacoes() {
+  const nomesDosCentros = useNomesDosCentros();
   const usuario = useUsuario();
   const { avisar } = useToast();
   const podeDesignar = podeTriar(usuario);
@@ -202,7 +205,7 @@ export function GestaoDeSolicitacoes() {
                       </td>
                       <td>{i.size || '—'}</td>
                       <td>{t.requesterLabel}</td>
-                      <td>{t.costCenter}</td>
+                      <td title={t.costCenter}>{rotuloDoCentro(nomesDosCentros, t.costCenter)}</td>
                       <td className="whitespace-nowrap">
                         {i.quantity != null ? `${quantidade(i.quantity)} ${i.unitOfMeasure ?? ''}`.trim() : '—'}
                       </td>

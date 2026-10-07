@@ -189,6 +189,8 @@ test.describe('Orçamento (finalidade da SC)', () => {
     await expect(cadastro.getByLabel('Descrição do produto')).toHaveValue(`Resma ${marca}`);
     await cadastro.getByLabel('Família', { exact: true }).selectOption('EPI CENARIO E2E');
     await cadastro.getByLabel(/^Código/).fill(`E2E-RES-${marca}`);
+    // família de almoxarifado: o custo de compra é obrigatório (IC-ERR-018)
+    await cadastro.getByLabel(/Custo de compra/).fill('21.90');
     await cadastro.getByRole('button', { name: 'Cadastrar e usar no item' }).click();
     await expect(page.getByTestId('toast').last()).toContainText(`E2E-RES-${marca}`);
     await expect(page.getByTestId('itens-cotacao')).not.toContainText('fora do catálogo');

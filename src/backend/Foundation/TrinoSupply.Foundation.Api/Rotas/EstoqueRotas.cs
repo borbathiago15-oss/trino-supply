@@ -134,6 +134,9 @@ public static class EstoqueRotas
             purchaseRequisitionId = r.PurchaseRequisitionId, purchaseRequisitionNumber = r.PurchaseRequisitionNumber,
             assignedToId = r.AssignedToId, assignedToLabel = r.AssignedToLabel,
             assignedByLabel = r.AssignedByLabel, assignedAt = r.AssignedAt,
+            // os três valores da solicitação, pelo custo congelado no dia do pedido
+            requestedValue = r.RequestedValue, approvedValue = r.ApprovedValue, fulfilledValue = r.FulfilledValue,
+            itemsWithoutPrice = r.ItemsWithoutPrice,
             items = r.Items.Select(i => new
             {
                 itemId = i.Id, catalogCode = i.CatalogCode, description = i.Description,
@@ -141,6 +144,8 @@ public static class EstoqueRotas
                 approvedQuantity = i.ApprovedQuantity, effectiveQuantity = i.EffectiveQuantity,
                 fulfilledQuantity = i.FulfilledQuantity,
                 pendingQuantity = i.EffectiveQuantity - i.FulfilledQuantity,
+                unitPrice = i.UnitPrice, requestedValue = i.RequestedValue,
+                approvedValue = i.ApprovedValue, fulfilledValue = i.FulfilledValue,
                 status = i.Status switch
                 {
                     MaterialItemStatus.Fulfilled => "ENTREGUE",
@@ -187,6 +192,8 @@ public static class EstoqueRotas
                 purchaseRequisitionNumber = r.PurchaseRequisitionNumber,
                 items = r.Items.Count,
                 pending = r.Items.Sum(i => i.EffectiveQuantity - i.FulfilledQuantity),
+                // o valor liberado (o pedido, enquanto o centro não decide); nulo sem custo
+                value = r.ApprovedValue, itemsWithoutPrice = r.ItemsWithoutPrice,
                 summary = string.Join(" · ", r.Items.Take(3).Select(i => $"{i.EffectiveQuantity:0.##}× {i.Description}")),
                 sla = sla.GetValueOrDefault(r.Id) is { MaxDays: not null } s2
                     ? new { maxDays = s2.MaxDays, days = s2.Days, status = s2.Status, family = s2.Family }

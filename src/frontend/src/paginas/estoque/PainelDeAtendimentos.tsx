@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  FILTRO_VAZIO, filtrosAtivos, painelDeAtendimentos,
+  FILTRO_VAZIO, filtrosAtivos, fraseDoValor, painelDeAtendimentos,
   type FiltroDoPainel, type GrupoPainel, type LinhaPainel,
 } from '@/api/material';
 import { Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
@@ -51,7 +51,7 @@ function Lista({ linhas, coluna, marca, nomesDosCentros }: {
     <div className="overflow-x-auto">
       <table data-testid={marca} className="min-w-[760px]">
         <thead>
-          <tr><th>Solicitação</th><th>Solicitante</th><th>Centro</th><th>Itens</th><th>Prazo</th><th>{coluna}</th></tr>
+          <tr><th>Solicitação</th><th>Solicitante</th><th>Centro</th><th>Itens</th><th>Valor</th><th>Prazo</th><th>{coluna}</th></tr>
         </thead>
         <tbody>
           {linhas.map((r) => (
@@ -63,6 +63,8 @@ function Lista({ linhas, coluna, marca, nomesDosCentros }: {
               <td>{r.requesterLabel}</td>
               <td title={r.costCenter}>{rotuloDoCentro(nomesDosCentros, r.costCenter)}</td>
               <td className="min-w-[240px]">{r.summary || '—'}</td>
+              {/* o valor liberado, pelo custo congelado no pedido; "sem custo" é dito, não deixado em branco */}
+              <td className="whitespace-nowrap">{fraseDoValor(r.value, r.itemsWithoutPrice) ?? '—'}</td>
               {/* o mesmo prazo e a mesma marca da fila do almoxarifado (MarcaDoSla) */}
               <td className="whitespace-nowrap"><MarcaDoSla sla={r.sla} /></td>
               <td>{situacaoDaLinha(r)}</td>

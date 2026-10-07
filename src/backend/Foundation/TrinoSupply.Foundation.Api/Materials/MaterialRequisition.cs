@@ -54,6 +54,19 @@ public class MaterialRequisition
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public int Version { get; set; } = 1;
+
+    /// <summary>Itens sem custo congelado: é o que separa "vale zero" de "ninguém cadastrou o custo".</summary>
+    public int ItemsWithoutPrice => Items.Count(i => i.UnitPrice is null);
+    /// <summary>A soma do que tem custo; nula quando nenhum item tem — zero diria que o material é de graça.</summary>
+    public decimal? RequestedValue => Soma(i => i.RequestedValue);
+    public decimal? ApprovedValue => Soma(i => i.ApprovedValue);
+    public decimal? FulfilledValue => Soma(i => i.FulfilledValue);
+
+    private decimal? Soma(Func<MaterialRequisitionItem, decimal?> valor)
+    {
+        var comCusto = Items.Select(valor).Where(v => v is not null).ToList();
+        return comCusto.Count == 0 ? null : comCusto.Sum();
+    }
 }
 
 public class MaterialRequisitionItem
@@ -69,8 +82,21 @@ public class MaterialRequisitionItem
     public decimal FulfilledQuantity { get; set; }            // entregue pelo almoxarifado
     public MaterialItemStatus Status { get; set; } = MaterialItemStatus.Pending;
     public Guid? StockMovementId { get; set; }                // saída vinculada (acervo anterior)
+    /// <summary>
+    /// O custo de compra do produto <b>no dia do pedido</b> (o preço de referência do catálogo,
+    /// congelado como o código e a descrição). Mudar o preço em dezembro não reescreve a
+    /// solicitação de setembro. Nulo na solicitação anterior à regra e no produto que ainda está
+    /// sem custo — e o relatório diz isso em vez de contar zero.
+    /// </summary>
+    public decimal? UnitPrice { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
     /// <summary>O que o Nível 1 liberou — antes da aprovação, o que foi pedido.</summary>
     public decimal EffectiveQuantity => ApprovedQuantity ?? Quantity;
+
+    // Três valores, não um: o centro pediu 10, o gestor liberou 8, o estoque entregou 5 —
+    // a diretoria pergunta os três. Derivados do custo congelado, nulos sem ele.
+    public decimal? RequestedValue => UnitPrice * Quantity;
+    public decimal? ApprovedValue => UnitPrice * EffectiveQuantity;
+    public decimal? FulfilledValue => UnitPrice * FulfilledQuantity;
 }

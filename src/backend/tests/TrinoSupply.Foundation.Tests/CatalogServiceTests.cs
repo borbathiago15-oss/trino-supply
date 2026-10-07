@@ -199,4 +199,87 @@ public class CatalogServiceTests
         Assert.Equal("AVULSA", pr!.Kind);
         Assert.Null(pr.Items.Single().CatalogItemId);
     }
+
+    // ---- o custo de compra do produto de almoxarifado (IC-ERR-018) -----------------------
+
+    [Fact]
+    public async Task Produto_de_familia_de_almoxarifado_nao_nasce_sem_custo_de_compra()
+    {
+        var (catalog, _, _) = Build();
+        await catalog.CreateFamilyAsync(Gestor.Id, "FARDAMENTO", null, materialRequestable: true);
+        await catalog.CreateFamilyAsync(Gestor.Id, "SERVICOS", null, materialRequestable: false);
+
+        var (_, semCusto) = await catalog.CreateAsync(Gestor.Id, "FAR-001", "Camisa polo", "FARDAMENTO", "UN", null);
+        Assert.Equal("IC-ERR-018", semCusto!.Code);
+
+        var (comCusto, ok) = await catalog.CreateAsync(Gestor.Id, "FAR-001", "Camisa polo", "FARDAMENTO", "UN", 45m);
+        Assert.Null(ok);
+        Assert.Equal(45m, comCusto!.ReferencePrice);
+
+        // família que não é de almoxarifado não exige: o serviço não vai para a solicitação de material
+        var (_, servico) = await catalog.CreateAsync(Gestor.Id, "SRV-001", "Manutenção predial", "SERVICOS", "UN", null);
+        Assert.Null(servico);
+
+        // a grade inteira é recusada, não meia grade
+        var (grade, gradeErro) = await catalog.CriarGradeAsync(Gestor.Id, "12003", "Bota", "FARDAMENTO", "PAR", null, ["38", "39"]);
+        Assert.Equal("IC-ERR-018", gradeErro!.Code);
+        Assert.Empty(grade);
+    }
+
+    [Fact]
+    public async Task O_ajuste_do_produto_vence_a_familia_tambem_para_o_custo()
+    {
+        var (catalog, _, _) = Build();
+        await catalog.CreateFamilyAsync(Gestor.Id, "FARDAMENTO", null, materialRequestable: true);
+        await catalog.CreateFamilyAsync(Gestor.Id, "SERVICOS", null, materialRequestable: false);
+
+        // "nunca entra" numa família de almoxarifado: não vai para a solicitação, não exige custo
+        var (_, nunca) = await catalog.CreateAsync(Gestor.Id, "FAR-900", "Cabide de loja", "FARDAMENTO", "UN", null,
+            materialAdjust: MaterialDoAlmoxarifado.NuncaEntra);
+        Assert.Null(nunca);
+
+        // "sempre entra" numa família que não é: vai para a solicitação, exige
+        var (_, sempre) = await catalog.CreateAsync(Gestor.Id, "SRV-900", "Crachá", "SERVICOS", "UN", null,
+            materialAdjust: MaterialDoAlmoxarifado.SempreEntra);
+        Assert.Equal("IC-ERR-018", sempre!.Code);
+    }
+
+    [Fact]
+    public async Task Familia_fora_do_cadastro_nao_exige_custo_e_a_edicao_cobra_quando_o_produto_passa_a_entrar()
+    {
+        var (catalog, _, _) = Build();
+        // cadastro de famílias vazio: a tela mostra tudo, mas ninguém marcou nada — não há o que cobrar
+        var (solto, erro) = await catalog.CreateAsync(Gestor.Id, "X-001", "Produto solto", "SEM CADASTRO", "UN", null);
+        Assert.Null(erro);
+
+        await catalog.CreateFamilyAsync(Gestor.Id, "SEM CADASTRO", null, materialRequestable: true);
+        // a edição de outra coisa cobra o custo que a família passou a exigir — e diz qual é o campo
+        var (_, aoEditar) = await catalog.UpdateAsync(solto!.Id, "Produto solto corrigido", null, null, null, null);
+        Assert.Equal("IC-ERR-018", aoEditar!.Code);
+        var (corrigido, ok) = await catalog.UpdateAsync(solto.Id, "Produto solto corrigido", null, null, 7.5m, null);
+        Assert.Null(ok);
+        Assert.Equal(7.5m, corrigido!.ReferencePrice);
+    }
+
+    [Fact]
+    public async Task O_resumo_conta_e_a_lista_recorta_os_produtos_de_almoxarifado_sem_custo()
+    {
+        var (catalog, _, db) = Build();
+        await catalog.CreateFamilyAsync(Gestor.Id, "FARDAMENTO", null, materialRequestable: true);
+        await catalog.CreateFamilyAsync(Gestor.Id, "SERVICOS", null, materialRequestable: false);
+        // o acervo anterior à regra entra pelo banco, sem custo
+        db.CatalogItems.AddRange(
+            new CatalogItem { Code = "FAR-001", Description = "Camisa", Family = "FARDAMENTO" },
+            new CatalogItem { Code = "FAR-002", Description = "Calça", Family = "FARDAMENTO", ReferencePrice = 80m },
+            new CatalogItem { Code = "FAR-003", Description = "Camisa antiga", Family = "FARDAMENTO", Active = false },
+            new CatalogItem { Code = "SRV-001", Description = "Limpeza", Family = "SERVICOS" },
+            new CatalogItem { Code = "SRV-002", Description = "Crachá", Family = "SERVICOS", MaterialRequestable = true });
+        await db.SaveChangesAsync();
+
+        var resumo = await catalog.SummaryAsync();
+        Assert.Equal(2, resumo.SemCusto);   // FAR-001 e SRV-002; o inativo e o serviço não contam
+
+        var lista = await catalog.ListAsync(null, null, includeInactive: false, semCusto: true);
+        Assert.Equal(["FAR-001", "SRV-002"], lista.Select(i => i.Code).Order().ToArray());
+    }
 }

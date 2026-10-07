@@ -429,4 +429,48 @@ public class MaterialRequisitionServiceTests
         Assert.NotNull(depois.FulfilledAt);
         Assert.NotNull(depois.PurchaseRequisitionNumber);
     }
+
+    // ---- o custo de compra congelado no dia do pedido ------------------------------------
+
+    [Fact]
+    public async Task O_custo_congela_no_pedido_e_da_os_tres_valores_da_solicitacao()
+    {
+        var w = await BuildAsync();
+        await ComResponsavelAsync(w, "CC-01", Bruno);
+        var (mr, _) = await w.Mrs.CreateAsync(Ana, "CC-01", null,
+            [new MaterialItemInput(w.Detergente.Id, 10), new MaterialItemInput(w.Papel.Id, 2)]);
+
+        var detergente = mr!.Items.Single(i => i.CatalogItemId == w.Detergente.Id);
+        Assert.Equal(3.5m, detergente.UnitPrice);
+        Assert.Equal(35m, detergente.RequestedValue);
+        Assert.Equal(85m, mr.RequestedValue);      // 10 × 3,50 + 2 × 25
+        Assert.Equal(0, mr.ItemsWithoutPrice);
+
+        // o preço do catálogo muda depois; a solicitação não
+        await w.Catalog.UpdateAsync(w.Detergente.Id, null, null, null, 9m, null);
+        var (aprovada, _) = await w.Mrs.ApproveAsync(Bruno, mr.Id, [new(detergente.Id, 4)], null);
+        var dep = aprovada!.Items.Single(i => i.CatalogItemId == w.Detergente.Id);
+        Assert.Equal(3.5m, dep.UnitPrice);
+        Assert.Equal(35m, dep.RequestedValue);     // o pedido não muda
+        Assert.Equal(14m, dep.ApprovedValue);      // o liberado é 4 × 3,50
+        Assert.Equal(0m, dep.FulfilledValue);      // nada entregue ainda
+        Assert.Equal(64m, aprovada.ApprovedValue); // 14 + 2 × 25
+    }
+
+    [Fact]
+    public async Task Sem_custo_no_produto_a_solicitacao_diz_que_falta_em_vez_de_valer_zero()
+    {
+        var w = await BuildAsync();
+        // o acervo anterior à regra: produto sem custo, família fora do cadastro (não é cobrado)
+        var (semCusto, erro) = await w.Catalog.CreateAsync(Otavio.Id, "ANT-001", "Produto antigo", "ACERVO ANTIGO", "UN", null);
+        Assert.Null(erro);
+        var (mr, _) = await w.Mrs.CreateAsync(Ana, "CC-01", null,
+            [new MaterialItemInput(semCusto!.Id, 3), new MaterialItemInput(w.Papel.Id, 1)]);
+
+        Assert.Equal(1, mr!.ItemsWithoutPrice);
+        Assert.Equal(25m, mr.RequestedValue);      // só o que tem custo entra na soma
+
+        var (soSemCusto, _) = await w.Mrs.CreateAsync(Ana, "CC-01", null, [new MaterialItemInput(semCusto.Id, 3)]);
+        Assert.Null(soSemCusto!.RequestedValue);   // nulo, e não zero: ninguém disse quanto custa
+    }
 }

@@ -5,7 +5,7 @@ import {
   ROTULO_DECISAO, ROTULO_RFQ, type Alcada, type Decisao, type DecisaoRecente, type ProcessoParaAprovar,
 } from '@/api/cotacoes';
 import {
-  aprovarMaterial, listarSolicitacoesMaterial, recusarMaterial, type SolicitacaoMaterial,
+  aprovarMaterial, fraseDoValor, listarSolicitacoesMaterial, recusarMaterial, type SolicitacaoMaterial,
 } from '@/api/material';
 import {
   aprovacoesPendentes, aprovarSolicitacao, devolverSolicitacao, rejeitarSolicitacao,
@@ -65,6 +65,12 @@ export function CentralDeAprovacao() {
   const quantidadeLiberada = (mr: SolicitacaoMaterial, itemId: string, pedida: number) => {
     const valor = liberado[`${mr.id}:${itemId}`];
     return valor === undefined || valor === '' ? pedida : parseFloat(valor) || 0;
+  };
+  /** O que a liberação vale, acompanhando a quantidade digitada; nulo quando nenhum item tem custo. */
+  const valorLiberado = (mr: SolicitacaoMaterial) => {
+    const comCusto = mr.items.filter((i) => i.unitPrice != null);
+    if (!comCusto.length) return null;
+    return comCusto.reduce((soma, i) => soma + quantidadeLiberada(mr, i.itemId, i.quantity) * (i.unitPrice ?? 0), 0);
   };
 
   async function concluir(texto: string) {
@@ -148,8 +154,15 @@ export function CentralDeAprovacao() {
                             value={liberado[`${r.id}:${i.itemId}`] ?? String(i.quantity)}
                             onChange={(e) => setLiberado((l) => ({ ...l, [`${r.id}:${i.itemId}`]: e.target.value }))} />
                           <span className="sub">de {quantidade(i.quantity)} {i.unitOfMeasure}</span>
+                          {i.unitPrice != null && <span className="sub">· {moeda(i.unitPrice)}/{i.unitOfMeasure}</span>}
                         </div>
                       ))}
+                      {/* o valor do que está sendo liberado: a decisão do centro é sobre dinheiro também */}
+                      {fraseDoValor(valorLiberado(r), r.itemsWithoutPrice) && (
+                        <div className="sub mt-1" data-testid={`valor-liberado-${r.number}`}>
+                          Valor liberado: <strong>{fraseDoValor(valorLiberado(r), r.itemsWithoutPrice)}</strong>
+                        </div>
+                      )}
                     </td>
                     <td className="whitespace-nowrap">
                       <div className="flex gap-1.5">

@@ -42,7 +42,8 @@ public class MaterialDoAlmoxarifadoTests
     private static async Task<CatalogItem> ProdutoAsync(
         CatalogService svc, string codigo, string familia, string? ajuste = null)
     {
-        var (item, erro) = await svc.CreateAsync(Admin, codigo, $"Produto {codigo}", familia, "UN", null,
+        // com custo: o produto de almoxarifado não nasce sem ele (IC-ERR-018), e a regra tem teste próprio
+        var (item, erro) = await svc.CreateAsync(Admin, codigo, $"Produto {codigo}", familia, "UN", 10m,
             materialAdjust: ajuste);
         Assert.Null(erro);
         return item!;

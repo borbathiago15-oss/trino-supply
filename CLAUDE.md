@@ -849,6 +849,27 @@ régua da SC — `dominio/buscaDeProduto.ts`, que existe fora das duas telas jus
 divergirem no piso de duas letras. Sem família e sem termo a tela não lista nada: era listar o
 acervo inteiro que fazia o solicitante rolar a página atrás da bota.
 
+**O custo de compra é do produto, e congela no dia do pedido de material.** Decisão da empresa
+(2026-10): o preço de referência do catálogo **é** o custo de compra, informado pelo comprador ao
+cadastrar, e é ele que dá valor à solicitação de material — sem ele, o relatório da diretoria conta
+quantidade sem dinheiro. O produto de almoxarifado **nasce e se corrige com custo** (`IC-ERR-018`,
+`CatalogService.CustoObrigatorioAsync`, nos três caminhos: produto, grade e edição), pela **mesma
+régua** de quem aparece em Solicitar Material — o ajuste do produto vence, "segue a família" cai na
+família — com **um** padrão diferente (`MaterialDoAlmoxarifado.ExigeCusto`): família que o cadastro
+não conhece **não exige**. Mostrar demais é o erro barato; recusar um cadastro por uma família que
+ninguém marcou seria regra saída do nada, sem lugar para desmarcá-la. A conferência vem **depois** de
+aplicar a edição, para a troca de família ou do ajuste cobrar o custo que antes não era cobrado. O
+acervo anterior à regra não é barrado nem corrigido por migration: o resumo do catálogo conta os
+produtos de almoxarifado **sem custo** (`SemCusto`) e o aviso do cadastro abre o recorte deles
+(`withoutCost=true`) — número sem lista, num acervo de milhares, é caçada. A solicitação grava o
+custo **no item** (`MaterialRequisitionItem.UnitPrice`), como o código e a descrição: mudar o preço
+em dezembro não reescreve a solicitação de setembro. Dele saem **três valores, não um** (pedido,
+liberado, entregue — o centro pediu 10, o gestor liberou 8, o estoque entregou 5, e a diretoria
+pergunta os três), derivados e nunca gravados. **Sem custo o valor é nulo, não zero**: a soma
+ignora o item sem custo e `ItemsWithoutPrice` diz quantos ficaram de fora, para a tela dizer
+"sem custo cadastrado" em vez de "R$ 0,00". A Central mostra o valor do que está sendo
+**liberado**, acompanhando a quantidade digitada: a decisão do centro é sobre dinheiro também.
+
 **O Dashboard de Suprimentos evolui o `/painel` e a `/diretoria` — não nasce ao lado.** Duas telas
 para o mesmo número desmentiriam a regra de que o indicador tem o mesmo valor em todo lugar. Três
 decisões seguram a Onda 1:

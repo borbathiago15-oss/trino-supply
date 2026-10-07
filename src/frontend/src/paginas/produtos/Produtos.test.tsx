@@ -41,7 +41,7 @@ const produto = (p: Partial<Produto>): Produto => ({
 });
 
 const resumo: ResumoCatalogo = {
-  total: 120, active: 118, inactive: 2, compliancePending: 3,
+  total: 120, active: 118, inactive: 2, compliancePending: 3, withoutCost: 0,
   families: [{ family: 'EPI', count: 40 }, { family: 'LIMPEZA', count: 78 }],
 };
 
@@ -157,6 +157,54 @@ describe('<Produtos />', () => {
 
     await waitFor(() => expect(criarProduto).toHaveBeenCalledWith(
       expect.objectContaining({ materialRequestable: 'NUNCA' })));
+  });
+
+  it('o custo de compra é obrigatório no produto de almoxarifado, pela régua da família e do ajuste', async () => {
+    // a família decide, o produto ajusta — a mesma régua da tela Solicitar Material (IC-ERR-018)
+    vi.mocked(listarFamilias).mockResolvedValue([
+      { id: 'f1', name: 'EPI', notes: null, active: true, category: null, leadRequestToQuote: null, leadQuoteToApproval: null,
+        leadApprovalToPo: null, leadPoToDelivery: null, leadTotal: null, materialRequestable: true },
+      { id: 'f2', name: 'SERVICOS', notes: null, active: true, category: null, leadRequestToQuote: null, leadQuoteToApproval: null,
+        leadApprovalToPo: null, leadPoToDelivery: null, leadTotal: null, materialRequestable: false },
+    ]);
+    montar();
+    await waitFor(() => expect(screen.getByRole('button', { name: '+ Novo produto' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: '+ Novo produto' }));
+
+    const custo = screen.getByLabelText(/Custo de compra/);
+    expect(custo).not.toBeRequired();
+    await userEvent.selectOptions(screen.getByLabelText('Família'), 'EPI');
+    expect(custo).toBeRequired();
+    // "nunca entra" tira o produto da solicitação de material, e com ele a obrigação
+    await userEvent.selectOptions(screen.getByLabelText(/Em Solicitar Material/), 'NUNCA');
+    expect(custo).not.toBeRequired();
+    // "sempre entra" numa família que não é de almoxarifado cobra
+    await userEvent.selectOptions(screen.getByLabelText('Família'), 'SERVICOS');
+    expect(custo).not.toBeRequired();
+    await userEvent.selectOptions(screen.getByLabelText(/Em Solicitar Material/), 'SEMPRE');
+    expect(custo).toBeRequired();
+  });
+
+  it('o aviso dos produtos sem custo abre a lista que ele contou', async () => {
+    vi.mocked(resumoCatalogo).mockResolvedValue({ ...resumo, withoutCost: 3 });
+    vi.mocked(buscarProdutos).mockResolvedValue([produto({ code: 'FAR-001', referencePrice: null })]);
+    montar();
+    const aviso = await screen.findByTestId('produtos-sem-custo');
+    expect(aviso).toHaveTextContent('3 produtos de almoxarifado estão sem custo de compra');
+
+    await userEvent.click(screen.getByTestId('ver-sem-custo'));
+    await waitFor(() => expect(buscarProdutos).toHaveBeenCalledWith(
+      expect.objectContaining({ semCusto: true }), expect.anything()));
+    expect(await screen.findByText(/Produtos de almoxarifado sem custo de compra — 1/)).toBeInTheDocument();
+    expect(within(screen.getByTestId('tabela-produtos')).getByText('sem custo')).toBeInTheDocument();
+  });
+
+  it('quem não mantém o catálogo não vê o aviso dos sem custo', async () => {
+    usuarioAtual = solicitante;
+    vi.mocked(resumoCatalogo).mockResolvedValue({ ...resumo, withoutCost: 3 });
+    montar();
+    await waitFor(() => expect(screen.getByText(/118 produto\(s\) ativo\(s\)/)).toBeInTheDocument());
+    expect(screen.queryByTestId('produtos-sem-custo')).not.toBeInTheDocument();
   });
 
   it('a grade de tamanhos cadastra um produto por tamanho, de uma vez', async () => {

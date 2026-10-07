@@ -15,7 +15,8 @@ vi.mock('@/api/cotacoes', async (importar) => ({
   ...(await importar<typeof import('@/api/cotacoes')>()),
   processosParaMinhaAprovacao: vi.fn(), minhasDecisoes: vi.fn(), decidir: vi.fn(),
 }));
-vi.mock('@/api/material', () => ({
+vi.mock('@/api/material', async (importar) => ({
+  ...(await importar<typeof import('@/api/material')>()),
   listarSolicitacoesMaterial: vi.fn(), aprovarMaterial: vi.fn(), recusarMaterial: vi.fn(),
 }));
 vi.mock('@/api/solicitacoes', async (importar) => ({
@@ -50,7 +51,8 @@ const processo: ProcessoParaAprovar = {
 const material: SolicitacaoMaterial = {
   id: 'mr1', number: 'MR-2026-000004', status: 'AGUARDANDO_APROVACAO', costCenter: 'BAH-001',
   requesterLabel: 'Ana Paula', notes: 'para a obra',
-  items: [{ itemId: 'mi1', description: 'Luva nitrílica', quantity: 10, unitOfMeasure: 'PAR' }],
+  items: [{ itemId: 'mi1', description: 'Luva nitrílica', quantity: 10, unitOfMeasure: 'PAR', unitPrice: 12.5 }],
+  requestedValue: 125, itemsWithoutPrice: 0,
 };
 
 const scLegado = {
@@ -223,6 +225,18 @@ describe('<CentralDeAprovacao />', () => {
     await userEvent.click(within(screen.getByTestId('tabela-material')).getByRole('button', { name: 'Aprovar' }));
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Liberar' }));
     await waitFor(() => expect(aprovarMaterial).toHaveBeenCalledWith('mr1', [{ itemId: 'mi1', quantity: 6 }], null));
+  });
+
+  it('material: o valor liberado acompanha a quantidade que o aprovador digita', async () => {
+    montar();
+    await waitFor(() => expect(screen.getByTestId('tabela-material')).toBeInTheDocument());
+    const valor = screen.getByTestId('valor-liberado-' + material.number);
+    expect(valor).toHaveTextContent('R$ 125,00');
+    expect(within(screen.getByTestId('tabela-material')).getByText('· R$ 12,50/PAR')).toBeInTheDocument();
+    const campo = screen.getByLabelText('Quantidade liberada de Luva nitrílica');
+    await userEvent.clear(campo);
+    await userEvent.type(campo, '6');
+    expect(valor).toHaveTextContent('R$ 75,00');
   });
 
   it('material: recusar exige justificativa', async () => {

@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using TrinoSupply.Foundation.Api.Domain;
 using TrinoSupply.Foundation.Api.Infrastructure;
@@ -161,8 +162,12 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
     /// Só o que a tela Solicitar Material mostra, pela régua de <see cref="MaterialDoAlmoxarifado"/>:
     /// a família manda e o produto ajusta.
     /// </param>
+    /// <param name="semCusto">
+    /// Só o produto de almoxarifado <b>sem custo de compra</b> — o recorte que o aviso do cadastro
+    /// abre, porque "12 produtos sem custo" sem a lista é caçada num acervo de milhares.
+    /// </param>
     public async Task<List<CatalogItem>> ListAsync(string? family, string? q, bool includeInactive,
-        bool stockOnly = false, bool materialOnly = false, CancellationToken ct = default)
+        bool stockOnly = false, bool materialOnly = false, bool semCusto = false, CancellationToken ct = default)
     {
         var query = db.CatalogItems.AsQueryable();
         if (!includeInactive) query = query.Where(i => i.Active);
@@ -171,6 +176,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
             query = query.Where(MaterialDoAlmoxarifado.Filtro(
                 await db.ProductFamilies.Where(f => !f.MaterialRequestable)
                     .Select(f => f.Name).ToArrayAsync(ct)));
+        if (semCusto) query = query.Where(SemCustoFiltro(await FamiliasDeMaterialAsync(ct)));
         if (!string.IsNullOrWhiteSpace(family)) query = query.Where(i => i.Family == family.Trim().ToUpperInvariant());
         if (!string.IsNullOrWhiteSpace(q))
         {
@@ -197,7 +203,43 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
             .Select(g => new { Family = g.Key, Count = g.Count() })
             .OrderBy(f => f.Family).ToListAsync(ct);
         var families = grouped.Select(f => new CatalogFamilyCount(f.Family, f.Count)).ToList();
-        return new CatalogSummary(total, active, total - active, pending, families);
+        // o produto de almoxarifado sem custo de compra: é a solicitação de material que fica sem
+        // valor por causa dele, e o cadastro precisa dizer quantos são antes que o relatório diga
+        var semCusto = await db.CatalogItems.Where(i => i.Active)
+            .Where(SemCustoFiltro(await FamiliasDeMaterialAsync(ct))).CountAsync(ct);
+        return new CatalogSummary(total, active, total - active, pending, families, semCusto);
+    }
+
+    // ---- o custo de compra do produto de almoxarifado --------------------------------
+    //
+    // A regra é a de MaterialDoAlmoxarifado.ExigeCusto, e está aqui em duas formas pelo mesmo
+    // motivo que Entra/Filtro: a conferência ao gravar lê a memória; a contagem do resumo e o
+    // recorte da lista leem o SQL. A família do cadastro vai como array (Contains na entidade),
+    // que é o que o Npgsql traduz.
+
+    /// <summary>As famílias de almoxarifado do cadastro — as únicas que exigem custo.</summary>
+    private Task<string[]> FamiliasDeMaterialAsync(CancellationToken ct) =>
+        db.ProductFamilies.Where(f => f.MaterialRequestable).Select(f => f.Name).ToArrayAsync(ct);
+
+    /// <summary>Sem custo e exigindo custo: ajuste do produto vence, nulo cai na família do cadastro.</summary>
+    private static Expression<Func<CatalogItem, bool>> SemCustoFiltro(string[] familiasDeMaterial) =>
+        i => i.ReferencePrice == null
+             && (i.MaterialRequestable == true
+                 || (i.MaterialRequestable == null && familiasDeMaterial.Contains(i.Family)));
+
+    /// <summary>
+    /// O produto de almoxarifado nasce e se corrige <b>com</b> custo de compra (<c>IC-ERR-018</c>).
+    /// Conferido depois de montar o item e antes de gravar, nos três caminhos (produto, grade e
+    /// edição), para a edição que troca a família ou o ajuste também responder.
+    /// </summary>
+    private async Task<UserError?> CustoObrigatorioAsync(CatalogItem item, CancellationToken ct)
+    {
+        if (item.ReferencePrice is not null) return null;
+        var daFamilia = await db.ProductFamilies.Where(f => f.Name == item.Family)
+            .Select(f => (bool?)f.MaterialRequestable).FirstOrDefaultAsync(ct);
+        return MaterialDoAlmoxarifado.ExigeCusto(item.MaterialRequestable, daFamilia)
+            ? new("IC-ERR-018", "Produto de almoxarifado precisa do custo de compra: informe o preço de referência — é ele que dá valor à solicitação de material.")
+            : null;
     }
 
     public async Task<(CatalogItem? item, UserError? error)> CreateAsync(
@@ -239,6 +281,7 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
             UpdatedAt = now,
             CreatedBy = actorId,
         };
+        if (await CustoObrigatorioAsync(item, ct) is { } custoError) return (null, custoError);
         db.CatalogItems.Add(item);
         ReplaceSuppliers(item, suppliers, now);
         await db.SaveChangesAsync(ct);
@@ -337,6 +380,8 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
                 }).ToList(),
         }).ToList();
 
+        // a grade inteira tem a mesma família e o mesmo custo: conferir um é conferir todos
+        if (await CustoObrigatorioAsync(itens[0], ct) is { } custoError) return ([], custoError);
         db.CatalogItems.AddRange(itens);
         await db.SaveChangesAsync(ct);
         return (itens, null);
@@ -555,6 +600,9 @@ public class CatalogService(AppDbContext db, TimeProvider clock)
             item.MinimumQty = minimumQty;
         }
         if (active is not null) item.Active = active.Value;
+        // depois de aplicar tudo: a edição que leva o produto para uma família de almoxarifado,
+        // ou o marca "sempre entra", passa a exigir o custo que antes não era cobrado dele
+        if (await CustoObrigatorioAsync(item, ct) is { } custoError) return (null, custoError);
         var now = clock.GetUtcNow();
         ReplaceSuppliers(item, suppliers, now);
         item.UpdatedAt = now;
@@ -604,4 +652,6 @@ public record ProdutoParaEscolha(
     /// <summary>Nenhum tamanho pode ser pedido: EPI/EPC sem C.A. em fornecedor nenhum (IC-ERR-023).</summary>
     public bool CompliancePending => Sizes.All(v => v.CompliancePending);
 }
-public record CatalogSummary(int Total, int Active, int Inactive, int CompliancePending, IReadOnlyList<CatalogFamilyCount> Families);
+/// <param name="SemCusto">Produtos de almoxarifado ativos sem custo de compra (IC-ERR-018 ainda não cobrado deles).</param>
+public record CatalogSummary(int Total, int Active, int Inactive, int CompliancePending, IReadOnlyList<CatalogFamilyCount> Families,
+    int SemCusto = 0);

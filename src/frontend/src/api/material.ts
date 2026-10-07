@@ -1,4 +1,5 @@
 import { api } from './cliente';
+import { moeda } from '@/util/formato';
 import type { SlaDoAtendimento } from './prazoDeAtendimento';
 
 /**
@@ -41,6 +42,11 @@ export interface ItemMaterial {
   fulfilledQuantity?: number;
   pendingQuantity?: number;
   status?: SituacaoItemMaterial;
+  /** O custo de compra congelado no dia do pedido; nulo no produto sem custo e na solicitação anterior à regra. */
+  unitPrice?: number | null;
+  requestedValue?: number | null;
+  approvedValue?: number | null;
+  fulfilledValue?: number | null;
 }
 
 export interface SolicitacaoMaterial {
@@ -59,6 +65,12 @@ export interface SolicitacaoMaterial {
   cancelReason?: string | null;
   decisionReason?: string | null;
   items: ItemMaterial[];
+  /** Os três valores da solicitação (pedido, liberado, entregue), pelo custo congelado; nulos sem custo. */
+  requestedValue?: number | null;
+  approvedValue?: number | null;
+  fulfilledValue?: number | null;
+  /** Itens sem custo: separa "vale zero" de "ninguém cadastrou o custo". */
+  itemsWithoutPrice?: number;
   /** O prazo de atendimento da família mais curta entre os itens — derivado no servidor. */
   sla?: SlaDoAtendimento | null;
 }
@@ -91,6 +103,16 @@ export const cancelarMaterial = (id: string, reason: string) =>
  * Quem pediu só cancela enquanto o almoxarifado não mexeu — a mesma regra que
  * o legado aplicava ao desenhar o botão.
  */
+/**
+ * O valor da solicitação dito em uma frase — e o que falta para ele ser inteiro. Nulo quando não
+ * há nada a dizer (nenhum item com custo e nenhum sem): zero diria que o material é de graça.
+ */
+export function fraseDoValor(valor: number | null | undefined, semCusto = 0): string | null {
+  if (valor == null) return semCusto > 0 ? 'sem custo cadastrado' : null;
+  const texto = moeda(valor);
+  return semCusto > 0 ? `${texto} (${semCusto} ${semCusto === 1 ? 'item' : 'itens'} sem custo)` : texto;
+}
+
 export const podeCancelarMaterial = (r: SolicitacaoMaterial, usuarioId: string) =>
   (r.status === 'AGUARDANDO_ALMOXARIFADO' || r.status === 'AGUARDANDO_APROVACAO')
   && r.requesterId === usuarioId;
@@ -130,6 +152,9 @@ export interface LinhaPainel {
   items: number;
   pending: number;
   summary: string | null;
+  /** O valor liberado (o pedido, enquanto o centro não decide); nulo sem custo. */
+  value?: number | null;
+  itemsWithoutPrice?: number;
   sla?: SlaDoAtendimento | null;
 }
 

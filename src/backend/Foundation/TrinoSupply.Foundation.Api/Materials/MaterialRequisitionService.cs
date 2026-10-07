@@ -73,6 +73,8 @@ public class MaterialRequisitionService(AppDbContext db, CatalogService catalog,
                 Description = c.Description,
                 UnitOfMeasure = c.UnitOfMeasure,
                 Quantity = input.Quantity,
+                // o custo de compra congela aqui, com o código e a descrição
+                UnitPrice = c.ReferencePrice,
                 CreatedAt = now,
             });
         }

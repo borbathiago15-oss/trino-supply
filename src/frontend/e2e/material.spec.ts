@@ -34,6 +34,8 @@ test.describe('Material, Contratos, Scorecard e Compliance (React)', () => {
     const linha = page.locator('tr', { hasText: `E2E material ${marca}` }).first();
     await expect(linha).toBeVisible();
     await expect(linha).toContainText(/Aguardando/);
+    // o valor pedido, pelo custo de compra do produto do cenário (12,50) congelado no pedido
+    await expect(linha.getByTestId('valor-da-solicitacao')).toContainText(/R\$\s?25,00/);
   });
 
   test('solicitar material: a busca acha o produto sem passar pela família', async ({ page }) => {

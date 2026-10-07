@@ -5,13 +5,15 @@ import { MemoryRouter } from 'react-router-dom';
 import type { Produto } from '@/api/catalogo';
 import type { CentroCusto } from '@/api/centrosCusto';
 import { ToastProvider } from '@/componentes/Toast';
-import { casDoProduto, itensEscolhidos, paraEscolha, semCaObrigatorio, SolicitarMaterial } from './SolicitarMaterial';
+import { casDoProduto, itensEscolhidos, paraEscolha, semCaObrigatorio, SolicitarMaterial, valorEstimado } from './SolicitarMaterial';
 
 vi.mock('@/api/catalogo', () => ({ buscarProdutos: vi.fn(), fichaDoProduto: vi.fn() }));
 vi.mock('@/api/documentos', () => ({ urlDocumento: vi.fn() }));
 vi.mock('@/api/familias', () => ({ listarFamilias: vi.fn() }));
 vi.mock('@/api/centrosCusto', () => ({ listarCentrosCusto: vi.fn() }));
-vi.mock('@/api/material', () => ({ criarSolicitacaoMaterial: vi.fn() }));
+vi.mock('@/api/material', async (importar) => ({
+  ...(await importar<typeof import('@/api/material')>()), criarSolicitacaoMaterial: vi.fn(),
+}));
 
 import { buscarProdutos, fichaDoProduto } from '@/api/catalogo';
 import { urlDocumento } from '@/api/documentos';
@@ -32,6 +34,19 @@ const produto = (p: Partial<Produto>): Produto => ({
 const abrir = () => render(
   <MemoryRouter><ToastProvider><SolicitarMaterial /></ToastProvider></MemoryRouter>,
 );
+
+describe('o valor estimado do pedido', () => {
+  it('é custo × quantidade dos marcados, nulo sem custo, e o marcado sem custo é contado à parte', () => {
+    const lista = [produto({ id: 'a', referencePrice: 12.5 }), produto({ id: 'b', referencePrice: null }), produto({ id: 'c', referencePrice: 3 })];
+    expect(valorEstimado({ a: { marcado: true, quantidade: '2' }, c: { marcado: false, quantidade: '9' } }, lista))
+      .toEqual({ valor: 25, semCusto: 0 });
+    // a vírgula do teclado brasileiro conta, e o sem custo fica fora da soma mas não da contagem
+    expect(valorEstimado({ a: { marcado: true, quantidade: '1,5' }, b: { marcado: true, quantidade: '4' } }, lista))
+      .toEqual({ valor: 18.75, semCusto: 1 });
+    expect(valorEstimado({ b: { marcado: true, quantidade: '4' } }, lista)).toEqual({ valor: null, semCusto: 1 });
+    expect(valorEstimado({}, lista)).toEqual({ valor: null, semCusto: 0 });
+  });
+});
 
 describe('regras da grade de material', () => {
   it('marcar sem quantidade não passa, e nada marcado também não', () => {

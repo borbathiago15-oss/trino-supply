@@ -55,6 +55,8 @@ public class AnalyticsDeMaterialTests
             {
                 RequisitionId = mr.Id, CatalogItemId = item.Id, CatalogCode = item.Code, Description = item.Description,
                 UnitOfMeasure = item.UnitOfMeasure, Quantity = qtd, FulfilledQuantity = entregue, CreatedAt = criada,
+                // o custo congelado no pedido, como a solicitação de verdade grava
+                UnitPrice = item.ReferencePrice,
                 Status = entregue >= qtd ? MaterialItemStatus.Fulfilled : entregue > 0 ? MaterialItemStatus.PartiallyFulfilled
                     : status == MaterialRequisitionStatus.PurchaseRoute ? MaterialItemStatus.PurchaseRoute : MaterialItemStatus.Pending,
             });
@@ -175,5 +177,84 @@ public class AnalyticsDeMaterialTests
         Assert.True(AnalyticsDeMaterialService.CanView(Roles.Director));
         Assert.True(AnalyticsDeMaterialService.CanView(Roles.WarehouseOperator));
         Assert.False(AnalyticsDeMaterialService.CanView(Roles.Requester));
+    }
+
+    // ---- os valores e a lista completa do relatório -----------------------------------------
+
+    [Fact]
+    public async Task Os_valores_saem_do_custo_congelado_e_o_item_sem_custo_e_contado_em_vez_de_valer_zero()
+    {
+        var w = await CenarioAsync();
+        // um produto sem custo, pedido junto com a luva: entra na contagem, não na soma
+        var (semCusto, _) = await new CatalogService(w.Db, new FixedTimeProvider(Hoje))
+            .CreateAsync(Ana, "ANT-001", "Produto antigo", "ACERVO ANTIGO", "UN", null);
+        var m6 = Mr("MR-6", "BAH-001", Ana, "Ana", Dia(10, 5), MaterialRequisitionStatus.Submitted, (semCusto!, 4, 0), (w.Luva, 1, 0));
+        w.Db.MaterialRequisitions.Add(m6);
+        await w.Db.SaveChangesAsync();
+
+        var r = await w.Svc.MaterialAsync(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 7), null, null, null);
+        // pedido: MR-1 10×12 + MR-2 5×25 + MR-3 2×12 + MR-5 3×12 + MR-6 1×12 = 120+125+24+36+12
+        Assert.Equal(317m, r.Kpis.RequestedValue);
+        Assert.Equal(120m, r.Kpis.DeliveredValue);      // só a MR-1 foi atendida no período
+        Assert.Equal(1, r.Kpis.ItemsWithoutPrice);
+        var bahia = r.ByCostCenter.Single(l => l.Key == "BAH-001");
+        Assert.Equal(156m, bahia.RequestedValue);       // MR-1 120 + MR-3 24 + MR-6 12 (a MR-5 é da BAH-002)
+        Assert.Equal(120m, bahia.DeliveredValue);
+        var outubro = r.Months.Single(m => m.Month == "2026-10");
+        Assert.Equal(317m, outubro.RequestedValue);
+        // o Dashboard não carrega a lista
+        Assert.Null(r.Requisitions);
+    }
+
+    [Fact]
+    public async Task A_lista_completa_vem_so_quando_pedida_com_itens_valores_e_a_situacao_do_prazo()
+    {
+        var w = await CenarioAsync();
+        var r = await w.Svc.MaterialAsync(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 7), null, null, null, comLista: true);
+
+        Assert.NotNull(r.Requisitions);
+        // as criadas no período, da mais recente para a mais antiga; a da janela anterior fica fora
+        Assert.Equal(["MR-5", "MR-3", "MR-2", "MR-1"], r.Requisitions!.Select(s => s.Number));
+        var m3 = r.Requisitions.Single(s => s.Number == "MR-3");
+        Assert.Equal("AGUARDANDO_ALMOXARIFADO", m3.Status);
+        Assert.Equal("Aguardando almoxarifado", m3.StatusLabel);
+        Assert.Equal("Obra Bahia", m3.CostCenterName);
+        Assert.Equal(24m, m3.RequestedValue);
+        Assert.Equal("ESTOURADO", m3.SlaStatus);          // 4 dias na fila com prazo padrão de 2
+        var item = Assert.Single(m3.ItemList);
+        Assert.Equal(12m, item.UnitPrice);
+        Assert.Equal("EPI", item.Family);
+        Assert.Equal("pendente", item.StatusLabel);
+        var m1 = r.Requisitions.Single(s => s.Number == "MR-1");
+        Assert.Equal(120m, m1.DeliveredValue);
+        Assert.Equal("ATENCAO", m1.SlaStatus);            // atendida em 2 dias de um prazo de 2: no limite, e dito
+
+        // o filtro por solicitante é pelo id, e o cabeçalho ganha o nome
+        var deBeto = await w.Svc.MaterialAsync(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 7), null, null, null,
+            requesterId: Beto, comLista: true);
+        Assert.Equal(["MR-2"], deBeto.Requisitions!.Select(s => s.Number));
+        Assert.Equal("Beto", deBeto.RequesterLabel);
+        Assert.Contains(deBeto.FilterOptions.Requesters, x => x.Id == Beto);
+    }
+
+    [Fact]
+    public async Task O_pdf_e_a_planilha_saem_do_mesmo_relatorio()
+    {
+        var w = await CenarioAsync();
+        var r = await w.Svc.MaterialAsync(new DateOnly(2026, 10, 1), new DateOnly(2026, 10, 7), null, null, null, comLista: true);
+
+        var pdf = RelatorioDeMaterialPdf.Generate(r, new RecorteDoRelatorioDeMaterial(null, "EPI", null, null),
+            new CompanyProfile { LegalName = "Trino Nordeste LTDA" }, "Ana", Hoje);
+        Assert.Equal("%PDF"u8.ToArray(), pdf.Take(4).ToArray());
+
+        var planilha = RelatorioDeMaterialPlanilha.Gerar(r);
+        // a primeira aba é a lista de solicitações, e o leitor da importação a lê de volta
+        var linhas = SpreadsheetReader.Read(new MemoryStream(planilha), "relatorio.xlsx");
+        Assert.Equal("Número", linhas[0][0]);
+        Assert.Equal(5, linhas.Count);                    // cabeçalho + 4 solicitações
+        Assert.Equal("MR-5", linhas[1][0]);
+        Assert.Equal("Recusada", linhas[1][5]);
+        Assert.Equal("24", linhas[2][14]);                 // o valor pedido da MR-3 vai como número
+        Assert.Equal("estourado", linhas[2][18]);
     }
 }

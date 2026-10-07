@@ -1,8 +1,5 @@
 import {
-  ehAdmin, podeAlmoxarifado, podeAprovarAlgo, podeComprar, podeConduzirCotacao, podeCriarSc,
-  podeManterCatalogo,
-  podePedirMaterial, podeTriar, podeVerCompliance, podeVerCotacao, podeVerPedidos, podeVerRelatorios, temModulo,
-  type Modulo, type Perfil,
+  ehAdmin, podeAlmoxarifado, podeAprovarAlgo, podeComprar, podeConduzirCotacao, podeCriarSc, podeManterCatalogo, podePedirMaterial, podeTriar, podeVerCompliance, podeVerCotacao, podeVerPedidos, podeVerRelatorioDeMaterial, podeVerRelatorios, temModulo, type Modulo, type Perfil,
 } from '@/dominio/papeis';
 
 /** Uma tela do menu. Todas vivem no React desde a remoção do sistema clássico. */
@@ -85,6 +82,9 @@ export const MENU: GrupoMenu[] = [
       { id: 'insights', rotulo: 'Insights & Executivo', rota: '/insights', modulo: 'INSIGHTS', mostrar: (u) => podeVerCompliance(u) && u.role !== 'Director' },
       { id: 'compliance', rotulo: 'Compliance', rota: '/compliance', modulo: 'COMPLIANCE', mostrar: podeVerCompliance },
       { id: 'reports', rotulo: 'Relatórios', rota: '/relatorios', mostrar: podeVerRelatorios },
+      // o outro cano da casa, com relatório próprio: a diretoria pediu todas as solicitações de
+      // material com valores, e o almoxarife lê a própria fila
+      { id: 'material-report', rotulo: 'Relatório de material', rota: '/relatorios/material', mostrar: podeVerRelatorioDeMaterial },
       // O cockpit é a mesma Torre vista da parede da sala, e o gesto é o mesmo destes
       // aqui: olhar o que aconteceu. Ele ficou no grupo Compras e isso o escondia duas
       // vezes — o grupo pede o módulo COMPRAS e some inteiro para o diretor, que é

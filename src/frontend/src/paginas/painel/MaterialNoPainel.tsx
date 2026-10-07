@@ -8,13 +8,14 @@ import { Badge, Carregando, Erro, Kpi, Painel, Vazio } from '@/componentes/basic
 import { Campo } from '@/componentes/formulario';
 import { CORES, GraficoColunas, ListaBarras, rotuloDoMes, type Serie } from '@/componentes/graficos';
 import { TabelaResponsiva } from '@/componentes/TabelaResponsiva';
-import { quantidade } from '@/util/formato';
+import { moeda, quantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
 
 const dias = (v: number | null) => (v == null ? '—' : `${v.toLocaleString('pt-BR')} d`);
 const horas = (v: number | null) => (v == null ? '—' : `${v.toLocaleString('pt-BR')} h`);
 const pct = (v: number | null) => (v == null ? '—' : `${v.toLocaleString('pt-BR')}%`);
 const inteiro = (v: number) => quantidade(v);
+const valor = (v: number | null | undefined) => (v == null ? '—' : moeda(v));
 
 /**
  * A solicitação de material ao almoxarifado, no Dashboard e na Visão da diretoria.
@@ -58,7 +59,12 @@ export function MaterialNoPainel({ compacto = false, de = '', ate = '', centroCu
   if (compacto) {
     return (
       <Painel titulo={titulo} id="material-na-diretoria"
-        acoes={<Link to="/estoque/atendimentos" className="botao-secundario">Painel de Atendimentos →</Link>}>
+        acoes={(
+          <>
+            <Link to="/estoque/atendimentos" className="botao-secundario">Painel de Atendimentos →</Link>
+            <Link to="/relatorios/material" className="botao-secundario">Relatório completo →</Link>
+          </>
+        )}>
         {carregando && !r && <Carregando texto="Apurando o almoxarifado…" />}
         {r && <ResumoCompacto r={r} />}
       </Painel>
@@ -124,6 +130,11 @@ function ResumoCompacto({ r }: { r: RelatorioDeMaterial }) {
           detalhe={k.slaBreachedOpen > 0 ? `${inteiro(k.slaBreachedOpen)} na fila com prazo estourado` : 'nada estourado na fila'}
           definicao={def('slaMetPercent')} />
       </div>
+      {/* o dinheiro do período, pelo custo congelado no pedido; sem custo é dito, não zero */}
+      <p className="sub mt-3" data-testid="valores-de-material">
+        Valor pedido no período: <strong>{valor(k.requestedValue)}</strong> · entregue: <strong>{valor(k.deliveredValue)}</strong>
+        {(k.itemsWithoutPrice ?? 0) > 0 && <> · {inteiro(k.itemsWithoutPrice ?? 0)} item(ns) sem custo cadastrado</>}
+      </p>
       <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
         <div>
           <p className="rotulo mb-1.5">Centros que mais pedem</p>
@@ -169,6 +180,13 @@ function Analises({ r, filtros, aoFiltrar }: {
         <Kpi rotulo="Tempo do pedido à entrega" valor={dias(k.avgTotalDays)} definicao={def('avgTotalDays')} />
         <Kpi rotulo="Atendidas no prazo" valor={pct(k.slaMetPercent)}
           detalhe={k.slaMeasured > 0 ? `${inteiro(k.slaMeasured)} atendimento(s) medido(s)` : 'sem atendimento medido'} definicao={def('slaMetPercent')} />
+        {/* os valores, pelo custo congelado no dia do pedido: nulo é traço, porque zero diria "de graça" */}
+        <Kpi rotulo="Valor pedido" valor={valor(k.requestedValue)}
+          detalhe={(k.itemsWithoutPrice ?? 0) > 0 ? <span className="text-perigo">{inteiro(k.itemsWithoutPrice ?? 0)} item(ns) sem custo, fora da soma</span> : 'custo de compra no dia do pedido'} />
+        <Kpi rotulo="Valor liberado" valor={valor(k.approvedValue)} detalhe="o que o Nível 1 do centro liberou" />
+        <Kpi rotulo="Valor entregue" valor={valor(k.deliveredValue)} detalhe="nas atendidas do período" />
+        <Kpi rotulo="Relatório completo" valor={<Link to="/relatorios/material" className="text-[16px] text-marca hover:underline">abrir →</Link>}
+          detalhe="todas as solicitações, PDF e planilha" />
       </div>
 
       <Painel titulo="Solicitações de material por mês">

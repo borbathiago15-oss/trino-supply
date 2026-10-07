@@ -5,10 +5,16 @@ using TrinoSupply.Foundation.Api.Materials;
 
 namespace TrinoSupply.Foundation.Api.Analytics;
 
-/// <summary>Uma linha de ranking: quantas solicitações, quanto foi pedido e quanto foi entregue.</summary>
-public record LinhaDeMaterial(string Label, string Key, int Count, decimal Qty, decimal Delivered);
+/// <summary>
+/// Uma linha de ranking: quantas solicitações, quanto foi pedido e quanto foi entregue — e quanto
+/// isso vale, pelo custo congelado no dia do pedido. O valor é <b>nulo</b> quando nenhum item da
+/// linha tem custo: zero diria que o material é de graça.
+/// </summary>
+public record LinhaDeMaterial(string Label, string Key, int Count, decimal Qty, decimal Delivered,
+    decimal? RequestedValue = null, decimal? DeliveredValue = null);
 
-public record MesDeMaterial(string Month, int Requested, int Fulfilled, int Rejected);
+public record MesDeMaterial(string Month, int Requested, int Fulfilled, int Rejected,
+    decimal? RequestedValue = null, decimal? DeliveredValue = null);
 
 /// <summary>Como o atendimento de uma família foi contra o prazo dela, no período.</summary>
 public record PrazoDaFamilia(string Family, int? MaxDays, int Measured, int Met, double? AvgDays);
@@ -17,17 +23,49 @@ public record KpisDeMaterial(
     int Requested, int RequestedPrev, decimal RequestedQty, decimal DeliveredQty,
     int AwaitingApproval, int InWarehouseQueue, int Fulfilled, int Partial, int Rejected, int Cancelled,
     int PurchaseRouteItems, double? AvgApprovalHours, double? AvgFulfillDays, double? AvgTotalDays,
-    double? SlaMetPercent, int SlaMeasured, int SlaBreachedOpen);
+    double? SlaMetPercent, int SlaMeasured, int SlaBreachedOpen,
+    /// <summary>Os três valores do período, pelo custo congelado: pedido e liberado das criadas, entregue das atendidas.</summary>
+    decimal? RequestedValue = null, decimal? ApprovedValue = null, decimal? DeliveredValue = null,
+    /// <summary>Itens das solicitações do período sem custo: é o que separa "vale zero" de "ninguém cadastrou".</summary>
+    int ItemsWithoutPrice = 0);
 
 public record CentroDeMaterial(string Code, string Name);
-public record OpcoesDeMaterial(IReadOnlyList<CentroDeMaterial> CostCenters, IReadOnlyList<string> Families);
+public record SolicitanteDeMaterial(Guid Id, string Label);
+public record OpcoesDeMaterial(IReadOnlyList<CentroDeMaterial> CostCenters, IReadOnlyList<string> Families,
+    IReadOnlyList<SolicitanteDeMaterial> Requesters);
+
+/// <summary>Um item na lista completa do relatório, com o custo congelado e o que ele vale.</summary>
+public record ItemDoRelatorioDeMaterial(
+    string Code, string Description, string Family, string Unit,
+    decimal Qty, decimal? ApprovedQty, decimal DeliveredQty,
+    decimal? UnitPrice, decimal? RequestedValue, decimal? ApprovedValue, decimal? DeliveredValue,
+    string Status, string StatusLabel);
+
+/// <summary>
+/// Uma solicitação na lista completa do relatório — o que a diretoria pediu: todas as
+/// solicitações do período, com valores. `Status` é o mesmo código da API da solicitação,
+/// para a tela reaproveitar o rótulo; `StatusLabel` é o texto que o PDF e a planilha escrevem.
+/// </summary>
+public record SolicitacaoDoRelatorioDeMaterial(
+    Guid Id, string Number, DateTimeOffset CreatedAt, string CostCenter, string CostCenterName,
+    string Requester, string Status, string StatusLabel,
+    DateTimeOffset? ApprovedAt, string? ApprovedBy, DateTimeOffset? FulfilledAt, string? FulfilledBy,
+    string? PurchaseRequisitionNumber,
+    int Items, decimal RequestedQty, decimal DeliveredQty,
+    decimal? RequestedValue, decimal? ApprovedValue, decimal? DeliveredValue, int ItemsWithoutPrice,
+    string? SlaStatus, int? SlaDays, int? SlaMaxDays,
+    IReadOnlyList<ItemDoRelatorioDeMaterial> ItemList);
 
 public record RelatorioDeMaterial(
     DateOnly From, DateOnly To, KpisDeMaterial Kpis, IReadOnlyList<MesDeMaterial> Months,
     IReadOnlyList<LinhaDeMaterial> ByCostCenter, IReadOnlyList<LinhaDeMaterial> ByFamily,
     IReadOnlyList<LinhaDeMaterial> ByProduct, IReadOnlyList<LinhaDeMaterial> ByRequester,
     IReadOnlyList<PrazoDaFamilia> SlaByFamily, OpcoesDeMaterial FilterOptions,
-    IReadOnlyDictionary<string, string> Indicators);
+    IReadOnlyDictionary<string, string> Indicators,
+    /// <summary>A lista completa das solicitações criadas no período; nula fora do relatório (o Dashboard não a carrega).</summary>
+    IReadOnlyList<SolicitacaoDoRelatorioDeMaterial>? Requisitions = null,
+    /// <summary>O nome de quem o filtro de solicitante escolheu, para o cabeçalho do PDF.</summary>
+    string? RequesterLabel = null);
 
 /// <summary>
 /// A solicitação de material no Dashboard e na Visão da diretoria: quanto se pediu ao
@@ -87,8 +125,46 @@ public class AnalyticsDeMaterialService(AppDbContext db, TimeProvider clock, Pra
         ["slaBreachedOpen"] = "Solicitações na fila do almoxarifado hoje com o prazo de atendimento estourado.",
     };
 
+    /// <summary>A situação da solicitação, no código da API e no texto que o PDF e a planilha escrevem.</summary>
+    public static (string Code, string Label) StatusDe(MaterialRequisitionStatus s) => s switch
+    {
+        MaterialRequisitionStatus.Submitted => ("AGUARDANDO_APROVACAO", "Aguardando aprovação"),
+        MaterialRequisitionStatus.Approved => ("AGUARDANDO_ALMOXARIFADO", "Aguardando almoxarifado"),
+        MaterialRequisitionStatus.Fulfilled => ("ATENDIDA", "Atendida"),
+        MaterialRequisitionStatus.PartiallyFulfilled => ("ATENDIDA_PARCIAL", "Atendida parcialmente"),
+        MaterialRequisitionStatus.PurchaseRoute => ("ROTA_DE_COMPRA", "Rota de compra"),
+        MaterialRequisitionStatus.Rejected => ("RECUSADA", "Recusada"),
+        _ => ("CANCELADA", "Cancelada"),
+    };
+
+    public static (string Code, string Label) StatusDoItem(MaterialItemStatus s) => s switch
+    {
+        MaterialItemStatus.Fulfilled => ("ENTREGUE", "entregue"),
+        MaterialItemStatus.PartiallyFulfilled => ("ENTREGUE_PARCIAL", "entregue em parte"),
+        MaterialItemStatus.PurchaseRoute => ("ROTA_DE_COMPRA", "rota de compra"),
+        _ => ("PENDENTE", "pendente"),
+    };
+
+    /// <summary>A soma do que tem custo; nula quando nada tem — zero diria que o material é de graça.</summary>
+    private static decimal? Soma(IEnumerable<decimal?> valores)
+    {
+        var comCusto = valores.Where(v => v is not null).ToList();
+        return comCusto.Count == 0 ? null : comCusto.Sum();
+    }
+
+    /// <param name="costCenters">
+    /// O recorte por <b>unidade</b> da parede: os centros de custo daquela empresa, em caixa alta.
+    /// Vazio é "nenhum centro" (unidade sem centro cadastrado), e nulo é a empresa inteira. É
+    /// outro recorte que o de <paramref name="costCenter"/>, que é um centro escolhido no filtro.
+    /// </param>
+    /// <param name="requesterId">O solicitante, pelo id e nunca pelo nome: dois homônimos são duas pessoas.</param>
+    /// <param name="comLista">
+    /// Traz a lista completa das solicitações do período, com itens e valores. É o relatório; o
+    /// Dashboard não a pede, porque cinco mil solicitações com itens não cabem num bloco de tela.
+    /// </param>
     public async Task<RelatorioDeMaterial> MaterialAsync(
         DateOnly from, DateOnly to, string? costCenter, string? family, string? product,
+        IReadOnlyCollection<string>? costCenters = null, Guid? requesterId = null, bool comLista = false,
         CancellationToken ct = default)
     {
         if (to < from) (from, to) = (to, from);
@@ -111,6 +187,13 @@ public class AnalyticsDeMaterialService(AppDbContext db, TimeProvider clock, Pra
             var centro = costCenter.Trim().ToUpperInvariant();
             consulta = consulta.Where(r => r.CostCenter.ToUpper() == centro);
         }
+        if (costCenters is not null)
+        {
+            // `Contains` com array e filtro na entidade: o que o Npgsql traduz
+            var daUnidade = costCenters.Select(c => c.Trim().ToUpperInvariant()).Distinct().ToArray();
+            consulta = consulta.Where(r => daUnidade.Contains(r.CostCenter.ToUpper()));
+        }
+        if (requesterId is { } quem) consulta = consulta.Where(r => r.RequesterId == quem);
         var mrs = await consulta.OrderByDescending(r => r.CreatedAt).Take(Cap).ToListAsync(ct);
 
         // a família e o nome atual do produto vêm do catálogo; `Contains` com array
@@ -160,8 +243,10 @@ public class AnalyticsDeMaterialService(AppDbContext db, TimeProvider clock, Pra
             .Select(r => (r.FulfilledAt!.Value - r.ApprovedAt!.Value).TotalDays));
         var mediaTotal = Media(atendidas.Select(r => (r.FulfilledAt!.Value - r.CreatedAt).TotalDays));
 
-        // o prazo de atendimento é a régua da fila do almoxarifado — a mesma função
-        var situacoes = await prazos.SituacoesAsync([.. atendidas, .. naFila], ct);
+        // o prazo de atendimento é a régua da fila do almoxarifado — a mesma função; a lista
+        // completa também o mostra linha a linha, então entra na mesma consulta
+        var situacoes = await prazos.SituacoesAsync(
+            [.. atendidas.Concat(naFila).Concat(comLista ? criadas : []).DistinctBy(r => r.Id)], ct);
         var medidas = atendidas.Select(r => situacoes.GetValueOrDefault(r.Id))
             .Where(s => s is { Status: not null }).Select(s => s!).ToList();
         double? noPrazo = medidas.Count == 0 ? null
@@ -173,7 +258,9 @@ public class AnalyticsDeMaterialService(AppDbContext db, TimeProvider clock, Pra
             .ToDictionary(g => g.Key, g => g.First().Name, StringComparer.OrdinalIgnoreCase);
         LinhaDeMaterial Linha(string label, string key, IReadOnlyList<MaterialRequisition> grupo) => new(
             label, key, grupo.Count,
-            grupo.SelectMany(Itens).Sum(i => i.Quantity), grupo.SelectMany(Itens).Sum(i => i.FulfilledQuantity));
+            grupo.SelectMany(Itens).Sum(i => i.Quantity), grupo.SelectMany(Itens).Sum(i => i.FulfilledQuantity),
+            Soma(grupo.SelectMany(Itens).Select(i => i.RequestedValue)),
+            Soma(grupo.SelectMany(Itens).Select(i => i.FulfilledValue)));
 
         var porCentro = criadas.GroupBy(r => r.CostCenter)
             .Select(g => Linha(ccNome.TryGetValue(g.Key, out var nome) ? $"{g.Key} — {nome}" : g.Key, g.Key, g.ToList()))
@@ -186,7 +273,8 @@ public class AnalyticsDeMaterialService(AppDbContext db, TimeProvider clock, Pra
         var itensCriados = criadas.SelectMany(r => Itens(r).Select(i => (Mr: r, Item: i))).ToList();
         var porFamilia = itensCriados.GroupBy(x => FamiliaDe(x.Item.CatalogItemId))
             .Select(g => new LinhaDeMaterial(g.Key, g.Key, g.Select(x => x.Mr.Id).Distinct().Count(),
-                g.Sum(x => x.Item.Quantity), g.Sum(x => x.Item.FulfilledQuantity)))
+                g.Sum(x => x.Item.Quantity), g.Sum(x => x.Item.FulfilledQuantity),
+                Soma(g.Select(x => x.Item.RequestedValue)), Soma(g.Select(x => x.Item.FulfilledValue))))
             .OrderByDescending(x => x.Qty).ThenBy(x => x.Label, StringComparer.Ordinal).Take(Top).ToList();
         var porProduto = itensCriados.GroupBy(x => x.Item.CatalogItemId)
             .Select(g =>
@@ -195,7 +283,8 @@ public class AnalyticsDeMaterialService(AppDbContext db, TimeProvider clock, Pra
                 var codigo = p?.Code ?? g.First().Item.CatalogCode;
                 var descricao = p?.Description ?? g.First().Item.Description;
                 return new LinhaDeMaterial($"[{codigo}] {descricao}", g.Key.ToString(),
-                    g.Select(x => x.Mr.Id).Distinct().Count(), g.Sum(x => x.Item.Quantity), g.Sum(x => x.Item.FulfilledQuantity));
+                    g.Select(x => x.Mr.Id).Distinct().Count(), g.Sum(x => x.Item.Quantity), g.Sum(x => x.Item.FulfilledQuantity),
+                    Soma(g.Select(x => x.Item.RequestedValue)), Soma(g.Select(x => x.Item.FulfilledValue)));
             })
             .OrderByDescending(x => x.Qty).ThenBy(x => x.Label, StringComparer.Ordinal).Take(Top).ToList();
 
@@ -207,10 +296,13 @@ public class AnalyticsDeMaterialService(AppDbContext db, TimeProvider clock, Pra
             var m0 = MeiaNoite(cursor);
             var m1 = MeiaNoite(cursor.AddMonths(1));
             bool NoMes(DateTimeOffset? d) => d is { } x && x >= m0 && x < m1;
+            var criadasNoMes = mrs.Where(r => NoMes(r.CreatedAt)).ToList();
+            var atendidasNoMes = mrs.Where(r => r.Status is MaterialRequisitionStatus.Fulfilled or MaterialRequisitionStatus.PartiallyFulfilled && NoMes(r.FulfilledAt)).ToList();
             meses.Add(new MesDeMaterial(cursor.ToString("yyyy-MM"),
-                mrs.Count(r => NoMes(r.CreatedAt)),
-                mrs.Count(r => r.Status is MaterialRequisitionStatus.Fulfilled or MaterialRequisitionStatus.PartiallyFulfilled && NoMes(r.FulfilledAt)),
-                mrs.Count(r => r.Status == MaterialRequisitionStatus.Rejected && NoMes(r.ApprovedAt))));
+                criadasNoMes.Count, atendidasNoMes.Count,
+                mrs.Count(r => r.Status == MaterialRequisitionStatus.Rejected && NoMes(r.ApprovedAt)),
+                Soma(criadasNoMes.SelectMany(Itens).Select(i => i.RequestedValue)),
+                Soma(atendidasNoMes.SelectMany(Itens).Select(i => i.FulfilledValue))));
             cursor = cursor.AddMonths(1);
         }
 
@@ -236,16 +328,50 @@ public class AnalyticsDeMaterialService(AppDbContext db, TimeProvider clock, Pra
             .Select(c => new CentroDeMaterial(c, ccNome.TryGetValue(c, out var n) ? n : c)).ToList();
         var familias = await db.ProductFamilies.AsNoTracking()
             .Where(f => f.MaterialRequestable).OrderBy(f => f.Name).Select(f => f.Name).ToListAsync(ct);
+        var solicitantes = opcoes.Solicitantes.Select(s => new SolicitanteDeMaterial(s.Id, s.Label)).ToList();
 
         var kpis = new KpisDeMaterial(
             criadas.Count, criadasAntes,
             criadas.SelectMany(Itens).Sum(i => i.Quantity), atendidas.SelectMany(Itens).Sum(i => i.FulfilledQuantity),
             esperandoAprovacao.Count, naFila.Count, atendidas.Count, parciais, rejeitadas, canceladas,
             itensParaCompra, mediaAprovacao, mediaAtendimento, mediaTotal,
-            noPrazo, medidas.Count, estouradasAbertas);
+            noPrazo, medidas.Count, estouradasAbertas,
+            // os três valores: pedido e liberado das criadas no período, entregue das atendidas nele
+            Soma(criadas.SelectMany(Itens).Select(i => i.RequestedValue)),
+            Soma(criadas.SelectMany(Itens).Select(i => i.ApprovedValue)),
+            Soma(atendidas.SelectMany(Itens).Select(i => i.FulfilledValue)),
+            criadas.SelectMany(Itens).Count(i => i.UnitPrice is null));
+
+        // a lista completa, só para o relatório: cada solicitação do período com os itens que
+        // entram no recorte, o custo congelado e a situação do prazo
+        List<SolicitacaoDoRelatorioDeMaterial>? lista = null;
+        if (comLista)
+        {
+            lista = criadas.OrderByDescending(r => r.CreatedAt).Select(r =>
+            {
+                var itens = Itens(r).Select(i =>
+                {
+                    var (codigoItem, rotuloItem) = StatusDoItem(i.Status);
+                    return new ItemDoRelatorioDeMaterial(i.CatalogCode, i.Description, FamiliaDe(i.CatalogItemId), i.UnitOfMeasure,
+                        i.Quantity, i.ApprovedQuantity, i.FulfilledQuantity,
+                        i.UnitPrice, i.RequestedValue, i.ApprovedValue, i.FulfilledValue, codigoItem, rotuloItem);
+                }).ToList();
+                var (codigo, rotulo) = StatusDe(r.Status);
+                var s = situacoes.GetValueOrDefault(r.Id);
+                return new SolicitacaoDoRelatorioDeMaterial(
+                    r.Id, r.Number, r.CreatedAt, r.CostCenter, ccNome.TryGetValue(r.CostCenter, out var nome) ? nome : r.CostCenter,
+                    r.RequesterLabel, codigo, rotulo,
+                    r.ApprovedAt, r.ApprovedByLabel, r.FulfilledAt, r.FulfilledByLabel, r.PurchaseRequisitionNumber,
+                    itens.Count, itens.Sum(i => i.Qty), itens.Sum(i => i.DeliveredQty),
+                    Soma(itens.Select(i => i.RequestedValue)), Soma(itens.Select(i => i.ApprovedValue)),
+                    Soma(itens.Select(i => i.DeliveredValue)), itens.Count(i => i.UnitPrice is null),
+                    s?.Status, s?.Days, s?.MaxDays, itens);
+            }).ToList();
+        }
 
         return new RelatorioDeMaterial(from, to, kpis, meses, porCentro, porFamilia, porProduto, porSolicitante,
-            prazoPorFamilia, new OpcoesDeMaterial(centros, familias), Definicoes);
+            prazoPorFamilia, new OpcoesDeMaterial(centros, familias, solicitantes), Definicoes,
+            lista, requesterId is { } id ? solicitantes.FirstOrDefault(x => x.Id == id)?.Label : null);
     }
 
     private static DateTimeOffset MeiaNoite(DateOnly dia) =>

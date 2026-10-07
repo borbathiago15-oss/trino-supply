@@ -12,6 +12,9 @@ GET /api/v1/action-plans/{id:guid}
 GET /api/v1/analytics/compliance
 GET /api/v1/analytics/insights
 GET /api/v1/analytics/material
+GET /api/v1/analytics/material/report
+GET /api/v1/analytics/material/report/pdf
+GET /api/v1/analytics/material/report/xlsx
 GET /api/v1/analytics/report
 GET /api/v1/analytics/report/pdf
 GET /api/v1/analytics/stock

@@ -19,6 +19,8 @@ import { rolarPara } from '@/util/rolar';
 import { useCarregar } from '@/util/useCarregar';
 import { useDebounce } from '@/util/useDebounce';
 import { cliqueEmControle, destinoDaSc } from './destinoDaSc';
+import { rotuloDoCentro } from '@/dominio/centrosDeCusto';
+import { useNomesDosCentros } from '@/util/useNomesDosCentros';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
@@ -102,6 +104,7 @@ export const resumoDosItens = (r: SolicitacaoCompra) =>
  * O que precisa dizer "solicitação" é o que aparece na tela.
  */
 export function MeusPedidos() {
+  const nomesDosCentros = useNomesDosCentros();
   const usuario = useUsuario();
   const navegar = useNavigate();
   const { avisar } = useToast();
@@ -263,8 +266,8 @@ export function MeusPedidos() {
                       <td className="min-w-[320px]">
                         {r.justification}
                         <div className="sub">{resumoDosItens(r)}</div>
-                        <div className="sub">
-                          CC: {r.costCenter}
+                        <div className="sub" title={r.costCenter}>
+                          CC: {rotuloDoCentro(nomesDosCentros, r.costCenter)}
                           {r.neededBy && ` · até ${data(r.neededBy)}`}
                           {r.priority === 'URGENT' && ` · ${ROTULO_PRIORIDADE.URGENT}`}
                           {r.budget != null && ` · orçamento ${moeda(r.budget)}`}

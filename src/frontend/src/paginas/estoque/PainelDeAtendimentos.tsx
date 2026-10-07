@@ -5,6 +5,8 @@ import { Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { useCarregar } from '@/util/useCarregar';
 import { data, quantidade } from '@/util/formato';
 import { rolarPara } from '@/util/rolar';
+import { rotuloDoCentro } from '@/dominio/centrosDeCusto';
+import { useNomesDosCentros } from '@/util/useNomesDosCentros';
 
 type Bloco = 'aguardando' | 'andamento' | 'parcial' | 'concluido';
 
@@ -34,7 +36,11 @@ function Cartao({ rotulo, valor, detalhe, aberto, aoEscolher }: {
   );
 }
 
-function Lista({ linhas, coluna, marca }: { linhas: LinhaPainel[]; coluna: string; marca: string }) {
+function Lista({ linhas, coluna, marca, nomesDosCentros }: {
+  linhas: LinhaPainel[]; coluna: string; marca: string;
+  /** Por prop: a tela monta várias listas, e um hook em cada uma seria uma consulta por bloco. */
+  nomesDosCentros: Record<string, string>;
+}) {
   if (!linhas.length) return <Vazio>Nada por aqui. ✔</Vazio>;
   return (
     <div className="overflow-x-auto">
@@ -50,7 +56,7 @@ function Lista({ linhas, coluna, marca }: { linhas: LinhaPainel[]; coluna: strin
                 <div className="sub">{data(r.createdAt)}</div>
               </td>
               <td>{r.requesterLabel}</td>
-              <td>{r.costCenter}</td>
+              <td title={r.costCenter}>{rotuloDoCentro(nomesDosCentros, r.costCenter)}</td>
               <td className="min-w-[240px]">{r.summary || '—'}</td>
               <td>{situacaoDaLinha(r)}</td>
             </tr>
@@ -84,6 +90,7 @@ function Agrupado({ linhas, titulo, campo, marca }:
 }
 
 export function PainelDeAtendimentos() {
+  const nomesDosCentros = useNomesDosCentros();
   const [aberto, setAberto] = useState<Bloco | null>(null);
   const { dados, erro, carregando } = useCarregar(painelDeAtendimentos, []);
 
@@ -119,24 +126,24 @@ export function PainelDeAtendimentos() {
       {visivel('aguardando') && (
         <Painel id="bloco-aguardando" titulo="Aguardando aprovação do centro"
           acoes={<Link className="botao-secundario" to="/aprovacoes">Ir para a Central de Aprovação</Link>}>
-          <Lista linhas={dados.aguardandoAprovacao} coluna="Situação" marca="painel-aguardando" />
+          <Lista linhas={dados.aguardandoAprovacao} coluna="Situação" marca="painel-aguardando" nomesDosCentros={nomesDosCentros} />
         </Painel>
       )}
       {visivel('andamento') && (
         <Painel id="bloco-andamento" titulo="Atendimentos em andamento"
           acoes={<Link className="botao-secundario" to="/estoque/fila">Ir para a Fila de Atendimento</Link>}>
-          <Lista linhas={dados.emAndamento} coluna="Situação" marca="painel-andamento" />
+          <Lista linhas={dados.emAndamento} coluna="Situação" marca="painel-andamento" nomesDosCentros={nomesDosCentros} />
         </Painel>
       )}
       {visivel('parcial') && (
         <Painel id="bloco-parcial" titulo="Concluídos parcialmente — aguardando a compra do faltante"
           acoes={<Link className="botao-secundario" to="/cotacoes">Ver os processos de compra</Link>}>
-          <Lista linhas={dados.parciais} coluna="Faltante" marca="painel-parcial" />
+          <Lista linhas={dados.parciais} coluna="Faltante" marca="painel-parcial" nomesDosCentros={nomesDosCentros} />
         </Painel>
       )}
       {visivel('concluido') && (
         <Painel id="bloco-concluido" titulo="Atendimentos concluídos">
-          <Lista linhas={dados.concluidos} coluna="Atendido por" marca="painel-concluido" />
+          <Lista linhas={dados.concluidos} coluna="Atendido por" marca="painel-concluido" nomesDosCentros={nomesDosCentros} />
         </Painel>
       )}
 

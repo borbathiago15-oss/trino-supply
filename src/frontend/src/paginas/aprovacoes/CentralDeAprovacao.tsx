@@ -19,6 +19,8 @@ import { useUsuario } from '@/sessao/SessaoProvider';
 import { data, dataHora, moeda, quantidade } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
 import { resumoDosItens } from '@/paginas/solicitacoes/MeusPedidos';
+import { rotuloDoCentro } from '@/dominio/centrosDeCusto';
+import { useNomesDosCentros } from '@/util/useNomesDosCentros';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
@@ -38,6 +40,7 @@ type Acao =
   | { tipo: 'recusar-material'; mr: SolicitacaoMaterial };
 
 export function CentralDeAprovacao() {
+  const nomesDosCentros = useNomesDosCentros();
   const { avisar } = useToast();
   const usuario = useUsuario();
   const [acao, setAcao] = useState<Acao | null>(null);
@@ -115,7 +118,7 @@ export function CentralDeAprovacao() {
         {processos.length > 0 && (
           <ul className="flex flex-col gap-3" data-testid="fila-decisao">
             {processos.map((q) => (
-              <CardDeDecisao key={q.id} q={q} usuarioId={usuario.id}
+              <CardDeDecisao key={q.id} q={q} usuarioId={usuario.id} nomesDosCentros={nomesDosCentros}
                 aoDecidir={(alcada, decisao) => setAcao({ tipo: 'decidir', q, alcada, decisao })} />
             ))}
           </ul>
@@ -133,7 +136,7 @@ export function CentralDeAprovacao() {
                   <tr key={r.id} data-material={r.number}>
                     <td className="whitespace-nowrap">
                       <span className="font-semibold">{r.number}</span>
-                      <div className="sub">CC: {r.costCenter}</div>
+                      <div className="sub" title={r.costCenter}>CC: {rotuloDoCentro(nomesDosCentros, r.costCenter)}</div>
                     </td>
                     <td>{r.requesterLabel}{r.notes && <div className="sub">{r.notes}</div>}</td>
                     <td className="min-w-[320px]">
@@ -180,7 +183,7 @@ export function CentralDeAprovacao() {
                       <td className="min-w-[300px]">
                         {r.justification}
                         <div className="sub">{resumoDosItens(r)}</div>
-                        <div className="sub">CC: {r.costCenter}</div>
+                        <div className="sub" title={r.costCenter}>CC: {rotuloDoCentro(nomesDosCentros, r.costCenter)}</div>
                       </td>
                       <td className="whitespace-nowrap">{moeda(r.totalEstimatedValue)}</td>
                       <td><Badge classe={marca.classe}>{marca.rotulo}</Badge></td>
@@ -266,8 +269,10 @@ const ROTULO_NIVEL: Record<number, string> = { 1: 'Nível 1 — gestor do centro
  * apertar o botão: quem pediu e por quê; o que o comprador escolheu e por que não a mais
  * barata; o que o sistema mede (compliance, contrato, orçamento); quem já aprovou.
  */
-export function CardDeDecisao({ q, usuarioId, aoDecidir }: {
+export function CardDeDecisao({ q, usuarioId, aoDecidir, nomesDosCentros = {} }: {
   q: ProcessoParaAprovar; usuarioId?: string; aoDecidir: (alcada: Alcada, decisao: Decisao) => void;
+  /** Vem por prop, e não de um hook próprio: um hook por card seria uma consulta por card. */
+  nomesDosCentros?: Record<string, string>;
 }) {
   const d = q.decisao;
   const escolha = comparacaoDaEscolha(q);
@@ -296,7 +301,7 @@ export function CardDeDecisao({ q, usuarioId, aoDecidir }: {
             )}
           </div>
           <div className="sub mt-0.5">
-            Centro {q.costCenter}{q.sourcePrNumbers.length ? ` · ${q.sourcePrNumbers.join(', ')}` : q.sourcePrNumber ? ` · ${q.sourcePrNumber}` : ''}
+            <span title={q.costCenter}>Centro {rotuloDoCentro(nomesDosCentros, q.costCenter)}</span>{q.sourcePrNumbers.length ? ` · ${q.sourcePrNumbers.join(', ')}` : q.sourcePrNumber ? ` · ${q.sourcePrNumber}` : ''}
             {' · '}conduzido por {q.createdByLabel ?? '—'}
           </div>
         </div>

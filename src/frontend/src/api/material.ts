@@ -1,4 +1,4 @@
-import { api } from './cliente';
+import { api, baixar } from './cliente';
 import { moeda } from '@/util/formato';
 import type { SlaDoAtendimento } from './prazoDeAtendimento';
 
@@ -221,29 +221,66 @@ export const painelDeAtendimentos = (filtro: FiltroDoPainel = {}, signal?: Abort
 
 // ---- A solicitação de material no Dashboard e na Visão da diretoria ----------------------
 
-export interface LinhaDeMaterial { label: string; key: string; count: number; qty: number; delivered: number }
-export interface MesDeMaterial { month: string; requested: number; fulfilled: number; rejected: number }
+export interface LinhaDeMaterial {
+  label: string; key: string; count: number; qty: number; delivered: number;
+  /** Pelo custo congelado no dia do pedido; nulo quando nenhum item da linha tem custo. */
+  requestedValue?: number | null; deliveredValue?: number | null;
+}
+export interface MesDeMaterial {
+  month: string; requested: number; fulfilled: number; rejected: number;
+  requestedValue?: number | null; deliveredValue?: number | null;
+}
 export interface PrazoDaFamilia { family: string; maxDays: number | null; measured: number; met: number; avgDays: number | null }
 export interface KpisDeMaterial {
   requested: number; requestedPrev: number; requestedQty: number; deliveredQty: number;
   awaitingApproval: number; inWarehouseQueue: number; fulfilled: number; partial: number; rejected: number; cancelled: number;
   purchaseRouteItems: number; avgApprovalHours: number | null; avgFulfillDays: number | null; avgTotalDays: number | null;
   slaMetPercent: number | null; slaMeasured: number; slaBreachedOpen: number;
+  /** Os três valores do período (pedido, liberado, entregue), nulos sem custo; e os itens sem custo. */
+  requestedValue?: number | null; approvedValue?: number | null; deliveredValue?: number | null;
+  itemsWithoutPrice?: number;
+}
+export interface ItemDoRelatorioDeMaterial {
+  code: string; description: string; family: string; unit: string;
+  qty: number; approvedQty: number | null; deliveredQty: number;
+  unitPrice: number | null; requestedValue: number | null; approvedValue: number | null; deliveredValue: number | null;
+  status: string; statusLabel: string;
+}
+/** Uma solicitação na lista completa do relatório. `status` é o mesmo código de `SolicitacaoMaterial`. */
+export interface SolicitacaoDoRelatorioDeMaterial {
+  id: string; number: string; createdAt: string; costCenter: string; costCenterName: string;
+  requester: string; status: SituacaoMaterial; statusLabel: string;
+  approvedAt: string | null; approvedBy: string | null; fulfilledAt: string | null; fulfilledBy: string | null;
+  purchaseRequisitionNumber: string | null;
+  items: number; requestedQty: number; deliveredQty: number;
+  requestedValue: number | null; approvedValue: number | null; deliveredValue: number | null; itemsWithoutPrice: number;
+  slaStatus: 'ESTOURADO' | 'ATENCAO' | 'OK' | null; slaDays: number | null; slaMaxDays: number | null;
+  itemList: ItemDoRelatorioDeMaterial[];
 }
 export interface RelatorioDeMaterial {
   from: string; to: string; kpis: KpisDeMaterial; months: MesDeMaterial[];
   byCostCenter: LinhaDeMaterial[]; byFamily: LinhaDeMaterial[]; byProduct: LinhaDeMaterial[]; byRequester: LinhaDeMaterial[];
   slaByFamily: PrazoDaFamilia[];
-  filterOptions: { costCenters: { code: string; name: string }[]; families: string[] };
+  filterOptions: {
+    costCenters: { code: string; name: string }[]; families: string[];
+    requesters?: { id: string; label: string }[];
+  };
   indicators?: Record<string, string>;
+  /** A lista completa do período: só o relatório a pede. */
+  requisitions?: SolicitacaoDoRelatorioDeMaterial[] | null;
+  requesterLabel?: string | null;
 }
 
 /**
  * Os filtros são próprios: período, centro, família e produto. Os do painel de compras falam
  * de fornecedor, comprador e prioridade, que a solicitação de material não tem.
  */
-export interface FiltrosMaterial { de: string; ate: string; centroCusto: string; familia: string; produto: string }
-export const FILTROS_MATERIAL_VAZIOS: FiltrosMaterial = { de: '', ate: '', centroCusto: '', familia: '', produto: '' };
+/** `solicitante` é o id da pessoa, nunca o nome: dois homônimos são duas pessoas. */
+export interface FiltrosMaterial {
+  de: string; ate: string; centroCusto: string; familia: string; produto: string; solicitante?: string;
+}
+export const FILTROS_MATERIAL_VAZIOS: FiltrosMaterial =
+  { de: '', ate: '', centroCusto: '', familia: '', produto: '', solicitante: '' };
 
 export function consultaDeMaterial(f: FiltrosMaterial) {
   const params = new URLSearchParams();
@@ -252,6 +289,7 @@ export function consultaDeMaterial(f: FiltrosMaterial) {
   if (f.centroCusto) params.set('costCenter', f.centroCusto);
   if (f.familia) params.set('family', f.familia);
   if (f.produto.trim()) params.set('product', f.produto.trim());
+  if (f.solicitante) params.set('requesterId', f.solicitante);
   return params.toString();
 }
 
@@ -259,3 +297,20 @@ export const analyticsDeMaterial = (f: FiltrosMaterial, signal?: AbortSignal) =>
   const query = consultaDeMaterial(f);
   return api<RelatorioDeMaterial>(`/api/v1/analytics/material${query ? `?${query}` : ''}`, { signal });
 };
+
+// ---- O relatório de solicitações de material: os mesmos números, mais a lista completa -------
+
+const relatorio = '/api/v1/analytics/material/report';
+const comQuery = (caminho: string, f: FiltrosMaterial) => {
+  const query = consultaDeMaterial(f);
+  return `${caminho}${query ? `?${query}` : ''}`;
+};
+
+export const relatorioDeMaterial = (f: FiltrosMaterial, signal?: AbortSignal) =>
+  api<RelatorioDeMaterial>(comQuery(relatorio, f), { signal });
+
+export const pdfDoRelatorioDeMaterial = (f: FiltrosMaterial) =>
+  baixar(comQuery(`${relatorio}/pdf`, f), 'Falha ao gerar o PDF do relatório de material.');
+
+export const planilhaDoRelatorioDeMaterial = (f: FiltrosMaterial) =>
+  baixar(comQuery(`${relatorio}/xlsx`, f), 'Falha ao gerar a planilha do relatório de material.');

@@ -962,6 +962,27 @@ atendeu continua aparecendo); solicitadas e atendidas são do período. O filtro
 que entram. Sem atendimento medido, tempo e prazo são nulos e aparecem como traço. Na diretoria o
 bloco é `compacto`: usa o período e o centro do topo, e o detalhe fica no Painel de Atendimentos.
 
+**O relatório de solicitações de material não tem conta própria.** `/relatorios/material`
+(`paginas/relatorios/RelatorioDeMaterial.tsx`, rotas `/analytics/material/report`, `/pdf` e `/xlsx`)
+é o que a diretoria pediu: **todas** as solicitações do período, com valores. Ele chama a **mesma**
+`AnalyticsDeMaterialService.MaterialAsync` do bloco do Dashboard, com `comLista: true` — a lista
+completa (solicitação, itens, custo congelado, situação do prazo) só existe no relatório, porque
+cinco mil solicitações com itens não cabem num bloco de tela. Os **valores** entraram nessa mesma
+função (KPIs, rankings, mês a mês): pedido e liberado das criadas no período, entregue das atendidas
+nele, pelo `UnitPrice` congelado; **nulo sem custo**, e `ItemsWithoutPrice` conta o que ficou fora
+da soma, para o PDF e a planilha dizerem "sem custo" em vez de somar zero. O filtro por
+**solicitante é pelo id** (`requesterId`), nunca pelo nome. O PDF (`RelatorioDeMaterialPdf`) usa os
+helpers de página do executivo, agora `internal`, para a folha de material não destoar da de
+compras; a lista completa vai em anexo. A **planilha** (`RelatorioDeMaterialPlanilha`) sai de
+`Infrastructure/PlanilhaXlsx.cs`, um gerador de xlsx **sem biblioteca** — um ZIP com meia dúzia de
+XMLs, texto inline, número como número e data como texto —, porque é o único lugar que escreve
+xlsx e o `SpreadsheetReader` da importação já lê o que ele produz: há teste que faz a volta
+inteira. Oito abas, uma por bloco, mais a de **itens** (uma linha por item), que é onde se responde
+"quanto de luva o centro X pediu". O acesso é o do bloco (`podeVerRelatorioDeMaterial`, espelho de
+`CanView` e dos módulos da rota): quem lê a compra lê o material, e o almoxarife também. A tela de
+Solicitar Material mostra o **valor estimado** enquanto a pessoa preenche (`valorEstimado`), pela
+mesma régua: custo × quantidade dos marcados, nulo sem custo, e o marcado sem custo contado à parte.
+
 **A meta é da empresa, e sem ela não há comparação.** `IndicatorGoal` guarda um valor **mensal**
 por indicador do catálogo (`MetasDosIndicadores.Catalogo`), editável pelo administrador em
 `/metas`; a linha só existe quando alguém grava, e o campo vazio a apaga. Card de indicador sem

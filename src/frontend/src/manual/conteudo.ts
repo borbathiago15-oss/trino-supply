@@ -108,6 +108,20 @@ export const MANUAIS: Record<string, Manual> = {
       { texto: '"Sem O.C. do ERP" conta as compras fechadas com a observação da PO-BR-011 — o número de O.C. nunca é inventado.' },
     ],
   },
+  'material-report': {
+    paraQueServe: 'O relatório de solicitações de material: tudo o que foi pedido ao almoxarifado no período, com valores — por centro de custo, família, produto e solicitante, mês a mês, o prazo de atendimento e a lista completa.',
+    passos: [
+      'Filtre por período, centro de custo, família, produto ou solicitante e clique em "Aplicar filtros".',
+      'Leia os números do topo: solicitadas, atendidas, pendentes, atendidas no prazo e os três valores (pedido, liberado, entregue).',
+      '"Exportar em PDF" gera a lâmina com os blocos e, em anexo, todas as solicitações do período.',
+      '"Baixar planilha" gera o .xlsx com uma aba por bloco e a aba de itens, uma linha por item com o custo congelado.',
+    ],
+    regras: [
+      { texto: 'Os valores são pelo custo de compra do produto no dia do pedido. Item sem custo cadastrado não vale zero: fica fora da soma e é contado em "itens sem custo".' },
+      { texto: 'Os números são os mesmos do bloco de material do Dashboard e da Visão da diretoria: o relatório não tem conta própria.' },
+      { texto: 'O filtro por família ou produto entra pelo item: a solicitação conta se algum item dela entra, e as quantidades somam só os itens que entram.' },
+    ],
+  },
   cockpit: {
     paraQueServe: 'A Torre de Controle vista da parede: a tela da TV da sala de suprimentos, sem menu, que se atualiza sozinha.',
     passos: [
@@ -331,6 +345,7 @@ export const MANUAIS: Record<string, Manual> = {
       'Escolha a família ou busque o produto pelo nome ou pelo código — as duas portas levam à mesma lista.',
       'Clique no nome do produto para ver a ficha: foto, cadastro, tamanhos e fornecedores com o C.A. "Usar este produto" marca a linha.',
       'Marque os produtos, informe as quantidades e, se precisar, uma observação.',
+      'O valor estimado do pedido aparece ao lado do botão, pelo custo de compra de cada produto — produto sem custo cadastrado é contado à parte.',
       'Clique em "Enviar ao almoxarifado".',
     ],
     regras: [

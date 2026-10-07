@@ -43,7 +43,7 @@ describe('menu', () => {
     const dashboard = topo.find((i) => ehSubgrupo(i) && i.rotulo === 'Dashboard');
     expect(dashboard).toBeDefined();
     expect((dashboard as SubgrupoMenu).filhos.map((f) => f.id))
-      .toEqual(['director-view', 'supply-dash', 'insights', 'compliance', 'reports', 'cockpit']);
+      .toEqual(['director-view', 'supply-dash', 'insights', 'compliance', 'reports', 'material-report', 'cockpit']);
     // a Central de Aprovação continua fora: ela é passo do ciclo, não leitura
     expect(topo.some((i) => !ehSubgrupo(i) && i.id === 'pr-approvals')).toBe(true);
   });
@@ -51,8 +51,18 @@ describe('menu', () => {
   it('quem só enxerga o painel não paga clique: o subgrupo de uma tela vira item simples', () => {
     // sem Insights, Compliance nem Relatórios, "Dashboard" viraria uma gaveta com
     // uma coisa dentro — dois cliques para a tela que a pessoa mais abre
-    const topo = itensVisiveis({ role: 'WarehouseOperator', modules: ['ESTOQUE'] })[0].itens;
+    // (sem módulo nenhum: com ESTOQUE o almoxarife ganha também o relatório de material, que é a fila dele)
+    const topo = itensVisiveis({ role: 'WarehouseOperator', modules: [] })[0].itens;
     expect(topo.map((i) => (ehSubgrupo(i) ? i.rotulo : i.id))).toEqual(['supply-dash']);
+  });
+
+  it('o relatório de material segue a rota dele: quem lê a compra e o almoxarife, com o módulo certo', () => {
+    expect(folhas({ role: 'WarehouseOperator', modules: ['ESTOQUE'] }).map((i) => i.id)).toContain('material-report');
+    expect(folhas({ role: 'Director', modules: ['APROVACAO'] }).map((i) => i.id)).toContain('material-report');
+    expect(folhas({ role: 'Approver', modules: ['MATERIAL'] }).map((i) => i.id)).toContain('material-report');
+    // papel certo sem módulo, e módulo certo sem papel
+    expect(folhas({ role: 'Director', modules: ['INSIGHTS'] }).map((i) => i.id)).not.toContain('material-report');
+    expect(folhas({ role: 'Requester', modules: ['MATERIAL'] }).map((i) => i.id)).not.toContain('material-report');
   });
 
   it('Relatórios segue o mesmo critério da rota: papel de análise e módulo Compras ou Insights', () => {

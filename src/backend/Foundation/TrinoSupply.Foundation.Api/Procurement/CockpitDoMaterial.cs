@@ -89,7 +89,7 @@ public class CockpitDoMaterialService(
         }
 
         var inicioDoMes = new DateOnly(hoje.Year, hoje.Month, 1);
-        var mes = await analytics.MaterialAsync(inicioDoMes, hoje, null, null, null, centrosDaUnidade, ct);
+        var mes = await analytics.MaterialAsync(inicioDoMes, hoje, null, null, null, centrosDaUnidade, ct: ct);
 
         // o radar: o que está aberto agora, no recorte, com o prazo de cada linha
         var abertas = await db.MaterialRequisitions.AsNoTracking().Include(r => r.Items)

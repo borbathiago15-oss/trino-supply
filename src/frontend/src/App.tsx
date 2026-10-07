@@ -41,6 +41,7 @@ import { DashboardSuprimentos } from '@/paginas/painel/DashboardSuprimentos';
 import { Insights } from '@/paginas/insights/Insights';
 import { VisaoDaDiretoria } from '@/paginas/diretoria/VisaoDaDiretoria';
 import { Relatorios } from '@/paginas/relatorios/Relatorios';
+import { RelatorioDeMaterial } from '@/paginas/relatorios/RelatorioDeMaterial';
 import { AbrirCotacao } from '@/paginas/cotacoes/AbrirCotacao';
 import { ProcessosDeCotacao } from '@/paginas/cotacoes/ProcessosDeCotacao';
 import { ProcessoDetalhe } from '@/paginas/cotacoes/ProcessoDetalhe';
@@ -150,6 +151,7 @@ export function Rotas() {
           <Route path="/insights" element={<Insights />} />
           <Route path="/diretoria" element={<VisaoDaDiretoria />} />
           <Route path="/relatorios" element={<Relatorios />} />
+          <Route path="/relatorios/material" element={<RelatorioDeMaterial />} />
           <Route path="/cotacoes" element={<ProcessosDeCotacao />} />
           <Route path="/cotacoes/abrir" element={<AbrirCotacao />} />
           <Route path="/cotacoes/:id" element={<ProcessoDetalhe />} />

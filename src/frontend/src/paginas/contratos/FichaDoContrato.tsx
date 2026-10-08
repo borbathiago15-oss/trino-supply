@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent } from 'react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { abrirBlob } from '@/api/cliente';
 import {
@@ -7,17 +7,17 @@ import {
 } from '@/api/contratos';
 import { baixarDocumento } from '@/api/documentos';
 import {
-  anexarDocumento, DOCUMENTOS_DO_CONTRATO, ehDocumentoDoContrato, ROTULO_DOCUMENTO, ROTULO_HOMOLOGACAO,
-  type DocumentoFornecedor, type TipoDocumento,
+  ehDocumentoDoContrato, ROTULO_DOCUMENTO, ROTULO_HOMOLOGACAO,
+  type DocumentoFornecedor,
 } from '@/api/fornecedores';
 import { Badge, Carregando, Dado, Erro, Painel, Vazio } from '@/componentes/basicos';
-import { Campo, Grade2 } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
 import { podeComprar } from '@/dominio/papeis';
 import { situacaoDocumento } from '@/paginas/fornecedores/PainelHomologacao';
 import { useUsuario } from '@/sessao/SessaoProvider';
 import { data, dataHora, moeda } from '@/util/formato';
 import { useCarregar } from '@/util/useCarregar';
+import { FormularioDeAnexo } from './AnexoDoContrato';
 
 const mensagem = (e: unknown, padrao: string) => (e instanceof Error ? e.message : padrao);
 
@@ -168,26 +168,8 @@ export function FichaDoContrato() {
 function Documentos({ ficha, podeAnexar, aoAbrir, aoAnexar }: {
   ficha: Ficha; podeAnexar: boolean; aoAbrir: (documentId: string) => void; aoAnexar: () => void;
 }) {
-  const { avisar } = useToast();
   const [anexando, setAnexando] = useState(false);
-  const [tipo, setTipo] = useState<TipoDocumento>('CONTRATO');
-  const [rotulo, setRotulo] = useState('');
-  const [arquivo, setArquivo] = useState<File | null>(null);
-  const [ocupado, setOcupado] = useState(false);
   const docs = documentosEmOrdem(ficha.supplier.documents);
-
-  async function anexar() {
-    if (!arquivo) { avisar('Escolha o arquivo.', 'erro'); return; }
-    setOcupado(true);
-    try {
-      // o papel do contrato não leva validade: a dele é a vigência, que já está no contrato
-      await anexarDocumento(ficha.supplier.id, arquivo, tipo, '', rotulo);
-      avisar('Documento anexado ao contrato.');
-      setAnexando(false); setArquivo(null); setRotulo('');
-      aoAnexar();
-    } catch (e) { avisar(mensagem(e, 'Falha ao anexar o documento.'), 'erro'); }
-    finally { setOcupado(false); }
-  }
 
   return (
     <Painel titulo={`Documentos (${docs.length})`} acoes={podeAnexar && !anexando
@@ -220,26 +202,9 @@ function Documentos({ ficha, podeAnexar, aoAbrir, aoAnexar }: {
       ) : <Vazio>Nenhum documento anexado. O contrato assinado e os aditivos podem ser anexados aqui; as certidões, na homologação do fornecedor.</Vazio>}
 
       {anexando && (
-        <div className="mt-4 rounded-lg border border-borda p-3" data-testid="anexar-documento-contrato">
-          <Grade2>
-            <Campo id="ficha-doc-tipo" rotulo="Documento">
-              <select id="ficha-doc-tipo" value={tipo} onChange={(ev) => setTipo(ev.target.value as TipoDocumento)}>
-                {[...DOCUMENTOS_DO_CONTRATO, 'OUTRO' as TipoDocumento].map((t) => <option key={t} value={t}>{ROTULO_DOCUMENTO[t]}</option>)}
-              </select>
-            </Campo>
-            <Campo id="ficha-doc-arquivo" rotulo="Arquivo">
-              <input id="ficha-doc-arquivo" type="file" accept=".pdf,.png,.jpg,.jpeg,.docx"
-                onChange={(ev: ChangeEvent<HTMLInputElement>) => setArquivo(ev.target.files?.[0] ?? null)} />
-            </Campo>
-          </Grade2>
-          <Campo id="ficha-doc-rotulo" rotulo="Descrição" dica="(opcional — ex.: 1º aditivo, renovação 2027)" className="mt-3">
-            <input id="ficha-doc-rotulo" value={rotulo} onChange={(ev) => setRotulo(ev.target.value)} />
-          </Campo>
-          <div className="mt-3 flex gap-2">
-            <button type="button" className="botao" disabled={ocupado} onClick={anexar}>{ocupado ? 'Anexando…' : 'Anexar'}</button>
-            <button type="button" className="botao-secundario" onClick={() => setAnexando(false)}>Cancelar</button>
-          </div>
-        </div>
+        <FormularioDeAnexo fornecedorId={ficha.supplier.id} idPrefixo="ficha"
+          aoAnexado={() => { setAnexando(false); aoAnexar(); }}
+          aoCancelar={() => setAnexando(false)} />
       )}
     </Painel>
   );

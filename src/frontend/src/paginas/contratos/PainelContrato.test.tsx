@@ -13,12 +13,13 @@ vi.mock('@/api/catalogo', async (importar) => ({
 vi.mock('@/api/familias', () => ({ listarFamilias: vi.fn() }));
 vi.mock('@/api/fornecedores', async (importar) => ({
   ...(await importar<typeof import('@/api/fornecedores')>()),
-  salvarContrato: vi.fn(),
+  salvarContrato: vi.fn(), anexarDocumento: vi.fn(),
 }));
+vi.mock('@/api/documentos', () => ({ baixarDocumento: vi.fn() }));
 
 import { buscarProdutos } from '@/api/catalogo';
 import { listarFamilias } from '@/api/familias';
-import { salvarContrato } from '@/api/fornecedores';
+import { anexarDocumento, salvarContrato } from '@/api/fornecedores';
 
 const produto = (p: Partial<Produto>): Produto => ({
   id: 'p1', code: '02090081', description: 'BALDE 20 LITROS', family: 'MATERIAL DE LIMPEZA',
@@ -40,6 +41,12 @@ const fornecedor = (c: Partial<Fornecedor['contract']> = {}): Fornecedor => ({
   effectiveHomologation: 'HOMOLOGADO', documents: [], duplicateCount: 0,
   contract: { ...CONTRATO_VAZIO, ...c },
 });
+
+const papel = (p: Partial<Fornecedor['documents'][number]> = {}) => ({
+  id: 'd1', type: 'CONTRATO' as const, fileName: 'contrato.pdf', documentId: 'doc1',
+  label: null, validUntil: null, uploadedByLabel: 'Ana', uploadedAt: '2026-10-01T12:00:00Z',
+  ...p,
+} as Fornecedor['documents'][number]);
 
 const abrir = (f = fornecedor()) => render(
   <ToastProvider>
@@ -191,5 +198,74 @@ describe('o produto do contrato se escolhe buscando', () => {
     }));
     expect(screen.getByDisplayValue('FRETE ESPECIAL')).toHaveAttribute('readonly');
     expect(screen.queryByRole('button', { name: 'Trocar' })).not.toBeInTheDocument();
+  });
+});
+
+
+describe('os papéis do contrato se anexam no próprio formulário', () => {
+  // decisão da empresa (2026-10): o contrato assinado se anexa onde o contrato é fechado — é
+  // quando o comprador tem o PDF na mão. O formulário é o **mesmo** da ficha, para as duas
+  // telas não gravarem de jeitos diferentes
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(listarFamilias).mockResolvedValue([] as never);
+    vi.mocked(anexarDocumento).mockResolvedValue(undefined as never);
+  });
+
+  it('o formulário oferece anexar, mesmo num contrato que ainda não foi salvo', async () => {
+    // o documento é do fornecedor no modelo, e o fornecedor já está escolhido
+    const usuario = userEvent.setup();
+    abrir();
+    expect(screen.getByText(/Nenhum papel do contrato anexado/)).toBeInTheDocument();
+
+    await usuario.click(screen.getByRole('button', { name: 'Anexar documento do contrato' }));
+    expect(screen.getByTestId('anexar-documento-contrato')).toBeInTheDocument();
+  });
+
+  it('anexa sem validade: a do papel do contrato é a vigência', async () => {
+    const usuario = userEvent.setup();
+    const aoSalvar = vi.fn();
+    render(
+      <ToastProvider>
+        <PainelContrato fornecedor={fornecedor()} aoSalvar={aoSalvar} aoFechar={() => {}} />
+      </ToastProvider>,
+    );
+    await usuario.click(screen.getByRole('button', { name: 'Anexar documento do contrato' }));
+
+    const arquivo = new File(['%PDF-1.4'], 'contrato.pdf', { type: 'application/pdf' });
+    await usuario.upload(screen.getByLabelText('Arquivo'), arquivo);
+    await usuario.type(screen.getByLabelText(/Descrição/), 'renovação 2027');
+    await usuario.click(screen.getByRole('button', { name: 'Anexar' }));
+
+    await vi.waitFor(() => expect(anexarDocumento).toHaveBeenCalledWith(
+      's1', arquivo, 'CONTRATO', '', 'renovação 2027'));
+    // a lista do contrato recarrega, senão o papel recém-anexado não apareceria
+    await vi.waitFor(() => expect(aoSalvar).toHaveBeenCalled());
+  });
+
+  it('sem arquivo não chama a API', async () => {
+    const usuario = userEvent.setup();
+    abrir();
+    await usuario.click(screen.getByRole('button', { name: 'Anexar documento do contrato' }));
+    await usuario.click(screen.getByRole('button', { name: 'Anexar' }));
+
+    expect(await screen.findByText('Escolha o arquivo.')).toBeInTheDocument();
+    expect(anexarDocumento).not.toHaveBeenCalled();
+  });
+
+  it('lista os papéis já anexados, com o nome do arquivo', async () => {
+    abrir({ ...fornecedor(), documents: [papel({}), papel({ id: 'd2', type: 'ADITIVO', fileName: 'aditivo-1.pdf', label: '1º aditivo' })] });
+    const lista = await screen.findByTestId('papeis-do-contrato');
+    expect(lista).toHaveTextContent('contrato.pdf');
+    expect(lista).toHaveTextContent('aditivo-1.pdf');
+    expect(lista).toHaveTextContent('1º aditivo');
+  });
+
+  it('a certidão do fornecedor não entra: ela é da homologação, não do contrato', async () => {
+    // misturá-las faria a lista do contrato parecer ter documentos que não são dele
+    abrir({ ...fornecedor(), documents: [papel({}), papel({ id: 'd3', type: 'FGTS', fileName: 'fgts.pdf' })] });
+    const lista = await screen.findByTestId('papeis-do-contrato');
+    expect(lista).toHaveTextContent('contrato.pdf');
+    expect(lista).not.toHaveTextContent('fgts.pdf');
   });
 });

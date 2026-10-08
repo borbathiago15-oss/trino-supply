@@ -275,6 +275,7 @@ export const MANUAIS: Record<string, Manual> = {
       '"Novo contrato de parceria": escolha o fornecedor (ativos e sem contrato) e preencha número, vigência, teto e os produtos.',
       'Em "Buscar produto no catálogo…", escolha a família ou digite ao menos duas letras do código ou da descrição.',
       'Em cada produto, o preço fixo, o prazo de entrega e a condição de pagamento que valem enquanto o contrato durar.',
+      'Em "Anexar documento do contrato", guarde o contrato assinado ou um aditivo — dá para anexar antes mesmo de salvar.',
       'Para mudar um contrato, use "Editar contrato" na linha dele.',
       'Veja o teto contratado, o consumido na vigência e o saldo de cada contrato.',
       'Para um reajuste, registre o percentual pleiteado e o fechado com "Registrar reajuste".',
@@ -288,6 +289,7 @@ export const MANUAIS: Record<string, Manual> = {
       { texto: 'Quem já tem contrato não aparece em "Novo contrato": edite pela linha dele.' },
       { texto: 'O produto se escolhe buscando, não rolando: o catálogo tem milhares de itens.' },
       { texto: 'Produto com tamanho entra uma linha por tamanho — a bota 38 e a 39 têm preço próprio.' },
+      { texto: 'O papel do contrato não leva validade: a dele é a vigência. Certidão se anexa na homologação do fornecedor.' },
     ],
   },
   'contract-detail': {

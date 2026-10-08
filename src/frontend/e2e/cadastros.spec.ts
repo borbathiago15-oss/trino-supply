@@ -185,6 +185,18 @@ test.describe('Cadastros (React)', () => {
     // a vigência não aceita fim antes do início (SUP-ERR-020): o campo já limita
     await expect(painel.locator('#ct-fim')).toHaveAttribute('min', '2026-01-01');
     await painel.locator('#ct-fim').fill('2030-12-31');
+
+    // o contrato assinado se anexa **no próprio formulário**, que é quando o comprador tem o
+    // PDF na mão. O documento é do fornecedor no modelo, então vale antes mesmo de salvar
+    await expect(painel.getByText(/Nenhum papel do contrato anexado/)).toBeVisible();
+    await painel.getByRole('button', { name: 'Anexar documento do contrato' }).click();
+    await painel.getByLabel('Arquivo').setInputFiles({
+      name: `contrato-${marca}.pdf`, mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%E2E\n'),
+    });
+    await painel.getByRole('button', { name: 'Anexar', exact: true }).click();
+    await expect(page.getByTestId('toast').last()).toContainText('Documento anexado ao contrato.');
+    await expect(painel.getByTestId('papeis-do-contrato')).toContainText(`contrato-${marca}.pdf`);
+
     await painel.getByRole('button', { name: 'Salvar contrato' }).click();
     await expect(page.getByTestId('toast').last()).toContainText('Contrato salvo.');
 
@@ -201,16 +213,22 @@ test.describe('Cadastros (React)', () => {
     const historia = page.getByTestId('linha-do-tempo-contrato');
     await expect(historia.locator('[data-tipo="CRIADO"]')).toContainText(`Contrato CT-E2E-${marca} cadastrado`);
 
-    // o contrato assinado entra nos documentos e na história
-    await page.getByRole('button', { name: 'Anexar documento do contrato' }).click();
-    await page.getByLabel('Arquivo').setInputFiles({
-      name: `contrato-${marca}.pdf`, mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%E2E\n'),
-    });
-    await page.getByRole('button', { name: 'Anexar', exact: true }).click();
-    await expect(page.getByTestId('toast').last()).toContainText('Documento anexado ao contrato.');
+    // o papel anexado no formulário está nos documentos e na história da ficha: é o mesmo
+    // documento, gravado pelo mesmo formulário, visto pelo outro lado
     await expect(page.getByTestId('documentos-do-contrato').locator('[data-documento="CONTRATO"]'))
       .toContainText(`contrato-${marca}.pdf`);
     await expect(historia.locator('[data-tipo="DOCUMENTO_ANEXADO"]')).toContainText(`contrato-${marca}.pdf`);
+
+    // e a ficha continua anexando pela porta dela (aditivo), com o mesmo formulário
+    await page.getByRole('button', { name: 'Anexar documento do contrato' }).click();
+    await page.getByLabel('Documento').selectOption('ADITIVO');
+    await page.getByLabel('Arquivo').setInputFiles({
+      name: `aditivo-${marca}.pdf`, mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4\n%E2E\n'),
+    });
+    await page.getByRole('button', { name: 'Anexar', exact: true }).click();
+    await expect(page.getByTestId('toast').last()).toContainText('Documento anexado ao contrato.');
+    await expect(page.getByTestId('documentos-do-contrato').locator('[data-documento="ADITIVO"]'))
+      .toContainText(`aditivo-${marca}.pdf`);
 
     // editar pela linha, remover o produto e salvar encerra o contrato
     await abrirAutenticado(page, '/contratos');

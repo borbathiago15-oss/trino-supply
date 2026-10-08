@@ -1,14 +1,20 @@
 import { useEffect, useState } from 'react';
 import type { Produto } from '@/api/catalogo';
+import { baixarDocumento } from '@/api/documentos';
 import { listarFamilias } from '@/api/familias';
-import { salvarContrato, type Fornecedor, type ItemContrato } from '@/api/fornecedores';
+import {
+  ehDocumentoDoContrato, ROTULO_DOCUMENTO, salvarContrato,
+  type Fornecedor, type ItemContrato,
+} from '@/api/fornecedores';
 import { Painel } from '@/componentes/basicos';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
 import { useToast } from '@/componentes/Toast';
 import { moeda } from '@/util/formato';
 import { rolarPara } from '@/util/rolar';
 import { useCarregar } from '@/util/useCarregar';
+import { abrirBlob } from '@/api/cliente';
 import { BuscaDeProdutoDoContrato } from './BuscaDeProdutoDoContrato';
+import { FormularioDeAnexo } from './AnexoDoContrato';
 
 /**
  * Uma linha do contrato já carrega o produto escolhido — código, descrição e unidade — em vez
@@ -79,6 +85,7 @@ export function PainelContrato({ fornecedor, aoSalvar, aoFechar }:
       catch { return []; }
     }, []);
   const [buscando, setBuscando] = useState<string | null>(null);
+  const [anexando, setAnexando] = useState(false);
   const [numero, setNumero] = useState(contrato.number ?? '');
   const [teto, setTeto] = useState(contrato.valueLimit != null ? String(contrato.valueLimit) : '');
   const [inicio, setInicio] = useState(contrato.validFrom ?? '');
@@ -95,6 +102,15 @@ export function PainelContrato({ fornecedor, aoSalvar, aoFechar }:
 
   const editar = (chave: string, campo: keyof LinhaForm, valor: string) =>
     setLinhas((ls) => ls.map((l) => (l.chave === chave ? { ...l, [campo]: valor } : l)));
+
+  // só os papéis do contrato: as certidões do fornecedor são da homologação, e misturá-las
+  // aqui faria a lista do contrato parecer ter documentos que não são dele
+  const papeis = (fornecedor.documents ?? []).filter((d) => ehDocumentoDoContrato(d.type) || d.type === 'OUTRO');
+
+  async function abrir(documentId: string) {
+    try { abrirBlob(await baixarDocumento(documentId)); }
+    catch (e) { avisar(e instanceof Error ? e.message : 'Falha ao abrir o documento.', 'erro'); }
+  }
 
   function escolher(chave: string, p: Produto) {
     setLinhas((ls) => ls.map((l) => (l.chave === chave
@@ -227,6 +243,42 @@ export function PainelContrato({ fornecedor, aoSalvar, aoFechar }:
         <button type="button" className="botao-secundario" onClick={() => setLinhas((ls) => [...ls, novaLinha()])}>+ Adicionar produto</button>
         <button type="button" className="botao" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando…' : 'Salvar contrato'}</button>
       </div>
+      {/* Os papéis do contrato ficam aqui, na hora de fechá-lo — é quando o comprador tem o PDF
+          assinado na mão. O documento é do **fornecedor** no modelo, então pode ser anexado antes
+          de o contrato ser salvo: o que o anexo precisa é do fornecedor, e ele já está escolhido.
+          O formulário é o **mesmo** da ficha (`FormularioDeAnexo`), para as duas telas não
+          gravarem de jeitos diferentes. */}
+      <p className="mb-2 mt-5 text-[12.5px] font-semibold text-texto-suave">
+        Documentos do contrato
+      </p>
+      {papeis.length ? (
+        <ul className="flex flex-col gap-1" data-testid="papeis-do-contrato">
+          {papeis.map((d) => (
+            <li key={d.id} className="text-[13px]" data-documento={d.type}>
+              <strong>{ROTULO_DOCUMENTO[d.type] ?? d.type}</strong>
+              {' · '}
+              <button type="button" className="text-marca underline"
+                onClick={() => abrir(d.documentId)}>{d.fileName}</button>
+              {d.label && <span className="sub"> — {d.label}</span>}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="sub">
+          Nenhum papel do contrato anexado. O contrato assinado e os aditivos entram aqui; as
+          certidões, na homologação do fornecedor.
+        </p>
+      )}
+      {anexando ? (
+        <FormularioDeAnexo fornecedorId={fornecedor.id} idPrefixo="ct"
+          aoAnexado={() => { setAnexando(false); aoSalvar(); }}
+          aoCancelar={() => setAnexando(false)} />
+      ) : (
+        <button type="button" className="botao-secundario mt-2" onClick={() => setAnexando(true)}>
+          Anexar documento do contrato
+        </button>
+      )}
+
       <Nota>Salvar sem nenhum produto encerra o contrato: o fornecedor volta a ser cotado normalmente.</Nota>
 
       {buscando && (

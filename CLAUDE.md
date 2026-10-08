@@ -281,6 +281,17 @@ o usuário descobrir no erro do servidor:
   cópia que obrigava a tela a baixar tudo. O produto **fora do catálogo** vindo de contrato antigo
   continua só de leitura: ele não tem id, e oferecer "trocar" apagaria uma linha que o fornecedor
   já entrega.
+- **O papel do contrato se anexa onde o contrato é fechado.** O formulário do contrato não tinha
+  como guardar o PDF assinado: só a ficha (`/contratos/:id`) anexava, e ela só existe depois de o
+  contrato estar salvo — então quem estava fechando o contrato, com o papel na mão, tinha de
+  salvar, procurar a ficha e voltar. Agora as **duas** telas anexam, e pelo **mesmo** formulário
+  (`AnexoDoContrato.FormularioDeAnexo`): duplicá-lo faria uma gravar com validade e a outra sem, e
+  a lista de documentos passaria a depender de por onde se entrou. Dá para anexar **antes de
+  salvar** o contrato porque o documento é do **fornecedor** no modelo — o que o anexo precisa é
+  do fornecedor escolhido, e no formulário ele já está. A lista do formulário mostra só os
+  **papéis do contrato** (`CONTRATO`, `ADITIVO`, `OUTRO`): a certidão é da homologação, e
+  misturá-la aqui faria a lista do contrato parecer ter documento que não é dele. Anexar
+  **recarrega** a lista, senão o papel recém-anexado não apareceria.
 - **O contrato de parceria tem ficha, e a ficha tem memória.** `/contratos/:id` junta o que o
   comprador pergunta antes de renovar ou reajustar: os documentos, os produtos, **todas** as compras
   com o fornecedor (a de antes do contrato mostra quanto se pagava sem ele; cada linha diz se abate

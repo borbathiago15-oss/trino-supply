@@ -66,8 +66,10 @@ test.describe('Cockpit (Modo TV)', () => {
     await expect(page.getByTestId('tela-na-parede')).toContainText('rodízio de');
     await expect(page.getByTestId('compras-na-tela-do-material')).toBeVisible();
     await expect(page.getByTestId('esteira-do-material')).toBeVisible();
-    await expect(page.getByText('Fila do almoxarifado')).toBeVisible();
-    await expect(page.getByText('Fora do prazo')).toBeVisible();
+    // pelo título do cartão: `getByText` casa trecho, e "Nenhuma solicitação fora do prazo." do
+    // radar vazio também contém "fora do prazo"
+    await expect(page.getByRole('heading', { name: 'Fila do almoxarifado' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Fora do prazo' })).toBeVisible();
     await expect(page.getByText('Radar do almoxarifado — ação imediata')).toBeVisible();
     await expect(page.getByTestId('ranking-centros')).toBeVisible();
 

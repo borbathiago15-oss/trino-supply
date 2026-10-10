@@ -37,9 +37,13 @@ const Linha = ({ rotulo, children }: { rotulo: string; children: React.ReactNode
  * O produto com grade abre a ficha do primeiro tamanho: descrição, família e fornecedores são
  * os mesmos, e a tabela de tamanhos mostra o que muda de um para outro (código, preço, C.A.).
  */
-export function FichaDoProduto({ produto, aoUsar, aoVoltar }:
-  { produto: ProdutoParaEscolha; aoUsar: () => void; aoVoltar: () => void }) {
-  const primeiro = produto.sizes[0];
+export function FichaDoProduto({ produto, aoUsar, aoVoltar, tamanhoAberto, rotuloVoltar = '← Voltar à busca' }: {
+  produto: ProdutoParaEscolha; aoUsar: () => void; aoVoltar: () => void;
+  /** O tamanho cuja ficha abre — quando a pessoa clicou numa linha da grade, é aquela; sem ele, o primeiro. */
+  tamanhoAberto?: string;
+  rotuloVoltar?: string;
+}) {
+  const primeiro = produto.sizes.find((v) => v.id === tamanhoAberto) ?? produto.sizes[0];
   const { dados: ficha, erro } = useCarregar((s) => fichaDoProduto(primeiro.id, s), [primeiro.id]);
   const foto = ficha?.imageDocumentId ?? produto.sizes.find((v) => v.imageDocumentId)?.imageDocumentId ?? null;
 
@@ -117,7 +121,7 @@ export function FichaDoProduto({ produto, aoUsar, aoVoltar }:
       )}
 
       <div className="mt-4 flex flex-wrap justify-between gap-2">
-        <button type="button" className="botao-secundario" onClick={aoVoltar}>← Voltar à busca</button>
+        <button type="button" className="botao-secundario" onClick={aoVoltar}>{rotuloVoltar}</button>
         <button type="button" className="botao" disabled={!ficha || produto.compliancePending} onClick={aoUsar}>
           Usar este produto
         </button>

@@ -138,7 +138,6 @@ export async function enviarArquivo<T = void>(caminho: string, arquivo: File, ex
   return (json.data ?? json) as T;
 }
 
-/** Abre um Blob numa nova aba (mesmo comportamento do legado para PDF e anexos). */
 /**
  * Baixa o blob como arquivo com o nome dado. É a porta da planilha: o navegador não tem como
  * "abrir" um xlsx numa aba, e `abrirBlob` deixaria um download sem nome.
@@ -153,6 +152,7 @@ export function salvarBlob(blob: Blob, nome: string) {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+/** Abre um Blob numa nova aba (mesmo comportamento do legado para PDF e anexos). */
 export function abrirBlob(blob: Blob) {
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank', 'noopener');

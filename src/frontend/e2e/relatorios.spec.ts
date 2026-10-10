@@ -118,7 +118,8 @@ test.describe('Relatório de material (React)', () => {
     expect(pdf.headers()['content-disposition']).toMatch(/relatorio-material-\d{4}-\d{2}-\d{2}_a_\d{4}-\d{2}-\d{2}\.pdf/);
 
     const xlsxResposta = page.waitForResponse((r) => r.url().includes('analytics/material/report/xlsx'));
-    const download = page.waitForEvent('download');
+    // só a planilha: o Chromium sem janela não abre PDF e também o entrega como download
+    const download = page.waitForEvent('download', { predicate: (d) => d.suggestedFilename().endsWith('.xlsx') });
     await page.getByRole('button', { name: 'Baixar planilha' }).click();
     const xlsx = await xlsxResposta;
     expect(xlsx.status()).toBe(200);

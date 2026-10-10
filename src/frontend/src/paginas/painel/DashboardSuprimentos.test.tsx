@@ -16,9 +16,13 @@ vi.mock('@/api/painel', async (importar) => ({
   ...(await importar<typeof import('@/api/painel')>()),
   dashboardDeSuprimentos: vi.fn(), listarAvisos: vi.fn(),
 }));
+vi.mock('@/api/material', async (importar) => ({
+  ...(await importar<typeof import('@/api/material')>()), analyticsDeMaterial: vi.fn(),
+}));
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => eu }));
 
 import { dashboardDeSuprimentos, listarAvisos } from '@/api/painel';
+import { analyticsDeMaterial } from '@/api/material';
 
 let eu: Usuario = {
   id: 'u1', email: 'carla@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['COMPRAS'],
@@ -107,6 +111,7 @@ describe('regras do painel', () => {
 describe('tela Dashboard de Suprimentos', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(analyticsDeMaterial).mockResolvedValue(undefined as never);
     eu = { id: 'u1', email: 'carla@t.com', name: 'Carla', role: 'PurchasingOfficer', modules: ['COMPRAS'] };
     vi.mocked(listarAvisos).mockResolvedValue([]);
   });
@@ -125,7 +130,7 @@ describe('tela Dashboard de Suprimentos', () => {
     await screen.findByTestId('painel-comprador');
     expect(dashboardDeSuprimentos).toHaveBeenCalledTimes(1);
 
-    await usuario.selectOptions(screen.getByLabelText('Centro de custo'), 'BAH-001');
+    await usuario.selectOptions(within(screen.getByTestId('filtros-principais')).getByLabelText('Centro de custo'), 'BAH-001');
     expect(dashboardDeSuprimentos).toHaveBeenCalledTimes(1);
 
     await usuario.click(screen.getByRole('button', { name: 'Aplicar filtros' }));

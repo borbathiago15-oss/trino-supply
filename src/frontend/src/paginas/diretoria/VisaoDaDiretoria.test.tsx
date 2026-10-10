@@ -14,11 +14,15 @@ vi.mock('@/api/relatorios', async (importar) => ({
 vi.mock('@/api/cotacoes', async (importar) => ({
   ...(await importar<typeof import('@/api/cotacoes')>()), processosParaMinhaAprovacao: vi.fn(),
 }));
+vi.mock('@/api/material', async (importar) => ({
+  ...(await importar<typeof import('@/api/material')>()), analyticsDeMaterial: vi.fn(),
+}));
 vi.mock('@/api/analytics', async (importar) => ({
   ...(await importar<typeof import('@/api/analytics')>()), relatorioDeInsights: vi.fn(),
 }));
 
 import { relatorioDeInsights } from '@/api/analytics';
+import { analyticsDeMaterial } from '@/api/material';
 import { processosParaMinhaAprovacao } from '@/api/cotacoes';
 import { relatorioExecutivo } from '@/api/relatorios';
 
@@ -68,6 +72,7 @@ const abrir = () => render(<MemoryRouter><VisaoDaDiretoria /></MemoryRouter>);
 describe('visão da diretoria', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.mocked(analyticsDeMaterial).mockResolvedValue(undefined as never);
     vi.mocked(relatorioExecutivo).mockResolvedValue(relatorio());
     vi.mocked(processosParaMinhaAprovacao).mockResolvedValue([pendente]);
     vi.mocked(relatorioDeInsights).mockResolvedValue(insights([]));

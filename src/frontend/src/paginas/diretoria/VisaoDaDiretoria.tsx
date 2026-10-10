@@ -4,6 +4,7 @@ import { BADGE_ACHADO, relatorioDeInsights, type Achado } from '@/api/analytics'
 import { comparacaoDaEscolha, diasDesde, processosParaMinhaAprovacao, type ProcessoParaAprovar } from '@/api/cotacoes';
 import { FILTROS_RELATORIO_VAZIOS, relatorioExecutivo, type RelatorioExecutivo } from '@/api/relatorios';
 import { variacao } from '@/api/painel';
+import { MaterialNoPainel } from '@/paginas/painel/MaterialNoPainel';
 import { Badge, Carregando, Erro, Painel } from '@/componentes/basicos';
 import { LinhaDaMeta } from '@/componentes/LinhaDaMeta';
 import { enderecoDoId } from '@/layout/menu';
@@ -115,6 +116,7 @@ export function VisaoDaDiretoria() {
     return d == null ? m : m == null ? d : Math.max(m, d);
   }, null);
   const excecoes = r ? r.withoutErp.orders + r.urgent.orders : 0;
+  const janela = intervaloDoPeriodo(periodo);
 
   return (
     <>
@@ -180,6 +182,9 @@ export function VisaoDaDiretoria() {
           </>
         )}
       </Painel>
+
+      {/* o almoxarifado pelo mesmo período e centro do topo: pendentes hoje, atendidas, tempo e prazo */}
+      <MaterialNoPainel compacto de={janela.de} ate={janela.ate} centroCusto={centroCusto} />
 
       {dados && (
         <Painel titulo="O que espera a sua decisão" acoes={<Link to="/aprovacoes" className="botao">Central de Aprovação →</Link>}>

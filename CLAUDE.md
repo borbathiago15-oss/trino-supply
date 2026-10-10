@@ -902,6 +902,21 @@ tabela (`minLargura`), nunca da célula: `min-w-[150px]` numa grade de duas colu
 vizinho — foi o prazo por família, que empilha meta, real, mediana e um selo em meia tela. Esse
 campo pede a largura inteira (`colunasNoCard={1}`); dois por linha é para valor curto.
 
+**O material do almoxarifado tem bloco próprio no Dashboard e na Visão da diretoria**
+(`Analytics/AnalyticsDeMaterial.cs`, rota `/analytics/material`, `paginas/painel/MaterialNoPainel`). É
+o outro cano da casa, ao lado da compra: o Dashboard contava só a compra, e a diretoria não tinha como
+perguntar "quanto fardamento o centro X pediu este mês" sem abrir o Painel de Atendimentos. Os filtros
+são **próprios** (período, centro, família, produto): os da compra falam de fornecedor, comprador e
+prioridade, que a solicitação de material não tem. Três réguas vêm de onde já existem, para o número
+bater com a tela do almoxarife: o prazo de atendimento é o de `PrazoDeAtendimentoService` (o mais
+curto entre as famílias dos itens, contado da liberação do Nível 1), o recorte por centro é o de
+`RecorteDoPainel`, e a família do item vem do **catálogo**, porque o item da solicitação guarda código
+e descrição. **Pendente é pergunta de agora**, não do período (a solicitação de setembro que ninguém
+atendeu continua aparecendo); solicitadas e atendidas são do período. O filtro por família ou produto
+**entra pelo item**: a solicitação conta se algum item dela entra, e as quantidades somam só os itens
+que entram. Sem atendimento medido, tempo e prazo são nulos e aparecem como traço. Na diretoria o
+bloco é `compacto`: usa o período e o centro do topo, e o detalhe fica no Painel de Atendimentos.
+
 **A meta é da empresa, e sem ela não há comparação.** `IndicatorGoal` guarda um valor **mensal**
 por indicador do catálogo (`MetasDosIndicadores.Catalogo`), editável pelo administrador em
 `/metas`; a linha só existe quando alguém grava, e o campo vazio a apaga. Card de indicador sem

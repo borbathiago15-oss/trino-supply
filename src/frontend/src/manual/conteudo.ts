@@ -41,6 +41,7 @@ export const MANUAIS: Record<string, Manual> = {
       'O relatório em três frases resume o período com os mesmos números dos blocos.',
       '"O que espera a sua decisão" lista a fila — a decisão em si é tomada na Central de Aprovação.',
       '"O que chama atenção" traz os achados do Insights.',
+      '"Solicitações de material ao almoxarifado" mostra, pelo mesmo período e centro do topo, as pendências de hoje, as atendidas, o tempo do pedido à entrega e a parte atendida no prazo, com os centros e as famílias que mais pedem. O detalhe fica no Painel de Atendimentos.',
     ],
     regras: [
       { texto: 'As três frases saem dos mesmos números da tabela: a frase nunca diz uma coisa e o bloco outra.' },
@@ -59,8 +60,11 @@ export const MANUAIS: Record<string, Manual> = {
       'No celular, as tabelas viram um card por linha, com as mesmas colunas.',
       'A Central de Avisos lista o que depende de você agora; o número muda sozinho quando o trabalho anda.',
       '"Limpar" volta ao recorte padrão.',
+      '"Solicitações de material ao almoxarifado" é o bloco do material que sai do estoque sem compra, com filtros próprios (período, centro de custo, família e produto): pendentes, atendidas, tempos e os rankings por centro, família, produto e solicitante. Tocar a barra do centro ou da família filtra o bloco.',
     ],
     regras: [
+      { texto: 'As pendências de material (aguardando aprovação e na fila do estoque) são de hoje, não do período: a solicitação de setembro que ninguém atendeu continua aparecendo. Solicitadas e atendidas são do período.' },
+      { texto: 'O prazo de atendimento é o de Cadastros → Prazo de atendimento, contado da aprovação do centro — a mesma régua da Fila de Atendimento.' },
       { texto: 'O valor comprado conta pela data da aprovação da compra, que é quando o pedido nasce — e não pela data da O.C. do ERP, que deixaria de fora o pedido fechado com justificativa.' },
       { texto: 'O comprador de um pedido é quem conduziu a compra (escolheu o vencedor), e não quem aprovou.' },
       { texto: 'Sem base no período anterior, a variação não aparece: "sem base" é diferente de "cresceu 100%".' },

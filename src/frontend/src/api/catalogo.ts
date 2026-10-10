@@ -112,6 +112,8 @@ export interface ResumoCatalogo {
   active: number;
   inactive: number;
   compliancePending: number;
+  /** Produtos de almoxarifado ativos sem custo de compra: a solicitação deles fica sem valor. */
+  withoutCost: number;
   families: { family: string; count: number }[];
 }
 
@@ -129,14 +131,16 @@ export const tiposDeProduto = async (signal?: AbortSignal) =>
  * trecho da descrição ou família. `incluirInativos` só vale para quem mantém.
  */
 export async function buscarProdutos(
-  { q, familia, incluirInativos, material }:
-  { q?: string; familia?: string; incluirInativos?: boolean; material?: boolean },
+  { q, familia, incluirInativos, material, semCusto }:
+  { q?: string; familia?: string; incluirInativos?: boolean; material?: boolean; semCusto?: boolean },
   signal?: AbortSignal,
 ) {
   const params = new URLSearchParams();
   if (incluirInativos) params.set('all', 'true');
   // o recorte da tela Solicitar Material: a família manda, o produto ajusta
   if (material) params.set('material', 'true');
+  // o recorte que o aviso do cadastro abre: produto de almoxarifado sem custo de compra
+  if (semCusto) params.set('withoutCost', 'true');
   if (q) params.set('q', q);
   if (familia) params.set('family', familia);
   const { items } = await api<{ items: Produto[] }>(`${base}/?${params}`, { signal });

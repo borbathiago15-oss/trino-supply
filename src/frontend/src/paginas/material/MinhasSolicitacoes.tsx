@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  cancelarMaterial, listarSolicitacoesMaterial, podeCancelarMaterial,
+  cancelarMaterial, fraseDoValor, listarSolicitacoesMaterial, podeCancelarMaterial,
   ROTULO_ITEM_MATERIAL, ROTULO_MATERIAL, type SolicitacaoMaterial,
 } from '@/api/material';
 import { Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
@@ -52,7 +52,7 @@ export function MinhasSolicitacoes() {
           <div className="overflow-x-auto">
             <table data-testid="tabela-material" className="min-w-[860px]">
               <thead>
-                <tr><th>Número</th><th>Itens</th><th>Situação</th><th>Ações</th></tr>
+                <tr><th>Número</th><th>Itens</th><th>Valor</th><th>Situação</th><th>Ações</th></tr>
               </thead>
               <tbody>
                 {lista.map((r) => {
@@ -72,6 +72,14 @@ export function MinhasSolicitacoes() {
                         )}
                         {(r.cancelReason || r.decisionReason) && (
                           <div className="sub">Motivo: {r.cancelReason ?? r.decisionReason}</div>
+                        )}
+                      </td>
+                      {/* o valor pedido, pelo custo congelado no dia do pedido; o liberado só
+                          quando o centro mexeu na quantidade — igual não é notícia */}
+                      <td className="whitespace-nowrap" data-testid="valor-da-solicitacao">
+                        {fraseDoValor(r.requestedValue, r.itemsWithoutPrice) ?? '—'}
+                        {r.approvedValue != null && r.requestedValue != null && r.approvedValue !== r.requestedValue && (
+                          <div className="sub">liberado: {fraseDoValor(r.approvedValue)}</div>
                         )}
                       </td>
                       <td><Badge classe={marca.classe}>{marca.rotulo}</Badge></td>

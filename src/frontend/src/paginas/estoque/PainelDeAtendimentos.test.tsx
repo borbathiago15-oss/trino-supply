@@ -123,6 +123,21 @@ describe('tela Painel de Atendimentos', () => {
     expect(within(tabela).getByText('5 de 2 dia(s) (EPI)')).toBeInTheDocument();
   });
 
+  it('a linha mostra o valor liberado, e diz quando o custo falta', async () => {
+    vi.mocked(painelDeAtendimentos).mockResolvedValue(painel({
+      emAndamento: [
+        linha({ id: 'v1', number: 'MR-COM-VALOR', value: 64, itemsWithoutPrice: 0 }),
+        linha({ id: 'v2', number: 'MR-PARTE', value: 25, itemsWithoutPrice: 1 }),
+        linha({ id: 'v3', number: 'MR-SEM-CUSTO', value: null, itemsWithoutPrice: 2 }),
+      ],
+    }));
+    abrir();
+    const bloco = await screen.findByTestId('painel-andamento');
+    expect(within(bloco).getByText('R$ 64,00')).toBeInTheDocument();
+    expect(within(bloco).getByText('R$ 25,00 (1 item sem custo)')).toBeInTheDocument();
+    expect(within(bloco).getByText('sem custo cadastrado')).toBeInTheDocument();
+  });
+
   it('sem prazo nenhum a coluna é traço, e não "no prazo"', async () => {
     // zero em todas as famílias quer dizer que esta fila não cobra tempo — dizer "no prazo"
     // afirmaria um veredito que ninguém deu

@@ -6,7 +6,7 @@ import {
 } from '@/api/catalogo';
 import { listarFamilias, type Familia } from '@/api/familias';
 import { listarFornecedores, type Fornecedor } from '@/api/fornecedores';
-import { Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
+import { Aviso, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { BadgeAtivo, Campo, Grade2, Nota } from '@/componentes/formulario';
 import { Miniatura, Visor } from '@/componentes/Miniatura';
 import { Confirmacao } from '@/componentes/Dialogo';
@@ -48,7 +48,7 @@ export function Produtos() {
 
   const [busca, setBusca] = useState('');
   const [familiaFiltro, setFamiliaFiltro] = useState('');
-  const [criterio, setCriterio] = useState<{ q: string; familia: string } | null>(null);
+  const [criterio, setCriterio] = useState<{ q: string; familia: string; semCusto?: boolean } | null>(null);
   const [editando, setEditando] = useState<Produto | null>(null);
   const [form, setForm] = useState<Formulario>(VAZIO);
   const [fornecedoresDoItem, setFornecedoresDoItem] = useState<LinhaFornecedor[]>([]);
@@ -76,6 +76,12 @@ export function Produtos() {
   const tipos = apoio.dados?.tipos ?? [];
   const tipoEscolhido = tipos.find((t) => t.key === form.tipo);
   const exigeCa = !!tipoEscolhido?.requiresCa;
+  // o custo de compra é obrigatório no produto de almoxarifado (IC-ERR-018), pela mesma régua
+  // da tela Solicitar Material: o ajuste do produto vence, "segue a família" cai na família
+  const familiaDoForm = (apoio.dados?.familias ?? []).find((f) => f.name === form.familia);
+  const exigeCusto = form.material === 'SEMPRE'
+    || (form.material === 'FAMILIA' && !!familiaDoForm?.materialRequestable);
+  const semCusto = apoio.dados?.resumo.withoutCost ?? 0;
 
   // um tipo que exige C.A. faz o campo aparecer em cada fornecedor já listado
   useEffect(() => {
@@ -98,6 +104,11 @@ export function Produtos() {
   }
   function limpar() {
     setBusca(''); setFamiliaFiltro(''); setCriterio(null);
+  }
+  /** O aviso abre a lista que contou: número sem lista, num acervo de milhares, é caçada. */
+  function verSemCusto() {
+    setBusca(''); setFamiliaFiltro(''); setCriterio({ q: '', familia: '', semCusto: true });
+    rolarPara('resultado-produtos');
   }
 
   function novo() {
@@ -217,6 +228,23 @@ export function Produtos() {
             ? <>{resumoEmTexto(apoio.dados.resumo)} — busque pelo código ou pela descrição para ver e editar um produto.</>
             : 'Carregando o resumo do catálogo…'}
         </Nota>
+        {/* o produto de almoxarifado sem custo deixa a solicitação de material sem valor; o
+            cadastro diz quantos são, e o aviso abre o recorte deles */}
+        {mantem && semCusto > 0 && (
+          <Aviso testid="produtos-sem-custo">
+            <span className="flex flex-wrap items-center justify-between gap-2">
+              <span>
+                {semCusto === 1
+                  ? 'Um produto de almoxarifado está sem custo de compra'
+                  : `${semCusto} produtos de almoxarifado estão sem custo de compra`}
+                {' '}— a solicitação de material deles fica sem valor no relatório. Informe o custo em cada um.
+              </span>
+              <button type="button" className="botao-secundario" data-testid="ver-sem-custo" onClick={verSemCusto}>
+                {semCusto === 1 ? 'Ver o produto' : 'Ver os produtos sem custo'}
+              </button>
+            </span>
+          </Aviso>
+        )}
 
         <Grade2 className="mt-3">
           <Campo id="prod-busca" rotulo="Buscar produto">
@@ -240,8 +268,10 @@ export function Produtos() {
       </Painel>
 
       {criterio && (
-        <Painel
-          titulo={`Resultado da busca — ${encontrados.length} produto(s)`}
+        <Painel id="resultado-produtos"
+          titulo={criterio.semCusto
+            ? `Produtos de almoxarifado sem custo de compra — ${encontrados.length}`
+            : `Resultado da busca — ${encontrados.length} produto(s)`}
           acoes={<button type="button" className="botao-secundario" onClick={limpar}>Fechar resultado</button>}>
           {resultado.erro && <Erro>{resultado.erro}</Erro>}
           {resultado.carregando && !resultado.dados && <Carregando texto="Buscando…" />}
@@ -252,7 +282,7 @@ export function Produtos() {
                 <thead>
                   <tr>
                     <th>Foto</th><th>Código</th><th>Produto</th><th>Família</th><th>Tam.</th>
-                    <th>Tipo / conformidade</th><th>Fornecedores</th><th>Preço ref.</th><th>Situação</th>
+                    <th>Tipo / conformidade</th><th>Fornecedores</th><th>Custo de compra</th><th>Situação</th>
                     {mantem && <th>Ações</th>}
                   </tr>
                 </thead>
@@ -277,7 +307,9 @@ export function Produtos() {
                         {p.compliancePending && <div className="text-[12px] text-perigo">⚠ sem C.A. em nenhum fornecedor</div>}
                       </td>
                       <td className="sub">{p.suppliers.map((f) => f.supplierName).join(' · ') || '—'}</td>
-                      <td className="whitespace-nowrap">{p.referencePrice != null ? moeda(p.referencePrice) : '—'}</td>
+                      <td className="whitespace-nowrap">
+                        {p.referencePrice != null ? moeda(p.referencePrice) : <span className="text-perigo">sem custo</span>}
+                      </td>
                       <td><BadgeAtivo ativo={p.active} /></td>
                       {mantem && (
                         <td className="whitespace-nowrap">
@@ -330,8 +362,12 @@ export function Produtos() {
               <Campo id="prod-unidade" rotulo="Unidade">
                 <input id="prod-unidade" placeholder="UN" {...campo('unidade')} />
               </Campo>
-              <Campo id="prod-preco" rotulo="Preço ref. (R$)">
-                <input id="prod-preco" type="number" min={0} step="0.01" placeholder="opcional" {...campo('preco')} />
+              {/* o custo de compra: quem cadastra é o comprador, e é ele que sabe quanto custa.
+                  É o preço de referência do catálogo, e dá valor à solicitação de material */}
+              <Campo id="prod-preco" rotulo="Custo de compra (R$)"
+                dica={exigeCusto ? '(obrigatório: material de almoxarifado)' : '(opcional)'}>
+                <input id="prod-preco" type="number" min={0} step="0.01" required={exigeCusto}
+                  placeholder={exigeCusto ? 'ex.: 12,50' : 'opcional'} {...campo('preco')} />
               </Campo>
             </Grade2>
 

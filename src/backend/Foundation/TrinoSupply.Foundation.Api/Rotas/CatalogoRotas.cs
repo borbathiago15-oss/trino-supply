@@ -85,17 +85,19 @@ public static class CatalogoRotas
             return Ok(new
             {
                 total = s.Total, active = s.Active, inactive = s.Inactive, compliancePending = s.CompliancePending,
+                withoutCost = s.SemCusto,
                 families = s.Families.Select(f => new { family = f.Family, count = f.Count }),
             }, ctx);
         });
 
         // `material=true` é o recorte da tela Solicitar Material: a família manda, o produto ajusta
         catalogGroup.MapGet("/", async (CatalogService svc, ClaimsPrincipal p, HttpContext ctx,
-            string? family, string? q, bool? all, bool? stock, bool? material) =>
+            string? family, string? q, bool? all, bool? stock, bool? material, bool? withoutCost) =>
         {
             var role = p.FindFirstValue(ClaimTypes.Role) ?? "";
             var includeInactive = all == true && CatalogService.CanRegisterProduct(role);
-            var items = await svc.ListAsync(family, q, includeInactive, stock == true, material == true);
+            var items = await svc.ListAsync(family, q, includeInactive, stock == true, material == true,
+                semCusto: withoutCost == true);
             return Ok(new { items = items.Select(CatalogView) }, ctx);
         });
 

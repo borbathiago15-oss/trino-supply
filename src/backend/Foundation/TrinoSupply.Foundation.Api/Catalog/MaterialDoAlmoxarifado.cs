@@ -32,6 +32,17 @@ public static class MaterialDoAlmoxarifado
     public static bool Entra(bool? doProduto, bool? daFamilia) => doProduto ?? daFamilia ?? true;
 
     /// <summary>
+    /// O produto de almoxarifado precisa do <b>custo de compra</b> (decisão da empresa, 2026-10):
+    /// o preço de referência é o que dá valor à solicitação de material, e sem ele o relatório da
+    /// diretoria conta quantidade sem dinheiro. É a <b>mesma</b> régua de <see cref="Entra"/> — o
+    /// ajuste do produto vence, nulo cai na família — com <b>um</b> padrão diferente: família que
+    /// o cadastro não conhece <b>não</b> exige. Mostrar demais é o erro barato (quem olha a lista
+    /// ignora o que não é dele); recusar um cadastro por causa de uma família que ninguém marcou
+    /// seria uma regra saída do nada, e a pessoa não teria onde desmarcá-la.
+    /// </summary>
+    public static bool ExigeCusto(bool? doProduto, bool? daFamilia) => doProduto ?? daFamilia ?? false;
+
+    /// <summary>
     /// A <b>mesma</b> regra, dita como filtro de consulta. O banco não tem o flag da família ao
     /// lado do produto — a família é texto no item —, então o que vai para o SQL é a lista curta
     /// das que <b>não</b> entram (o cadastro inteiro cabe em trezentas linhas), e o resto segue

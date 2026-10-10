@@ -71,6 +71,10 @@ export function DialogoProdutoDoItem({ processo, item, aoConcluir, aoFechar }: {
     finally { setSalvando(false); }
   }
 
+  // o custo de compra é obrigatório no produto de almoxarifado (IC-ERR-018): a tela antecipa
+  // pela família escolhida, em vez de deixar o comprador descobrir no erro do servidor
+  const exigeCusto = !!familias.find((f) => f.name === novo.family)?.materialRequestable;
+
   const campo = (k: keyof typeof novo) => ({
     value: novo[k],
     onChange: (ev: { target: { value: string } }) => setNovo((n) => ({ ...n, [k]: ev.target.value })),
@@ -143,8 +147,9 @@ export function DialogoProdutoDoItem({ processo, item, aoConcluir, aoFechar }: {
             <Campo id="pdi-codigo" rotulo="Código" dica="(vazio: o sistema gera pela família)">
               <input id="pdi-codigo" {...campo('code')} />
             </Campo>
-            <Campo id="pdi-preco" rotulo="Preço de referência" dica="(opcional)">
-              <input id="pdi-preco" type="number" step="0.01" min="0" {...campo('referencePrice')} />
+            <Campo id="pdi-preco" rotulo="Custo de compra (R$)"
+              dica={exigeCusto ? '(obrigatório: material de almoxarifado)' : '(opcional)'}>
+              <input id="pdi-preco" type="number" step="0.01" min="0" required={exigeCusto} {...campo('referencePrice')} />
             </Campo>
           </Grade2>
           <div className="mt-4 flex justify-end gap-2">

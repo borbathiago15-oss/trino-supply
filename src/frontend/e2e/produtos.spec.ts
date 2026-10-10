@@ -54,6 +54,9 @@ test.describe('Cadastro de Produtos (React)', () => {
     await page.fill('#prod-codigo', codigo);
     await page.selectOption('#prod-form-familia', { index: 1 });
     await page.fill('#prod-descricao', `E2E Bota ${marca}`);
+    // o custo de compra: obrigatório no produto de almoxarifado (IC-ERR-018), e a família do
+    // cenário é uma — sem ele o formulário nem chega à conferência do C.A.
+    await page.fill('#prod-preco', '89.90');
 
     // escolher um tipo que exige C.A. mostra o aviso e cria a primeira linha de fornecedor
     const tipoComCa = await page.locator('#prod-tipo option').evaluateAll((os) =>
@@ -119,6 +122,7 @@ test.describe('Cadastro de Produtos (React)', () => {
     await page.selectOption('#prod-form-familia', { index: 1 });
     await page.fill('#prod-descricao', descricao);
     await page.fill('#prod-unidade', 'UN');
+    await page.fill('#prod-preco', '5.00');
     await page.getByRole('button', { name: 'Adicionar produto' }).click();
     await expect(page.getByTestId('toast').last()).toContainText('adicionado ao catálogo');
 

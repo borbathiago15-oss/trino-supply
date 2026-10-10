@@ -132,6 +132,7 @@ export const MANUAIS: Record<string, Manual> = {
       { codigo: 'RFQ-ERR-030', texto: 'No Nível 2, o diretor não pode ser quem escolheu o fornecedor nem quem deu o Nível 1. No Nível 1 não há essa segregação.' },
       { texto: 'A fila mostra só o que você pode decidir — o que não é da sua alçada não aparece aqui. A compra da empresa inteira fica no painel.' },
       { texto: 'A compra do Gestor de Suprimentos não tem Nível 2; a de um comprador vai para o gestor responsável por ele.' },
+      { texto: 'Na solicitação de material, cada item mostra o custo de compra e a linha diz o valor do que você está liberando — ele acompanha a quantidade que você ajustar.' },
     ],
   },
 
@@ -340,10 +341,14 @@ export const MANUAIS: Record<string, Manual> = {
     ],
   },
   'mr-mine': {
-    paraQueServe: 'Acompanhar as suas solicitações de material: aprovação, atendimento e o que ficou parcial.',
+    paraQueServe: 'Acompanhar as suas solicitações de material: aprovação, atendimento, o que ficou parcial e quanto vale.',
     passos: [
       'Veja a situação de cada solicitação.',
+      'A coluna "Valor" é o que você pediu, pelo custo de compra do produto no dia do pedido; quando o centro liberou menos, a linha diz o valor liberado.',
       'Solicitação ainda não atendida pode ser cancelada, com o motivo.',
+    ],
+    regras: [
+      { texto: 'O custo é congelado no pedido: mudar o preço do produto depois não muda a solicitação. "Sem custo cadastrado" quer dizer que o produto ainda não tem custo de compra, não que vale zero.' },
     ],
   },
   triage: {
@@ -384,6 +389,7 @@ export const MANUAIS: Record<string, Manual> = {
       { texto: 'O filtro vale para os cartões e para as listas ao mesmo tempo: o número do topo sempre conta exatamente a lista que ele abre.' },
       { texto: 'A quebra por solicitante é por pessoa, não por nome: dois homônimos continuam sendo duas linhas.' },
       { texto: 'A data recorta pela criação da solicitação, e os dois dias informados entram inteiros.' },
+      { texto: 'A coluna "Valor" é o valor liberado pelo centro (o pedido, enquanto ele não decide), pelo custo de compra congelado no dia do pedido.' },
     ],
   },
 
@@ -459,6 +465,7 @@ export const MANUAIS: Record<string, Manual> = {
       '"Excluir" apaga de vez o produto cadastrado por engano; o que já circulou se inativa (gestor de suprimentos e administrador).',
     ],
     regras: [
+      { codigo: 'IC-ERR-018', texto: 'Produto de almoxarifado nasce e se corrige com o custo de compra (o "Custo de compra (R$)" do formulário): é ele que dá valor à solicitação de material. Vale para a família de almoxarifado e para o produto marcado "sempre entra"; o aviso do topo abre a lista dos que ainda estão sem custo.' },
       { codigo: 'IC-ERR-030', texto: 'Só se exclui o produto que nunca entrou numa SC, cotação, pedido, contrato, solicitação de material ou no estoque — a mensagem diz onde ele foi usado. Nesses casos, inative.' },
       { texto: 'O comprador cadastra e corrige produtos; importar, excluir e manter famílias continuam com o gestor de suprimentos e o administrador.' },
       { texto: 'Cada tamanho é um produto próprio (código 12003-38, 12003-39…). A grade é cadastrada inteira ou nada.' },

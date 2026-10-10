@@ -573,6 +573,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(i => i.FulfilledQuantity).HasColumnName("fulfilled_quantity").HasPrecision(18, 4);
             e.Property(i => i.Status).HasColumnName("status").HasConversion<short>();
             e.Property(i => i.StockMovementId).HasColumnName("stock_movement_id");
+            e.Property(i => i.UnitPrice).HasColumnName("unit_price").HasPrecision(18, 4);
             e.Property(i => i.CreatedAt).HasColumnName("created_at");
             e.Ignore(i => i.EffectiveQuantity);
             e.HasIndex(i => i.RequisitionId);

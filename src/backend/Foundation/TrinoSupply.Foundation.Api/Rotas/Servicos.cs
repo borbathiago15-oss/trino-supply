@@ -50,6 +50,7 @@ public static class Servicos
         servicos.AddScoped<AvisoDoUsuarioService>();
         servicos.AddScoped<EscalonamentoDoPrazoService>();
         servicos.AddScoped<TorreDeControleService>();
+        servicos.AddScoped<CockpitDoMaterialService>();
         servicos.AddScoped<Acoes.PlanoDeAcaoService>();
         servicos.AddScoped<Melhoria.CicloDeMelhoriaService>();
         servicos.AddScoped<Melhoria.AvisoDoCicloService>();

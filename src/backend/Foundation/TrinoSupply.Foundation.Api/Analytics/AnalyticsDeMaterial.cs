@@ -87,9 +87,14 @@ public class AnalyticsDeMaterialService(AppDbContext db, TimeProvider clock, Pra
         ["slaBreachedOpen"] = "Solicitações na fila do almoxarifado hoje com o prazo de atendimento estourado.",
     };
 
+    /// <param name="costCenters">
+    /// O recorte por <b>unidade</b> da parede: os centros de custo daquela empresa, em caixa alta.
+    /// Vazio é "nenhum centro" (unidade sem centro cadastrado), e nulo é a empresa inteira. É
+    /// outro recorte que o de <paramref name="costCenter"/>, que é um centro escolhido no filtro.
+    /// </param>
     public async Task<RelatorioDeMaterial> MaterialAsync(
         DateOnly from, DateOnly to, string? costCenter, string? family, string? product,
-        CancellationToken ct = default)
+        IReadOnlyCollection<string>? costCenters = null, CancellationToken ct = default)
     {
         if (to < from) (from, to) = (to, from);
         var fromDt = MeiaNoite(from);
@@ -110,6 +115,12 @@ public class AnalyticsDeMaterialService(AppDbContext db, TimeProvider clock, Pra
         {
             var centro = costCenter.Trim().ToUpperInvariant();
             consulta = consulta.Where(r => r.CostCenter.ToUpper() == centro);
+        }
+        if (costCenters is not null)
+        {
+            // `Contains` com array e filtro na entidade: o que o Npgsql traduz
+            var daUnidade = costCenters.Select(c => c.Trim().ToUpperInvariant()).Distinct().ToArray();
+            consulta = consulta.Where(r => daUnidade.Contains(r.CostCenter.ToUpper()));
         }
         var mrs = await consulta.OrderByDescending(r => r.CreatedAt).Take(Cap).ToListAsync(ct);
 

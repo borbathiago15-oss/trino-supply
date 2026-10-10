@@ -651,6 +651,30 @@ empresa cadastrada conta só na visão geral — pôr a solicitação numa unida
 seria inventar o dado que falta. O bloco **só entra quando há o que dizer** (`temAlmoxarifado`):
 cinco zeros tirariam altura da esteira e do radar para anunciar que o módulo não é usado.
 
+**A parede tem duas telas num rodízio só, e a do material não inventa número.** Decisão da empresa
+(2026-10): o cockpit alterna a tela da **compra** (a de sempre) e a do **material do almoxarifado**
+(`paginas/cockpit/TelaDoMaterial.tsx`, rota `/control-tower/cockpit/material`,
+`Procurement/CockpitDoMaterial.cs`), **uma parada por minuto no mesmo relógio** que já girava as
+unidades — Compras geral → Material geral → Compras PB → Material PB… (`cicloDeParadas`). Um segundo
+cronômetro de 60 segundos cortaria a unidade pela metade; por isso `ROTACAO_MS` caiu de dois minutos
+para um, para a volta inteira não dobrar. A tela do material **só entra quando a visão geral diz que
+há material para contar** (`temAlmoxarifado`, lido da geral e não da unidade da vez, senão a tela
+entraria e sairia do ciclo a cada volta), e `?tela=material` abre direto nela — é como o E2E a
+confere sem esperar o minuto. **Nenhuma tela esconde o alarme da outra**: a faixa do almoxarifado
+fica na tela da compra, e a tela do material leva no topo a faixa da compra (risco, atraso crítico,
+backlog, SLA), lida dos mesmos dados do cockpit de compras da mesma parada. E **nenhum número nasce
+nela**: o bloco do almoxarifado é o **mesmo objeto** da tela da compra (`AlmoxarifadoAsync`), o mês —
+solicitadas, atendidas, atendidas no prazo, fora do prazo, rankings por centro, família e produto — é o
+do Dashboard (`AnalyticsDeMaterialService.MaterialAsync`, do dia 1 até hoje), e o prazo de cada linha
+do radar é o de `PrazoDeAtendimentoService`. Há teste que compara a parede com o painel. O **recorte
+por unidade** vai ao Dashboard como a **lista de centros** da empresa (`costCenters`), porque a
+solicitação não carrega empresa — é o mesmo caminho do bloco do almoxarifado, e centro sem empresa
+conta só na geral. O radar do almoxarifado tem quatro tipos e uma ordem: prazo estourado, prazo a
+vencer, parada no centro (pela régua de gargalo da esteira, porque a fila do centro não tem prazo
+cadastrado) e o que virou compra no mês — este em azul, porque não é falha do estoque. A tela do
+material **sem leitura nenhuma** (primeira volta, ou a consulta falhou sem leitura anterior) mostra a
+compra: parede em branco é pior que a tela de antes.
+
 **Aviso e contagem são coisas diferentes, e as duas ficam.** A Central de Avisos é
 **derivada**: conta o que está aberto e o número muda sozinho quando o trabalho anda — serve
 para "o que há para eu fazer agora". `UserNotice` é o outro lado: **fato datado, com dono e

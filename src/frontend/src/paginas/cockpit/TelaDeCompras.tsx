@@ -1,0 +1,269 @@
+import type { CockpitDados } from '@/api/torre';
+import { moeda } from '@/util/formato';
+import {
+  CLASSE_DA_DESCARGA, CLASSE_DO_ALERTA, CLASSE_DO_GARGALO, compacto,
+  CLASSE_DA_VAZAO, FRASE_DA_VAZAO, fraseDaEmergencia, fraseDaRotaDeCompra,
+  horasNaParede, ordenarRadar, progressoDaMeta,
+  saldoComSinal, sentidoDaVazao, temAlmoxarifado, tomDoTeto,
+  ROTULO_DA_DESCARGA, ROTULO_DO_ALERTA, slaAtingido,
+} from './cockpit';
+import {
+  BarraDeMeta, CartaoVital, CelulaDaFaixa, ListaRolante, NumeroVivo, ParDaFaixa,
+} from './pecas';
+
+/**
+ * A tela da compra: a primeira parada do rodízio da parede. É o cockpit de sempre — os cinco
+ * cartões, a vazão do dia, a compra do mês, a faixa do almoxarifado, a esteira, o radar e a
+ * produtividade. A faixa do almoxarifado **fica** aqui mesmo com a tela do material no ciclo:
+ * quem passa e olha três segundos durante o minuto da compra ainda vê o pulso do estoque.
+ */
+export function TelaDeCompras({ dados }: { dados: CockpitDados }) {
+  const {
+    kpis, vazao, compra, almoxarifado, pipeline, excecoesCriticas, burndownCompradores,
+    agendaDocaHoje,
+  } = dados;
+  const radar = ordenarRadar(excecoesCriticas);
+  const slaOk = slaAtingido(kpis.slaSemanalPct, kpis.metaSlaPct);
+
+  return (
+    <>
+      {/* NÍVEL 2 — cinco cartões de comando */}
+      <div className="grid grid-cols-5 gap-4">
+        <CartaoVital icone="🚨" titulo="Risco operacional"
+          tom={kpis.taxaRiscoPct > 20 ? 'text-rose-400' : 'text-white'}
+          rodape={<><NumeroVivo valor={String(kpis.itensAtrasados)} /> em atraso crítico</>}>
+          <NumeroVivo valor={`${kpis.taxaRiscoPct.toLocaleString('pt-BR')}%`} />
+        </CartaoVital>
+
+        <CartaoVital icone="⏳" titulo="Backlog de suprimentos"
+          rodape={<>{moeda(kpis.backlogTotalValor)} em trâmite</>}>
+          <NumeroVivo valor={compacto(kpis.backlogTotalItens)} />
+        </CartaoVital>
+
+        <CartaoVital icone="⏱️" titulo="SLA da semana"
+          tom={slaOk ? 'text-emerald-400' : 'text-amber-400'}
+          rodape={<BarraDeMeta progresso={progressoDaMeta(kpis.slaSemanalPct, kpis.metaSlaPct)} atingiu={slaOk} />}>
+          <NumeroVivo valor={`${kpis.slaSemanalPct.toLocaleString('pt-BR')}%`} />
+        </CartaoVital>
+
+        <CartaoVital icone="💰" titulo="Saving do mês" tom="text-emerald-400"
+          rodape={<BarraDeMeta
+            progresso={progressoDaMeta(kpis.savingMesTotal, kpis.metaSavingMes)}
+            atingiu={kpis.savingMesTotal >= kpis.metaSavingMes} />}>
+          <NumeroVivo valor={`R$ ${compacto(kpis.savingMesTotal)}`} />
+        </CartaoVital>
+
+        <CartaoVital icone="🚚" titulo="OTIF 30 dias"
+          tom={kpis.otifGeralPct !== null && kpis.otifGeralPct < 85 ? 'text-amber-400' : 'text-white'}
+          rodape={kpis.otifMedidos > 0 ? `${kpis.otifMedidos} entrega(s) medida(s)` : 'nenhuma entrega medida'}>
+          <NumeroVivo valor={kpis.otifGeralPct === null ? '—' : `${kpis.otifGeralPct.toLocaleString('pt-BR')}%`} />
+        </CartaoVital>
+      </div>
+
+      {/* NÍVEL 2.5 — a vazão do dia.
+          O backlog do cartão diz quanto há parado; ele não diz se o time está ganhando ou
+          perdendo terreno. Entrou × concluiu responde isso nos dois extremos do mesmo cano,
+          e o saldo com sinal é o que se lê de longe. Fica colado nos cartões, acima da
+          esteira, porque é leitura do DIA — a esteira é do agora. */}
+      <div className="mt-3 flex items-center gap-6 rounded-xl border border-white/10 bg-fundo-card/90 px-5 py-2.5"
+        data-testid="vazao-do-dia">
+        <span className="text-[12px] uppercase tracking-wider text-slate-400">Vazão do dia</span>
+        <ParDaFaixa rotulo="entraram" valor={String(vazao.entraramHoje)} testid="vazao-entraram" />
+        <span aria-hidden className="text-slate-700">──▶</span>
+        <ParDaFaixa rotulo="concluídos" valor={String(vazao.concluidosHoje)} testid="vazao-concluidos" />
+        <div className="flex items-baseline gap-2" data-testid="vazao-saldo">
+          <NumeroVivo valor={saldoComSinal(vazao.saldo)}
+            className={`font-mono text-2xl font-bold ${CLASSE_DA_VAZAO[sentidoDaVazao(vazao.saldo)]}`} />
+          <span className={`text-[12px] ${CLASSE_DA_VAZAO[sentidoDaVazao(vazao.saldo)]}`}>
+            {FRASE_DA_VAZAO[sentidoDaVazao(vazao.saldo)]}
+          </span>
+        </div>
+        <div className="ml-auto flex items-baseline gap-2" data-testid="vazao-taxa">
+          <span className="text-[12px] uppercase tracking-wider text-slate-400">Taxa de conclusão</span>
+          {/* nula é traço, não 0%: "nada entrou" e "não demos conta de nada" são
+              notícias diferentes, e só uma delas cobra alguém */}
+          <NumeroVivo className="font-mono text-2xl font-bold"
+            valor={vazao.taxaConclusaoPct === null
+              ? '—' : `${vazao.taxaConclusaoPct.toLocaleString('pt-BR')}%`} />
+        </div>
+      </div>
+
+      {/* NÍVEL 2.55 — a compra do mês.
+          O dia acabou de ser dito pela faixa acima; esta diz o mês, que é o horizonte em que
+          a compra é cobrada. Nenhum número nasce aqui: o valor é o `poTotalValue` do painel,
+          o emergencial é o CP-02 do Compliance e o teto é a meta do catálogo. A cor do valor
+          vem do servidor porque essa meta é teto, não alvo — "menor é melhor" é decisão da
+          régua da empresa, não da parede. */}
+      <div className="mt-3 flex items-center gap-6 rounded-xl border border-white/10 bg-fundo-card/90 px-5 py-2.5"
+        data-testid="compra-do-mes">
+        <span className="text-[12px] uppercase tracking-wider text-slate-400">A compra do mês</span>
+        <ParDaFaixa testid="compra-valor" rotulo="valor comprado"
+          valor={`R$ ${compacto(compra.valorComprado)}`} tom={tomDoTeto(compra.faixaDoTeto)} />
+        {/* zero é notícia boa e merece ser dita: espaço vazio só diz que ninguém olhou */}
+        <span className="text-[13px] text-slate-300" data-testid="compra-emergenciais">
+          {fraseDaEmergencia(compra.emergenciais, compra.pedidos)}
+        </span>
+        <div className="ml-auto flex w-64 items-baseline gap-2" data-testid="compra-teto">
+          <span className="text-[12px] uppercase tracking-wider text-slate-400">Teto</span>
+          {compra.pctDoTeto === null ? (
+            // sem meta cadastrada não há comparação — teto inventado parece conferido e não é
+            <span className="text-[13px] text-slate-500">sem teto definido</span>
+          ) : (
+            <>
+              <NumeroVivo valor={`${compra.pctDoTeto.toLocaleString('pt-BR')}%`}
+                className={`font-mono text-2xl font-bold ${tomDoTeto(compra.faixaDoTeto)}`} />
+              <span className="flex-1">
+                <BarraDeMeta progresso={progressoDaMeta(compra.valorComprado, compra.tetoAteHoje ?? 0)}
+                  atingiu={compra.faixaDoTeto === 'ok'} />
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* NÍVEL 2.6 — o almoxarifado.
+          A solicitação de material é o outro cano da casa, e a parede fica na sala onde o
+          atendimento acontece. Duas filas separadas de propósito: a do centro de custo espera
+          o Nível 1, a do almoxarifado espera o estoque — somá-las cobraria do almoxarife
+          trabalho que não é dele. E o bloco só existe quando há o que dizer: cinco zeros
+          tirariam altura da esteira para anunciar que o módulo não é usado. */}
+      {temAlmoxarifado(almoxarifado) && (
+        <div className="mt-3 grid grid-cols-5 gap-3" data-testid="almoxarifado">
+          <CelulaDaFaixa testid="almox-fila" icone="📦" titulo="Fila do almoxarifado"
+            valor={String(almoxarifado.filaSolicitacoes)}
+            borda={CLASSE_DO_GARGALO[almoxarifado.gargalo]}
+            rodape={almoxarifado.filaSolicitacoes === 0 ? 'nada a separar' : (
+              <>
+                {almoxarifado.filaItens} itens · mais antiga {horasNaParede(almoxarifado.horasDoMaisAntigo)}
+                {almoxarifado.maisAntigaNumero && ` · ${almoxarifado.maisAntigaNumero}`}
+              </>
+            )} />
+
+          <CelulaDaFaixa testid="almox-aprovacao" icone="✋" titulo="Aguardando o centro"
+            valor={String(almoxarifado.aguardandoAprovacao)}
+            rodape="Nível 1, antes do estoque" />
+
+          <CelulaDaFaixa testid="almox-atendidas" icone="✅" titulo="Atendidas hoje"
+            valor={String(almoxarifado.atendidasHoje)}
+            rodape="entregues pelo almoxarifado" />
+
+          {/* nulo é traço: 0% diria que o estoque estava vazio, e "nada foi atendido" é
+              notícia diferente de "nada havia" */}
+          <CelulaDaFaixa testid="almox-estoque" icone="🏷️" titulo="Atendido pelo estoque"
+            valor={almoxarifado.atendidoPeloEstoquePct === null
+              ? '—' : `${almoxarifado.atendidoPeloEstoquePct.toLocaleString('pt-BR')}%`}
+            rodape={fraseDaRotaDeCompra(almoxarifado.viraramCompraNoMes)} />
+
+          <CelulaDaFaixa testid="almox-tempo" icone="⏱️" titulo="Tempo de atendimento"
+            valor={horasNaParede(almoxarifado.horasMediaAtendimento)}
+            rodape="média do mês, da liberação à entrega" />
+        </div>
+      )}
+
+      {/* NÍVEL 3 — a esteira */}
+      <div className="mt-4 flex items-stretch gap-2" data-testid="esteira">
+        {pipeline.map((no, i) => (
+          <div key={no.etapa} className="flex flex-1 items-center gap-2">
+            <div className={`flex-1 rounded-xl border bg-fundo-card/90 px-4 py-3 ${CLASSE_DO_GARGALO[no.gargalo]}`}
+              data-etapa={no.etapa} data-gargalo={no.gargalo}>
+              <div className="text-[12px] uppercase tracking-wider text-slate-400">{no.rotulo}</div>
+              <div className="flex items-baseline gap-2">
+                <NumeroVivo valor={String(no.quantidade)} className="font-mono text-3xl font-bold" />
+                {no.quantidade > 0 && (
+                  <span className="text-[12px]">mais antigo: {no.horasNaFila}h</span>
+                )}
+              </div>
+            </div>
+            {i < pipeline.length - 1 && <span aria-hidden className="text-slate-700">──▶</span>}
+          </div>
+        ))}
+      </div>
+
+      {/* NÍVEL 4 — radar (60%) e produtividade (40%) */}
+      <div className="mt-4 grid min-h-0 flex-1 grid-cols-5 gap-4">
+        <section className="col-span-3 flex min-h-0 flex-col rounded-2xl border border-white/10 bg-fundo-card/90 p-4">
+          <h2 className="pb-2 text-[13px] font-semibold uppercase tracking-wider text-slate-400">
+            Radar de exceções — ação imediata
+          </h2>
+          {radar.length === 0 ? (
+            <p className="py-6 text-center text-emerald-300">Nenhuma exceção aberta.</p>
+          ) : (
+            <ListaRolante itens={radar.length}>
+              <ul data-testid="radar">
+                {radar.map((x) => (
+                  <li key={`${x.tipoAlerta}-${x.id}`} data-alerta={x.tipoAlerta}
+                    className={`mb-1.5 flex items-center gap-3 border-l-4 px-3 py-2 ${CLASSE_DO_ALERTA[x.tipoAlerta]}`}>
+                    <span className="w-28 shrink-0 text-[12px] font-bold uppercase">{ROTULO_DO_ALERTA[x.tipoAlerta]}</span>
+                    <span className="w-32 shrink-0 font-mono text-[15px]">{x.codigoReferencia}</span>
+                    <span className="min-w-0 flex-1 truncate text-[16px]">{x.descricaoItem}</span>
+                    <span className="w-28 shrink-0 text-[13px] text-slate-400">{x.unidadeCentroCusto}</span>
+                    <span className="w-44 shrink-0 text-right font-semibold">{x.tempoRestanteOuAtraso}</span>
+                    <span className="w-40 shrink-0 truncate text-right text-[13px] text-slate-400">{x.responsavelNome}</span>
+                  </li>
+                ))}
+              </ul>
+            </ListaRolante>
+          )}
+        </section>
+
+        <section className="col-span-2 flex min-h-0 flex-col gap-4">
+          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-white/10 bg-fundo-card/90 p-4">
+            <h2 className="pb-2 text-[13px] font-semibold uppercase tracking-wider text-slate-400">
+              Produtividade do dia
+            </h2>
+            {burndownCompradores.length === 0 ? (
+              <p className="py-4 text-center text-slate-500">Sem fila atribuída.</p>
+            ) : (
+              <ListaRolante itens={burndownCompradores.length}>
+                <ul data-testid="burndown">
+                  {burndownCompradores.map((b) => (
+                    <li key={b.compradorNome} className="mb-2">
+                      <div className="flex items-baseline justify-between text-[15px]">
+                        <span className="truncate">{b.compradorNome}</span>
+                        <span className="font-mono tabular-nums">
+                          {b.atendidosHoje}/{b.totalHoje}
+                          {b.pendenciasCriticas > 0 && (
+                            <span className="ml-2 text-rose-400">⚠ {b.pendenciasCriticas}</span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                        <div className="h-full rounded-full bg-sky-400 transition-all duration-700"
+                          style={{ width: `${b.totalHoje === 0 ? 0 : Math.round(b.atendidosHoje * 100 / b.totalHoje)}%` }} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </ListaRolante>
+            )}
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-white/10 bg-fundo-card/90 p-4">
+            <h2 className="pb-2 text-[13px] font-semibold uppercase tracking-wider text-slate-400">
+              Descargas previstas
+            </h2>
+            {agendaDocaHoje.length === 0 ? (
+              <p className="py-4 text-center text-slate-500">Nenhuma descarga prevista.</p>
+            ) : (
+              <ListaRolante itens={agendaDocaHoje.length}>
+                <ul data-testid="doca">
+                  {agendaDocaHoje.map((d) => (
+                    <li key={`${d.numeroNfe}-${d.fornecedorNome}`}
+                      className="mb-1.5 flex items-center gap-3 text-[15px]">
+                      <span className="w-14 shrink-0 font-mono text-slate-400">{d.horarioPrevisto}</span>
+                      <span className="w-24 shrink-0 font-mono">NF {d.numeroNfe}</span>
+                      <span className="min-w-0 flex-1 truncate">{d.fornecedorNome}</span>
+                      <span className={`shrink-0 text-[13px] font-semibold ${CLASSE_DA_DESCARGA[d.statusEntrega]}`}>
+                        {ROTULO_DA_DESCARGA[d.statusEntrega]}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </ListaRolante>
+            )}
+          </div>
+        </section>
+      </div>
+    </>
+  );
+}

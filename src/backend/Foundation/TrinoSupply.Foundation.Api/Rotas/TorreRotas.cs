@@ -54,5 +54,16 @@ public static class TorreRotas
             return Ok(await svc.CockpitAsync(unidade, ct), ctx);
         }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole())
             .AddEndpointFilter(RequireModules(AppModules.Compras));
+
+        // A segunda tela da parede: a solicitação de material, no rodízio com a da compra.
+        // Mesma autorização, porque é a mesma parede.
+        app.MapGet("/api/v1/control-tower/cockpit/material", async (CockpitDoMaterialService svc,
+            ClaimsPrincipal p, HttpContext ctx, string? unidade, CancellationToken ct) =>
+        {
+            if (!TorreDeControleService.CanView(RoleOf(p)))
+                return Error(ctx, 403, "TC-ERR-900", "Seu papel não acessa a Torre de Controle.");
+            return Ok(await svc.ObterAsync(unidade, ct), ctx);
+        }).RequireAuthorization().AddEndpointFilter(RejectSupplierRole())
+            .AddEndpointFilter(RequireModules(AppModules.Compras));
     }
 }

@@ -5,10 +5,12 @@ import type { CockpitDados } from '@/api/torre';
 vi.mock('@/api/torre', async (importar) => ({
   ...(await importar<typeof import('@/api/torre')>()),
   obterCockpit: vi.fn(),
+  obterCockpitDoMaterial: vi.fn(),
 }));
 
-import { obterCockpit } from '@/api/torre';
+import { obterCockpit, obterCockpitDoMaterial, type CockpitDoMaterial } from '@/api/torre';
 import { Cockpit } from './Cockpit';
+import { TelaDoMaterial } from './TelaDoMaterial';
 
 const dados = (p: Partial<CockpitDados> = {}): CockpitDados => ({
   sincronizadoEm: '2026-09-22T12:00:00Z',
@@ -44,8 +46,32 @@ const dados = (p: Partial<CockpitDados> = {}): CockpitDados => ({
   ...p,
 });
 
+const materialDados = (p: Partial<CockpitDoMaterial> = {}): CockpitDoMaterial => ({
+  sincronizadoEm: '2026-09-22T12:00:00Z',
+  unidade: null,
+  unidades: [],
+  almoxarifado: dados().almoxarifado,
+  horasDoMaisAntigoAguardando: 30, gargaloAguardando: 'NORMAL', maisAntigaAguardandoNumero: 'MR-2026-000015',
+  foraDoPrazo: 2, emAtencao: 1, atendidasNoPrazoPct: 87.5, atendidasMedidas: 8,
+  solicitadasNoMes: 23, atendidasNoMes: 15, horasMediaAprovacao: 6.2,
+  radar: [
+    { id: 'r1', tipo: 'ROTA_DE_COMPRA', numero: 'MR-2026-000003', descricao: '2× Bota', centroCusto: 'Obra PB',
+      solicitante: 'Ana', tempo: 'virou PR-2026-000040', ordem: 3 },
+    { id: 'r2', tipo: 'PRAZO_ESTOURADO', numero: 'MR-2026-000012', descricao: '10× Luva', centroCusto: 'Obra BA',
+      solicitante: 'Beto', tempo: '4d na fila · prazo 2d (EPI)', ordem: 0 },
+  ],
+  porCentro: [{ rotulo: 'PB-001 — Obra PB', solicitacoes: 9, quantidade: 120 }, { rotulo: 'BA-001 — Obra BA', solicitacoes: 4, quantidade: 30 }],
+  porFamilia: [{ rotulo: 'EPI', solicitacoes: 11, quantidade: 140 }],
+  porProduto: [],
+  ...p,
+});
+
 describe('<Cockpit />', () => {
-  beforeEach(() => { vi.clearAllMocks(); vi.mocked(obterCockpit).mockResolvedValue(dados()); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(obterCockpit).mockResolvedValue(dados());
+    vi.mocked(obterCockpitDoMaterial).mockResolvedValue(materialDados());
+  });
   afterEach(() => vi.useRealTimers());
 
   it('mostra os cinco números de comando', async () => {
@@ -253,6 +279,38 @@ describe('<Cockpit />', () => {
     expect(screen.getByTestId('almox-estoque')).toHaveTextContent('nenhuma virou compra no mês');
   });
 
+  it('com material para contar, a parede anuncia o rodízio de duas telas e começa pela compra', async () => {
+    render(<Cockpit />);
+    await waitFor(() => expect(screen.getByTestId('tela-na-parede')).toHaveTextContent('Compras'));
+    // a geral sem unidades: compra geral e material geral, só
+    await waitFor(() => expect(screen.getByTestId('tela-na-parede')).toHaveTextContent('rodízio de 2 telas'));
+    expect(screen.getByTestId('cockpit')).toHaveAttribute('data-tela', 'compras');
+    // os dados da segunda tela são pedidos junto, para a troca não esperar a rede
+    await waitFor(() => expect(obterCockpitDoMaterial).toHaveBeenCalled());
+  });
+
+  it('?tela=material abre direto na tela do material, com a faixa da compra no topo', async () => {
+    window.history.pushState({}, '', '/cockpit?tela=material');
+    render(<Cockpit />);
+    await waitFor(() => expect(screen.getByTestId('cockpit')).toHaveAttribute('data-tela', 'material'));
+    expect(screen.getByTestId('tela-na-parede')).toHaveTextContent('Material do almoxarifado');
+    // a compra não some: o comprador que levanta a cabeça vê o alarme dele
+    expect(screen.getByTestId('mat-compras-risco')).toHaveTextContent('25%');
+    expect(screen.getByTestId('mat-compras-atrasados')).toHaveTextContent('4');
+    expect(screen.getByText('Fora do prazo')).toBeInTheDocument();
+    window.history.pushState({}, '', '/cockpit');
+  });
+
+  it('a tela do material sem leitura nenhuma mostra a compra, não uma parede em branco', async () => {
+    window.history.pushState({}, '', '/cockpit?tela=material');
+    vi.mocked(obterCockpitDoMaterial).mockRejectedValue(new Error('timeout'));
+    render(<Cockpit />);
+    await waitFor(() => expect(screen.getByText('última leitura mantida')).toBeInTheDocument());
+    expect(screen.getByTestId('cockpit')).toHaveAttribute('data-tela', 'compras');
+    expect(screen.getByText('Risco operacional')).toBeInTheDocument();
+    window.history.pushState({}, '', '/cockpit');
+  });
+
   it('operação que não pede material ao almoxarifado não perde altura com o bloco', async () => {
     vi.mocked(obterCockpit).mockResolvedValue(dados({
       almoxarifado: {
@@ -265,5 +323,49 @@ describe('<Cockpit />', () => {
     await screen.findByTestId('esteira');
 
     expect(screen.queryByTestId('almoxarifado')).not.toBeInTheDocument();
+  });
+});
+
+describe('<TelaDoMaterial />', () => {
+  it('os quatro cartões dizem a fila, a espera do centro, o fora do prazo e o atendido no prazo', () => {
+    render(<TelaDoMaterial compras={dados()} material={materialDados()} />);
+    expect(screen.getByText('Fila do almoxarifado').closest('section')).toHaveTextContent('6');
+    expect(screen.getByText('Fila do almoxarifado').closest('section')).toHaveTextContent('21 itens · mais antiga 2d 4h · MR-2026-000012');
+    expect(screen.getByText('Aguardando o centro', { selector: 'h2' }).closest('section')).toHaveTextContent('3');
+    expect(screen.getByText('Aguardando o centro', { selector: 'h2' }).closest('section')).toHaveTextContent('mais antiga 30h · MR-2026-000015');
+    expect(screen.getByText('Fora do prazo').closest('section')).toHaveTextContent('2');
+    expect(screen.getByText('Fora do prazo').closest('section')).toHaveTextContent('1 a vencer');
+    expect(screen.getByText('Atendidas no prazo').closest('section')).toHaveTextContent('87,5%');
+    expect(screen.getByText('Atendidas no prazo').closest('section')).toHaveTextContent('8 atendimentos medidos no mês');
+    expect(screen.getByTestId('mat-mes')).toHaveTextContent('no mês: 15 de 23 solicitadas · estoque atendeu 78,5% · 2 viraram compra no mês');
+  });
+
+  it('sem atendimento medido o cartão mostra traço, e não 0%', () => {
+    render(<TelaDoMaterial compras={dados()} material={materialDados({ atendidasNoPrazoPct: null, atendidasMedidas: 0 })} />);
+    expect(screen.getByText('Atendidas no prazo').closest('section')).toHaveTextContent('—');
+    expect(screen.getByText('Atendidas no prazo').closest('section')).toHaveTextContent('nenhum atendimento medido no mês');
+  });
+
+  it('o radar põe o prazo estourado no topo, mesmo vindo depois, e diz de quem é a vez', () => {
+    render(<TelaDoMaterial compras={dados()} material={materialDados()} />);
+    const linhas = screen.getByTestId('radar-do-material').querySelectorAll('li');
+    expect(linhas[0]).toHaveAttribute('data-alerta', 'PRAZO_ESTOURADO');
+    expect(linhas[0]).toHaveTextContent('MR-2026-000012');
+    expect(linhas[0]).toHaveTextContent('4d na fila · prazo 2d (EPI)');
+    expect(linhas[1]).toHaveAttribute('data-alerta', 'ROTA_DE_COMPRA');
+    expect(linhas[1]).toHaveTextContent('Virou compra');
+  });
+
+  it('os rankings do mês mostram cinco linhas no máximo, e o vazio é dito', () => {
+    render(<TelaDoMaterial compras={dados()} material={materialDados()} />);
+    expect(screen.getByTestId('ranking-centros')).toHaveTextContent('PB-001 — Obra PB');
+    expect(screen.getByTestId('ranking-centros')).toHaveTextContent('9');
+    expect(screen.getByTestId('ranking-familias')).toHaveTextContent('EPI');
+    expect(screen.getByTestId('ranking-produtos')).toHaveTextContent('nada pedido no mês');
+  });
+
+  it('sem nada fora do prazo o radar diz isso em vez de ficar vazio', () => {
+    render(<TelaDoMaterial compras={dados()} material={materialDados({ radar: [], foraDoPrazo: 0 })} />);
+    expect(screen.getByText('Nenhuma solicitação fora do prazo.')).toBeInTheDocument();
   });
 });

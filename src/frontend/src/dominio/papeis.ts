@@ -103,6 +103,14 @@ export const podeVerAnalises = (u: Perfil) =>
   && (temModulo(u, 'SOLICITACOES') || temModulo(u, 'APROVACAO') || temModulo(u, 'COMPRAS'));
 
 /**
+ * O relatório de solicitações de material: quem lê a compra lê o material, e o almoxarife também,
+ * porque é a fila dele. Espelho de `AnalyticsDeMaterialService.CanView` e dos módulos da rota.
+ */
+export const podeVerRelatorioDeMaterial = (u: Perfil) =>
+  (podeDecidirSc(u) || podeComprar(u) || u.role === 'Auditor' || u.role === 'Director' || u.role === 'WarehouseOperator')
+  && (temModulo(u, 'MATERIAL') || temModulo(u, 'ESTOQUE') || temModulo(u, 'APROVACAO') || temModulo(u, 'COMPRAS'));
+
+/**
  * Relatórios de compras — mesmo critério de `RelatorioExecutivoService.CanView`
  * (papel) somado ao dos módulos da rota: Compras **ou** Insights. O menu não pode
  * abrir uma tela que o servidor vai recusar, nem esconder uma que ele aceitaria.

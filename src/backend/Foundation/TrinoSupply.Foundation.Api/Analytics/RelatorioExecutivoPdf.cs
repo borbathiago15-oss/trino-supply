@@ -28,15 +28,15 @@ namespace TrinoSupply.Foundation.Api.Analytics;
 public static class RelatorioExecutivoPdf
 {
     // paleta corporativa — a mesma do sistema (tailwind.config.ts), para a folha não destoar da tela
-    private const string Navy = "#031430";
-    private const string Blue = "#2563eb";
-    private const string Emerald = "#047857";
-    private const string Amber = "#b45309";
-    private const string Rose = "#be123c";
-    private const string Slate = "#64748b";
-    private const string Slate900 = "#0f172a";
-    private const string Slate100 = "#f1f5f9";
-    private const string Slate200 = "#e2e8f0";
+    internal const string Navy = "#031430";
+    internal const string Blue = "#2563eb";
+    internal const string Emerald = "#047857";
+    internal const string Amber = "#b45309";
+    internal const string Rose = "#be123c";
+    internal const string Slate = "#64748b";
+    internal const string Slate900 = "#0f172a";
+    internal const string Slate100 = "#f1f5f9";
+    internal const string Slate200 = "#e2e8f0";
 
     private static readonly System.Globalization.CultureInfo PtBr = System.Globalization.CultureInfo.GetCultureInfo("pt-BR");
 
@@ -341,8 +341,8 @@ public static class RelatorioExecutivoPdf
     // lâmina
     // ======================================================================
 
-    private static string Moeda(decimal v) => $"R$ {v:N2}";
-    private static string Pct(double? v) => v is null ? "—" : $"{v:0.#}%";
+    internal static string Moeda(decimal v) => $"R$ {v:N2}";
+    internal static string Pct(double? v) => v is null ? "—" : $"{v:0.#}%";
 
     /// <summary>Os cinco números de impacto, cada um com a faixa da sua cor e o período anterior embaixo.</summary>
     private static void HeroCards(ColumnDescriptor col, RelatorioExecutivo r) =>
@@ -369,7 +369,7 @@ public static class RelatorioExecutivoPdf
                 $"ponderado pelo valor · {r.Payment.OrdersWithDays} pedido(s) com prazo", null);
         });
 
-    private static void Card(RowDescriptor row, string cor, string rotulo, string valor, string detalhe, string? anterior) =>
+    internal static void Card(RowDescriptor row, string cor, string rotulo, string valor, string detalhe, string? anterior) =>
         row.RelativeItem().Border(0.6f).BorderColor(Slate200).Background(Colors.White).Column(k =>
         {
             k.Item().Height(3).Background(cor);
@@ -392,7 +392,7 @@ public static class RelatorioExecutivoPdf
     }
 
     /// <summary>Uma seção da lâmina: título com a cor da família, e o corpo num quadro branco.</summary>
-    private static void Secao(IContainer c, string titulo, string cor, Action<ColumnDescriptor> corpo) =>
+    internal static void Secao(IContainer c, string titulo, string cor, Action<ColumnDescriptor> corpo) =>
         c.Border(0.6f).BorderColor(Slate200).Background(Colors.White).Column(col =>
         {
             col.Item().BorderLeft(3).BorderColor(cor).PaddingLeft(5).PaddingVertical(3)
@@ -401,7 +401,7 @@ public static class RelatorioExecutivoPdf
         });
 
     /// <summary>Barra proporcional: a fatia lida de relance sem virar gráfico.</summary>
-    private static void Barra(IContainer c, double pct, string cor)
+    internal static void Barra(IContainer c, double pct, string cor)
     {
         var p = Math.Max(0.5, Math.Min(100, pct));
         c.Height(4).Background(Slate100).Row(row =>
@@ -763,7 +763,7 @@ public static class RelatorioExecutivoPdf
         });
     }
 
-    private static void Colunas(TableDescriptor t, float?[] larguras) =>
+    internal static void Colunas(TableDescriptor t, float?[] larguras) =>
         t.ColumnsDefinition(cd =>
         {
             foreach (var l in larguras)
@@ -773,7 +773,7 @@ public static class RelatorioExecutivoPdf
             }
         });
 
-    private static void Cabecalhos(TableDescriptor t, string[] titulos) =>
+    internal static void Cabecalhos(TableDescriptor t, string[] titulos) =>
         t.Header(h =>
         {
             foreach (var titulo in titulos)
@@ -781,11 +781,11 @@ public static class RelatorioExecutivoPdf
                     .Text(titulo).SemiBold().FontSize(7.5f);
         });
 
-    private static void Celula(TableDescriptor t, string texto) =>
+    internal static void Celula(TableDescriptor t, string texto) =>
         t.Cell().BorderBottom(0.3f).BorderColor(Colors.Grey.Lighten2)
             .PaddingVertical(1.5f).PaddingRight(4).Text(texto).FontSize(7.5f);
 
-    private static void CelulaNum(TableDescriptor t, string texto) =>
+    internal static void CelulaNum(TableDescriptor t, string texto) =>
         t.Cell().BorderBottom(0.3f).BorderColor(Colors.Grey.Lighten2)
             .PaddingVertical(1.5f).PaddingRight(4).AlignRight().Text(texto).FontSize(7.5f);
 
@@ -819,7 +819,7 @@ public static class RelatorioExecutivoPdf
             });
         });
 
-    private static void Chip(RowDescriptor row, string rotulo, string valor) =>
+    internal static void Chip(RowDescriptor row, string rotulo, string valor) =>
         row.AutoItem().Background(Slate100).Border(0.5f).BorderColor(Slate200).PaddingHorizontal(5).PaddingVertical(2).Text(t =>
         {
             t.Span(rotulo + ": ").FontSize(6.2f).FontColor(Slate);

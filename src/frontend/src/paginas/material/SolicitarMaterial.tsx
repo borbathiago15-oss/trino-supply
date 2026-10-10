@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { buscarProdutos, type Produto, type ProdutoParaEscolha } from '@/api/catalogo';
 import { listarFamilias } from '@/api/familias';
 import { listarCentrosCusto } from '@/api/centrosCusto';
-import { criarSolicitacaoMaterial } from '@/api/material';
+import { criarSolicitacaoMaterial, fraseDoValor } from '@/api/material';
 import { Aviso, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { Dialogo } from '@/componentes/Dialogo';
 import { Campo, Grade2, Nota } from '@/componentes/formulario';
@@ -62,6 +62,19 @@ export function itensEscolhidos(escolhas: Record<string, Escolha>) {
   if (!marcados.length) return { items: [], erro: 'Marque ao menos um produto da lista.' };
   if (items.length < marcados.length) return { items: [], erro: 'Informe a quantidade dos itens marcados.' };
   return { items, erro: null };
+}
+
+/**
+ * O valor estimado do pedido enquanto a pessoa preenche: custo de compra × quantidade dos
+ * itens marcados. Nulo quando nenhum item marcado tem custo — zero diria que é de graça —, e
+ * `semCusto` conta os marcados que ficaram fora da soma, porque isso é informação e não erro.
+ */
+export function valorEstimado(escolhas: Record<string, Escolha>, lista: Produto[]) {
+  const marcados = lista.filter((p) => escolhas[p.id]?.marcado);
+  const comCusto = marcados.filter((p) => p.referencePrice != null);
+  const total = comCusto.reduce(
+    (soma, p) => soma + (p.referencePrice ?? 0) * (Number((escolhas[p.id]?.quantidade ?? '').replace(',', '.')) || 0), 0);
+  return { valor: comCusto.length ? total : null, semCusto: marcados.length - comCusto.length };
 }
 
 export function SolicitarMaterial() {
@@ -245,6 +258,12 @@ export function SolicitarMaterial() {
               {enviando ? 'Enviando…' : 'Enviar ao almoxarifado'}
             </button>
             <span className="sub">{marcados} produto(s) marcado(s).</span>
+            {/* o valor estimado: a pessoa sabe o que está pedindo antes de o gestor ler o valor na Central */}
+            {marcados > 0 && (
+              <span className="sub" data-testid="valor-estimado">
+                Valor estimado: <strong>{fraseDoValor(valorEstimado(escolhas, lista).valor, valorEstimado(escolhas, lista).semCusto) ?? '—'}</strong>
+              </span>
+            )}
           </div>
         </form>
       )}

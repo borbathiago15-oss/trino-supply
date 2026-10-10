@@ -71,6 +71,73 @@ public static class AnalyticsRotas
             return Ok(await svc.MaterialAsync(f, t, costCenter, family, product), ctx);
         });
 
+        // ---- o relatório de solicitações de material -----------------------------------
+        //
+        // Os mesmos números do bloco do Dashboard, mais a lista completa do período com valores —
+        // em JSON para a tela, em PDF para a reunião e em planilha para quem quer filtrar e somar.
+        // A mesma autorização do bloco: quem lê a compra lê o material, e o almoxarife também.
+        static IResult? GuardaDoMaterial(ClaimsPrincipal p, HttpContext ctx)
+        {
+            if (!AnalyticsDeMaterialService.CanView(RoleOf(p)))
+                return Error(ctx, 403, "AN-ERR-901", "Seu papel não acessa o relatório de solicitações de material.");
+            var mods = ModulesOf(p);
+            if (!mods.Contains(AppModules.Material) && !mods.Contains(AppModules.Estoque)
+                && !mods.Contains(AppModules.Aprovacao) && !mods.Contains(AppModules.Compras))
+                return Error(ctx, 403, "IAM-ERR-018", "Seu usuário não tem autorização para este módulo.");
+            return null;
+        }
+        static (DateOnly De, DateOnly Ate) JanelaDoMaterial(TimeProvider clock, DateOnly? from, DateOnly? to)
+        {
+            var today = DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime);
+            return (from ?? new DateOnly(today.Year, today.Month, 1), to ?? today);
+        }
+        static RecorteDoRelatorioDeMaterial RecorteDoMaterial(RelatorioDeMaterial r, string? costCenter, string? family, string? product) =>
+            new(string.IsNullOrWhiteSpace(costCenter) ? null
+                    : r.FilterOptions.CostCenters.FirstOrDefault(c => string.Equals(c.Code, costCenter.Trim(), StringComparison.OrdinalIgnoreCase)) is { } cc
+                        ? $"{cc.Code} — {cc.Name}" : costCenter.Trim(),
+                string.IsNullOrWhiteSpace(family) ? null : family.Trim(),
+                string.IsNullOrWhiteSpace(product) ? null : product.Trim(),
+                r.RequesterLabel);
+
+        analytics.MapGet("/material/report", async (AnalyticsDeMaterialService svc, ClaimsPrincipal p, HttpContext ctx,
+            TimeProvider clock, DateOnly? from, DateOnly? to, string? costCenter, string? family, string? product,
+            Guid? requesterId, CancellationToken ct) =>
+        {
+            if (GuardaDoMaterial(p, ctx) is { } recusa) return recusa;
+            var (f, t) = JanelaDoMaterial(clock, from, to);
+            return Ok(await svc.MaterialAsync(f, t, costCenter, family, product, requesterId: requesterId, comLista: true, ct: ct), ctx);
+        });
+
+        analytics.MapGet("/material/report/pdf", async (AnalyticsDeMaterialService svc, AppDbContext db,
+            ClaimsPrincipal p, HttpContext ctx, TimeProvider clock, IWebHostEnvironment env,
+            DateOnly? from, DateOnly? to, string? costCenter, string? family, string? product, Guid? requesterId,
+            CancellationToken ct) =>
+        {
+            if (GuardaDoMaterial(p, ctx) is { } recusa) return recusa;
+            var (f, t) = JanelaDoMaterial(clock, from, to);
+            var r = await svc.MaterialAsync(f, t, costCenter, family, product, requesterId: requesterId, comLista: true, ct: ct);
+            var perfil = await db.CompanyProfiles.FirstOrDefaultAsync(ct);
+            var logoPath = Path.Combine(env.WebRootPath ?? Path.Combine(env.ContentRootPath, "wwwroot"),
+                "assets", "brand", "trino-supply-logo.png");
+            var logo = File.Exists(logoPath) ? await File.ReadAllBytesAsync(logoPath, ct) : null;
+            var pdf = RelatorioDeMaterialPdf.Generate(r, RecorteDoMaterial(r, costCenter, family, product), perfil,
+                p.FindFirstValue("name") ?? "Sistema", clock.GetUtcNow(), logo);
+            // leitura do momento, como o PDF do executivo: não vai para stored_document
+            return Results.File(pdf, "application/pdf", $"relatorio-material-{r.From:yyyy-MM-dd}_a_{r.To:yyyy-MM-dd}.pdf");
+        });
+
+        analytics.MapGet("/material/report/xlsx", async (AnalyticsDeMaterialService svc, ClaimsPrincipal p, HttpContext ctx,
+            TimeProvider clock, DateOnly? from, DateOnly? to, string? costCenter, string? family, string? product,
+            Guid? requesterId, CancellationToken ct) =>
+        {
+            if (GuardaDoMaterial(p, ctx) is { } recusa) return recusa;
+            var (f, t) = JanelaDoMaterial(clock, from, to);
+            var r = await svc.MaterialAsync(f, t, costCenter, family, product, requesterId: requesterId, comLista: true, ct: ct);
+            return Results.File(RelatorioDeMaterialPlanilha.Gerar(r),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"solicitacoes-de-material-{r.From:yyyy-MM-dd}_a_{r.To:yyyy-MM-dd}.xlsx");
+        });
+
         // Procurement Insights (V2-P3): achados determinísticos + visão executiva + backlog
         analytics.MapGet("/insights", async (TrinoSupply.Foundation.Api.Insights.InsightsService svc,
             TrinoSupply.Foundation.Api.Melhoria.GatilhoDePlanoService gatilho,

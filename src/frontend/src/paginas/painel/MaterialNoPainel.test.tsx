@@ -16,6 +16,7 @@ const relatorio = (p: Partial<RelatorioDeMaterial> = {}): RelatorioDeMaterial =>
     requested: 4, requestedPrev: 2, requestedQty: 20, deliveredQty: 10, awaitingApproval: 1, inWarehouseQueue: 1,
     fulfilled: 1, partial: 0, rejected: 1, cancelled: 0, purchaseRouteItems: 0, avgApprovalHours: 2, avgFulfillDays: 2,
     avgTotalDays: 2.2, slaMetPercent: 100, slaMeasured: 1, slaBreachedOpen: 1,
+    requestedValue: 317, approvedValue: 300, deliveredValue: 120, itemsWithoutPrice: 1,
   },
   months: [{ month: '2026-10', requested: 4, fulfilled: 1, rejected: 1 }],
   byCostCenter: [{ label: 'BAH-001 — Obra Bahia', key: 'BAH-001', count: 2, qty: 12, delivered: 10 },
@@ -84,6 +85,27 @@ describe('o bloco de material no Dashboard', () => {
     await usuario.click(screen.getByRole('button', { name: /BAH-002 — Obra Salvador/ }));
     await waitFor(() => expect(analyticsDeMaterial).toHaveBeenCalledTimes(4));
     expect(vi.mocked(analyticsDeMaterial).mock.calls[3][0]).toMatchObject({ centroCusto: '' });
+  });
+
+  it('os valores do período aparecem pelo custo congelado, e o item sem custo é dito', async () => {
+    vi.mocked(analyticsDeMaterial).mockResolvedValue(relatorio());
+    abrir();
+    const kpis = await screen.findByTestId('kpis-material');
+    expect(within(kpis).getByText('Valor pedido').parentElement).toHaveTextContent('R$');
+    expect(within(kpis).getByText('Valor pedido').parentElement).toHaveTextContent('317');
+    expect(within(kpis).getByText('Valor pedido').parentElement).toHaveTextContent('1 item(ns) sem custo, fora da soma');
+    expect(within(kpis).getByText('Valor entregue').parentElement).toHaveTextContent('120');
+    expect(within(kpis).getByRole('link', { name: 'abrir →' })).toHaveAttribute('href', '/relatorios/material');
+  });
+
+  it('sem custo nenhum o valor é traço, não R$ 0,00', async () => {
+    vi.mocked(analyticsDeMaterial).mockResolvedValue(relatorio({
+      kpis: { ...relatorio().kpis, requestedValue: null, approvedValue: null, deliveredValue: null, itemsWithoutPrice: 0 },
+    }));
+    abrir();
+    const kpis = await screen.findByTestId('kpis-material');
+    expect(within(kpis).getByText('Valor pedido').parentElement).toHaveTextContent('—');
+    expect(within(kpis).getByText('Valor pedido').parentElement).not.toHaveTextContent('R$');
   });
 
   it('sem medição, o tempo e o prazo aparecem como traço, não como zero', async () => {

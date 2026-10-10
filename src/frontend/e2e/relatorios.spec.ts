@@ -86,3 +86,46 @@ test.describe('Relatórios (React)', () => {
       .toMatch(/relatorio-compras-\d{4}-\d{2}-\d{2}_a_\d{4}-\d{2}-\d{2}\.pdf/);
   });
 });
+
+/**
+ * O relatório de material: a lista completa com valores, em tela, PDF e planilha. O banco pode
+ * estar vazio e a tela tem de continuar de pé; os bytes do PDF e da planilha são conferidos no
+ * backend — aqui se prova que a página pede o recorte certo e o servidor devolve os arquivos.
+ */
+test.describe('Relatório de material (React)', () => {
+  test('abre pelo menu com os sete blocos, e exporta o PDF e a planilha do mesmo recorte', async ({ page }) => {
+    await abrirAutenticado(page, '/painel');
+    await page.getByRole('link', { name: 'Relatório de material' }).click();
+    await expect(page).toHaveURL(/\/relatorios\/material$/);
+    await expect(page.locator('#titulo-pagina')).toHaveText('Relatório de material');
+    await expect(page.getByTestId('kpis-relatorio-material')).toBeVisible();
+    for (const titulo of ['1. Por centro de custo', '2. Por família', '3. Por produto', '4. Por solicitante',
+      '5. Mês a mês', '6. Prazo de atendimento por família'])
+      await expect(page.getByRole('heading', { name: titulo })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /7\. Todas as solicitações do período/ })).toBeVisible();
+
+    // o recorte vai junto nos dois arquivos
+    await page.selectOption('#rm-cc', 'E2E-001');
+    await page.getByRole('button', { name: 'Aplicar filtros' }).click();
+    await expect(page.getByRole('button', { name: 'Exportar em PDF' })).toBeEnabled();
+
+    const pdfResposta = page.waitForResponse((r) => r.url().includes('analytics/material/report/pdf'));
+    await page.getByRole('button', { name: 'Exportar em PDF' }).click();
+    const pdf = await pdfResposta;
+    expect(pdf.status()).toBe(200);
+    expect(pdf.url()).toContain('costCenter=E2E-001');
+    expect(pdf.headers()['content-type']).toContain('application/pdf');
+    expect(pdf.headers()['content-disposition']).toMatch(/relatorio-material-\d{4}-\d{2}-\d{2}_a_\d{4}-\d{2}-\d{2}\.pdf/);
+
+    const xlsxResposta = page.waitForResponse((r) => r.url().includes('analytics/material/report/xlsx'));
+    // só a planilha: o Chromium sem janela não abre PDF e também o entrega como download
+    const download = page.waitForEvent('download', { predicate: (d) => d.suggestedFilename().endsWith('.xlsx') });
+    await page.getByRole('button', { name: 'Baixar planilha' }).click();
+    const xlsx = await xlsxResposta;
+    expect(xlsx.status()).toBe(200);
+    expect(xlsx.url()).toContain('costCenter=E2E-001');
+    expect(xlsx.headers()['content-type']).toContain('spreadsheetml');
+    expect((await download).suggestedFilename()).toMatch(/solicitacoes-de-material-.*\.xlsx$/);
+  });
+});
+

@@ -30,7 +30,7 @@ public static class AutenticacaoRotas
     {
         var auth = app.MapGroup("/api/v1/auth");
 
-        auth.MapPost("/login", async (LoginRequest body, AuthService svc, HttpContext ctx) =>
+        auth.MapPost("/login", async (LoginRequest body, AuthService svc, TimeProvider clock, HttpContext ctx) =>
         {
             if (!seedOk)
                 return Error(ctx, 503, "IAM-ERR-503",
@@ -38,10 +38,12 @@ public static class AutenticacaoRotas
             if (string.IsNullOrWhiteSpace(body.Email) || string.IsNullOrWhiteSpace(body.Password))
                 return Error(ctx, 400, "IAM-ERR-400", "Informe e-mail e senha.");
 
-            var tokens = await svc.LoginAsync(body.Email, body.Password);
-            return tokens is null
+            var tentativa = await svc.TentarEntrarAsync(body.Email, body.Password);
+            if (tentativa.BloqueadaAte is { } ate)
+                return Error(ctx, 423, "IAM-ERR-003", BloqueioPorConta.Mensagem(ate, clock.GetUtcNow()));
+            return tentativa.Tokens is null
                 ? Error(ctx, 401, "IAM-ERR-001", "E-mail ou senha inválidos.")
-                : Ok(ToResponse(tokens), ctx);
+                : Ok(ToResponse(tentativa.Tokens), ctx);
         }).AllowAnonymous().RequireRateLimiting("auth");
 
         auth.MapPost("/refresh", async (RefreshRequest body, AuthService svc, HttpContext ctx) =>

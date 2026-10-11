@@ -130,6 +130,28 @@ public class UserServiceTests
         Assert.Null(await auth.RefreshAsync(session!.RefreshToken));
     }
 
+    [Fact]
+    public async Task Redefinir_a_senha_e_desbloquear_abrem_a_conta_fechada_por_tentativas()
+    {
+        var (users, auth, _, _) = Build();
+        var (maria, _) = await users.CreateAsync("maria@trino.test", "Maria", Roles.WarehouseOperator, "Vt7#trocaAgora!");
+        for (var i = 0; i < 5; i++) await auth.LoginAsync("maria@trino.test", "errada");
+        Assert.NotNull(maria!.LockedUntil);
+
+        Assert.Null(await users.UnlockAsync(maria.Id));
+        Assert.Null(maria.LockedUntil);
+        Assert.Equal(0, maria.FailedLogins);
+        Assert.NotNull(await auth.LoginAsync("maria@trino.test", "Vt7#trocaAgora!"));
+
+        for (var i = 0; i < 5; i++) await auth.LoginAsync("maria@trino.test", "errada");
+        Assert.NotNull(maria.LockedUntil);
+        Assert.Null(await users.ResetPasswordAsync(maria.Id, "Ln3^outraSaida!"));
+        Assert.Null(maria.LockedUntil);
+        Assert.NotNull(await auth.LoginAsync("maria@trino.test", "Ln3^outraSaida!"));
+
+        Assert.Equal("IAM-ERR-404", (await users.UnlockAsync(Guid.NewGuid()))?.Code);
+    }
+
     // ---- senha provisória no primeiro acesso (SEC-004) ----------------------
     [Fact]
     public async Task Usuario_novo_nasce_com_senha_provisoria()

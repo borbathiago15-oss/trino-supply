@@ -2,8 +2,8 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { listarCentrosCusto, type CentroCusto } from '@/api/centrosCusto';
 import { listarSetores, type Setor } from '@/api/setores';
 import {
-  atualizarUsuario, criarUsuario, listarUsuarios, redefinirSenha, TAMANHO_MINIMO_SENHA,
-  type DadosUsuario, type UsuarioCadastro,
+  atualizarUsuario, contaBloqueada, criarUsuario, desbloquearUsuario, listarUsuarios, redefinirSenha,
+  TAMANHO_MINIMO_SENHA, type DadosUsuario, type UsuarioCadastro,
 } from '@/api/usuarios';
 import { Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
 import { Confirmacao, Dialogo } from '@/componentes/Dialogo';
@@ -16,6 +16,7 @@ import {
 import { useUsuario } from '@/sessao/SessaoProvider';
 import { rolarPara } from '@/util/rolar';
 import { useCarregar } from '@/util/useCarregar';
+import { dataHora } from '@/util/formato';
 
 const VAZIO = { nome: '', email: '', papel: '' as Papel | '', senha: '', diretor: '', gestor: '', setor: '' };
 type Formulario = typeof VAZIO;
@@ -71,6 +72,16 @@ export function Usuarios() {
   const [salvando, setSalvando] = useState(false);
   const [aInativar, setAInativar] = useState<UsuarioCadastro | null>(null);
   const [aTrocarSenha, setATrocarSenha] = useState<UsuarioCadastro | null>(null);
+
+  async function desbloquear(u: UsuarioCadastro) {
+    try {
+      await desbloquearUsuario(u.id);
+      avisar(`Conta de ${u.name} desbloqueada.`);
+      recarregar();
+    } catch (e) {
+      avisar(mensagem(e, 'Não consegui desbloquear.'));
+    }
+  }
   const [novaSenha, setNovaSenha] = useState('');
 
   const { dados, erro, carregando, recarregar } = useCarregar(
@@ -206,12 +217,20 @@ export function Usuarios() {
                           </Badge>
                         </div>
                       )}
+                      {contaBloqueada(u) && (
+                        <div className="mt-1">
+                          <Badge classe="bg-perigo-fundo text-perigo" title={`${u.failedLogins ?? 0} senhas erradas seguidas (IAM-ERR-003)`}>
+                            bloqueada até {dataHora(u.lockedUntil)}
+                          </Badge>
+                        </div>
+                      )}
                     </td>
                     <td className="whitespace-nowrap">
                       <CelulaAcoes>
                         <button type="button" className="botao-secundario" onClick={() => editar(u)}>Editar</button>
                         <MenuAcoes rotulo={`Mais ações de ${u.name}`} acoes={[
                           { rotulo: 'Nova senha', aoEscolher: () => { setNovaSenha(''); setATrocarSenha(u); } },
+                          ...(contaBloqueada(u) ? [{ rotulo: 'Desbloquear', aoEscolher: () => desbloquear(u) }] : []),
                           u.active
                             ? {
                                 rotulo: 'Inativar', perigo: true,

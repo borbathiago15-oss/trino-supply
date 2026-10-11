@@ -39,6 +39,13 @@ public class User
     public bool MustChangePassword { get; set; }
     /// <summary>Quando o próprio usuário definiu a senha atual. Nulo = senha ainda é a de cadastro.</summary>
     public DateTimeOffset? PasswordChangedAt { get; set; }
+    /// <summary>
+    /// Senhas erradas seguidas nesta conta; zera quando a certa entra. É o contador do
+    /// bloqueio por conta (<see cref="Auth.BloqueioPorConta"/>, auditoria A4).
+    /// </summary>
+    public int FailedLogins { get; set; }
+    /// <summary>Até quando o login desta conta está bloqueado por tentativas erradas. Nulo = livre.</summary>
+    public DateTimeOffset? LockedUntil { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

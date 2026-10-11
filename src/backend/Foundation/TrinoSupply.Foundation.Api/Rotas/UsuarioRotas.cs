@@ -32,6 +32,8 @@ public static class UsuarioRotas
             sectorId = u.SectorId,
             // quem ainda não definiu a própria senha aparece marcado na lista do admin
             mustChangePassword = u.MustChangePassword, passwordChangedAt = u.PasswordChangedAt,
+            // a conta fechada por senhas erradas aparece na lista, para o administrador abrir
+            failedLogins = u.FailedLogins, lockedUntil = u.LockedUntil,
             createdAt = u.CreatedAt, updatedAt = u.UpdatedAt,
         };
 
@@ -64,6 +66,14 @@ public static class UsuarioRotas
             return error is not null
                 ? Error(ctx, error.Code == "IAM-ERR-404" ? 404 : 400, error.Code, error.Message)
                 : Ok(new { message = "Senha redefinida. As sessões do usuário foram encerradas." }, ctx);
+        });
+
+        users.MapPost("/{id:guid}/unlock", async (Guid id, UserService svc, HttpContext ctx) =>
+        {
+            var error = await svc.UnlockAsync(id);
+            return error is not null
+                ? Error(ctx, 404, error.Code, error.Message)
+                : Ok(new { message = "Conta desbloqueada." }, ctx);
         });
     }
 }

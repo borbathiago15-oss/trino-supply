@@ -393,6 +393,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(u => u.Active).HasColumnName("active");
             e.Property(u => u.MustChangePassword).HasColumnName("must_change_password");
             e.Property(u => u.PasswordChangedAt).HasColumnName("password_changed_at");
+            e.Property(u => u.FailedLogins).HasColumnName("failed_logins").HasDefaultValue(0);
+            e.Property(u => u.LockedUntil).HasColumnName("locked_until");
             e.Property(u => u.CreatedAt).HasColumnName("created_at");
             e.Property(u => u.UpdatedAt).HasColumnName("updated_at");
             e.HasIndex(u => u.Email).IsUnique();

@@ -226,6 +226,17 @@ o usuário descobrir no erro do servidor:
   `Program.cs` recusa toda rota `/api` fora de `/auth/{change-password,me,logout,refresh,login}`
   com **IAM-ERR-022**. A política de senha vive em `Auth/PasswordPolicy.cs` e vale
   para os três caminhos que gravam senha.
+- **IAM-ERR-003 — a conta fecha por senhas erradas, e é a conta, não o IP.** O limite por IP
+  barra a força bruta de um endereço só; o ataque distribuído (muitos endereços, uma conta) ele
+  não enxerga. `Auth/BloqueioPorConta.cs`: cinco erros seguidos fecham a conta por 15 minutos, e
+  cada cinco a mais dobram a espera, até um dia; a senha certa zera o contador. A senha **errada**
+  durante o bloqueio continua recebendo "e-mail ou senha inválidos" — dizer "bloqueada" a quem não
+  tem a senha confirmaria que a conta existe; a senha **certa** durante o bloqueio recebe
+  `IAM-ERR-003` (423) com o tempo que falta, porque quem a tem é o dono, e deixá-lo tentando a
+  senha que ele sabe estar certa seria pior que dizer a verdade. A falha é gravada mesmo com o
+  login recusado (é o que o bloqueio conta), e e-mail sem conta não conta em ninguém. Abrem a
+  conta: o tempo, a redefinição de senha pelo administrador e "Desbloquear" na tela de Usuários
+  (`/users/{id}/unlock`), que não mexe na senha.
 - **SUP-ERR-013/014** — o pré-cadastro do fornecedor. Cotar vem antes de cadastrar:
   o mínimo para entrar numa cotação é **razão social + telefone** (`SUP-ERR-014`), e
   o CPF/CNPJ é **opcional** — o comprador pede preço por telefone e nessa hora não o

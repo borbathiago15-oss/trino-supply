@@ -26,6 +26,10 @@ export interface UsuarioCadastro {
   /** Ainda usa a senha de cadastro: troca obrigatória no próximo acesso (SEC-004). */
   mustChangePassword: boolean;
   passwordChangedAt: string | null;
+  /** Senhas erradas seguidas; cinco fecham a conta por um tempo (IAM-ERR-003). */
+  failedLogins?: number;
+  /** Até quando a conta está fechada por tentativas erradas. Nulo = livre. */
+  lockedUntil?: string | null;
   createdAt: string;
   updatedAt: string | null;
 }
@@ -54,6 +58,14 @@ export const atualizarUsuario = (id: string, dados: Partial<DadosUsuario> & { ac
 
 export const redefinirSenha = (id: string, novaSenha: string) =>
   api<unknown>(`${base}/${id}/reset-password`, { method: 'POST', body: { newPassword: novaSenha } });
+
+/** Abre a conta fechada por senhas erradas, sem mexer na senha. */
+export const desbloquearUsuario = (id: string) =>
+  api<unknown>(`${base}/${id}/unlock`, { method: 'POST' });
+
+/** A conta está fechada por tentativas erradas neste instante. */
+export const contaBloqueada = (u: Pick<UsuarioCadastro, 'lockedUntil'>, agora = Date.now()) =>
+  !!u.lockedUntil && new Date(u.lockedUntil).getTime() > agora;
 
 /** Senha mínima aceita pela API. */
 export const TAMANHO_MINIMO_SENHA = 12;

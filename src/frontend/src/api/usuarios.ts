@@ -30,6 +30,10 @@ export interface UsuarioCadastro {
   failedLogins?: number;
   /** Até quando a conta está fechada por tentativas erradas. Nulo = livre. */
   lockedUntil?: string | null;
+  /** A verificação em duas etapas está ligada. */
+  mfaEnabled?: boolean;
+  /** O papel exige a segunda etapa: sem ela a pessoa fica presa no cadastro do autenticador. */
+  mfaRequired?: boolean;
   createdAt: string;
   updatedAt: string | null;
 }
@@ -62,6 +66,10 @@ export const redefinirSenha = (id: string, novaSenha: string) =>
 /** Abre a conta fechada por senhas erradas, sem mexer na senha. */
 export const desbloquearUsuario = (id: string) =>
   api<unknown>(`${base}/${id}/unlock`, { method: 'POST' });
+
+/** Apaga o autenticador de quem perdeu o telefone e os códigos: a pessoa cadastra outro na próxima entrada. */
+export const redefinirMfa = (id: string) =>
+  api<unknown>(`${base}/${id}/reset-mfa`, { method: 'POST' });
 
 /** A conta está fechada por tentativas erradas neste instante. */
 export const contaBloqueada = (u: Pick<UsuarioCadastro, 'lockedUntil'>, agora = Date.now()) =>

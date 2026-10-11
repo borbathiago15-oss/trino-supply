@@ -27,6 +27,7 @@ GET /api/v1/announcements/current
 GET /api/v1/announcements/{id:guid}/image
 GET /api/v1/approvals/pending
 GET /api/v1/auth/me
+GET /api/v1/auth/mfa/
 GET /api/v1/companies/
 GET /api/v1/company
 GET /api/v1/control-tower
@@ -117,6 +118,10 @@ POST /api/v1/announcements/{id:guid}/image
 POST /api/v1/auth/change-password
 POST /api/v1/auth/login
 POST /api/v1/auth/logout
+POST /api/v1/auth/mfa/disable
+POST /api/v1/auth/mfa/enable
+POST /api/v1/auth/mfa/setup
+POST /api/v1/auth/mfa/verify
 POST /api/v1/auth/refresh
 POST /api/v1/companies/
 POST /api/v1/cost-centers/
@@ -191,6 +196,7 @@ POST /api/v1/triage/assign
 POST /api/v1/triage/assign-batch
 POST /api/v1/triage/priority
 POST /api/v1/users/
+POST /api/v1/users/{id:guid}/reset-mfa
 POST /api/v1/users/{id:guid}/reset-password
 POST /api/v1/users/{id:guid}/unlock
 PUT /api/v1/action-plans/{id:guid}/lessons

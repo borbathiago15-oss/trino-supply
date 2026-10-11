@@ -3,7 +3,7 @@ import { FaixaDaMarca } from '@/componentes/FaixaDaMarca';
 import { HexagonosDaMarca } from '@/componentes/HexagonosDaMarca';
 import { Fragment, useState, type FormEvent, type ReactNode } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { entrar, type Usuario } from '@/api/auth';
+import { confirmarSegundaEtapa, entrar, type Usuario } from '@/api/auth';
 import { sessao } from '@/api/sessao';
 import { useSessao } from '@/sessao/SessaoProvider';
 
@@ -46,10 +46,12 @@ function Elo() {
 
 /**
  * Para onde ir depois de entrar. Senha ainda provisória vence o destino
- * guardado: nada mais abre antes da troca (SEC-004).
+ * guardado: nada mais abre antes da troca (SEC-004). Depois dela, o papel que
+ * exige a verificação em duas etapas e ainda não a cadastrou vai ao cadastro
+ * do autenticador (IAM-ERR-024) — o servidor não abre outra tela mesmo.
  */
 export const destinoDe = (u: Usuario, de?: string) =>
-  u.mustChangePassword ? '/trocar-senha' : de ?? '/pedidos';
+  u.mustChangePassword ? '/trocar-senha' : u.mustSetupMfa ? '/autenticador' : de ?? '/pedidos';
 
 /** O app de bolso instalado abre em janela própria (`display-mode: standalone`). */
 export const appInstalado = () => {
@@ -68,18 +70,39 @@ export function Login() {
   const [lembrar, setLembrar] = useState(() => sessao.lembrada || appInstalado());
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
+  // a senha conferiu e falta o código do autenticador: o token só vale para a segunda etapa
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [codigo, setCodigo] = useState('');
 
   if (usuario) return <Navigate to={destinoDe(usuario, state?.de)} replace />;
+
+  function chegou(logado: Usuario) {
+    entrou(logado);
+    navegar(destinoDe(logado, state?.de), { replace: true });
+  }
 
   async function enviar(ev: FormEvent) {
     ev.preventDefault();
     setErro(null); setEnviando(true);
     try {
-      const logado = await entrar(email, senha, lembrar);
-      entrou(logado);
-      navegar(destinoDe(logado, state?.de), { replace: true });
+      const entrada = await entrar(email, senha, lembrar);
+      if (!entrada.usuario) { setMfaToken(entrada.mfaToken ?? null); setCodigo(''); return; }
+      chegou(entrada.usuario);
     } catch (e) {
       setErro(e instanceof Error ? e.message : 'Falha ao entrar.');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  async function confirmar(ev: FormEvent) {
+    ev.preventDefault();
+    if (!mfaToken) return;
+    setErro(null); setEnviando(true);
+    try {
+      chegou(await confirmarSegundaEtapa(mfaToken, codigo, lembrar));
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : 'Não consegui confirmar o código.');
     } finally {
       setEnviando(false);
     }
@@ -150,6 +173,29 @@ export function Login() {
         <BotaoDeTema className="absolute right-4 top-4" />
         <div className="w-full max-w-[460px] min-[981px]:max-w-[400px] motion-safe:animate-entrada motion-safe:[animation-delay:.06s]">
           <span aria-hidden="true" className="mb-4 block h-[3px] w-[34px] rounded-sm bg-marca-vermelho" />
+          {mfaToken ? (
+            <>
+              <h1 className="mb-1.5 text-[22px] font-bold -tracking-[.2px]">Confirme que é você</h1>
+              <p className="mb-1 text-[13.5px] text-texto-suave">
+                Digite o código de 6 dígitos do aplicativo autenticador. Perdeu o telefone? Um código de recuperação também entra.
+              </p>
+              <form onSubmit={confirmar} aria-label="Segunda etapa" data-testid="segunda-etapa">
+                <label htmlFor="codigo" className="mb-1.5 mt-4">Código do autenticador</label>
+                <input
+                  id="codigo" name="codigo" type="text" required autoComplete="one-time-code" inputMode="numeric"
+                  autoFocus placeholder="000000" className="px-3.5 py-[13px] text-[18px] tracking-[4px]"
+                  value={codigo} onChange={(e) => setCodigo(e.target.value)}
+                />
+                <button type="submit" className="botao mt-[22px] w-full py-3.5 text-[15px]" disabled={enviando || codigo.trim().length < 6}>
+                  {enviando ? 'Confirmando…' : 'Confirmar'}
+                </button>
+                <button type="button" className="botao-secundario mt-2.5 w-full py-3" onClick={() => { setMfaToken(null); setErro(null); }}>
+                  Voltar
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
           <h1 className="mb-1.5 text-[22px] font-bold -tracking-[.2px]">Acesse sua conta</h1>
           <p className="mb-1 text-[13.5px] text-texto-suave">Entre com o e-mail corporativo cadastrado pelo administrador.</p>
 
@@ -192,6 +238,8 @@ export function Login() {
               {enviando ? 'Entrando…' : 'Entrar'}
             </button>
           </form>
+            </>
+          )}
 
           {erro && (
             <p role="alert" aria-live="polite" className="mt-3.5 rounded-lg border border-perigo/25 bg-perigo-fundo px-3 py-[11px] text-[13.5px] text-perigo">

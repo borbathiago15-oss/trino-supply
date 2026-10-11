@@ -41,6 +41,9 @@ public static class AutenticacaoRotas
             var tentativa = await svc.TentarEntrarAsync(body.Email, body.Password);
             if (tentativa.BloqueadaAte is { } ate)
                 return Error(ctx, 423, "IAM-ERR-003", BloqueioPorConta.Mensagem(ate, clock.GetUtcNow()));
+            // senha certa com a segunda etapa ligada: ainda não é sessão, é a vez do código
+            if (tentativa.MfaToken is { } pendente)
+                return Ok(new { mfaRequired = true, mfaToken = pendente, expiresIn = Mfa.MinutosDoTokenPendente * 60 }, ctx);
             return tentativa.Tokens is null
                 ? Error(ctx, 401, "IAM-ERR-001", "E-mail ou senha inválidos.")
                 : Ok(ToResponse(tentativa.Tokens), ctx);
@@ -68,14 +71,23 @@ public static class AutenticacaoRotas
                       ?? principal.FindFirstValue("sub");
             var costCenters = Array.Empty<string>();
             var senhaProvisoria = principal.FindFirstValue(TokenService.SenhaProvisoria) == "1";
+            var cadastroDoMfa = principal.FindFirstValue(Mfa.ClaimCadastro) == "1";
+            var mfaAtiva = false;
+            var mfaExigida = Mfa.Exigida(principal.FindFirstValue(ClaimTypes.Role) ?? "");
             if (Guid.TryParse(sub, out var uid))
             {
                 var dados = await db.Users.Where(u => u.Id == uid)
-                    .Select(u => new { u.CostCenters, u.MustChangePassword }).FirstOrDefaultAsync();
+                    .Select(u => new { u.CostCenters, u.MustChangePassword, u.Role, u.MfaEnabledAt, u.TotpSecret }).FirstOrDefaultAsync();
                 costCenters = (dados?.CostCenters ?? "")
                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 // o banco manda: um token emitido antes de o admin resetar a senha não vale como quitação
-                if (dados is not null) senhaProvisoria = dados.MustChangePassword;
+                if (dados is not null)
+                {
+                    senhaProvisoria = dados.MustChangePassword;
+                    mfaAtiva = dados.MfaEnabledAt is not null && !string.IsNullOrEmpty(dados.TotpSecret);
+                    mfaExigida = Mfa.Exigida(dados.Role);
+                    cadastroDoMfa = mfaExigida && !mfaAtiva;
+                }
             }
             return Ok(new
             {
@@ -86,8 +98,52 @@ public static class AutenticacaoRotas
                 modules = (principal.FindFirstValue("modules") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries),
                 costCenters,
                 mustChangePassword = senhaProvisoria,
+                mfaEnabled = mfaAtiva, mfaRequired = mfaExigida, mustSetupMfa = cadastroDoMfa,
             }, ctx);
         }).RequireAuthorization();
+
+        // ---- verificação em duas etapas (ver Auth/Mfa.cs) --------------------------------
+        var mfa = auth.MapGroup("/mfa");
+
+        // a segunda etapa do login: anônima porque a sessão ainda não existe — o que
+        // identifica a pessoa é o token do meio do login, que só serve aqui
+        mfa.MapPost("/verify", async (MfaVerifyRequest body, MfaService svc, HttpContext ctx) =>
+        {
+            var (etapa, error) = await svc.VerificarAsync(body.MfaToken, body.Code);
+            if (error is not null)
+                return Error(ctx, error.Code switch { "IAM-ERR-003" => 423, "IAM-ERR-029" => 401, _ => 401 }, error.Code, error.Message);
+            return Ok(new { sessao = ToResponse(etapa!.Tokens), usedRecoveryCode = etapa.UsedRecoveryCode, recoveryCodesLeft = etapa.RecoveryCodesLeft }, ctx);
+        }).AllowAnonymous().RequireRateLimiting("auth");
+
+        mfa.MapGet("/", async (MfaService svc, ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            var estado = await svc.EstadoAsync(ActorId(p));
+            return estado is null ? Error(ctx, 404, "IAM-ERR-404", "Usuário não encontrado.") : Ok(estado, ctx);
+        }).RequireAuthorization();
+
+        mfa.MapPost("/setup", async (MfaService svc, ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            var (cadastro, error) = await svc.IniciarAsync(ActorId(p));
+            return error is not null
+                ? Error(ctx, error.Code == "IAM-ERR-025" ? 409 : 404, error.Code, error.Message)
+                : Ok(cadastro!, ctx);
+        }).RequireAuthorization().RequireRateLimiting("auth-senha");
+
+        mfa.MapPost("/enable", async (MfaCodeRequest body, MfaService svc, ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            var (tokens, codigos, error) = await svc.AtivarAsync(ActorId(p), body.Code);
+            if (error is not null)
+                return Error(ctx, error.Code switch { "IAM-ERR-404" => 404, "IAM-ERR-025" => 409, "IAM-ERR-026" => 400, _ => 422 }, error.Code, error.Message);
+            return Ok(new { sessao = ToResponse(tokens!), recoveryCodes = codigos }, ctx);
+        }).RequireAuthorization().RequireRateLimiting("auth-senha");
+
+        mfa.MapPost("/disable", async (MfaCodeRequest body, MfaService svc, ClaimsPrincipal p, HttpContext ctx) =>
+        {
+            var error = await svc.DesativarAsync(ActorId(p), body.Code);
+            return error is not null
+                ? Error(ctx, error.Code switch { "IAM-ERR-404" => 404, "IAM-ERR-028" => 403, _ => 422 }, error.Code, error.Message)
+                : Ok(new { message = "Verificação em duas etapas desligada." }, ctx);
+        }).RequireAuthorization().RequireRateLimiting("auth-senha");
 
         // troca de senha pelo próprio dono — a única rota que responde enquanto a senha
         // é provisória, junto de /me, /refresh e /logout (SEC-004)

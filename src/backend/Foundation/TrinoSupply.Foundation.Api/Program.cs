@@ -199,6 +199,37 @@ app.Use(async (ctx, next) =>
     await next();
 });
 
+// ---- Segunda etapa obrigatória: a sessão só anda depois do cadastro (ver Auth/Mfa.cs) --
+// O mesmo desenho da senha provisória, e pelo mesmo motivo: no pipeline, para nenhuma rota
+// nova nascer aberta a quem o papel exige que prove ser quem é. Vem depois da senha: quem
+// tem as duas pendências troca a senha primeiro e cadastra o autenticador em seguida.
+string[] rotasComCadastroDoMfa =
+[
+    "/api/v1/auth/mfa/", "/api/v1/auth/mfa/setup", "/api/v1/auth/mfa/enable",
+    "/api/v1/auth/me", "/api/v1/auth/logout", "/api/v1/auth/refresh", "/api/v1/auth/login",
+    "/api/v1/auth/change-password",
+];
+app.Use(async (ctx, next) =>
+{
+    if (ctx.User.Identity?.IsAuthenticated == true
+        && ctx.User.FindFirstValue(Mfa.ClaimCadastro) == "1"
+        && ctx.Request.Path.StartsWithSegments("/api")
+        && !rotasComCadastroDoMfa.Any(r => ctx.Request.Path.ToString().TrimEnd('/').Equals(r.TrimEnd('/'), StringComparison.OrdinalIgnoreCase)))
+    {
+        await Results.Json(new
+        {
+            error = new
+            {
+                code = "IAM-ERR-024",
+                message = "O seu papel exige a verificação em duas etapas: cadastre o autenticador para continuar.",
+                correlationId = ctx.TraceIdentifier,
+            },
+        }, statusCode: 403).ExecuteAsync(ctx);
+        return;
+    }
+    await next();
+});
+
 // ---- Envelope de resposta (convenção da suíte: data/error + correlationId) --
 // ---- Endpoints ---------------------------------------------------------------
 // O healthcheck do Railway aponta para cá. Recebia o AppDbContext e não perguntava nada
@@ -281,6 +312,8 @@ app.Run();
 // ---- Autorização por módulo (cadastro do usuário) ----------------------------
 public record LoginRequest(string Email, string Password);
 public record RefreshRequest(string RefreshToken);
+public record MfaVerifyRequest(string? MfaToken, string? Code);
+public record MfaCodeRequest(string? Code);
 public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 public record CreateUserRequest(string Email, string Name, string Role, string Password, List<string>? Modules,
     List<string>? CostCenters, Guid? DirectorId, Guid? SupplyManagerId = null, Guid? SectorId = null);

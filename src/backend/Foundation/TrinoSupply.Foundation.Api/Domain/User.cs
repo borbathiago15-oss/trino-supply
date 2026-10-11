@@ -46,6 +46,15 @@ public class User
     public int FailedLogins { get; set; }
     /// <summary>Até quando o login desta conta está bloqueado por tentativas erradas. Nulo = livre.</summary>
     public DateTimeOffset? LockedUntil { get; set; }
+    /// <summary>
+    /// Segredo TOTP, <b>cifrado</b> (<see cref="Auth.CofreDeSegredos"/>). Com <see cref="MfaEnabledAt"/>
+    /// nulo é um cadastro começado e não confirmado — ainda não vale na entrada.
+    /// </summary>
+    public string? TotpSecret { get; set; }
+    /// <summary>Quando a pessoa confirmou o autenticador. Nulo = segunda etapa desligada.</summary>
+    public DateTimeOffset? MfaEnabledAt { get; set; }
+    /// <summary>Códigos de recuperação ainda não usados, como hashes (CSV). Ver <see cref="Auth.Mfa"/>.</summary>
+    public string? MfaRecoveryCodes { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
 }

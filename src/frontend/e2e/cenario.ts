@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { ARQUIVO_CENARIO, ARQUIVO_SESSAO } from './sessao';
+import { ARQUIVO_CENARIO, ARQUIVO_MFA, ARQUIVO_SESSAO, segredoDoMfa } from './sessao';
+import { totp } from './totp';
 
 const API = process.env.API_URL ?? 'http://127.0.0.1:5099';
 const EMAIL = process.env.ADMIN_EMAIL ?? 'admin@trinosupply.com.br';
@@ -39,6 +40,32 @@ function guardarSessao(tokens: { accessToken: string; refreshToken: string }) {
   }));
 }
 
+type Sessao = { accessToken: string; refreshToken: string; user?: { mustChangePassword?: boolean; mustSetupMfa?: boolean } };
+
+/**
+ * O administrador não entra sem a verificação em duas etapas. Na primeira execução contra
+ * este banco a suíte cadastra o autenticador (e guarda o segredo em .e2e/mfa.json); nas
+ * seguintes, calcula o código a partir dele.
+ */
+async function garantirAutenticador(sessao: Sessao): Promise<Sessao> {
+  if (!sessao.user?.mustSetupMfa) return sessao;
+  const cadastro = await chamar<{ secret: string }>('/api/v1/auth/mfa/setup', sessao.accessToken, {});
+  const ativado = await chamar<{ sessao: Sessao }>('/api/v1/auth/mfa/enable', sessao.accessToken, { code: totp(cadastro.secret) });
+  mkdirSync(dirname(ARQUIVO_MFA), { recursive: true });
+  writeFileSync(ARQUIVO_MFA, JSON.stringify({ secret: cadastro.secret }));
+  return ativado.sessao;
+}
+
+/** A segunda etapa do login do administrador, com o segredo guardado por esta máquina. */
+async function segundaEtapa(mfaToken: string): Promise<Sessao> {
+  const segredo = segredoDoMfa();
+  if (!segredo)
+    throw new Error('o administrador tem autenticador cadastrado, mas .e2e/mfa.json não existe nesta máquina: '
+      + 'redefina o autenticador dele em Usuários (ou recrie o banco) e rode de novo');
+  const etapa = await chamar<{ sessao: Sessao }>('/api/v1/auth/mfa/verify', undefined, { mfaToken, code: totp(segredo) });
+  return etapa.sessao;
+}
+
 /**
  * Um único login por execução: o login aceita 10 tentativas por minuto por IP
  * (SEC-003), e um login por teste estouraria o limite.
@@ -53,17 +80,24 @@ async function entrar(): Promise<string> {
 
     if (res.ok) {
       const json = await res.json();
-      const tokens = json.data ?? json;
-      if (!tokens.user?.mustChangePassword) { guardarSessao(tokens); return tokens.accessToken; }
+      let tokens: Sessao = json.data ?? json;
+      // com o autenticador já cadastrado, a senha certa dá o token do meio do login
+      if ((json.data ?? json).mfaRequired) tokens = await segundaEtapa((json.data ?? json).mfaToken);
+      if (!tokens.user?.mustChangePassword) {
+        tokens = await garantirAutenticador(tokens);
+        guardarSessao(tokens); return tokens.accessToken;
+      }
 
       if (!usadaAProvisoria)
         throw new Error('a senha da suíte entrou mas continua provisória — banco em estado inesperado');
 
       // primeira execução deste banco: define a senha da suíte e segue com ela
-      const trocados = await chamar<{ accessToken: string; refreshToken: string }>(
+      let trocados = await chamar<Sessao>(
         '/api/v1/auth/change-password', tokens.accessToken,
         { currentPassword: SENHA, newPassword: SENHA_E2E },
       );
+      // e, logo depois da senha, o autenticador: a sessão trocada ainda está presa no cadastro
+      trocados = await garantirAutenticador(trocados);
       guardarSessao(trocados);
       return trocados.accessToken;
     }

@@ -2,7 +2,7 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { listarCentrosCusto, type CentroCusto } from '@/api/centrosCusto';
 import { listarSetores, type Setor } from '@/api/setores';
 import {
-  atualizarUsuario, contaBloqueada, criarUsuario, desbloquearUsuario, listarUsuarios, redefinirSenha,
+  atualizarUsuario, contaBloqueada, criarUsuario, desbloquearUsuario, listarUsuarios, redefinirMfa, redefinirSenha,
   TAMANHO_MINIMO_SENHA, type DadosUsuario, type UsuarioCadastro,
 } from '@/api/usuarios';
 import { Badge, Carregando, Erro, Painel, Vazio } from '@/componentes/basicos';
@@ -72,6 +72,18 @@ export function Usuarios() {
   const [salvando, setSalvando] = useState(false);
   const [aInativar, setAInativar] = useState<UsuarioCadastro | null>(null);
   const [aTrocarSenha, setATrocarSenha] = useState<UsuarioCadastro | null>(null);
+  const [aRedefinirMfa, setARedefinirMfa] = useState<UsuarioCadastro | null>(null);
+
+  async function redefinirAutenticador(u: UsuarioCadastro) {
+    setARedefinirMfa(null);
+    try {
+      await redefinirMfa(u.id);
+      avisar(`Autenticador de ${u.name} redefinido: ele cadastra outro na próxima entrada.`);
+      recarregar();
+    } catch (e) {
+      avisar(mensagem(e, 'Não consegui redefinir o autenticador.'));
+    }
+  }
 
   async function desbloquear(u: UsuarioCadastro) {
     try {
@@ -217,6 +229,18 @@ export function Usuarios() {
                           </Badge>
                         </div>
                       )}
+                      {u.mfaEnabled && (
+                        <div className="mt-1">
+                          <Badge classe="bg-ok-fundo text-ok" title="Verificação em duas etapas ligada">2 etapas</Badge>
+                        </div>
+                      )}
+                      {u.mfaRequired && !u.mfaEnabled && u.active && (
+                        <div className="mt-1">
+                          <Badge classe="bg-aviso-fundo text-aviso" title="O papel exige a segunda etapa: a pessoa cadastra o autenticador na próxima entrada (IAM-ERR-024)">
+                            sem autenticador
+                          </Badge>
+                        </div>
+                      )}
                       {contaBloqueada(u) && (
                         <div className="mt-1">
                           <Badge classe="bg-perigo-fundo text-perigo" title={`${u.failedLogins ?? 0} senhas erradas seguidas (IAM-ERR-003)`}>
@@ -231,6 +255,7 @@ export function Usuarios() {
                         <MenuAcoes rotulo={`Mais ações de ${u.name}`} acoes={[
                           { rotulo: 'Nova senha', aoEscolher: () => { setNovaSenha(''); setATrocarSenha(u); } },
                           ...(contaBloqueada(u) ? [{ rotulo: 'Desbloquear', aoEscolher: () => desbloquear(u) }] : []),
+                          ...(u.mfaEnabled ? [{ rotulo: 'Redefinir autenticador', aoEscolher: () => setARedefinirMfa(u) }] : []),
                           u.active
                             ? {
                                 rotulo: 'Inativar', perigo: true,
@@ -354,6 +379,11 @@ export function Usuarios() {
         </form>
       </Painel>
 
+      {aRedefinirMfa && (
+        <Confirmacao titulo="Redefinir autenticador" perigo rotuloConfirmar="Redefinir"
+          mensagem={<>Apagar o autenticador de <strong>{aRedefinirMfa.name}</strong>? As sessões dele serão encerradas e ele cadastra outro na próxima entrada. Use só quando a pessoa perdeu o telefone e os códigos de recuperação.</>}
+          aoConfirmar={() => redefinirAutenticador(aRedefinirMfa)} aoFechar={() => setARedefinirMfa(null)} />
+      )}
       {aInativar && (
         <Confirmacao titulo="Inativar usuário" perigo rotuloConfirmar="Inativar"
           mensagem={<>Inativar <strong>{aInativar.name}</strong>? As sessões dele serão encerradas.</>}

@@ -539,9 +539,11 @@ export const MANUAIS: Record<string, Manual> = {
       'Vincule os centros de custo quando a pessoa só deve solicitar para eles. Para o comprador, defina o gestor responsável.',
       '"Nova senha" redefine a senha — ela nasce provisória.',
       'Conta marcada "bloqueada até…" fechou por senhas erradas: "Desbloquear" a abre na hora, sem mexer na senha. Redefinir a senha também desbloqueia.',
+      '"2 etapas" é quem já cadastrou o autenticador; "sem autenticador" é diretor ou administrador que ainda vai cadastrar na próxima entrada. "Redefinir autenticador" apaga o cadastro de quem perdeu o telefone e os códigos de recuperação.',
     ],
     regras: [
       { codigo: 'IAM-ERR-022', texto: 'Senha definida por outra pessoa é provisória: no primeiro acesso, o usuário precisa trocá-la.' },
+      { codigo: 'IAM-ERR-024', texto: 'Diretor e administrador não entram sem a verificação em duas etapas: quem ainda não cadastrou o autenticador fica preso no cadastro dele. Para os demais papéis ela é opcional, em "Segurança" no cabeçalho.' },
       { codigo: 'IAM-ERR-003', texto: 'Cinco senhas erradas seguidas fecham a conta por 15 minutos, e cada cinco a mais dobram a espera (até um dia). A senha certa zera a contagem; quem a digita durante o bloqueio vê até quando ele vale.' },
       { texto: 'Plano de Ação, PDCA e Atender chamados de suporte não vêm em padrão de papel nenhum: são dados a quem vai usá-los.' },
       { texto: 'Módulo novo passa a valer no próximo login do usuário.' },

@@ -8,10 +8,10 @@ import { destinoDe, Login } from './Login';
 
 vi.mock('@/api/auth', async (importar) => ({
   ...(await importar<typeof import('@/api/auth')>()),
-  entrar: vi.fn(), quemSou: vi.fn(), sair: vi.fn(),
+  entrar: vi.fn(), confirmarSegundaEtapa: vi.fn(), quemSou: vi.fn(), sair: vi.fn(),
 }));
 
-import { entrar } from '@/api/auth';
+import { confirmarSegundaEtapa, entrar } from '@/api/auth';
 
 const admin: Usuario = {
   id: 'u1', email: 'admin@trinosupply.com.br', name: 'Admin', role: 'SystemAdministrator', modules: [],
@@ -25,6 +25,7 @@ const abrir = () =>
           <Route path="/login" element={<Login />} />
           <Route path="/pedidos" element={<p>Meus pedidos</p>} />
           <Route path="/trocar-senha" element={<p>Defina a sua senha</p>} />
+          <Route path="/autenticador" element={<p>Cadastre o autenticador</p>} />
         </Routes>
       </SessaoProvider>
     </MemoryRouter>,
@@ -55,7 +56,7 @@ describe('tela de login', () => {
 
   it('entra com e-mail e senha e segue para os pedidos', async () => {
     const usuario = userEvent.setup();
-    vi.mocked(entrar).mockResolvedValue(admin);
+    vi.mocked(entrar).mockResolvedValue({ usuario: admin });
     abrir();
 
     await usuario.type(screen.getByLabelText('E-mail'), 'admin@trinosupply.com.br');
@@ -69,7 +70,7 @@ describe('tela de login', () => {
 
   it('"Manter conectado" vai junto na entrada, e vem marcada para quem já pediu', async () => {
     const usuario = userEvent.setup();
-    vi.mocked(entrar).mockResolvedValue(admin);
+    vi.mocked(entrar).mockResolvedValue({ usuario: admin });
     abrir();
     const caixa = screen.getByRole('checkbox', { name: /Manter conectado neste aparelho/ });
     expect(caixa).not.toBeChecked();
@@ -88,11 +89,49 @@ describe('tela de login', () => {
     expect(destinoDe({ ...admin, mustChangePassword: true }, '/cotacoes')).toBe('/trocar-senha');
     expect(destinoDe({ ...admin, mustChangePassword: false }, '/cotacoes')).toBe('/cotacoes');
     expect(destinoDe(admin)).toBe('/pedidos');
+    // a senha vem antes do autenticador: quem tem as duas pendências troca a senha primeiro
+    expect(destinoDe({ ...admin, mustSetupMfa: true }, '/cotacoes')).toBe('/autenticador');
+    expect(destinoDe({ ...admin, mustChangePassword: true, mustSetupMfa: true })).toBe('/trocar-senha');
+  });
+
+  it('com a segunda etapa ligada, a senha certa pede o código e só ele abre a sessão', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(entrar).mockResolvedValue({ mfaToken: 'token-pendente' });
+    vi.mocked(confirmarSegundaEtapa).mockResolvedValue({ ...admin, usedRecoveryCode: false, recoveryCodesLeft: 8 });
+    abrir();
+
+    await usuario.type(screen.getByLabelText('E-mail'), 'admin@trinosupply.com.br');
+    await usuario.type(document.querySelector('#password')!, 'TrinoSupply@2026!');
+    await usuario.click(screen.getByRole('button', { name: 'Entrar' }));
+
+    const etapa = await screen.findByTestId('segunda-etapa');
+    expect(within(etapa).getByRole('button', { name: 'Confirmar' })).toBeDisabled();   // sem código não manda
+    await usuario.type(screen.getByLabelText('Código do autenticador'), '123456');
+    await usuario.click(screen.getByRole('button', { name: 'Confirmar' }));
+
+    expect(confirmarSegundaEtapa).toHaveBeenCalledWith('token-pendente', '123456', false);
+    await waitFor(() => expect(screen.getByText('Meus pedidos')).toBeInTheDocument());
+  });
+
+  it('código recusado mostra o motivo e "Voltar" devolve à senha', async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(entrar).mockResolvedValue({ mfaToken: 'token-pendente' });
+    vi.mocked(confirmarSegundaEtapa).mockRejectedValue(new Error('Código inválido.'));
+    abrir();
+    await usuario.type(screen.getByLabelText('E-mail'), 'admin@trinosupply.com.br');
+    await usuario.type(document.querySelector('#password')!, 'TrinoSupply@2026!');
+    await usuario.click(screen.getByRole('button', { name: 'Entrar' }));
+    await usuario.type(await screen.findByLabelText('Código do autenticador'), '000000');
+    await usuario.click(screen.getByRole('button', { name: 'Confirmar' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Código inválido.');
+
+    await usuario.click(screen.getByRole('button', { name: 'Voltar' }));
+    expect(screen.getByRole('button', { name: 'Entrar' })).toBeInTheDocument();
   });
 
   it('quem entra com senha provisória cai na tela de troca', async () => {
     const usuario = userEvent.setup();
-    vi.mocked(entrar).mockResolvedValue({ ...admin, mustChangePassword: true });
+    vi.mocked(entrar).mockResolvedValue({ usuario: { ...admin, mustChangePassword: true } });
     abrir();
 
     await usuario.type(screen.getByLabelText('E-mail'), 'admin@trinosupply.com.br');

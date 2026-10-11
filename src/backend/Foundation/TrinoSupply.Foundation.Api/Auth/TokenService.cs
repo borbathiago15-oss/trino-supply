@@ -38,6 +38,8 @@ public class TokenService(JwtOptions options)
         // senha provisória vira claim: o filtro de rota fecha tudo menos a troca
         // de senha, sem consultar o banco a cada requisição (SEC-004)
         if (user.MustChangePassword) claims.Add(new Claim(SenhaProvisoria, "1"));
+        // papel que exige a segunda etapa e ainda não a cadastrou: a sessão só abre o cadastro
+        if (Mfa.PrecisaCadastrar(user)) claims.Add(new Claim(Mfa.ClaimCadastro, "1"));
 
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Secret));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -70,6 +72,40 @@ public class TokenService(JwtOptions options)
             notBefore: now.UtcDateTime, expires: now.UtcDateTime.AddMinutes(60),
             signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    /// <summary>
+    /// O token do meio do login: a senha conferiu e falta o código. Tem audiência própria, então
+    /// o JwtBearer da API o recusa como sessão — ele só serve para <c>/auth/mfa/verify</c>, por
+    /// cinco minutos, e carrega só quem é.
+    /// </summary>
+    public string CreateMfaToken(User user, DateTimeOffset now)
+    {
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(options.Secret));
+        var token = new JwtSecurityToken(
+            issuer: options.Issuer, audience: Mfa.AudienciaPendente,
+            claims: [new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()), new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())],
+            notBefore: now.UtcDateTime, expires: now.UtcDateTime.AddMinutes(Mfa.MinutosDoTokenPendente),
+            signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256));
+        return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    /// <summary>Quem é o dono de um token do meio do login; nulo se expirou, foi forjado ou é um token de sessão.</summary>
+    public Guid? ReadMfaToken(string token, DateTimeOffset now)
+    {
+        try
+        {
+            var parametros = BuildValidationParameters(options);
+            parametros.ValidAudience = Mfa.AudienciaPendente;
+            parametros.LifetimeValidator = (nbf, exp, _, _) => exp is { } fim && now.UtcDateTime < fim.AddSeconds(30) && (nbf is null || nbf.Value.AddSeconds(-30) <= now.UtcDateTime);
+            var principal = new JwtSecurityTokenHandler().ValidateToken(token, parametros, out _);
+            var sub = principal.FindFirst(JwtRegisteredClaimNames.Sub)?.Value ?? principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return Guid.TryParse(sub, out var id) ? id : null;
+        }
+        catch (Exception e) when (e is SecurityTokenException or ArgumentException)
+        {
+            return null;
+        }
     }
 
     public static string GenerateRefreshTokenValue()

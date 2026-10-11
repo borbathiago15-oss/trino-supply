@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { SENHA_E2E } from './cenario';
-import { abrirAutenticado, lerCenario } from './sessao';
+import { abrirAutenticado, lerCenario, segundaEtapaDoAdmin } from './sessao';
 
 const EMAIL = process.env.ADMIN_EMAIL ?? 'admin@trinosupply.com.br';
 // depois do preparo do cenário o admin já trocou a senha provisória (SEC-004)
@@ -85,6 +85,8 @@ test.describe('Pedidos de Compra (React)', () => {
     await page.fill('#email', EMAIL);
     await page.fill('#password', SENHA);
     await page.click('button[type=submit]');
+    // o administrador tem a segunda etapa: a senha certa pede o código antes do destino
+    await segundaEtapaDoAdmin(page);
     await expect(page).toHaveURL(/\/pedidos$/);
     await expect(page.locator('#titulo-pagina')).toHaveText('Pedidos de Compra (O.C.)');
   });
@@ -94,6 +96,7 @@ test.describe('Pedidos de Compra (React)', () => {
     await page.locator('#email').fill(EMAIL);
     await page.locator('#password').fill(SENHA);
     await page.getByRole('button', { name: /Entrar/ }).click();
+    await segundaEtapaDoAdmin(page);
     await expect(page.locator('#titulo-pagina')).toBeVisible();
 
     // a sessão fica na aba: outra rota abre sem novo login

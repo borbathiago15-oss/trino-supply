@@ -28,9 +28,12 @@ interface RespostaMfaPendente { mfaRequired: true; mfaToken: string; expiresIn: 
 /** O que o login devolve: a pessoa, ou a vez do código do autenticador. */
 export type Entrada = { usuario: Usuario; mfaToken?: undefined } | { usuario?: undefined; mfaToken: string };
 
-/** `lembrar` guarda a sessão no aparelho em vez de na aba: é o que deixa o app de bolso aberto entre usos. */
+/**
+ * `lembrar` guarda a sessão no aparelho em vez de na aba: é o que deixa o app de bolso aberto
+ * entre usos. Vai ao servidor, que é quem dá a duração ao cookie do refresh token.
+ */
 export async function entrar(email: string, password: string, lembrar = false): Promise<Entrada> {
-  const data = await api<RespostaLogin | RespostaMfaPendente>('/api/v1/auth/login', { method: 'POST', body: { email, password } });
+  const data = await api<RespostaLogin | RespostaMfaPendente>('/api/v1/auth/login', { method: 'POST', body: { email, password, remember: lembrar } });
   if ('mfaRequired' in data && data.mfaRequired) return { mfaToken: data.mfaToken };
   sessao.set(data as RespostaLogin, lembrar);
   return { usuario: (data as RespostaLogin).user };
@@ -39,7 +42,7 @@ export async function entrar(email: string, password: string, lembrar = false): 
 /** A segunda etapa do login: código do aplicativo ou código de recuperação. */
 export async function confirmarSegundaEtapa(mfaToken: string, code: string, lembrar = false): Promise<Usuario & { usedRecoveryCode: boolean; recoveryCodesLeft: number }> {
   const data = await api<{ sessao: RespostaLogin; usedRecoveryCode: boolean; recoveryCodesLeft: number }>(
-    '/api/v1/auth/mfa/verify', { method: 'POST', body: { mfaToken, code } });
+    '/api/v1/auth/mfa/verify', { method: 'POST', body: { mfaToken, code, remember: lembrar } });
   sessao.set(data.sessao, lembrar);
   return { ...data.sessao.user, usedRecoveryCode: data.usedRecoveryCode, recoveryCodesLeft: data.recoveryCodesLeft };
 }
@@ -80,7 +83,8 @@ export async function trocarSenha(senhaAtual: string, senhaNova: string): Promis
 
 export async function sair(): Promise<void> {
   try {
-    await api('/api/v1/auth/logout', { method: 'POST', body: { refreshToken: sessao.refresh } });
+    // o refresh token vai no cookie; o servidor o revoga e apaga o cookie
+    await api('/api/v1/auth/logout', { method: 'POST', body: {} });
   } catch {
     // o logout local vale mesmo se o servidor não responder
   } finally {

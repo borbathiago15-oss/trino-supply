@@ -573,15 +573,26 @@ pipeline justamente para uma rota nova não nascer sem elas.
   (`PR-ERR-031`), e o `SaveChanges` do `AppDbContext` é a rede para quem ainda não confere —
   lança `TextoAcimaDoLimiteException`, que o envelope devolve como `SYS-ERR-400`. Repetir os
   números no serviço daria dois donos para o mesmo limite.
-- **A sessão mora na aba ou no aparelho, e quem escolhe é a pessoa** ("Manter conectado neste
-  aparelho", `api/sessao.ts`). Na aba (`sessionStorage`) ela some quando a aba ou o app fecham — o
-  padrão no computador, que pode ser compartilhado; no aparelho (`localStorage`) ela sobrevive ao
-  fechar do app de bolso, que é fechado a cada uso e era inútil pedindo a senha toda vez. A caixa
-  vem marcada para quem já pediu e no app instalado (`display-mode: standalone`). `lembrar` só vai
-  na **entrada**; renovação e troca de senha mantêm o lugar já escolhido, e entrar de novo nunca
-  deixa a sessão antiga no outro lugar. Os dois lugares correm o mesmo risco (XSS lê os dois; a CSP
-  é o que segura) e a sessão dura o que o refresh token durar (`RefreshTokenDays`, renovado a cada
-  uso). O cookie HttpOnly continua sendo a decisão pendente da auditoria.
+- **O refresh token mora num cookie HttpOnly; a pessoa escolhe por quanto tempo.** Era a decisão
+  pendente da auditoria (A5): no `sessionStorage` ele ficava ao alcance de qualquer script, e um
+  XSS — barrado pela CSP, que era a única barreira — levava uma sessão de sete dias. Agora o
+  servidor o grava em `ts_refresh` (`Rotas/CookieDaSessao.cs`): **HttpOnly** (o script não lê),
+  **SameSite=Strict** (outro site não o manda), **Path=/api/v1/auth** (só viaja para a renovação e
+  a saída — a API inteira continua Bearer) e **Secure** quando a requisição veio por https (em
+  http, no desenvolvimento e no E2E, o navegador recusaria a marca). Segunda tranca contra CSRF:
+  a renovação e a saída pelo cookie exigem o cabeçalho `X-Requested-With: TrinoSupply`, que o
+  nosso JavaScript manda em toda chamada e um formulário de outro site não consegue acrescentar —
+  sem ele é 403 sem tocar na sessão. "Manter conectado neste aparelho" (`remember`, só na entrada
+  e na segunda etapa) é a **duração** do cookie: persistente pelos dias do refresh token, ou de
+  sessão, que some quando o navegador fecha; a escolha fica no cookie `ts_lembrar`, para a
+  renovação manter o lugar escolhido. No navegador fica só o **access token** de quinze minutos
+  (`api/sessao.ts`, na aba ou no aparelho, pela mesma escolha), que é o teto do que um script
+  alcança; sem ele guardado, a casca tenta a renovação pelo cookie antes de desistir — é assim que
+  a aba nova e o app reaberto voltam logados sem o token passar pelo script. O corpo da resposta
+  **não traz** o refresh token, exceto na renovação pelo caminho antigo (token no corpo), que
+  continua aceita para a página aberta antes do deploy terminar o dia; ela faz um login novo
+  quando recarregar. O E2E faz o papel do navegador: lê o cookie do `Set-Cookie` no cenário e o
+  injeta na aba de cada teste (`abrirAutenticado`).
 - **A renovação do refresh token não abre duas sessões** (A7): `RevokedAt` é token de
   concorrência, e a segunda renovação simultânea recebe 409. Só muda o `UPDATE`, não a tabela —
   por isso não houve migration.

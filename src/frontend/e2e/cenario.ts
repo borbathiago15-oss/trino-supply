@@ -8,6 +8,10 @@ const EMAIL = process.env.ADMIN_EMAIL ?? 'admin@trinosupply.com.br';
 const SENHA = process.env.ADMIN_PASSWORD ?? 'TrinoSupply@2026!';
 
 async function chamar<T>(caminho: string, token?: string, corpo?: unknown, metodo?: string): Promise<T> {
+  return (await chamarComResposta<T>(caminho, token, corpo, metodo)).data;
+}
+
+async function chamarComResposta<T>(caminho: string, token?: string, corpo?: unknown, metodo?: string): Promise<{ data: T; res: Response }> {
   const res = await fetch(API + caminho, {
     method: metodo ?? (corpo === undefined ? 'GET' : 'POST'),
     headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
@@ -15,7 +19,17 @@ async function chamar<T>(caminho: string, token?: string, corpo?: unknown, metod
   });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`${caminho} → ${res.status} ${json.error?.code ?? ''} ${json.error?.message ?? ''}`);
-  return (json.data ?? json) as T;
+  return { data: (json.data ?? json) as T, res };
+}
+
+/**
+ * O refresh token não vem no corpo: o servidor o grava num cookie HttpOnly. A suíte faz o papel
+ * do navegador e o lê do Set-Cookie, para injetá-lo no cookie da aba de cada teste.
+ */
+function refreshDoCookie(res: Response): string {
+  const cookie = res.headers.getSetCookie().find((c) => c.startsWith('ts_refresh='));
+  if (!cookie) throw new Error('a resposta não trouxe o cookie ts_refresh');
+  return decodeURIComponent(cookie.slice('ts_refresh='.length).split(';')[0]);
 }
 
 /**
@@ -41,6 +55,8 @@ function guardarSessao(tokens: { accessToken: string; refreshToken: string }) {
 }
 
 type Sessao = { accessToken: string; refreshToken: string; user?: { mustChangePassword?: boolean; mustSetupMfa?: boolean } };
+const comRefresh = (s: Omit<Sessao, 'refreshToken'> & { refreshToken?: string | null }, res: Response): Sessao =>
+  ({ ...s, refreshToken: refreshDoCookie(res) });
 
 /**
  * O administrador não entra sem a verificação em duas etapas. Na primeira execução contra
@@ -50,10 +66,10 @@ type Sessao = { accessToken: string; refreshToken: string; user?: { mustChangePa
 async function garantirAutenticador(sessao: Sessao): Promise<Sessao> {
   if (!sessao.user?.mustSetupMfa) return sessao;
   const cadastro = await chamar<{ secret: string }>('/api/v1/auth/mfa/setup', sessao.accessToken, {});
-  const ativado = await chamar<{ sessao: Sessao }>('/api/v1/auth/mfa/enable', sessao.accessToken, { code: totp(cadastro.secret) });
+  const ativado = await chamarComResposta<{ sessao: Sessao }>('/api/v1/auth/mfa/enable', sessao.accessToken, { code: totp(cadastro.secret) });
   mkdirSync(dirname(ARQUIVO_MFA), { recursive: true });
   writeFileSync(ARQUIVO_MFA, JSON.stringify({ secret: cadastro.secret }));
-  return ativado.sessao;
+  return comRefresh(ativado.data.sessao, ativado.res);
 }
 
 /** A segunda etapa do login do administrador, com o segredo guardado por esta máquina. */
@@ -62,8 +78,8 @@ async function segundaEtapa(mfaToken: string): Promise<Sessao> {
   if (!segredo)
     throw new Error('o administrador tem autenticador cadastrado, mas .e2e/mfa.json não existe nesta máquina: '
       + 'redefina o autenticador dele em Usuários (ou recrie o banco) e rode de novo');
-  const etapa = await chamar<{ sessao: Sessao }>('/api/v1/auth/mfa/verify', undefined, { mfaToken, code: totp(segredo) });
-  return etapa.sessao;
+  const etapa = await chamarComResposta<{ sessao: Sessao }>('/api/v1/auth/mfa/verify', undefined, { mfaToken, code: totp(segredo) });
+  return comRefresh(etapa.data.sessao, etapa.res);
 }
 
 /**
@@ -80,9 +96,9 @@ async function entrar(): Promise<string> {
 
     if (res.ok) {
       const json = await res.json();
-      let tokens: Sessao = json.data ?? json;
+      const corpo = json.data ?? json;
       // com o autenticador já cadastrado, a senha certa dá o token do meio do login
-      if ((json.data ?? json).mfaRequired) tokens = await segundaEtapa((json.data ?? json).mfaToken);
+      let tokens: Sessao = corpo.mfaRequired ? await segundaEtapa(corpo.mfaToken) : comRefresh(corpo, res);
       if (!tokens.user?.mustChangePassword) {
         tokens = await garantirAutenticador(tokens);
         guardarSessao(tokens); return tokens.accessToken;
@@ -92,10 +108,11 @@ async function entrar(): Promise<string> {
         throw new Error('a senha da suíte entrou mas continua provisória — banco em estado inesperado');
 
       // primeira execução deste banco: define a senha da suíte e segue com ela
-      let trocados = await chamar<Sessao>(
+      const troca = await chamarComResposta<Sessao>(
         '/api/v1/auth/change-password', tokens.accessToken,
         { currentPassword: SENHA, newPassword: SENHA_E2E },
       );
+      let trocados = comRefresh(troca.data, troca.res);
       // e, logo depois da senha, o autenticador: a sessão trocada ainda está presa no cadastro
       trocados = await garantirAutenticador(trocados);
       guardarSessao(trocados);

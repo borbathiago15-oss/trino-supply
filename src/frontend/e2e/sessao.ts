@@ -42,12 +42,17 @@ const lerTokens = () => (tokens ??= JSON.parse(readFileSync(ARQUIVO_SESSAO, 'utf
 /** O token do login único da execução, para a spec que precisa semear pela API. */
 export const tokenDaSessao = () => lerTokens().accessToken;
 
-/** Abre a página já autenticada, na mesma sessão que o legado usa. */
+/**
+ * Abre a página já autenticada: o access token na aba, como o login grava, e o refresh token no
+ * cookie HttpOnly, como o servidor grava — é dele que a renovação vive.
+ */
 export async function abrirAutenticado(page: Page, destino: string) {
   const { accessToken, refreshToken } = lerTokens();
-  await page.addInitScript(([a, r]) => {
-    sessionStorage.setItem('ts.access', a);
-    sessionStorage.setItem('ts.refresh', r);
-  }, [accessToken, refreshToken] as const);
+  const base = new URL(process.env.API_URL ?? 'http://127.0.0.1:5099');
+  await page.context().addCookies([{
+    name: 'ts_refresh', value: refreshToken, domain: base.hostname, path: '/api/v1/auth',
+    httpOnly: true, sameSite: 'Strict', secure: base.protocol === 'https:',
+  }]);
+  await page.addInitScript((a) => { sessionStorage.setItem('ts.access', a); }, accessToken);
   await page.goto(destino);
 }

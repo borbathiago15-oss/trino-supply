@@ -5,7 +5,7 @@ using TrinoSupply.Foundation.Api.Infrastructure;
 
 namespace TrinoSupply.Foundation.Api.Auth;
 
-public record AuthTokens(string AccessToken, int ExpiresInSeconds, string RefreshToken, User User);
+public record AuthTokens(string AccessToken, int ExpiresInSeconds, string RefreshToken, User User, int RefreshTokenDays = 7);
 
 /// <summary>
 /// O resultado da tentativa de entrar. <c>Tokens</c> nulo é credencial recusada; quando a senha
@@ -139,6 +139,6 @@ public class AuthService(AppDbContext db, TokenService tokens, IPasswordHasher<U
         });
 
         if (saveChanges) await db.SaveChangesAsync(ct);
-        return new AuthTokens(access, tokens.Options.AccessTokenMinutes * 60, refreshValue, user);
+        return new AuthTokens(access, tokens.Options.AccessTokenMinutes * 60, refreshValue, user, tokens.Options.RefreshTokenDays);
     }
 }

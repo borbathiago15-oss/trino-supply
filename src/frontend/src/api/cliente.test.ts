@@ -11,30 +11,36 @@ describe('api()', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
 
   it('devolve o `data` do envelope e manda o Bearer da sessão', async () => {
-    sessao.set({ accessToken: 'abc', refreshToken: 'r1' });
+    sessao.set({ accessToken: 'abc' });
     fetchMock.mockResolvedValueOnce(resposta(200, { data: { items: [1, 2] }, correlationId: 'x' }));
     const r = await api<{ items: number[] }>('/api/v1/purchase-orders/');
     expect(r.items).toEqual([1, 2]);
     const [, init] = fetchMock.mock.calls[0];
     expect((init?.headers as Record<string, string>).Authorization).toBe('Bearer abc');
+    // a tranca anti-CSRF do cookie vai em toda chamada
+    expect((init?.headers as Record<string, string>)['X-Requested-With']).toBe('TrinoSupply');
   });
 
-  it('em 401 renova o token uma vez e repete a chamada', async () => {
-    sessao.set({ accessToken: 'velho', refreshToken: 'r1' });
+  it('em 401 renova o token uma vez, pelo cookie, e repete a chamada', async () => {
+    sessao.set({ accessToken: 'velho' });
     fetchMock
       .mockResolvedValueOnce(resposta(401, { error: { code: 'AUTH', message: 'expirou' } }))
-      .mockResolvedValueOnce(resposta(200, { data: { accessToken: 'novo', refreshToken: 'r2' } }))
+      .mockResolvedValueOnce(resposta(200, { data: { accessToken: 'novo', refreshToken: null } }))
       .mockResolvedValueOnce(resposta(200, { data: { ok: true } }));
     const r = await api<{ ok: boolean }>('/api/v1/purchase-orders/');
     expect(r.ok).toBe(true);
     expect(sessao.access).toBe('novo');
-    expect(sessao.refresh).toBe('r2');
-    expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/auth/refresh');
+    const [url, init] = fetchMock.mock.calls[1];
+    expect(url).toBe('/api/v1/auth/refresh');
+    // o refresh token não vai no corpo: vai no cookie, com a tranca do cabeçalho
+    expect(init?.body).toBe('{}');
+    expect(init?.credentials).toBe('same-origin');
+    expect((init?.headers as Record<string, string>)['X-Requested-With']).toBe('TrinoSupply');
     expect((fetchMock.mock.calls[2][1]?.headers as Record<string, string>).Authorization).toBe('Bearer novo');
   });
 
   it('três chamadas simultâneas em 401 renovam uma vez só e todas seguem', async () => {
-    sessao.set({ accessToken: 'velho', refreshToken: 'r1' });
+    sessao.set({ accessToken: 'velho' });
     let refreshes = 0;
     // o refresh demora: é justamente na janela de espera que as outras chamadas
     // precisam entrar na fila, em vez de cada uma abrir a sua renovação
@@ -43,7 +49,7 @@ describe('api()', () => {
       if (caminho === '/api/v1/auth/refresh') {
         refreshes++;
         await new Promise((r) => setTimeout(r, 10));
-        return resposta(200, { data: { accessToken: 'novo', refreshToken: 'r2' } });
+        return resposta(200, { data: { accessToken: 'novo' } });
       }
       return resposta(sessao.access === 'novo' ? 200 : 401, sessao.access === 'novo' ? { data: { ok: caminho } } : {});
     });
@@ -61,13 +67,13 @@ describe('api()', () => {
   });
 
   it('depois de uma renovação concluída, um 401 novo renova de novo', async () => {
-    sessao.set({ accessToken: 'velho', refreshToken: 'r1' });
+    sessao.set({ accessToken: 'velho' });
     fetchMock
       .mockResolvedValueOnce(resposta(401, {}))
-      .mockResolvedValueOnce(resposta(200, { data: { accessToken: 'n1', refreshToken: 'r2' } }))
+      .mockResolvedValueOnce(resposta(200, { data: { accessToken: 'n1' } }))
       .mockResolvedValueOnce(resposta(200, { data: { ok: true } }))
       .mockResolvedValueOnce(resposta(401, {}))
-      .mockResolvedValueOnce(resposta(200, { data: { accessToken: 'n2', refreshToken: 'r3' } }))
+      .mockResolvedValueOnce(resposta(200, { data: { accessToken: 'n2' } }))
       .mockResolvedValueOnce(resposta(200, { data: { ok: true } }));
     await api('/api/v1/purchase-orders/');
     await api('/api/v1/purchase-orders/');
@@ -75,7 +81,7 @@ describe('api()', () => {
   });
 
   it('refresh recusado pelo servidor limpa a sessão e avisa a aplicação', async () => {
-    sessao.set({ accessToken: 'velho', refreshToken: 'r1' });
+    sessao.set({ accessToken: 'velho' });
     const ouvinte = vi.fn();
     globalThis.addEventListener(EVENTO_SESSAO_EXPIRADA, ouvinte);
     fetchMock
@@ -88,7 +94,7 @@ describe('api()', () => {
   });
 
   it('falha passageira na renovação mantém o usuário logado', async () => {
-    sessao.set({ accessToken: 'velho', refreshToken: 'r1' });
+    sessao.set({ accessToken: 'velho' });
     const ouvinte = vi.fn();
     globalThis.addEventListener(EVENTO_SESSAO_EXPIRADA, ouvinte);
     fetchMock

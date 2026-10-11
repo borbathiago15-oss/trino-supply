@@ -280,6 +280,9 @@ jobs:
           JWT_SECRET: segredo-de-ci-nao-usar-em-producao-react
           ASPNETCORE_URLS: http://127.0.0.1:5099
           ASPNETCORE_ENVIRONMENT: Production
+          # o teto global de requisições por pessoa é para gente; a suíte inteira entra com um
+          # usuário só e, no runner, passa do padrão — aqui a folga é explícita
+          RATE_LIMIT_GLOBAL_PER_MINUTE: "6000"
         run: |
           dotnet bin/Release/net9.0/TrinoSupply.Foundation.Api.dll > /tmp/api.log 2>&1 &
           for i in $(seq 1 60); do

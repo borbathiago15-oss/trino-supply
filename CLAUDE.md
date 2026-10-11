@@ -566,8 +566,25 @@ pipeline justamente para uma rota nova não nascer sem elas.
   IP do cliente nunca era aplicado, e o rate limit do login (por IP) contava **todo mundo** como
   o proxy. Com `ForwardLimit = 1` vale só o último endereço do `X-Forwarded-For`, o que o proxy
   acrescentou; o que o cliente inventa antes dele é ignorado.
+- **Toda rota exige sessão por padrão** (`FallbackPolicy` em `Program.cs`): rota nova sem
+  `RequireAuthorization` já nasce fechada, e abrir uma é ato explícito com `AllowAnonymous` —
+  hoje só o login, o refresh, o logout, o login do Portal, o `/health` e o `index.html` do SPA.
+  `TabelaDeRotasTests` cobra os dois lados: porta de entrada sem `AllowAnonymous` e
+  `AllowAnonymous` fora da lista pública falham. Efeito colateral aceito: caminho que não casa
+  com rota nenhuma responde 401, não 404.
+- **Há um teto global de requisições por pessoa** (`RATE_LIMIT_GLOBAL_PER_MINUTE`, padrão 900
+  por minuto, balde de fichas), além das cotas de login, upload e relatório. A partição é o
+  usuário do token, e o IP só para quem ainda não entrou; quem bate no teto vai para o log
+  com rota e usuário, e recebe `Retry-After`. O padrão é para gente: a suíte E2E entra com
+  um usuário só e no runner passa dele, por isso o `ci.yml` sobe o teto pelo ambiente — a
+  primeira rodada do CI caiu justamente aí, com a Torre e o painel recebendo 429. **`UseRateLimiter` vem depois de
+  `UseAuthentication`**, e a ordem é regra: antes dele o `ctx.User` está vazio, e toda cota
+  "por usuário" caía no IP sem ninguém notar — o escritório inteiro dividia a cota de upload.
 - **Dependência vulnerável trava o CI** no que vai para produção (`src/frontend` e o
-  projeto .NET). O monorepo `platform/` não é implantado e fica fora do gate.
+  projeto .NET). O monorepo `platform/` não é implantado e fica fora do gate. Os pacotes
+  Microsoft do backend seguem a última correção da linha 9.0 (`dotnet list package --outdated
+  --highest-minor` diz qual é); o `tailwindcss` 3 fica até a migração para o 4, que é trabalho
+  de tela, não de dependência.
 
 ## Torre de Controle: o que é derivado, e de onde
 

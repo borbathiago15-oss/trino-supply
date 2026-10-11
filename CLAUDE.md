@@ -572,10 +572,12 @@ pipeline justamente para uma rota nova não nascer sem elas.
   `TabelaDeRotasTests` cobra os dois lados: porta de entrada sem `AllowAnonymous` e
   `AllowAnonymous` fora da lista pública falham. Efeito colateral aceito: caminho que não casa
   com rota nenhuma responde 401, não 404.
-- **Há um teto global de requisições por pessoa** (`RATE_LIMIT_GLOBAL_PER_MINUTE`, padrão 600
+- **Há um teto global de requisições por pessoa** (`RATE_LIMIT_GLOBAL_PER_MINUTE`, padrão 900
   por minuto, balde de fichas), além das cotas de login, upload e relatório. A partição é o
   usuário do token, e o IP só para quem ainda não entrou; quem bate no teto vai para o log
-  com rota e usuário, e recebe `Retry-After`. **`UseRateLimiter` vem depois de
+  com rota e usuário, e recebe `Retry-After`. O padrão é para gente: a suíte E2E entra com
+  um usuário só e no runner passa dele, por isso o `ci.yml` sobe o teto pelo ambiente — a
+  primeira rodada do CI caiu justamente aí, com a Torre e o painel recebendo 429. **`UseRateLimiter` vem depois de
   `UseAuthentication`**, e a ordem é regra: antes dele o `ctx.User` está vazio, e toda cota
   "por usuário" caía no IP sem ninguém notar — o escritório inteiro dividia a cota de upload.
 - **Dependência vulnerável trava o CI** no que vai para produção (`src/frontend` e o

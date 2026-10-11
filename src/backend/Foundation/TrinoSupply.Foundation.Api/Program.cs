@@ -68,8 +68,9 @@ builder.Services.AddAuthorization(o =>
 // partição é o usuário logado (o IP só para quem ainda não entrou), o balde é de fichas
 // (aguenta a rajada de uma tela abrindo e repõe por minuto) e a cota é folgada para uso
 // humano, inclusive o de várias abas — o que se barra é a repetição automática.
+// O padrão é para gente; a suíte E2E, que não é gente, sobe o teto pelo ambiente no CI.
 var tetoGlobalPorMinuto = int.TryParse(builder.Configuration["RATE_LIMIT_GLOBAL_PER_MINUTE"], out var teto) && teto > 0
-    ? teto : 600;
+    ? teto : 900;
 
 builder.Services.AddRateLimiter(o =>
 {

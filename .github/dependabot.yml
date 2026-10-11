@@ -1,0 +1,35 @@
+# Atualizações de dependência como PR, uma vez por semana, agrupadas por ecossistema: o CI
+# já trava dependência vulnerável no que vai para produção, e isto é o que faz a correção
+# chegar antes de a vulnerabilidade existir. Minor e patch vêm num PR só; major vem sozinho,
+# porque pode pedir migração (o tailwindcss 4 é o exemplo).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /src/frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Sao_Paulo
+    groups:
+      frontend-minor-e-patch:
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+  - package-ecosystem: nuget
+    directory: /src/backend/Foundation/TrinoSupply.Foundation.Api
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Sao_Paulo
+    groups:
+      backend-minor-e-patch:
+        update-types: [minor, patch]
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Sao_Paulo

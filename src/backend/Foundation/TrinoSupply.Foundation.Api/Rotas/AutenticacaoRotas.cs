@@ -113,7 +113,7 @@ public static class AutenticacaoRotas
             if (error is not null)
                 return Error(ctx, error.Code switch { "IAM-ERR-003" => 423, "IAM-ERR-029" => 401, _ => 401 }, error.Code, error.Message);
             return Ok(new { sessao = ToResponse(etapa!.Tokens), usedRecoveryCode = etapa.UsedRecoveryCode, recoveryCodesLeft = etapa.RecoveryCodesLeft }, ctx);
-        }).AllowAnonymous().RequireRateLimiting("auth");
+        }).AllowAnonymous().RequireRateLimiting("auth-mfa");
 
         mfa.MapGet("/", async (MfaService svc, ClaimsPrincipal p, HttpContext ctx) =>
         {

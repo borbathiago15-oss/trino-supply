@@ -72,6 +72,13 @@ builder.Services.AddAuthorization(o =>
 var tetoGlobalPorMinuto = int.TryParse(builder.Configuration["RATE_LIMIT_GLOBAL_PER_MINUTE"], out var teto) && teto > 0
     ? teto : 900;
 
+// O limite do login é por IP e para gente; a suíte E2E entra várias vezes do mesmo endereço
+// em poucos minutos — com a segunda etapa, duas chamadas por entrada — e o CI sobe o teto pelo
+// ambiente, como faz com o teto global. O que segura a adivinhação de senha e de código em
+// produção é o bloqueio por conta (Auth/BloqueioPorConta.cs), que não depende do IP.
+var tetoDoLoginPorMinuto = int.TryParse(builder.Configuration["RATE_LIMIT_LOGIN_PER_MINUTE"], out var tetoLogin) && tetoLogin > 0
+    ? tetoLogin : 10;
+
 builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -98,7 +105,13 @@ builder.Services.AddRateLimiter(o =>
     };
     o.AddPolicy("auth", ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = tetoDoLoginPorMinuto, Window = TimeSpan.FromMinutes(1) }));
+    // a segunda etapa tem balde próprio: o login e o código são duas chamadas da mesma entrada,
+    // e dividir a cota do login faria cinco entradas por minuto por escritório; o código errado
+    // conta no bloqueio por conta, que é o que barra a adivinhação dos seis dígitos
+    o.AddPolicy("auth-mfa", ctx => RateLimitPartition.GetFixedWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = tetoDoLoginPorMinuto, Window = TimeSpan.FromMinutes(1) }));
     // a troca de senha é rota autenticada: limitar por IP puniria o escritório
     // inteiro atrás do mesmo IP — quem entra depois de dez logins não conseguiria
     // definir a própria senha. O limite aqui é por usuário, que é o que protege

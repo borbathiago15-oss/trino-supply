@@ -255,7 +255,10 @@ o usuário descobrir no erro do servidor:
   o telefone; sem eles, o administrador redefine o autenticador em Usuários (`/users/{id}/reset-mfa`,
   que derruba as sessões) — e com um administrador só, os códigos dele são a única saída dele.
   Recomeçar o cadastro com o autenticador ativo é recusado (`IAM-ERR-025`): trocar o segredo por
-  baixo de um cadastro ativo é o que um invasor com a sessão aberta faria. O E2E faz o papel do
+  baixo de um cadastro ativo é o que um invasor com a sessão aberta faria. A segunda etapa tem
+  **balde próprio** de limite por IP (`auth-mfa`): login e código são duas chamadas da mesma
+  entrada, e dividir a cota do login faria cinco entradas por minuto por escritório; o limite do
+  login é `RATE_LIMIT_LOGIN_PER_MINUTE` (padrão 10), que o `ci.yml` sobe para a suíte. O E2E faz o papel do
   telefone do administrador (`e2e/totp.ts`): cadastra na primeira execução contra o banco e
   guarda o segredo em `.e2e/mfa.json`.
 - **SUP-ERR-013/014** — o pré-cadastro do fornecedor. Cotar vem antes de cadastrar:

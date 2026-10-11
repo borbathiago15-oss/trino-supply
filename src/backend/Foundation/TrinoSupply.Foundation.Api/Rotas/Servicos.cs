@@ -24,6 +24,10 @@ public static class Servicos
         servicos.AddSingleton(TimeProvider.System);
         servicos.AddSingleton<TokenService>();
         servicos.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+        // PBKDF2-HMAC-SHA512 com 210 mil iterações, o piso da OWASP (2023) para este algoritmo; o
+        // padrão do Identity são 100 mil. A senha gravada com o número antigo continua valendo e é
+        // regravada com o novo no login seguinte (`SuccessRehashNeeded` em AuthService).
+        servicos.Configure<PasswordHasherOptions>(o => o.IterationCount = 210_000);
         servicos.AddScoped<AuthService>();
         servicos.AddSingleton<CofreDeSegredos>();
         servicos.AddScoped<MfaService>();

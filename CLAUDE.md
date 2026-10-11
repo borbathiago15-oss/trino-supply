@@ -626,8 +626,14 @@ pipeline justamente para uma rota nova não nascer sem elas.
   primeira rodada do CI caiu justamente aí, com a Torre e o painel recebendo 429. **`UseRateLimiter` vem depois de
   `UseAuthentication`**, e a ordem é regra: antes dele o `ctx.User` está vazio, e toda cota
   "por usuário" caía no IP sem ninguém notar — o escritório inteiro dividia a cota de upload.
+- **O corpo de uma requisição JSON não passa de 2 MB** (`MaxRequestBodySize` no Kestrel); as rotas
+  de upload declaram o próprio teto com `ComTetoDeUpload`, que vence o global. **A senha usa
+  PBKDF2 com 210 mil iterações** (piso da OWASP para SHA-512; o padrão do Identity são 100 mil):
+  a senha gravada com o número antigo continua valendo e é regravada no login seguinte.
 - **Dependência vulnerável trava o CI** no que vai para produção (`src/frontend` e o
-  projeto .NET). O monorepo `platform/` não é implantado e fica fora do gate. Os pacotes
+  projeto .NET). O monorepo `platform/` não é implantado e fica fora do gate. O Dependabot
+  (`.github/dependabot.yml`) abre o PR semanal de npm, NuGet e Actions, com minor e patch
+  agrupados; major vem sozinho porque pode pedir migração. Os pacotes
   Microsoft do backend seguem a última correção da linha 9.0 (`dotnet list package --outdated
   --highest-minor` diz qual é); o `tailwindcss` 3 fica até a migração para o 4, que é trabalho
   de tela, não de dependência.

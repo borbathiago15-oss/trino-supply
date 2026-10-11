@@ -19,8 +19,15 @@ using static TrinoSupply.Foundation.Api.Rotas.Anexos;
 using TrinoSupply.Foundation.Api.Rotas;
 
 var builder = WebApplication.CreateBuilder(args);
-// o cabeçalho "Server: Kestrel" só diz a quem sonda com o que está falando (auditoria A8)
-builder.WebHost.ConfigureKestrel(k => k.AddServerHeader = false);
+builder.WebHost.ConfigureKestrel(k =>
+{
+    // o cabeçalho "Server: Kestrel" só diz a quem sonda com o que está falando (auditoria A8)
+    k.AddServerHeader = false;
+    // o corpo de uma requisição JSON não passa de 2 MB: o padrão do Kestrel são 30 MB, e um
+    // corpo desse tamanho numa rota de JSON só serve para ocupar memória. As rotas de upload
+    // declaram o próprio teto (`ComTetoDeUpload`), que vence este (auditoria, item 3).
+    k.Limits.MaxRequestBodySize = 2 * 1024 * 1024;
+});
 
 // ---- Configuração -----------------------------------------------------------
 var jwtOptions = new JwtOptions();

@@ -38,6 +38,8 @@ public class TabelaDeRotasTests
                                   // própria sessão, e exigir token válido impediria sair com
                                   // o acesso já expirado
         "/api/v1/portal/login",   // a porta do Portal do Fornecedor, por CNPJ e chave
+        "/api/v1/auth/mfa/verify", // a segunda etapa do login: a sessão ainda não existe, e o
+                                   // que identifica a pessoa é o token do meio do login
     ];
 
     private static List<RouteEndpoint> Rotas()

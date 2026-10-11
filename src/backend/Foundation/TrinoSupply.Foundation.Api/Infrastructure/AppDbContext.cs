@@ -395,6 +395,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.Property(u => u.PasswordChangedAt).HasColumnName("password_changed_at");
             e.Property(u => u.FailedLogins).HasColumnName("failed_logins").HasDefaultValue(0);
             e.Property(u => u.LockedUntil).HasColumnName("locked_until");
+            e.Property(u => u.TotpSecret).HasColumnName("totp_secret").HasMaxLength(400);
+            e.Property(u => u.MfaEnabledAt).HasColumnName("mfa_enabled_at");
+            e.Property(u => u.MfaRecoveryCodes).HasColumnName("mfa_recovery_codes").HasMaxLength(1000);
             e.Property(u => u.CreatedAt).HasColumnName("created_at");
             e.Property(u => u.UpdatedAt).HasColumnName("updated_at");
             e.HasIndex(u => u.Email).IsUnique();

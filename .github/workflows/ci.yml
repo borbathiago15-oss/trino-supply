@@ -283,6 +283,8 @@ jobs:
           # o teto global de requisições por pessoa é para gente; a suíte inteira entra com um
           # usuário só e, no runner, passa do padrão — aqui a folga é explícita
           RATE_LIMIT_GLOBAL_PER_MINUTE: "6000"
+          # idem para o login: a suíte entra pela tela várias vezes do mesmo IP em poucos minutos
+          RATE_LIMIT_LOGIN_PER_MINUTE: "60"
         run: |
           dotnet bin/Release/net9.0/TrinoSupply.Foundation.Api.dll > /tmp/api.log 2>&1 &
           for i in $(seq 1 60); do

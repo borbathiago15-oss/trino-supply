@@ -34,6 +34,8 @@ public static class UsuarioRotas
             mustChangePassword = u.MustChangePassword, passwordChangedAt = u.PasswordChangedAt,
             // a conta fechada por senhas erradas aparece na lista, para o administrador abrir
             failedLogins = u.FailedLogins, lockedUntil = u.LockedUntil,
+            // a segunda etapa: ligada, e se o papel a exige (quem exige e não tem está preso no cadastro)
+            mfaEnabled = Auth.Mfa.Ativa(u), mfaRequired = Auth.Mfa.Exigida(u.Role),
             createdAt = u.CreatedAt, updatedAt = u.UpdatedAt,
         };
 
@@ -66,6 +68,14 @@ public static class UsuarioRotas
             return error is not null
                 ? Error(ctx, error.Code == "IAM-ERR-404" ? 404 : 400, error.Code, error.Message)
                 : Ok(new { message = "Senha redefinida. As sessões do usuário foram encerradas." }, ctx);
+        });
+
+        users.MapPost("/{id:guid}/reset-mfa", async (Guid id, Auth.MfaService svc, HttpContext ctx) =>
+        {
+            var error = await svc.RedefinirAsync(id);
+            return error is not null
+                ? Error(ctx, 404, error.Code, error.Message)
+                : Ok(new { message = "Autenticador redefinido. As sessões do usuário foram encerradas e ele cadastra outro na próxima entrada." }, ctx);
         });
 
         users.MapPost("/{id:guid}/unlock", async (Guid id, UserService svc, HttpContext ctx) =>

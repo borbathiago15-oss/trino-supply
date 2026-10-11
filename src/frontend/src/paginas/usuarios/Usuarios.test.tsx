@@ -14,12 +14,13 @@ vi.mock('@/api/usuarios', async (importar) => ({
   atualizarUsuario: vi.fn(),
   redefinirSenha: vi.fn(),
   desbloquearUsuario: vi.fn(),
+  redefinirMfa: vi.fn(),
 }));
 vi.mock('@/api/centrosCusto', () => ({ listarCentrosCusto: vi.fn() }));
 vi.mock('@/api/setores', () => ({ listarSetores: vi.fn() }));
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => admin }));
 
-import { atualizarUsuario, contaBloqueada, criarUsuario, desbloquearUsuario, listarUsuarios, redefinirSenha } from '@/api/usuarios';
+import { atualizarUsuario, contaBloqueada, criarUsuario, desbloquearUsuario, listarUsuarios, redefinirMfa, redefinirSenha } from '@/api/usuarios';
 import { listarCentrosCusto } from '@/api/centrosCusto';
 import { listarSetores } from '@/api/setores';
 
@@ -218,6 +219,30 @@ describe('<Usuarios />', () => {
     expect(screen.queryByRole('menuitem', { name: 'Desbloquear' })).not.toBeInTheDocument();
     expect(contaBloqueada({ lockedUntil: new Date(Date.now() - 1000).toISOString() })).toBe(false);
     expect(contaBloqueada({ lockedUntil: null })).toBe(false);
+  });
+
+  it('quem tem o autenticador aparece marcado, e "Redefinir autenticador" pede confirmação antes de apagar', async () => {
+    vi.mocked(listarUsuarios).mockResolvedValue({
+      items: [usuario({ mfaEnabled: true }), { ...diretor, mfaRequired: true, mfaEnabled: false }],
+      roles: ['Requester', 'Director', 'SystemAdministrator'], availableModules: ['SOLICITACOES', 'APROVACAO'],
+    });
+    vi.mocked(redefinirMfa).mockResolvedValue({});
+    montar();
+    await waitFor(() => expect(screen.getByTestId('tabela-usuarios')).toBeInTheDocument());
+    expect(screen.getByText('2 etapas')).toBeInTheDocument();
+    // diretor que ainda não cadastrou: a marca diz que ele vai cadastrar na próxima entrada
+    expect(screen.getByText('sem autenticador')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /Mais ações de Ana/ }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Redefinir autenticador' }));
+    expect(redefinirMfa).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Redefinir' }));
+    await waitFor(() => expect(redefinirMfa).toHaveBeenCalledWith('u-ana@t.com'));
+    expect(await screen.findByTestId('toast')).toHaveTextContent('redefinido');
+
+    // sem autenticador não há o que redefinir
+    await userEvent.click(screen.getByRole('button', { name: /Mais ações de Davi/ }));
+    expect(screen.queryByRole('menuitem', { name: 'Redefinir autenticador' })).not.toBeInTheDocument();
   });
 
   it('inativar a si mesmo e o único administrador aparece barrado, com o motivo', async () => {

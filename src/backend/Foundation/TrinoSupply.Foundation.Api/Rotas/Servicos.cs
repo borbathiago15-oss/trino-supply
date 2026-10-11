@@ -25,6 +25,8 @@ public static class Servicos
         servicos.AddSingleton<TokenService>();
         servicos.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
         servicos.AddScoped<AuthService>();
+        servicos.AddSingleton<CofreDeSegredos>();
+        servicos.AddScoped<MfaService>();
         servicos.AddScoped<UserService>();
         servicos.AddScoped<IPrNumberGenerator, PostgresPrNumberGenerator>();
         servicos.AddScoped<CatalogService>();

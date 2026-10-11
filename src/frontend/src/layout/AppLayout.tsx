@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { LimiteErro } from '@/componentes/LimiteErro';
 import { Sidebar } from './Sidebar';
 import { ModalDeComunicados } from '@/componentes/Comunicados';
@@ -65,6 +65,8 @@ export function AppLayout() {
               {/* o manual e o chamado da tela aberta — no cabeçalho, para nenhuma tela nascer sem eles */}
               <BarraDeAjuda />
               <BotaoDeTema />
+              {/* senha e autenticador da própria pessoa: fora da casca, como a troca obrigatória */}
+              <Link to="/autenticador" className="hidden text-[12.5px] text-texto-suave underline sm:inline" title="Senha e verificação em duas etapas">Segurança</Link>
               <button type="button" className="botao-perigo !py-1.5" onClick={async () => { await sair(); navegar('/login', { replace: true }); }}>Sair</button>
             </div>
           </div>

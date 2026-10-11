@@ -11,8 +11,10 @@ public record AuthTokens(string AccessToken, int ExpiresInSeconds, string Refres
 /// O resultado da tentativa de entrar. <c>Tokens</c> nulo é credencial recusada; quando a senha
 /// estava certa mas a conta está fechada por tentativas erradas, <c>BloqueadaAte</c> diz até
 /// quando — é o único caso em que o login explica a recusa (ver <see cref="BloqueioPorConta"/>).
+/// Com a segunda etapa ligada, a senha certa não dá sessão: dá <c>MfaToken</c>, que só vale
+/// para apresentar o código (ver <see cref="Mfa"/>).
 /// </summary>
-public record TentativaDeLogin(AuthTokens? Tokens, DateTimeOffset? BloqueadaAte);
+public record TentativaDeLogin(AuthTokens? Tokens, DateTimeOffset? BloqueadaAte, string? MfaToken = null);
 
 public class AuthService(AppDbContext db, TokenService tokens, IPasswordHasher<User> hasher, TimeProvider clock)
 {
@@ -50,13 +52,21 @@ public class AuthService(AppDbContext db, TokenService tokens, IPasswordHasher<U
         if (BloqueioPorConta.Bloqueada(user, agora))
             return new(null, user.LockedUntil);
 
-        if (user.FailedLogins > 0 || user.LockedUntil is not null) BloqueioPorConta.Desbloquear(user);
         if (result == PasswordVerificationResult.SuccessRehashNeeded)
         {
             user.PasswordHash = hasher.HashPassword(user, password);
             user.UpdatedAt = agora;
         }
 
+        if (Mfa.Ativa(user))
+        {
+            // a senha conferiu, mas o contador só zera quando o código também conferir: o
+            // código errado conta como falha, e é isso que barra a adivinhação dos seis dígitos
+            await db.SaveChangesAsync(ct);
+            return new(null, null, tokens.CreateMfaToken(user, agora));
+        }
+
+        if (user.FailedLogins > 0 || user.LockedUntil is not null) BloqueioPorConta.Desbloquear(user);
         return new(await IssueTokensAsync(user, ct), null);
     }
 

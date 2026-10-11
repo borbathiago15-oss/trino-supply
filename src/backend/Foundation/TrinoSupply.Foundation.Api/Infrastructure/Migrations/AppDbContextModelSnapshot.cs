@@ -1435,6 +1435,15 @@ namespace TrinoSupply.Foundation.Api.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("locked_until");
 
+                    b.Property<DateTimeOffset?>("MfaEnabledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("mfa_enabled_at");
+
+                    b.Property<string>("MfaRecoveryCodes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("mfa_recovery_codes");
+
                     b.Property<string>("Modules")
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)")
@@ -1472,6 +1481,11 @@ namespace TrinoSupply.Foundation.Api.Infrastructure.Migrations
                     b.Property<Guid?>("SupplyManagerId")
                         .HasColumnType("uuid")
                         .HasColumnName("supply_manager_id");
+
+                    b.Property<string>("TotpSecret")
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)")
+                        .HasColumnName("totp_secret");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")

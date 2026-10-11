@@ -237,6 +237,30 @@ o usuário descobrir no erro do servidor:
   login recusado (é o que o bloqueio conta), e e-mail sem conta não conta em ninguém. Abrem a
   conta: o tempo, a redefinição de senha pelo administrador e "Desbloquear" na tela de Usuários
   (`/users/{id}/unlock`), que não mexe na senha.
+- **IAM-ERR-024 — diretor e administrador não entram sem a verificação em duas etapas.** Decisão
+  da empresa (2026-10), em `Auth/Mfa.cs`: são quem aprova dinheiro e quem cria usuários, e senha
+  vazada nessas contas é conta tomada; para os demais papéis ela é opcional ("Segurança" no
+  cabeçalho, `/autenticador`). É TOTP (RFC 6238, `Auth/Totp.cs`, sem biblioteca e com os vetores
+  da RFC no teste): o que o Google/Microsoft Authenticator e o Authy calculam. Quem o papel
+  obriga e ainda não cadastrou entra numa sessão **presa no cadastro** (claim `mfa_setup`, o
+  mesmo desenho e o mesmo middleware da senha provisória, que vem antes): só as rotas de
+  `/auth/mfa/*` respondem, e a tela leva direto a elas. Com ela ligada, **a senha certa não dá
+  sessão**: dá o `mfaToken`, um JWT de cinco minutos com **audiência própria** — o JwtBearer da
+  API o recusa como Bearer, e ele só serve em `/auth/mfa/verify`, que é rota pública (a sessão
+  ainda não existe). **O código errado conta como senha errada** para o bloqueio por conta: seis
+  dígitos sem isso seriam um milhão de tentativas livres. O segredo vai ao banco **cifrado**
+  (`CofreDeSegredos`, AES-GCM com chave derivada do `JWT_SECRET` — trocar o segredo do ambiente
+  obriga todo mundo a cadastrar de novo, como derruba as sessões). Oito **códigos de
+  recuperação** de uso único, mostrados uma vez e guardados como hash, são a saída de quem perdeu
+  o telefone; sem eles, o administrador redefine o autenticador em Usuários (`/users/{id}/reset-mfa`,
+  que derruba as sessões) — e com um administrador só, os códigos dele são a única saída dele.
+  Recomeçar o cadastro com o autenticador ativo é recusado (`IAM-ERR-025`): trocar o segredo por
+  baixo de um cadastro ativo é o que um invasor com a sessão aberta faria. A segunda etapa tem
+  **balde próprio** de limite por IP (`auth-mfa`): login e código são duas chamadas da mesma
+  entrada, e dividir a cota do login faria cinco entradas por minuto por escritório; o limite do
+  login é `RATE_LIMIT_LOGIN_PER_MINUTE` (padrão 10), que o `ci.yml` sobe para a suíte. O E2E faz o papel do
+  telefone do administrador (`e2e/totp.ts`): cadastra na primeira execução contra o banco e
+  guarda o segredo em `.e2e/mfa.json`.
 - **SUP-ERR-013/014** — o pré-cadastro do fornecedor. Cotar vem antes de cadastrar:
   o mínimo para entrar numa cotação é **razão social + telefone** (`SUP-ERR-014`), e
   o CPF/CNPJ é **opcional** — o comprador pede preço por telefone e nessa hora não o

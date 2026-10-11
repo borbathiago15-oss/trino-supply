@@ -103,6 +103,8 @@ public static class Vistas
             modules = AppModules.EffectiveFor(t.User),
             // a tela usa isto para levar direto à troca de senha no primeiro acesso
             mustChangePassword = t.User.MustChangePassword,
+            // e isto para levar ao cadastro do autenticador, quando o papel exige e ainda não há
+            mfaEnabled = Mfa.Ativa(t.User), mfaRequired = Mfa.Exigida(t.User.Role), mustSetupMfa = Mfa.PrecisaCadastrar(t.User),
         },
     };
 }

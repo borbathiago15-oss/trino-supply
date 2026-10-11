@@ -47,6 +47,7 @@ import { ProcessosDeCotacao } from '@/paginas/cotacoes/ProcessosDeCotacao';
 import { ProcessoDetalhe } from '@/paginas/cotacoes/ProcessoDetalhe';
 import { Portal } from '@/paginas/portal/Portal';
 import { TrocarSenha } from '@/paginas/senha/TrocarSenha';
+import { Autenticador } from '@/paginas/seguranca/Autenticador';
 import { SessaoProvider, useSessao } from '@/sessao/SessaoProvider';
 import { paginaInicial } from '@/dominio/papeis';
 import { Carregando } from '@/componentes/basicos';
@@ -69,6 +70,9 @@ function Protegida() {
   if (!usuario) return <Navigate to="/login" replace state={{ de: pathname }} />;
   if (usuario.mustChangePassword && pathname !== '/trocar-senha')
     return <Navigate to="/trocar-senha" replace />;
+  // depois da senha: o papel que exige a segunda etapa cadastra o autenticador antes de tudo (IAM-ERR-024)
+  if (usuario.mustSetupMfa && pathname !== '/autenticador')
+    return <Navigate to="/autenticador" replace />;
   return <Outlet />;
 }
 
@@ -97,6 +101,7 @@ export function Rotas() {
       <Route element={<Protegida />}>
         {/* fora do AppLayout: com a senha provisória o menu não deve nem aparecer */}
         <Route path="/trocar-senha" element={<TrocarSenha />} />
+        <Route path="/autenticador" element={<Autenticador />} />
         {/* o cockpit da TV também fica fora do layout: é tela de parede, sem menu
             nem cabeçalho — ninguém navega nela, e cada pixel é área de leitura */}
         <Route path="/cockpit" element={<Cockpit />} />

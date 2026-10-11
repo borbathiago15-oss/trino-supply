@@ -169,8 +169,24 @@ public class UserService(AppDbContext db, IPasswordHasher<User> hasher, TimeProv
         user.PasswordHash = hasher.HashPassword(user, newPassword);
         // senha definida por outra pessoa volta a ser provisória (SEC-004)
         user.MustChangePassword = true;
+        // e a conta fechada por tentativas abre: quem redefine a senha é quem socorre o dono
+        BloqueioPorConta.Desbloquear(user);
         user.UpdatedAt = clock.GetUtcNow();
         await RevokeSessionsAsync(user.Id, ct);
+        await db.SaveChangesAsync(ct);
+        return null;
+    }
+
+    /// <summary>
+    /// Abre a conta fechada por senhas erradas sem mexer na senha: é o socorro do administrador
+    /// para quem está esperando o tempo passar com a senha certa na mão.
+    /// </summary>
+    public async Task<UserError?> UnlockAsync(Guid id, CancellationToken ct = default)
+    {
+        var user = await db.Users.SingleOrDefaultAsync(u => u.Id == id, ct);
+        if (user is null) return new("IAM-ERR-404", "Usuário não encontrado.");
+        BloqueioPorConta.Desbloquear(user);
+        user.UpdatedAt = clock.GetUtcNow();
         await db.SaveChangesAsync(ct);
         return null;
     }

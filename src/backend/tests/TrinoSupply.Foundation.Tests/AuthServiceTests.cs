@@ -170,6 +170,64 @@ public class AuthServiceTests
         Assert.Equal(2, hasher.Verificacoes);
     }
 
+    // ---- bloqueio por conta (auditoria A4) -----------------------------------------
+    [Fact]
+    public async Task Cinco_senhas_erradas_fecham_a_conta_e_a_certa_passa_a_dizer_ate_quando()
+    {
+        var (svc, db, clock, admin) = Build();
+
+        for (var i = 0; i < 4; i++) Assert.Null(await svc.LoginAsync("admin@trino.test", "errada"));
+        Assert.Null(admin.LockedUntil);          // quatro ainda não fecham
+        Assert.Null(await svc.LoginAsync("admin@trino.test", "errada"));
+        Assert.Equal(5, admin.FailedLogins);
+        Assert.Equal(clock.Now + BloqueioPorConta.BloqueioInicial, admin.LockedUntil);
+
+        // a senha certa durante o bloqueio não entra, mas diz até quando — é o dono que a tem
+        var tentativa = await svc.TentarEntrarAsync("admin@trino.test", "Hx8@baseSegura!");
+        Assert.Null(tentativa.Tokens);
+        Assert.Equal(admin.LockedUntil, tentativa.BloqueadaAte);
+        // a errada durante o bloqueio continua recebendo a recusa genérica: não confirma a conta
+        var errada = await svc.TentarEntrarAsync("admin@trino.test", "errada");
+        Assert.Null(errada.Tokens);
+        Assert.Null(errada.BloqueadaAte);
+        Assert.Empty(db.RefreshTokens);
+    }
+
+    [Fact]
+    public async Task Passado_o_bloqueio_a_senha_certa_entra_e_zera_o_contador()
+    {
+        var (svc, _, clock, admin) = Build();
+        for (var i = 0; i < 5; i++) await svc.LoginAsync("admin@trino.test", "errada");
+        Assert.NotNull(admin.LockedUntil);
+
+        clock.Now = clock.Now.AddMinutes(16);
+        Assert.NotNull(await svc.LoginAsync("admin@trino.test", "Hx8@baseSegura!"));
+        Assert.Equal(0, admin.FailedLogins);
+        Assert.Null(admin.LockedUntil);
+    }
+
+    [Theory]
+    [InlineData(4, null)]
+    [InlineData(5, 15)]
+    [InlineData(9, 15)]
+    [InlineData(10, 30)]
+    [InlineData(15, 60)]
+    [InlineData(40, 24 * 60)]
+    [InlineData(500, 24 * 60)]
+    public void A_espera_dobra_a_cada_cinco_erros_ate_um_dia(int falhas, int? minutos)
+    {
+        var d = BloqueioPorConta.Duracao(falhas);
+        Assert.Equal(minutos, d is { } t ? (int?)t.TotalMinutes : null);
+    }
+
+    [Fact]
+    public async Task Email_sem_conta_nao_conta_falha_em_ninguem()
+    {
+        var (svc, db, _, _) = Build();
+        for (var i = 0; i < 6; i++) Assert.Null(await svc.LoginAsync("ninguem@trino.test", "errada"));
+        Assert.All(db.Users, u => Assert.Equal(0, u.FailedLogins));
+    }
+
     [Fact]
     public async Task Token_com_outro_algoritmo_e_recusado_mesmo_com_a_chave_certa()
     {

@@ -39,6 +39,7 @@ GET /api/v1/documents/{id:guid}
 GET /api/v1/improvement-cycles/
 GET /api/v1/improvement-cycles/{id:guid}
 GET /api/v1/improvement-cycles/{id:guid}/a3
+GET /api/v1/indicator-goals/
 GET /api/v1/inventory/balances
 GET /api/v1/inventory/locations
 GET /api/v1/inventory/movements
@@ -51,6 +52,7 @@ GET /api/v1/items/{id:guid}
 GET /api/v1/items/{id:guid}/price-history
 GET /api/v1/material-requisitions/
 GET /api/v1/material-requisitions/panel
+GET /api/v1/material-sla/
 GET /api/v1/notices/
 GET /api/v1/payment-methods/
 GET /api/v1/payment-terms/
@@ -75,10 +77,8 @@ GET /api/v1/quotations/{id:guid}/price-history
 GET /api/v1/quotations/{id:guid}/score-map
 GET /api/v1/quotations/{id:guid}/timeline
 GET /api/v1/request-types/
-GET /api/v1/indicator-goals/
 GET /api/v1/score-weights/
 GET /api/v1/sectors/
-GET /api/v1/material-sla/
 GET /api/v1/stage-sla/
 GET /api/v1/suppliers/
 GET /api/v1/suppliers/{id:guid}/contract/adjustments
@@ -192,15 +192,16 @@ POST /api/v1/triage/assign-batch
 POST /api/v1/triage/priority
 POST /api/v1/users/
 POST /api/v1/users/{id:guid}/reset-password
+POST /api/v1/users/{id:guid}/unlock
 PUT /api/v1/action-plans/{id:guid}/lessons
 PUT /api/v1/action-plans/{id:guid}/risks
 PUT /api/v1/action-plans/{id:guid}/root-cause
 PUT /api/v1/company
 PUT /api/v1/improvement-cycles/{id:guid}/tools
 PUT /api/v1/improvement-cycles/{id:guid}/watchers
-PUT /api/v1/quotations/{id:guid}/suppliers/{supplierId:guid}/deadline
 PUT /api/v1/indicator-goals/
-PUT /api/v1/score-weights/
 PUT /api/v1/material-sla/
+PUT /api/v1/quotations/{id:guid}/suppliers/{supplierId:guid}/deadline
+PUT /api/v1/score-weights/
 PUT /api/v1/stage-sla/
 PUT /api/v1/suppliers/{id:guid}/contract

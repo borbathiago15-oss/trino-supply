@@ -7,10 +7,25 @@ namespace TrinoSupply.Foundation.Api.Auth;
 
 public record AuthTokens(string AccessToken, int ExpiresInSeconds, string RefreshToken, User User);
 
+/// <summary>
+/// O resultado da tentativa de entrar. <c>Tokens</c> nulo é credencial recusada; quando a senha
+/// estava certa mas a conta está fechada por tentativas erradas, <c>BloqueadaAte</c> diz até
+/// quando — é o único caso em que o login explica a recusa (ver <see cref="BloqueioPorConta"/>).
+/// </summary>
+public record TentativaDeLogin(AuthTokens? Tokens, DateTimeOffset? BloqueadaAte);
+
 public class AuthService(AppDbContext db, TokenService tokens, IPasswordHasher<User> hasher, TimeProvider clock)
 {
     /// <summary>Login por e-mail e senha. Retorna null em credencial inválida (sem distinguir usuário inexistente de senha errada).</summary>
-    public async Task<AuthTokens?> LoginAsync(string email, string password, CancellationToken ct = default)
+    public async Task<AuthTokens?> LoginAsync(string email, string password, CancellationToken ct = default) =>
+        (await TentarEntrarAsync(email, password, ct)).Tokens;
+
+    /// <summary>
+    /// A tentativa completa, com o bloqueio por conta: a senha errada conta contra a conta e,
+    /// no quinto erro seguido, a fecha por um tempo (<see cref="BloqueioPorConta"/>). A senha
+    /// certa zera o contador — e, se a conta estiver fechada, é recusada dizendo até quando.
+    /// </summary>
+    public async Task<TentativaDeLogin> TentarEntrarAsync(string email, string password, CancellationToken ct = default)
     {
         var normalized = email.Trim().ToLowerInvariant();
         var user = await db.Users.SingleOrDefaultAsync(u => u.Email == normalized && u.Active, ct);
@@ -19,19 +34,30 @@ public class AuthService(AppDbContext db, TokenService tokens, IPasswordHasher<U
             // o mesmo custo de PBKDF2 que a senha errada: sem isto, o tempo da resposta dizia
             // quais e-mails têm conta (auditoria A4)
             hasher.VerifyHashedPassword(new User(), HashDeReferencia(), password);
-            return null;
+            return new(null, null);
         }
 
+        var agora = clock.GetUtcNow();
         var result = hasher.VerifyHashedPassword(user, user.PasswordHash, password);
-        if (result == PasswordVerificationResult.Failed) return null;
+        if (result == PasswordVerificationResult.Failed)
+        {
+            // a falha é gravada mesmo com o login recusado: é o que o bloqueio conta
+            BloqueioPorConta.RegistrarFalha(user, agora);
+            await db.SaveChangesAsync(ct);
+            return new(null, null);
+        }
 
+        if (BloqueioPorConta.Bloqueada(user, agora))
+            return new(null, user.LockedUntil);
+
+        if (user.FailedLogins > 0 || user.LockedUntil is not null) BloqueioPorConta.Desbloquear(user);
         if (result == PasswordVerificationResult.SuccessRehashNeeded)
         {
             user.PasswordHash = hasher.HashPassword(user, password);
-            user.UpdatedAt = clock.GetUtcNow();
+            user.UpdatedAt = agora;
         }
 
-        return await IssueTokensAsync(user, ct);
+        return new(await IssueTokensAsync(user, ct), null);
     }
 
     private static string? hashDeReferencia;

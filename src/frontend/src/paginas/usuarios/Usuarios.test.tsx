@@ -13,12 +13,13 @@ vi.mock('@/api/usuarios', async (importar) => ({
   criarUsuario: vi.fn(),
   atualizarUsuario: vi.fn(),
   redefinirSenha: vi.fn(),
+  desbloquearUsuario: vi.fn(),
 }));
 vi.mock('@/api/centrosCusto', () => ({ listarCentrosCusto: vi.fn() }));
 vi.mock('@/api/setores', () => ({ listarSetores: vi.fn() }));
 vi.mock('@/sessao/SessaoProvider', () => ({ useUsuario: () => admin }));
 
-import { atualizarUsuario, criarUsuario, listarUsuarios, redefinirSenha } from '@/api/usuarios';
+import { atualizarUsuario, contaBloqueada, criarUsuario, desbloquearUsuario, listarUsuarios, redefinirSenha } from '@/api/usuarios';
 import { listarCentrosCusto } from '@/api/centrosCusto';
 import { listarSetores } from '@/api/setores';
 
@@ -194,6 +195,29 @@ describe('<Usuarios />', () => {
     await userEvent.type(campoSenha, 'MaisQueDozeCaracteres1');
     await userEvent.click(screen.getByRole('button', { name: 'Redefinir senha' }));
     await waitFor(() => expect(redefinirSenha).toHaveBeenCalledWith('u-ana@t.com', 'curtaMaisQueDozeCaracteres1'));
+  });
+
+  it('conta fechada por senhas erradas aparece marcada, e "Desbloquear" a abre', async () => {
+    const daquiAUmaHora = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    vi.mocked(listarUsuarios).mockResolvedValue({
+      items: [usuario({ lockedUntil: daquiAUmaHora, failedLogins: 5 }), diretor],
+      roles: ['Requester', 'Director', 'SystemAdministrator'], availableModules: ['SOLICITACOES', 'APROVACAO'],
+    });
+    vi.mocked(desbloquearUsuario).mockResolvedValue({});
+    montar();
+    await waitFor(() => expect(screen.getByTestId('tabela-usuarios')).toBeInTheDocument());
+    expect(screen.getByText(/bloqueada até/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /Mais ações de Ana/ }));
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Desbloquear' }));
+    await waitFor(() => expect(desbloquearUsuario).toHaveBeenCalledWith('u-ana@t.com'));
+    expect(await screen.findByTestId('toast')).toHaveTextContent('desbloqueada');
+
+    // quem não está bloqueado não ganha a ação: o bloqueio que já passou também não
+    await userEvent.click(screen.getByRole('button', { name: /Mais ações de Davi/ }));
+    expect(screen.queryByRole('menuitem', { name: 'Desbloquear' })).not.toBeInTheDocument();
+    expect(contaBloqueada({ lockedUntil: new Date(Date.now() - 1000).toISOString() })).toBe(false);
+    expect(contaBloqueada({ lockedUntil: null })).toBe(false);
   });
 
   it('inativar a si mesmo e o único administrador aparece barrado, com o motivo', async () => {

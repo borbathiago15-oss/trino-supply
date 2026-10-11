@@ -538,9 +538,11 @@ export const MANUAIS: Record<string, Manual> = {
       'Marque os módulos. Ao escolher o papel, o sistema sugere os módulos padrão dele.',
       'Vincule os centros de custo quando a pessoa só deve solicitar para eles. Para o comprador, defina o gestor responsável.',
       '"Nova senha" redefine a senha — ela nasce provisória.',
+      'Conta marcada "bloqueada até…" fechou por senhas erradas: "Desbloquear" a abre na hora, sem mexer na senha. Redefinir a senha também desbloqueia.',
     ],
     regras: [
       { codigo: 'IAM-ERR-022', texto: 'Senha definida por outra pessoa é provisória: no primeiro acesso, o usuário precisa trocá-la.' },
+      { codigo: 'IAM-ERR-003', texto: 'Cinco senhas erradas seguidas fecham a conta por 15 minutos, e cada cinco a mais dobram a espera (até um dia). A senha certa zera a contagem; quem a digita durante o bloqueio vê até quando ele vale.' },
       { texto: 'Plano de Ação, PDCA e Atender chamados de suporte não vêm em padrão de papel nenhum: são dados a quem vai usá-los.' },
       { texto: 'Módulo novo passa a valer no próximo login do usuário.' },
     ],

@@ -116,6 +116,36 @@ public class TabelaDeRotasTests
     }
 
     [Fact]
+    public void As_portas_de_entrada_se_declaram_abertas_porque_a_politica_padrao_exige_sessao()
+    {
+        // o Program.cs instala uma FallbackPolicy que exige usuário autenticado em toda
+        // rota: sem `AllowAnonymous` explícito, o login responderia 401 para quem ainda
+        // não entrou. A lista pública é a mesma; o que se confere aqui é que cada uma
+        // dela carrega a abertura como metadado, e não só a ausência de exigência.
+        var semAbertura = Rotas()
+            .Where(e => Publicas.Contains(e.RoutePattern.RawText))
+            .Where(e => e.Metadata.GetMetadata<IAllowAnonymous>() is null)
+            .Select(e => e.RoutePattern.RawText!)
+            .Distinct().ToList();
+
+        Assert.True(semAbertura.Count == 0, "Porta de entrada sem AllowAnonymous: " + string.Join(", ", semAbertura));
+    }
+
+    [Fact]
+    public void Nenhuma_rota_protegida_se_abre_por_engano()
+    {
+        // o inverso: AllowAnonymous fora da lista pública derrubaria a política padrão
+        // justamente onde ela mais importa
+        var abertas = Rotas()
+            .Where(e => e.RoutePattern.RawText?.StartsWith("/api", StringComparison.Ordinal) == true)
+            .Where(e => e.Metadata.GetMetadata<IAllowAnonymous>() is not null)
+            .Select(e => e.RoutePattern.RawText!)
+            .Distinct().Except(Publicas).ToList();
+
+        Assert.True(abertas.Count == 0, "AllowAnonymous em rota que não é porta de entrada: " + string.Join(", ", abertas));
+    }
+
+    [Fact]
     public void A_gestao_de_usuarios_so_abre_para_o_administrador()
     {
         // é o único grupo que se protege por papel, e não por módulo.

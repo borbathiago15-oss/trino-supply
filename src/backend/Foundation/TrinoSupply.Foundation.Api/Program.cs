@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -48,7 +49,12 @@ builder.Services.AddDbContext<AppDbContext>(o =>
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(o => o.TokenValidationParameters = TokenService.BuildValidationParameters(jwtOptions));
-builder.Services.AddAuthorization();
+// Política padrão: rota sem `RequireAuthorization` exige sessão mesmo assim. Sem ela, uma
+// rota nova esquecida nascia anônima e só o inventário de rotas dos testes a pegaria; com
+// ela, abrir uma rota é um ato explícito (`AllowAnonymous`) — hoje são o login, o refresh,
+// o logout, a porta do Portal, o /health e o index.html do SPA (auditoria, item 19).
+builder.Services.AddAuthorization(o =>
+    o.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
 
 // Rate limit da autenticação (SEC-003), por IP e por rota:
 // - "auth": 10 tentativas/min, para o login — é o que barra força bruta de senha.
@@ -56,9 +62,39 @@ builder.Services.AddAuthorization();
 //   (várias abas, recargas), então o limite serve só contra abuso.
 // Consultas de sessão (/me) e o logout ficam de fora: limitar essas rotas
 // derrubava a sessão de quem apenas navegava entre as telas.
+// Teto global por pessoa (auditoria, item 15): as rotas autenticadas sem cota própria
+// — listas, Torre, cockpit, busca de catálogo — não tinham limite nenhum, e um token
+// vazado podia martelar as consultas caras e degradar o sistema para todo mundo. A
+// partição é o usuário logado (o IP só para quem ainda não entrou), o balde é de fichas
+// (aguenta a rajada de uma tela abrindo e repõe por minuto) e a cota é folgada para uso
+// humano, inclusive o de várias abas — o que se barra é a repetição automática.
+var tetoGlobalPorMinuto = int.TryParse(builder.Configuration["RATE_LIMIT_GLOBAL_PER_MINUTE"], out var teto) && teto > 0
+    ? teto : 600;
+
 builder.Services.AddRateLimiter(o =>
 {
     o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    o.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
+        RateLimitPartition.GetTokenBucketLimiter(QuemEsta(ctx), _ => new TokenBucketRateLimiterOptions
+        {
+            TokenLimit = tetoGlobalPorMinuto,
+            TokensPerPeriod = tetoGlobalPorMinuto,
+            ReplenishmentPeriod = TimeSpan.FromMinutes(1),
+            AutoReplenishment = true,
+            QueueLimit = 0,
+        }));
+    // quem bate no teto fica no log: é como se descobre o script, o token vazado ou a cota
+    // apertada demais — e a resposta diz quando tentar de novo
+    o.OnRejected = (contexto, _) =>
+    {
+        if (contexto.Lease.TryGetMetadata(MetadataName.RetryAfter, out var espera))
+            contexto.HttpContext.Response.Headers.RetryAfter = ((int)Math.Ceiling(espera.TotalSeconds)).ToString();
+        contexto.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("RateLimit")
+            .LogWarning("Limite de requisições atingido: {Metodo} {Rota} por {Quem}",
+                contexto.HttpContext.Request.Method, contexto.HttpContext.Request.Path, QuemEsta(contexto.HttpContext));
+        return ValueTask.CompletedTask;
+    };
     o.AddPolicy("auth", ctx => RateLimitPartition.GetFixedWindowLimiter(
         ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
@@ -123,11 +159,15 @@ var staticFiles = new StaticFileOptions
     },
 };
 app.UseStaticFiles(staticFiles);
-app.UseRateLimiter();
 if (!app.Environment.IsProduction() || app.Configuration["OPENAPI_ENABLED"] == "1")
-    app.MapOpenApi();
+    app.MapOpenApi().AllowAnonymous();
 app.UseAuthentication();
 app.UseAuthorization();
+// DEPOIS da autenticação, e a ordem é o ponto: as cotas "por usuário" (upload, relatório,
+// troca de senha e o teto global) particionam pela claim do token, e antes do
+// UseAuthentication o `ctx.User` ainda está vazio — toda cota por usuário caía no IP, e o
+// escritório inteiro atrás do mesmo endereço dividia a mesma cota sem ninguém saber.
+app.UseRateLimiter();
 
 // ---- Senha provisória: a sessão só anda depois da troca (SEC-004) -----------
 // Fica no pipeline, e não em cada rota, para uma tela nova não nascer com o furo.
@@ -175,7 +215,7 @@ app.MapGet("/health", async (AppDbContext db, HttpContext ctx, CancellationToken
     return Results.Json(
         Saude.Corpo(banco, ctx.User.Identity?.IsAuthenticated == true, seedOk, commit, iniciadoEm, DateTimeOffset.UtcNow),
         statusCode: banco ? StatusCodes.Status200OK : StatusCodes.Status503ServiceUnavailable);
-});
+}).AllowAnonymous();   // o healthcheck do Railway chega sem sessão; o que ele vê sem ela é só o estado
 
 // ---- Autenticação: login, refresh, sessão e troca de senha ------------------
 app.MapAutenticacao(seedOk);
@@ -233,7 +273,7 @@ app.MapDocumentos();
 // Frontend React: qualquer rota que não seja arquivo cai no index.html dele, e o
 // roteador do navegador assume dali. O `nonfile` impede que o fallback engula o
 // próprio JS — sem ele, o bundle voltaria como HTML.
-app.MapFallbackToFile("{*path:nonfile}", "index.html", staticFiles);
+app.MapFallbackToFile("{*path:nonfile}", "index.html", staticFiles).AllowAnonymous();   // a tela de login é este HTML
 
 app.Run();
 

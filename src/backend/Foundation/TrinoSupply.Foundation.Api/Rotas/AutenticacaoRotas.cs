@@ -13,8 +13,9 @@ namespace TrinoSupply.Foundation.Api.Rotas;
 /// <summary>
 /// Autenticação: login, refresh, quem sou, logout e a troca de senha.
 ///
-/// É um dos dois grupos públicos do sistema — a porta de entrada — e por isso
-/// as rotas autenticadas de dentro dele declaram a exigência uma a uma. A
+/// É um dos dois grupos públicos do sistema — a porta de entrada. A política padrão exige
+/// sessão em toda rota, então as portas (login, refresh, logout) se declaram abertas uma a
+/// uma com `AllowAnonymous`, e as demais declaram a exigência explicitamente. A
 /// troca de senha tem limite por usuário, e não por IP: um escritório inteiro
 /// atrás do mesmo IP não pode ficar sem trocar a senha (SEC-004).
 /// </summary>
@@ -41,7 +42,7 @@ public static class AutenticacaoRotas
             return tokens is null
                 ? Error(ctx, 401, "IAM-ERR-001", "E-mail ou senha inválidos.")
                 : Ok(ToResponse(tokens), ctx);
-        }).RequireRateLimiting("auth");
+        }).AllowAnonymous().RequireRateLimiting("auth");
 
         auth.MapPost("/refresh", async (RefreshRequest body, AuthService svc, HttpContext ctx) =>
         {
@@ -51,13 +52,13 @@ public static class AutenticacaoRotas
             return tokens is null
                 ? Error(ctx, 401, "IAM-ERR-002", "Refresh token inválido, expirado ou revogado. Faça login novamente.")
                 : Ok(ToResponse(tokens), ctx);
-        }).RequireRateLimiting("auth-refresh");
+        }).AllowAnonymous().RequireRateLimiting("auth-refresh");
 
         auth.MapPost("/logout", async (RefreshRequest body, AuthService svc, HttpContext ctx) =>
         {
             if (!string.IsNullOrWhiteSpace(body.RefreshToken)) await svc.LogoutAsync(body.RefreshToken);
             return Ok(new { message = "Sessão encerrada." }, ctx);
-        });
+        }).AllowAnonymous();
 
         auth.MapGet("/me", async (ClaimsPrincipal principal, AppDbContext db, HttpContext ctx) =>
         {

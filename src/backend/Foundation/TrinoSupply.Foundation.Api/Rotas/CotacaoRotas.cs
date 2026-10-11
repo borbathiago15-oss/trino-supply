@@ -603,7 +603,7 @@ public static class CotacaoRotas
                 accessToken = token, tokenType = "Bearer", expiresIn = 3600,
                 supplier = new { id = supplier.Id, name = supplier.TradeName ?? supplier.LegalName, taxId = supplier.TaxId },
             }, ctx);
-        }).RequireRateLimiting("auth");
+        }).AllowAnonymous().RequireRateLimiting("auth");
 
         // o fornecedor só enxerga as próprias cotações — nunca dados de outros fornecedores
         static object PortalQuotationView(Quotation q, Guid supplierId) => new

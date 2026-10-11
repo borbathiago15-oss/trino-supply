@@ -91,12 +91,16 @@ public static class Vistas
     };
 
     /// <summary>A resposta do login: os tokens e quem entrou.</summary>
-    public static object ToResponse(AuthTokens t) => new
+    /// <param name="refreshNoCorpo">
+    /// Só para a renovação pelo caminho antigo (token no corpo): a página aberta antes do deploy
+    /// ainda guarda o token no navegador e lê a resposta. Pelo cookie, o corpo não o traz.
+    /// </param>
+    public static object ToResponse(AuthTokens t, bool refreshNoCorpo = false) => new
     {
         accessToken = t.AccessToken,
         tokenType = "Bearer",
         expiresIn = t.ExpiresInSeconds,
-        refreshToken = t.RefreshToken,
+        refreshToken = refreshNoCorpo ? t.RefreshToken : null,
         user = new
         {
             id = t.User.Id, email = t.User.Email, name = t.User.Name, role = t.User.Role,

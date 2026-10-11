@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { quemSou, sair, type Usuario } from '@/api/auth';
 import { EVENTO_SESSAO_EXPIRADA, sessao } from '@/api/sessao';
-import { ErroApi } from '@/api/cliente';
+import { ErroApi, renovarSessao } from '@/api/cliente';
 
 interface ContextoSessao {
   usuario: Usuario | null;
@@ -13,26 +13,31 @@ interface ContextoSessao {
 const Contexto = createContext<ContextoSessao | null>(null);
 
 /**
- * Descobre quem está logado a partir dos tokens já guardados (a mesma sessão
- * do legado) e mantém o usuário à mão para as telas e o menu.
+ * Descobre quem está logado e mantém o usuário à mão para as telas e o menu. Com access token
+ * guardado, pergunta quem é; sem ele, tenta a renovação pelo cookie HttpOnly antes de desistir
+ * — é assim que a aba nova e o app reaberto voltam logados sem o refresh token passar pelo
+ * script. Sem cookie o servidor responde 401 em seguida, e a tela de login aparece.
  */
 export function SessaoProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
-  const [carregando, setCarregando] = useState(sessao.ativa);
+  const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
     let vivo = true;
-    if (sessao.ativa) {
-      quemSou()
-        .then((u) => { if (vivo) setUsuario(u); })
-        .catch((e: unknown) => {
-          if (!vivo) return;
-          // só descarta a sessão quando o servidor diz que ela não vale mais
-          if (e instanceof ErroApi && e.status === 401) sessao.clear();
-          setUsuario(null);
-        })
-        .finally(() => { if (vivo) setCarregando(false); });
-    }
+    (async () => {
+      try {
+        if (!sessao.ativa && (await renovarSessao()) !== 'ok') return;
+        const u = await quemSou();
+        if (vivo) setUsuario(u);
+      } catch (e: unknown) {
+        if (!vivo) return;
+        // só descarta a sessão quando o servidor diz que ela não vale mais
+        if (e instanceof ErroApi && e.status === 401) sessao.clear();
+        setUsuario(null);
+      } finally {
+        if (vivo) setCarregando(false);
+      }
+    })();
     const expirou = () => { if (vivo) setUsuario(null); };
     globalThis.addEventListener(EVENTO_SESSAO_EXPIRADA, expirou);
     return () => { vivo = false; globalThis.removeEventListener(EVENTO_SESSAO_EXPIRADA, expirou); };

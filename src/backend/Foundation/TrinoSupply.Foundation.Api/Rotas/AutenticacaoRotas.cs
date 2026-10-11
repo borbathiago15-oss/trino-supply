@@ -30,6 +30,15 @@ public static class AutenticacaoRotas
     {
         var auth = app.MapGroup("/api/v1/auth");
 
+        // a sessão nova: o refresh token vai para o cookie HttpOnly e o corpo leva só o access
+        // token (ver CookieDaSessao). `lembrar` só vem na entrada; a renovação e a troca de
+        // senha mantêm o lugar escolhido.
+        static object Sessao(AuthTokens t, HttpContext ctx, bool? lembrar = null)
+        {
+            CookieDaSessao.Gravar(ctx, t.RefreshToken, lembrar, t.RefreshTokenDays);
+            return ToResponse(t);
+        }
+
         auth.MapPost("/login", async (LoginRequest body, AuthService svc, TimeProvider clock, HttpContext ctx) =>
         {
             if (!seedOk)
@@ -46,22 +55,41 @@ public static class AutenticacaoRotas
                 return Ok(new { mfaRequired = true, mfaToken = pendente, expiresIn = Mfa.MinutosDoTokenPendente * 60 }, ctx);
             return tentativa.Tokens is null
                 ? Error(ctx, 401, "IAM-ERR-001", "E-mail ou senha inválidos.")
-                : Ok(ToResponse(tentativa.Tokens), ctx);
+                : Ok(Sessao(tentativa.Tokens, ctx, body.Remember), ctx);
         }).AllowAnonymous().RequireRateLimiting("auth");
 
-        auth.MapPost("/refresh", async (RefreshRequest body, AuthService svc, HttpContext ctx) =>
+        // A renovação: pelo cookie (a aplicação de hoje) ou pelo corpo (a página aberta antes do
+        // deploy, que ainda guarda o token no navegador). Com o cookie, o pedido precisa do
+        // cabeçalho que só o nosso JavaScript manda — sem ele é formulário de outro site, e a
+        // resposta é 403 sem tocar na sessão.
+        auth.MapPost("/refresh", async (RefreshRequest? body, AuthService svc, HttpContext ctx) =>
         {
-            if (string.IsNullOrWhiteSpace(body.RefreshToken))
+            var doCookie = CookieDaSessao.Ler(ctx);
+            if (doCookie is not null && !CookieDaSessao.PedidoDoProprioApp(ctx))
+                return Error(ctx, 403, "IAM-ERR-403", "Renovação recusada: o pedido não veio da aplicação.");
+            var valor = doCookie ?? body?.RefreshToken;
+            if (string.IsNullOrWhiteSpace(valor))
                 return Error(ctx, 400, "IAM-ERR-400", "Informe o refresh token.");
-            var tokens = await svc.RefreshAsync(body.RefreshToken);
-            return tokens is null
-                ? Error(ctx, 401, "IAM-ERR-002", "Refresh token inválido, expirado ou revogado. Faça login novamente.")
-                : Ok(ToResponse(tokens), ctx);
+
+            var tokens = await svc.RefreshAsync(valor);
+            if (tokens is null)
+            {
+                if (doCookie is not null) CookieDaSessao.Apagar(ctx);
+                return Error(ctx, 401, "IAM-ERR-002", "Refresh token inválido, expirado ou revogado. Faça login novamente.");
+            }
+            return doCookie is not null
+                ? Ok(Sessao(tokens, ctx), ctx)
+                : Ok(ToResponse(tokens, refreshNoCorpo: true), ctx);
         }).AllowAnonymous().RequireRateLimiting("auth-refresh");
 
-        auth.MapPost("/logout", async (RefreshRequest body, AuthService svc, HttpContext ctx) =>
+        auth.MapPost("/logout", async (RefreshRequest? body, AuthService svc, HttpContext ctx) =>
         {
-            if (!string.IsNullOrWhiteSpace(body.RefreshToken)) await svc.LogoutAsync(body.RefreshToken);
+            var doCookie = CookieDaSessao.Ler(ctx);
+            if (doCookie is not null && !CookieDaSessao.PedidoDoProprioApp(ctx))
+                return Error(ctx, 403, "IAM-ERR-403", "Saída recusada: o pedido não veio da aplicação.");
+            var valor = doCookie ?? body?.RefreshToken;
+            if (!string.IsNullOrWhiteSpace(valor)) await svc.LogoutAsync(valor);
+            CookieDaSessao.Apagar(ctx);
             return Ok(new { message = "Sessão encerrada." }, ctx);
         }).AllowAnonymous();
 
@@ -112,7 +140,7 @@ public static class AutenticacaoRotas
             var (etapa, error) = await svc.VerificarAsync(body.MfaToken, body.Code);
             if (error is not null)
                 return Error(ctx, error.Code switch { "IAM-ERR-003" => 423, "IAM-ERR-029" => 401, _ => 401 }, error.Code, error.Message);
-            return Ok(new { sessao = ToResponse(etapa!.Tokens), usedRecoveryCode = etapa.UsedRecoveryCode, recoveryCodesLeft = etapa.RecoveryCodesLeft }, ctx);
+            return Ok(new { sessao = Sessao(etapa!.Tokens, ctx, body.Remember), usedRecoveryCode = etapa.UsedRecoveryCode, recoveryCodesLeft = etapa.RecoveryCodesLeft }, ctx);
         }).AllowAnonymous().RequireRateLimiting("auth-mfa");
 
         mfa.MapGet("/", async (MfaService svc, ClaimsPrincipal p, HttpContext ctx) =>
@@ -134,7 +162,7 @@ public static class AutenticacaoRotas
             var (tokens, codigos, error) = await svc.AtivarAsync(ActorId(p), body.Code);
             if (error is not null)
                 return Error(ctx, error.Code switch { "IAM-ERR-404" => 404, "IAM-ERR-025" => 409, "IAM-ERR-026" => 400, _ => 422 }, error.Code, error.Message);
-            return Ok(new { sessao = ToResponse(tokens!), recoveryCodes = codigos }, ctx);
+            return Ok(new { sessao = Sessao(tokens!, ctx), recoveryCodes = codigos }, ctx);
         }).RequireAuthorization().RequireRateLimiting("auth-senha");
 
         mfa.MapPost("/disable", async (MfaCodeRequest body, MfaService svc, ClaimsPrincipal p, HttpContext ctx) =>
@@ -160,7 +188,7 @@ public static class AutenticacaoRotas
             // a troca derruba as sessões antigas, inclusive a desta aba: devolve tokens
             // novos, já sem a marca de provisória, para o usuário seguir sem relogar
             var tokens = await authSvc.IssueForAsync(user!);
-            return Ok(ToResponse(tokens), ctx);
+            return Ok(Sessao(tokens, ctx), ctx);
         }).RequireAuthorization().RequireRateLimiting("auth-senha");
     }
 }

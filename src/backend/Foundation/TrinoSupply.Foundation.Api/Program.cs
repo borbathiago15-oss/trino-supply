@@ -323,9 +323,9 @@ app.MapFallbackToFile("{*path:nonfile}", "index.html", staticFiles).AllowAnonymo
 app.Run();
 
 // ---- Autorização por módulo (cadastro do usuário) ----------------------------
-public record LoginRequest(string Email, string Password);
-public record RefreshRequest(string RefreshToken);
-public record MfaVerifyRequest(string? MfaToken, string? Code);
+public record LoginRequest(string Email, string Password, bool? Remember = null);
+public record RefreshRequest(string? RefreshToken);
+public record MfaVerifyRequest(string? MfaToken, string? Code, bool? Remember = null);
 public record MfaCodeRequest(string? Code);
 public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
 public record CreateUserRequest(string Email, string Name, string Role, string Password, List<string>? Modules,

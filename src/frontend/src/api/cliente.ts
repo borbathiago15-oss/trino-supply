@@ -36,16 +36,24 @@ export type ResultadoRenovacao = 'ok' | 'invalida' | 'indisponivel';
 /** Uma renovação por vez: várias chamadas em 401 simultâneas dividem a mesma promessa. */
 let renovacaoEmCurso: Promise<ResultadoRenovacao> | null = null;
 
+/**
+ * O cabeçalho que só o nosso JavaScript manda. O refresh token viaja num cookie, e cookie o
+ * navegador manda para qualquer formulário do mesmo site: o servidor só aceita a renovação e
+ * a saída pelo cookie quando este cabeçalho vem junto — um formulário de outro site não
+ * consegue acrescentá-lo. Vai em toda chamada, porque não custa nada e não deixa rota de fora.
+ */
+export const CABECALHO_DO_APP = { 'X-Requested-With': 'TrinoSupply' } as const;
+
 export async function renovarSessao(): Promise<ResultadoRenovacao> {
-  const refreshToken = sessao.refresh;
-  if (!refreshToken) return 'invalida';
   if (!renovacaoEmCurso) {
     renovacaoEmCurso = (async (): Promise<ResultadoRenovacao> => {
       try {
+        // o refresh token vai no cookie HttpOnly: o corpo não o leva, e a resposta não o traz
         const res = await fetch('/api/v1/auth/refresh', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken }),
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', ...CABECALHO_DO_APP },
+          body: '{}',
         });
         if (res.status === 401 || res.status === 403) return 'invalida';
         if (!res.ok) return 'indisponivel';
@@ -71,7 +79,7 @@ function encerrarSessao() {
 }
 
 function cabecalhos(json = true): Record<string, string> {
-  const h: Record<string, string> = {};
+  const h: Record<string, string> = { ...CABECALHO_DO_APP };
   if (json) h['Content-Type'] = 'application/json';
   if (sessao.access) h.Authorization = 'Bearer ' + sessao.access;
   return h;
@@ -90,7 +98,9 @@ export async function api<T = unknown>(caminho: string, opcoes: OpcoesRequisicao
     signal: opcoes.signal,
   });
 
-  if (res.status === 401 && !_repetida && sessao.refresh && !caminho.includes('/auth/')) {
+  // sem o refresh token à vista (ele está no cookie), a tentativa de renovar é a regra; o
+  // servidor diz se a sessão ainda vale
+  if (res.status === 401 && !_repetida && !caminho.includes('/auth/')) {
     const renovacao = await renovarSessao();
     if (renovacao === 'ok') return api<T>(caminho, opcoes, true);
     // só encerra quando o servidor recusa o refresh; falha passageira mantém a sessão
@@ -114,7 +124,7 @@ export async function api<T = unknown>(caminho: string, opcoes: OpcoesRequisicao
 /** Baixa um arquivo autenticado (PDF da OC, anexos) como Blob. */
 export async function baixar(caminho: string, mensagemErro = 'Falha ao baixar o arquivo.'): Promise<Blob> {
   let res = await fetch(caminho, { headers: cabecalhos(false) });
-  if (res.status === 401 && sessao.refresh && (await renovarSessao()) === 'ok')
+  if (res.status === 401 && (await renovarSessao()) === 'ok')
     res = await fetch(caminho, { headers: cabecalhos(false) });
   if (!res.ok) throw new ErroApi(mensagemErro, res.status);
   return res.blob();
@@ -130,7 +140,7 @@ export async function enviarArquivo<T = void>(caminho: string, arquivo: File, ex
   fd.append('file', arquivo);
   for (const [campo, valor] of Object.entries(extras)) fd.append(campo, valor);
   let res = await fetch(caminho, { method: 'POST', headers: cabecalhos(false), body: fd });
-  if (res.status === 401 && sessao.refresh && (await renovarSessao()) === 'ok')
+  if (res.status === 401 && (await renovarSessao()) === 'ok')
     res = await fetch(caminho, { method: 'POST', headers: cabecalhos(false), body: fd });
   const json = await res.json().catch(() => ({}));
   if (!res.ok)
